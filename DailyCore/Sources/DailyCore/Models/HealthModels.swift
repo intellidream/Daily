@@ -235,6 +235,25 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
     public let semantics: String?
     public let tzOffsetMin: Int?
     public let localDate: String?
+    public var hostDeviceName: String? {
+        guard let dev = sourceDevice, dev.contains(" - ") else { return sourceDevice }
+        return String(dev.components(separatedBy: " - ").first ?? dev)
+    }
+    
+    public var sensorSourceName: String? {
+        guard let dev = sourceDevice, dev.contains(" - ") else { return sourceDevice }
+        let parts = dev.components(separatedBy: " - ")
+        return parts.dropFirst().joined(separator: " - ")
+    }
+    
+    public var sourceDeviceKey: String? {
+        sourceDevice
+    }
+    
+    public var sourceColor: String? {
+        guard let dev = sourceDevice else { return nil }
+        return DeviceColorPalette.getColor(for: dev)
+    }
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -267,7 +286,11 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         sourceId: String? = nil,
         semantics: String? = nil,
         tzOffsetMin: Int? = nil,
-        localDate: String? = nil
+        localDate: String? = nil,
+        hostDeviceName: String? = nil,
+        sensorSourceName: String? = nil,
+        sourceDeviceKey: String? = nil,
+        sourceColor: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -276,13 +299,23 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         self.unit = unit
         self.startTime = startTime
         self.endTime = endTime
-        self.sourceDevice = sourceDevice
+        self.sourceDevice = sourceDeviceKey ?? sourceDevice
         self.createdAt = createdAt
         self.externalId = externalId
         self.sourceId = sourceId
         self.semantics = semantics
         self.tzOffsetMin = tzOffsetMin
         self.localDate = localDate
+    }
+    
+    public var effectiveSourceKey: String {
+        if let key = sourceDeviceKey, !key.isEmpty { return key }
+        return sourceDevice ?? "Unknown"
+    }
+
+    public var effectiveColor: String {
+        if let c = sourceColor, !c.isEmpty { return c }
+        return DeviceColorPalette.getColor(for: effectiveSourceKey)
     }
     
     public var normalizedType: String {
@@ -1044,9 +1077,17 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
         lhs.displayName < rhs.displayName
     }
     
+    public var colorHex: String {
+        DeviceColorPalette.getColor(for: displayName)
+    }
+
     public static func from(name: String?) -> DeviceSource {
         guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
             return .other("Unknown")
+        }
+        // Preserve compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - Pixel Watch 5")
+        if name.contains(" - ") {
+            return .other(name)
         }
         let lower = name.lowercased()
         if lower.contains("oura") { return .oura }
@@ -1101,3 +1142,26 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
         }
     }
 }
+
+// MARK: - Deterministic Color Palette
+
+public struct DeviceColorPalette: Sendable {
+    public static let palette: [String] = [
+        "#00D09C", // Emerald (Oura green)
+        "#3897F0", // Electric Blue (Pixel / Google)
+        "#FF6B4A", // Coral / Orange (Activity)
+        "#AF52DE", // Violet / Purple (HealthKit)
+        "#FF2D55", // Rose / Crimson
+        "#34C759", // Apple Green
+        "#FF9500", // Amber
+        "#5856D6", // Indigo
+        "#00C7BE"  // Cyan / Teal
+    ]
+
+    public static func getColor(for sourceKey: String) -> String {
+        guard !sourceKey.isEmpty else { return "#3897F0" }
+        let hash = abs(sourceKey.hashValue)
+        return palette[hash % palette.count]
+    }
+}
+

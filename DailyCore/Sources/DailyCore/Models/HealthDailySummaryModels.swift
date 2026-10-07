@@ -81,6 +81,42 @@ public struct HealthDailySummaryRecord: Codable, Identifiable, Sendable {
     }
 }
 
+// MARK: - Device Metric Item
+
+public struct DeviceMetricItem: Codable, Sendable, Equatable {
+    public let value: Double?
+    public let sourceKey: String?
+    public let color: String?
+    public let unit: String?
+    public let score: Int?
+    public let updatedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case value
+        case sourceKey = "source_key"
+        case color
+        case unit
+        case score
+        case updatedAt = "updated_at"
+    }
+
+    public init(
+        value: Double? = nil,
+        sourceKey: String? = nil,
+        color: String? = nil,
+        unit: String? = nil,
+        score: Int? = nil,
+        updatedAt: String? = nil
+    ) {
+        self.value = value
+        self.sourceKey = sourceKey
+        self.color = color
+        self.unit = unit
+        self.score = score
+        self.updatedAt = updatedAt
+    }
+}
+
 // MARK: - Daily Health Summary Payload (summary JSONB)
 
 public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
@@ -92,6 +128,8 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
     public let cardiovascular: CanonicalCardiovascularSummary
     public let stress: CanonicalStressSummary?
     public let vitals: [String: CanonicalVitalSummaryItem]
+    public let sources: [String]
+    public let allDevicesView: [String: DeviceMetricItem]?
     
     enum CodingKeys: String, CodingKey {
         case date
@@ -102,6 +140,8 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         case cardiovascular
         case stress
         case vitals
+        case sources
+        case allDevicesView = "all_devices_view"
     }
     
     public init(
@@ -112,7 +152,9 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         activity: CanonicalActivitySummary,
         cardiovascular: CanonicalCardiovascularSummary,
         stress: CanonicalStressSummary? = nil,
-        vitals: [String: CanonicalVitalSummaryItem] = [:]
+        vitals: [String: CanonicalVitalSummaryItem] = [:],
+        sources: [String] = [],
+        allDevicesView: [String: DeviceMetricItem]? = nil
     ) {
         self.date = date
         self.engineVersion = engineVersion
@@ -122,6 +164,22 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         self.cardiovascular = cardiovascular
         self.stress = stress
         self.vitals = vitals
+        self.sources = sources
+        self.allDevicesView = allDevicesView
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.date = try container.decode(String.self, forKey: .date)
+        self.engineVersion = try container.decodeIfPresent(String.self, forKey: .engineVersion) ?? "1.0"
+        self.computedAt = try container.decodeIfPresent(Date.self, forKey: .computedAt) ?? Date()
+        self.sleep = try container.decodeIfPresent(CanonicalSleepSummary.self, forKey: .sleep) ?? CanonicalSleepSummary()
+        self.activity = try container.decodeIfPresent(CanonicalActivitySummary.self, forKey: .activity) ?? CanonicalActivitySummary(totalSteps: 0, activeCalories: 0)
+        self.cardiovascular = try container.decodeIfPresent(CanonicalCardiovascularSummary.self, forKey: .cardiovascular) ?? CanonicalCardiovascularSummary()
+        self.stress = try container.decodeIfPresent(CanonicalStressSummary.self, forKey: .stress)
+        self.vitals = try container.decodeIfPresent([String: CanonicalVitalSummaryItem].self, forKey: .vitals) ?? [:]
+        self.sources = try container.decodeIfPresent([String].self, forKey: .sources) ?? []
+        self.allDevicesView = try container.decodeIfPresent([String: DeviceMetricItem].self, forKey: .allDevicesView)
     }
     
     public var isEmpty: Bool {
@@ -232,7 +290,7 @@ public struct CanonicalCardiovascularSummary: Codable, Sendable, Equatable {
         restingBpm: Double? = nil,
         minBpm: Double? = nil,
         maxBpm: Double? = nil,
-        zones: CanonicalHeartRateZones,
+        zones: CanonicalHeartRateZones = CanonicalHeartRateZones(),
         intradayPoints: [IntradayHeartRatePoint] = []
     ) {
         self.averageBpm = averageBpm

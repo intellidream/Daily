@@ -88,13 +88,26 @@ fun VitalMetricTile(
 
                     val device = record?.sourceDevice
                     if (!device.isNullOrEmpty()) {
-                        Text(
-                            text = DeviceSource.from(device).displayName,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = ThemeColors.fgMutedDark,
-                            maxLines = 1
-                        )
+                        val src = DeviceSource.from(device)
+                        val dotColor = runCatching { Color(android.graphics.Color.parseColor(src.colorHex)) }.getOrDefault(ThemeColors.accentCyan)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                            Text(
+                                text = src.displayName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = ThemeColors.fgMutedDark,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
 

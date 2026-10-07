@@ -60,7 +60,19 @@ data class HealthTelemetryEntity(
     val tzOffsetMin: Int? = null,
 
     @ColumnInfo(name = "local_date")
-    val localDate: String? = null
+    val localDate: String? = null,
+
+    @ColumnInfo(name = "host_device_name")
+    val hostDeviceName: String? = null,
+
+    @ColumnInfo(name = "sensor_source_name")
+    val sensorSourceName: String? = null,
+
+    @ColumnInfo(name = "source_device_key")
+    val sourceDeviceKey: String? = null,
+
+    @ColumnInfo(name = "source_color")
+    val sourceColor: String? = null
 ) {
     fun toRecord(): HealthTelemetryRecord = HealthTelemetryRecord(
         id = id,
@@ -75,6 +87,10 @@ data class HealthTelemetryEntity(
         externalId = externalId,
         sourceId = sourceId,
         semantics = semantics,
+        hostDeviceName = hostDeviceName,
+        sensorSourceName = sensorSourceName,
+        sourceDeviceKey = sourceDeviceKey,
+        sourceColor = sourceColor,
         tzOffsetMin = tzOffsetMin,
         localDate = localDate
     )
@@ -95,6 +111,10 @@ data class HealthTelemetryEntity(
                 externalId = record.externalId,
                 sourceId = record.sourceId,
                 semantics = record.semantics,
+                hostDeviceName = record.hostDeviceName,
+                sensorSourceName = record.sensorSourceName,
+                sourceDeviceKey = record.sourceDeviceKey,
+                sourceColor = record.sourceColor,
                 tzOffsetMin = record.tzOffsetMin,
                 localDate = record.localDate
             )

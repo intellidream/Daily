@@ -77,6 +77,8 @@ public final class HealthDataService: ObservableObject {
     private var realtimeTask: Task<Void, Never>?
     private var lastEngineInvocation: [String: Date] = [:]
     private var isSyncingHistory: Bool = false
+    private var lastPushedTelemetryEpochMs: TimeInterval = 0
+    private var periodicActiveSyncTask: Task<Void, Never>?
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -152,6 +154,27 @@ public final class HealthDataService: ObservableObject {
                 await self?.syncMissingHistoricalDataIfNeeded()
             }
         }
+        startActiveSyncLoop()
+    }
+    
+    // MARK: - Active Periodic Cadence
+    
+    public func startActiveSyncLoop() {
+        periodicActiveSyncTask?.cancel()
+        periodicActiveSyncTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 minutes periodic cadence
+                guard let self = self, !Task.isCancelled else { break }
+                if AuthService.shared.isAuthenticated && self.isToday {
+                    await self.loadDataForSelectedDate(forceRefresh: true)
+                }
+            }
+        }
+    }
+    
+    public func stopActiveSyncLoop() {
+        periodicActiveSyncTask?.cancel()
+        periodicActiveSyncTask = nil
     }
     
     // MARK: - Realtime Health Summary Subscription
@@ -324,7 +347,7 @@ public final class HealthDataService: ObservableObject {
     
     public func refreshIfStale() async {
         let isToday = Calendar.current.isDateInToday(selectedDate)
-        let staleThreshold: TimeInterval = isToday ? 900 : 3600 // 15 min for today, 1 hour for past
+        let staleThreshold: TimeInterval = isToday ? 300 : 3600 // 5 min for today, 1 hour for past
         
         if Date().timeIntervalSince(lastRefreshTimestamp) > staleThreshold {
             lastRefreshTimestamp = Date()
@@ -538,6 +561,15 @@ public final class HealthDataService: ObservableObject {
         var devicesSet = Set<String>()
         var sourcesSet = Set<DeviceSource>()
         
+        for s in summary.sources {
+            if !s.isEmpty {
+                let src = DeviceSource.from(name: s)
+                if !src.isVirtualEngine {
+                    devicesSet.insert(s)
+                    sourcesSet.insert(src)
+                }
+            }
+        }
         if let d = summary.sleep.primarySession?.sourceDevice, !d.isEmpty {
             let src = DeviceSource.from(name: d)
             if !src.isVirtualEngine {
@@ -573,11 +605,19 @@ public final class HealthDataService: ObservableObject {
         // 2. Activity
         self.hourlySteps = summary.activity.hourlySteps
         let isToday = Calendar.current.isDateInToday(selectedDate)
-        if isToday {
+        if selectedDeviceSource == nil && selectedDeviceFilter == nil, let allSteps = summary.allDevicesView?["steps"], let v = allSteps.value {
+            self.totalStepsToday = Int(v)
+        } else if isToday {
             self.totalStepsToday = max(self.totalStepsToday, summary.activity.totalSteps)
-            self.totalActiveCalories = max(self.totalActiveCalories, summary.activity.activeCalories)
         } else {
             self.totalStepsToday = summary.activity.totalSteps
+        }
+        
+        if selectedDeviceSource == nil && selectedDeviceFilter == nil, let allCal = summary.allDevicesView?["active_energy"], let v = allCal.value {
+            self.totalActiveCalories = v
+        } else if isToday {
+            self.totalActiveCalories = max(self.totalActiveCalories, summary.activity.activeCalories)
+        } else {
             self.totalActiveCalories = summary.activity.activeCalories
         }
         
@@ -662,6 +702,24 @@ public final class HealthDataService: ObservableObject {
                     sourceDevice: v.sourceDevice,
                     createdAt: v.timestamp
                 )
+            }
+        }
+        
+        // If All Devices is selected, overlay freshest biometrics from allDevicesView
+        if selectedDeviceSource == nil && selectedDeviceFilter == nil, let allView = summary.allDevicesView {
+            for (metricKey, item) in allView {
+                if let type = HealthMetricType.from(rawString: metricKey), let v = item.value {
+                    let updatedDate: Date? = item.updatedAt.flatMap { isoTimestampFormatter.date(from: $0) }
+                    vitalsMap[type] = VitalMetricRecord(
+                        userId: "canonical",
+                        type: type.rawValue,
+                        value: v,
+                        unit: item.unit ?? type.defaultUnit,
+                        date: dateKey,
+                        sourceDevice: item.sourceKey,
+                        createdAt: updatedDate
+                    )
+                }
             }
         }
         
@@ -750,18 +808,36 @@ public final class HealthDataService: ObservableObject {
             preferredSource: selectedDeviceSource,
             calendar: Calendar.current
         )
-        if isToday || stepCalc.totalSteps > self.totalStepsToday {
-            if stepCalc.totalSteps > 0 {
+        if selectedDeviceSource == nil && selectedDeviceFilter == nil {
+            // In "All Devices" mode, do not downgrade canonical summary with lower local phone pedometer steps
+            if stepCalc.totalSteps > self.totalStepsToday {
                 self.totalStepsToday = stepCalc.totalSteps
                 self.hourlySteps = stepCalc.hourlyBuckets
+            } else if self.hourlySteps.isEmpty && stepCalc.totalSteps > 0 {
+                self.hourlySteps = stepCalc.hourlyBuckets
+            }
+        } else {
+            if isToday || stepCalc.totalSteps > self.totalStepsToday {
+                if stepCalc.totalSteps > 0 {
+                    self.totalStepsToday = stepCalc.totalSteps
+                    self.hourlySteps = stepCalc.hourlyBuckets
+                }
             }
         }
         
         let activeCals = telemetry.filter { $0.type == "active_energy" }.compactMap { $0.value }.reduce(0, +)
-        if (isToday || activeCals > self.totalActiveCalories) && activeCals > 0 {
-            self.totalActiveCalories = activeCals
-        } else if self.totalActiveCalories == 0 && stepCalc.activeCalories > 0 {
-            self.totalActiveCalories = stepCalc.activeCalories
+        if selectedDeviceSource == nil && selectedDeviceFilter == nil {
+            if activeCals > self.totalActiveCalories {
+                self.totalActiveCalories = activeCals
+            } else if self.totalActiveCalories == 0 && stepCalc.activeCalories > 0 {
+                self.totalActiveCalories = stepCalc.activeCalories
+            }
+        } else {
+            if (isToday || activeCals > self.totalActiveCalories) && activeCals > 0 {
+                self.totalActiveCalories = activeCals
+            } else if self.totalActiveCalories == 0 && stepCalc.activeCalories > 0 {
+                self.totalActiveCalories = stepCalc.activeCalories
+            }
         }
         
         // 3. Intraday Heart Rate
@@ -1139,13 +1215,23 @@ public final class HealthDataService: ObservableObject {
               let userId = session.user.id.uuidString.lowercased() as String?,
               !telemetry.isEmpty else { return }
         
+        let deltaTelemetry = lastPushedTelemetryEpochMs > 0
+            ? telemetry.filter {
+                let st = $0.startTime.timeIntervalSince1970 * 1000
+                let et = ($0.endTime ?? $0.startTime).timeIntervalSince1970 * 1000
+                return st >= self.lastPushedTelemetryEpochMs || et >= self.lastPushedTelemetryEpochMs
+            }
+            : telemetry
+        
+        guard !deltaTelemetry.isEmpty else { return }
+        
         let tzOffsetMin = Calendar.current.timeZone.secondsFromGMT() / 60
         
-        let prepared = telemetry.compactMap { r -> HealthTelemetryRecord? in
+        let prepared = deltaTelemetry.compactMap { r -> HealthTelemetryRecord? in
             if let dev = r.sourceDevice, DeviceSource.from(name: dev).isVirtualEngine {
                 return nil
             }
-            let dKey = isoDateFormatter.string(from: r.startTime)
+            let dKey = r.localDate ?? isoDateFormatter.string(from: r.startTime)
             return HealthTelemetryRecord(
                 id: r.id,
                 userId: userId,
@@ -1159,8 +1245,12 @@ public final class HealthDataService: ObservableObject {
                 externalId: r.externalId ?? r.id,
                 sourceId: r.sourceId,
                 semantics: r.semantics,
-                tzOffsetMin: tzOffsetMin,
-                localDate: dKey
+                tzOffsetMin: r.tzOffsetMin ?? tzOffsetMin,
+                localDate: dKey,
+                hostDeviceName: r.hostDeviceName,
+                sensorSourceName: r.sensorSourceName,
+                sourceDeviceKey: r.effectiveSourceKey,
+                sourceColor: r.effectiveColor
             )
         }
         
@@ -1203,8 +1293,12 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // If telemetry was successfully uploaded, trigger canonical engine computation (throttled)
+        // If telemetry was successfully uploaded, update watermark and trigger canonical engine computation (throttled)
         if anyChunkSucceeded {
+            let maxEpoch = newRecords.map { ($0.endTime ?? $0.startTime).timeIntervalSince1970 * 1000 }.max() ?? 0
+            if maxEpoch > self.lastPushedTelemetryEpochMs {
+                self.lastPushedTelemetryEpochMs = maxEpoch
+            }
             for dKey in affectedDates {
                 triggerCanonicalEngineIfNeeded(for: dKey, userId: userId)
             }

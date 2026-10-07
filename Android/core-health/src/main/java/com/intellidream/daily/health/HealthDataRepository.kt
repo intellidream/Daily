@@ -38,6 +38,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -203,12 +204,35 @@ class HealthDataRepository(
 
     private val isoDateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
+    private var periodicActiveSyncJob: kotlinx.coroutines.Job? = null
+
     init {
         performDatabaseMaintenance()
+        startActiveSyncLoop()
         if (currentUserId != "local_user") {
             loadDataForSelectedDate(forceRefresh = true)
             setupRealtimeSubscription()
         }
+    }
+
+    fun startActiveSyncLoop() {
+        periodicActiveSyncJob?.cancel()
+        periodicActiveSyncJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                kotlinx.coroutines.delay(5 * 60 * 1000L) // 5 minutes periodic cadence
+                if (currentUserId != "local_user") {
+                    val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
+                    if (isToday) {
+                        loadDataForSelectedDate(forceRefresh = true)
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopActiveSyncLoop() {
+        periodicActiveSyncJob?.cancel()
+        periodicActiveSyncJob = null
     }
 
     private fun performDatabaseMaintenance() {
@@ -364,7 +388,7 @@ class HealthDataRepository(
     fun refreshIfStale() {
         val now = System.currentTimeMillis()
         val isToday = isSameDay(_selectedDate.value, now)
-        val staleThreshold = if (isToday) 15 * 60 * 1000L else 60 * 60 * 1000L
+        val staleThreshold = if (isToday) 5 * 60 * 1000L else 60 * 60 * 1000L
         if (now - lastRefreshTimestamp > staleThreshold) {
             lastRefreshTimestamp = now
             loadDataForSelectedDate(forceRefresh = true)
@@ -542,11 +566,20 @@ class HealthDataRepository(
 
         // Activity
         val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
-        if (isToday) {
+        val isAllDevices = _selectedDeviceSource.value == null && _selectedDeviceFilter.value.isNullOrEmpty()
+        if (isAllDevices && payload.allDevicesView?.containsKey("steps") == true) {
+            _totalStepsToday.value = (payload.allDevicesView["steps"]?.value ?: 0.0).toInt()
+        } else if (isToday) {
             _totalStepsToday.value = maxOf(_totalStepsToday.value, payload.activity?.totalSteps ?: 0)
-            _totalActiveCalories.value = maxOf(_totalActiveCalories.value, payload.activity?.activeCaloriesKcal ?: 0.0)
         } else {
             _totalStepsToday.value = payload.activity?.totalSteps ?: 0
+        }
+
+        if (isAllDevices && payload.allDevicesView?.containsKey("active_energy") == true) {
+            _totalActiveCalories.value = payload.allDevicesView["active_energy"]?.value ?: 0.0
+        } else if (isToday) {
+            _totalActiveCalories.value = maxOf(_totalActiveCalories.value, payload.activity?.activeCaloriesKcal ?: 0.0)
+        } else {
             _totalActiveCalories.value = payload.activity?.activeCaloriesKcal ?: 0.0
         }
         _hourlySteps.value = payload.activity?.hourlySteps ?: emptyList()
@@ -587,6 +620,21 @@ class HealthDataRepository(
                 date = dateKey,
                 sourceDevice = item.sourceDevice
             )
+        }
+        if (isAllDevices && payload.allDevicesView != null) {
+            for ((metricKey, item) in payload.allDevicesView) {
+                val type = HealthMetricType.from(metricKey) ?: continue
+                val valNum = item.value ?: continue
+                vitalsMap[type] = VitalMetricRecord(
+                    id = UUID.randomUUID().toString(),
+                    userId = currentUserId,
+                    type = metricKey,
+                    value = valNum,
+                    unit = item.unit,
+                    date = dateKey,
+                    sourceDevice = item.sourceKey
+                )
+            }
         }
         _currentVitals.value = vitalsMap
 
@@ -643,19 +691,37 @@ class HealthDataRepository(
             preferredDevice = _selectedDeviceFilter.value,
             preferredSource = _selectedDeviceSource.value
         )
-        if (isToday || stepsResult.totalSteps > _totalStepsToday.value) {
-            if (stepsResult.totalSteps > 0) {
+        val isAllDevices = _selectedDeviceSource.value == null && _selectedDeviceFilter.value.isNullOrEmpty()
+        if (isAllDevices) {
+            if (stepsResult.totalSteps > _totalStepsToday.value) {
                 _totalStepsToday.value = stepsResult.totalSteps
                 _hourlySteps.value = stepsResult.hourlyBuckets
+            } else if (_hourlySteps.value.isEmpty() && stepsResult.totalSteps > 0) {
+                _hourlySteps.value = stepsResult.hourlyBuckets
+            }
+        } else {
+            if (isToday || stepsResult.totalSteps > _totalStepsToday.value) {
+                if (stepsResult.totalSteps > 0) {
+                    _totalStepsToday.value = stepsResult.totalSteps
+                    _hourlySteps.value = stepsResult.hourlyBuckets
+                }
             }
         }
 
         val activeCals = telemetry.filter { it.type == "active_energy" || it.type == "active_calories" }
             .mapNotNull { it.value }.sum()
-        if ((isToday || activeCals > _totalActiveCalories.value) && activeCals > 0) {
-            _totalActiveCalories.value = activeCals
-        } else if (_totalActiveCalories.value == 0.0 && stepsResult.activeCalories > 0.0) {
-            _totalActiveCalories.value = stepsResult.activeCalories
+        if (isAllDevices) {
+            if (activeCals > _totalActiveCalories.value) {
+                _totalActiveCalories.value = activeCals
+            } else if (_totalActiveCalories.value == 0.0 && stepsResult.activeCalories > 0.0) {
+                _totalActiveCalories.value = stepsResult.activeCalories
+            }
+        } else {
+            if ((isToday || activeCals > _totalActiveCalories.value) && activeCals > 0) {
+                _totalActiveCalories.value = activeCals
+            } else if (_totalActiveCalories.value == 0.0 && stepsResult.activeCalories > 0.0) {
+                _totalActiveCalories.value = stepsResult.activeCalories
+            }
         }
 
         // 3. Intraday Heart Rate
@@ -1340,15 +1406,28 @@ class HealthDataRepository(
         }
     }
 
+    private var lastPushedTelemetryEpochMs: Long = 0L
+
     suspend fun syncTelemetryToSupabase(telemetry: List<HealthTelemetryRecord>): Boolean {
         if (currentUserId == "local_user" || telemetry.isEmpty()) return false
-        val success = remoteService.pushTelemetry(telemetry)
+        val deltaTelemetry = if (lastPushedTelemetryEpochMs > 0) {
+            telemetry.filter { it.startTime >= lastPushedTelemetryEpochMs || (it.endTime ?: it.startTime) >= lastPushedTelemetryEpochMs }
+        } else {
+            telemetry
+        }
+        if (deltaTelemetry.isEmpty()) return true
+
+        val success = remoteService.pushTelemetry(deltaTelemetry)
         if (success) {
-            val ids = telemetry.map { it.id }
+            val maxEpoch = deltaTelemetry.maxOfOrNull { it.startTime } ?: 0L
+            if (maxEpoch > lastPushedTelemetryEpochMs) {
+                lastPushedTelemetryEpochMs = maxEpoch
+            }
+            val ids = deltaTelemetry.map { it.id }
             withContext(Dispatchers.IO) {
                 telemetryDao.markRecordsSynced(ids, System.currentTimeMillis())
             }
-            val affectedDates = telemetry.map { isoDateFormatter.format(Date(it.startTime)) }.toSet()
+            val affectedDates = deltaTelemetry.map { isoDateFormatter.format(Date(it.startTime)) }.toSet()
             for (dKey in affectedDates) {
                 triggerCanonicalEngineIfNeeded(dKey)
             }

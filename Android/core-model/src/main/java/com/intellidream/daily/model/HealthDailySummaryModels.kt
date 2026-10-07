@@ -35,10 +35,22 @@ data class HealthDailySummaryRecord(
 )
 
 @Serializable
+data class DeviceMetricItem(
+    val value: Double = 0.0,
+    @SerialName("source_key") val sourceKey: String = "",
+    @SerialName("source_color") val sourceColor: String = "#3897F0",
+    val unit: String? = null,
+    val timestamp: String? = null,
+    val score: Int? = null
+)
+
+@Serializable
 data class DailyHealthSummaryPayload(
     val date: String,
     @SerialName("computed_at") val computedAt: String? = null,
     val sources: List<String> = emptyList(),
+    @SerialName("all_devices_view") val allDevicesView: Map<String, DeviceMetricItem> = emptyMap(),
+    @SerialName("sources_breakdown") val sourcesBreakdown: Map<String, Map<String, Double>> = emptyMap(),
     val sleep: CanonicalSleepSummary? = null,
     val activity: CanonicalActivitySummary? = null,
     val cardiovascular: CanonicalCardiovascularSummary? = null,

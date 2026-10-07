@@ -1,5 +1,8 @@
 import Foundation
 import HealthKit
+#if canImport(UIKit)
+import UIKit
+#endif
 import DailyCore
 
 /// Native iOS HealthKit provider querying on-device biometric sensors and Apple Watch data.
@@ -15,6 +18,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     }
     
     public init() {
+        Self.configureHostName()
         HabitsService.shared.onWaterLogged = { [weak self] amountMl, date in
             Task {
                 await self?.writeWaterIntake(amountMl: amountMl, date: date)
@@ -92,6 +96,30 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     
     // MARK: - LocalHealthDataProvider Conformance
     
+    private nonisolated(unsafe) static var _cachedHostPhoneName: String = "Schmitz"
+
+    @MainActor
+    public static func configureHostName() {
+        #if canImport(UIKit)
+        let name = UIDevice.current.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            _cachedHostPhoneName = name
+        }
+        #endif
+    }
+    
+    nonisolated public static var hostPhoneName: String {
+        return _cachedHostPhoneName
+    }
+
+    nonisolated public static func resolveCompoundSource(device: HKDevice?, source: HKSource) -> (host: String, sensor: String, compoundKey: String, color: String) {
+        let host = hostPhoneName
+        let sensor = resolveDeviceName(device: device, source: source)
+        let key = "\(host) - \(sensor)"
+        let color = DeviceColorPalette.getColor(for: key)
+        return (host, sensor, key, color)
+    }
+
     public func fetchLocalTelemetry(for date: Date) async -> [HealthTelemetryRecord] {
         guard isAvailable else { return [] }
         _ = await ensureAuthorized()
@@ -101,8 +129,17 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         let cal = Calendar.current
         let startOfDay = cal.startOfDay(for: date)
         let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) ?? date
+        let tzOffsetMin = cal.timeZone.secondsFromGMT(for: date) / 60
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        let dateStr = f.string(from: date)
         
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        
+        let host = Self.hostPhoneName
+        let defaultSensor = "Apple Health"
+        let defaultKey = "\(host) - \(defaultSensor)"
+        let defaultColor = DeviceColorPalette.getColor(for: defaultKey)
         
         // 1. Steps (Queried per hour via HKStatisticsCollectionQuery for clean hourly distribution and automatic deduplication)
         let hourlySteps = await fetchHourlySteps(for: date)
@@ -117,7 +154,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "count",
                     startTime: startOfDay,
                     endTime: endOfDay,
-                    sourceDevice: "Apple Health"
+                    sourceDevice: defaultKey,
+                    externalId: "steps_daily_\(Int(startOfDay.timeIntervalSince1970))",
+                    semantics: "interval_delta",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: dateStr,
+                    hostDeviceName: host,
+                    sensorSourceName: defaultSensor,
+                    sourceDeviceKey: defaultKey,
+                    sourceColor: defaultColor
                 ))
             }
         }
@@ -136,9 +181,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "kcal",
                     startTime: startOfDay,
                     endTime: endOfDay,
-                    sourceDevice: "Apple Health",
+                    sourceDevice: defaultKey,
                     externalId: "active_energy_daily_\(epoch)",
-                    semantics: "interval_delta"
+                    semantics: "interval_delta",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: dateStr,
+                    hostDeviceName: host,
+                    sensorSourceName: defaultSensor,
+                    sourceDeviceKey: defaultKey,
+                    sourceColor: defaultColor
                 ))
             }
         }
@@ -165,9 +216,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "bpm",
                     startTime: rhr.timestamp,
                     endTime: rhr.timestamp,
-                    sourceDevice: rhr.device,
+                    sourceDevice: rhr.compoundKey,
                     externalId: rhr.uuid,
-                    semantics: "spot"
+                    semantics: "spot",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: f.string(from: rhr.timestamp),
+                    hostDeviceName: rhr.host,
+                    sensorSourceName: rhr.sensor,
+                    sourceDeviceKey: rhr.compoundKey,
+                    sourceColor: rhr.color
                 ))
             }
         }
@@ -183,9 +240,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "ms",
                     startTime: hrv.timestamp,
                     endTime: hrv.timestamp,
-                    sourceDevice: hrv.device,
+                    sourceDevice: hrv.compoundKey,
                     externalId: hrv.uuid,
-                    semantics: "spot"
+                    semantics: "spot",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: f.string(from: hrv.timestamp),
+                    hostDeviceName: hrv.host,
+                    sensorSourceName: hrv.sensor,
+                    sourceDeviceKey: hrv.compoundKey,
+                    sourceColor: hrv.color
                 ))
             }
         }
@@ -202,9 +265,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "%",
                     startTime: o2.timestamp,
                     endTime: o2.timestamp,
-                    sourceDevice: o2.device,
+                    sourceDevice: o2.compoundKey,
                     externalId: o2.uuid,
-                    semantics: "spot"
+                    semantics: "spot",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: f.string(from: o2.timestamp),
+                    hostDeviceName: o2.host,
+                    sensorSourceName: o2.sensor,
+                    sourceDeviceKey: o2.compoundKey,
+                    sourceColor: o2.color
                 ))
             }
         }
@@ -220,9 +289,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "br/min",
                     startTime: resp.timestamp,
                     endTime: resp.timestamp,
-                    sourceDevice: resp.device,
+                    sourceDevice: resp.compoundKey,
                     externalId: resp.uuid,
-                    semantics: "spot"
+                    semantics: "spot",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: f.string(from: resp.timestamp),
+                    hostDeviceName: resp.host,
+                    sensorSourceName: resp.sensor,
+                    sourceDeviceKey: resp.compoundKey,
+                    sourceColor: resp.color
                 ))
             }
         }
@@ -238,9 +313,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "kg",
                     startTime: weight.timestamp,
                     endTime: weight.timestamp,
-                    sourceDevice: weight.device,
+                    sourceDevice: weight.compoundKey,
                     externalId: weight.uuid,
-                    semantics: "spot"
+                    semantics: "spot",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: f.string(from: weight.timestamp),
+                    hostDeviceName: weight.host,
+                    sensorSourceName: weight.sensor,
+                    sourceDeviceKey: weight.compoundKey,
+                    sourceColor: weight.color
                 ))
             }
         }
@@ -256,9 +337,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     unit: "%",
                     startTime: fat.timestamp,
                     endTime: fat.timestamp,
-                    sourceDevice: fat.device,
+                    sourceDevice: fat.compoundKey,
                     externalId: fat.uuid,
-                    semantics: "spot"
+                    semantics: "spot",
+                    tzOffsetMin: tzOffsetMin,
+                    localDate: f.string(from: fat.timestamp),
+                    hostDeviceName: fat.host,
+                    sensorSourceName: fat.sensor,
+                    sourceDeviceKey: fat.compoundKey,
+                    sourceColor: fat.color
                 ))
             }
         }
@@ -326,8 +413,10 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         typeName = sample.value == HKCategoryValueSleepAnalysis.awake.rawValue ? "sleep_stage_awake" : "sleep"
                     }
                     
-                    let devName = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
-                    
+                    let (host, sensor, key, color) = Self.resolveCompoundSource(device: sample.device, source: sample.sourceRevision.source)
+                    let tzOffset = Calendar.current.timeZone.secondsFromGMT(for: sample.startDate) / 60
+                    let f = DateFormatter()
+                    f.dateFormat = "yyyy-MM-dd"
                     let durationMinutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
                     records.append(HealthTelemetryRecord(
                         id: sample.uuid.uuidString,
@@ -337,9 +426,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         unit: "minutes",
                         startTime: sample.startDate,
                         endTime: sample.endDate,
-                        sourceDevice: devName,
+                        sourceDevice: key,
                         externalId: sample.uuid.uuidString,
-                        semantics: "session_stage"
+                        semantics: "session_stage",
+                        tzOffsetMin: tzOffset,
+                        localDate: f.string(from: sample.startDate),
+                        hostDeviceName: host,
+                        sensorSourceName: sensor,
+                        sourceDeviceKey: key,
+                        sourceColor: color
                     ))
                 }
                 
@@ -400,9 +495,17 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     return
                 }
                 var hourlyRecords: [HealthTelemetryRecord] = []
+                let host = Self.hostPhoneName
+                let sensor = "Apple Health"
+                let key = "\(host) - \(sensor)"
+                let color = DeviceColorPalette.getColor(for: key)
+                let f = DateFormatter()
+                f.dateFormat = "yyyy-MM-dd"
+                
                 results.enumerateStatistics(from: startOfDay, to: endOfDay) { stats, _ in
                     if let sum = stats.sumQuantity()?.doubleValue(for: .count()), sum > 0 {
                         let epoch = Int(stats.startDate.timeIntervalSince1970)
+                        let tzOffset = Calendar.current.timeZone.secondsFromGMT(for: stats.startDate) / 60
                         hourlyRecords.append(HealthTelemetryRecord(
                             id: UUID().uuidString,
                             userId: "healthkit",
@@ -411,9 +514,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                             unit: "count",
                             startTime: stats.startDate,
                             endTime: stats.endDate,
-                            sourceDevice: "Apple Health",
+                            sourceDevice: key,
                             externalId: "steps_hourly_\(epoch)",
-                            semantics: "interval_delta"
+                            semantics: "interval_delta",
+                            tzOffsetMin: tzOffset,
+                            localDate: f.string(from: stats.startDate),
+                            hostDeviceName: host,
+                            sensorSourceName: sensor,
+                            sourceDeviceKey: key,
+                            sourceColor: color
                         ))
                     }
                 }
@@ -445,9 +554,17 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     return
                 }
                 var hourlyRecords: [HealthTelemetryRecord] = []
+                let host = Self.hostPhoneName
+                let sensor = "Apple Health"
+                let key = "\(host) - \(sensor)"
+                let color = DeviceColorPalette.getColor(for: key)
+                let f = DateFormatter()
+                f.dateFormat = "yyyy-MM-dd"
+                
                 results.enumerateStatistics(from: startOfDay, to: endOfDay) { stats, _ in
                     if let sum = stats.sumQuantity()?.doubleValue(for: .kilocalorie()), sum > 0 {
                         let epoch = Int(stats.startDate.timeIntervalSince1970)
+                        let tzOffset = Calendar.current.timeZone.secondsFromGMT(for: stats.startDate) / 60
                         hourlyRecords.append(HealthTelemetryRecord(
                             id: UUID().uuidString,
                             userId: "healthkit",
@@ -456,9 +573,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                             unit: "kcal",
                             startTime: stats.startDate,
                             endTime: stats.endDate,
-                            sourceDevice: "Apple Health",
+                            sourceDevice: key,
                             externalId: "active_energy_hourly_\(epoch)",
-                            semantics: "interval_delta"
+                            semantics: "interval_delta",
+                            tzOffsetMin: tzOffset,
+                            localDate: f.string(from: stats.startDate),
+                            hostDeviceName: host,
+                            sensorSourceName: sensor,
+                            sourceDeviceKey: key,
+                            sourceColor: color
                         ))
                     }
                 }
@@ -502,8 +625,11 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     continuation.resume(returning: [])
                     return
                 }
+                let f = DateFormatter()
+                f.dateFormat = "yyyy-MM-dd"
                 let records = qSamples.map { sample in
-                    let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
+                    let (host, sensor, key, color) = Self.resolveCompoundSource(device: sample.device, source: sample.sourceRevision.source)
+                    let tzOffset = Calendar.current.timeZone.secondsFromGMT(for: sample.startDate) / 60
                     return HealthTelemetryRecord(
                         id: sample.uuid.uuidString,
                         userId: "healthkit",
@@ -512,9 +638,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         unit: unit.unitString,
                         startTime: sample.startDate,
                         endTime: sample.endDate,
-                        sourceDevice: dev,
+                        sourceDevice: key,
                         externalId: sample.uuid.uuidString,
-                        semantics: "spot"
+                        semantics: "spot",
+                        tzOffsetMin: tzOffset,
+                        localDate: f.string(from: sample.startDate),
+                        hostDeviceName: host,
+                        sensorSourceName: sensor,
+                        sourceDeviceKey: key,
+                        sourceColor: color
                     )
                 }
                 continuation.resume(returning: records)
@@ -528,7 +660,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         predicate: NSPredicate,
         unit: HKUnit,
         sampleLimit: Int = 50
-    ) async -> [(value: Double, device: String, timestamp: Date, uuid: String)] {
+    ) async -> [(value: Double, device: String, timestamp: Date, uuid: String, host: String, sensor: String, compoundKey: String, color: String)] {
         await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: sampleLimit, sortDescriptors: [sort]) { _, samples, _ in
@@ -538,16 +670,16 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 }
                 
                 var seenDevices = Set<String>()
-                var results: [(value: Double, device: String, timestamp: Date, uuid: String)] = []
+                var results: [(value: Double, device: String, timestamp: Date, uuid: String, host: String, sensor: String, compoundKey: String, color: String)] = []
                 
                 for sample in qSamples {
-                    let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
-                    if DeviceSource.from(name: dev).isVirtualEngine {
+                    let (host, sensor, key, color) = Self.resolveCompoundSource(device: sample.device, source: sample.sourceRevision.source)
+                    if DeviceSource.from(name: sensor).isVirtualEngine {
                         continue
                     }
-                    if !seenDevices.contains(dev) {
-                        seenDevices.insert(dev)
-                        results.append((sample.quantity.doubleValue(for: unit), dev, sample.endDate, sample.uuid.uuidString))
+                    if !seenDevices.contains(key) {
+                        seenDevices.insert(key)
+                        results.append((sample.quantity.doubleValue(for: unit), key, sample.endDate, sample.uuid.uuidString, host, sensor, key, color))
                     }
                 }
                 continuation.resume(returning: results)
@@ -556,13 +688,13 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         }
     }
     
-    private func fetchMostRecentSample(for quantityType: HKQuantityType, predicate: NSPredicate, unit: HKUnit) async -> (value: Double, device: String, timestamp: Date, uuid: String)? {
+    private func fetchMostRecentSample(for quantityType: HKQuantityType, predicate: NSPredicate, unit: HKUnit) async -> (value: Double, device: String, timestamp: Date, uuid: String, host: String, sensor: String, compoundKey: String, color: String)? {
         await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: quantityType, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
                 if let sample = samples?.first as? HKQuantitySample {
-                    let dev = Self.resolveDeviceName(device: sample.device, source: sample.sourceRevision.source)
-                    continuation.resume(returning: (sample.quantity.doubleValue(for: unit), dev, sample.endDate, sample.uuid.uuidString))
+                    let (host, sensor, key, color) = Self.resolveCompoundSource(device: sample.device, source: sample.sourceRevision.source)
+                    continuation.resume(returning: (sample.quantity.doubleValue(for: unit), key, sample.endDate, sample.uuid.uuidString, host, sensor, key, color))
                 } else {
                     continuation.resume(returning: nil)
                 }
@@ -585,7 +717,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         }
     }
     
-    private static func resolveDeviceName(device: HKDevice?, source: HKSource) -> String {
+    nonisolated private static func resolveDeviceName(device: HKDevice?, source: HKSource) -> String {
         if let d = device?.name, !d.isEmpty {
             let lowerD = d.lowercased()
             if lowerD.contains("stresswatch") || lowerD.contains("stress-engine") {
@@ -618,27 +750,41 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     private func downsampleHeartRateRecords(_ samples: [HealthTelemetryRecord], bucketIntervalSeconds: TimeInterval = 300) -> [HealthTelemetryRecord] {
         guard !samples.isEmpty else { return [] }
         
-        var buckets: [String: (sum: Double, count: Int, timestamp: Date, device: String)] = [:]
+        var buckets: [String: (sum: Double, count: Int, timestamp: Date, device: String, host: String?, sensor: String?, key: String?, color: String?)] = [:]
         
         for sample in samples {
             guard let bpm = sample.value, bpm >= 30, bpm <= 240 else { continue }
             let epoch = sample.startTime.timeIntervalSince1970
             let bucketTime = floor(epoch / bucketIntervalSeconds) * bucketIntervalSeconds
-            let device = sample.sourceDevice ?? "Apple Health"
-            let key = "\(Int64(bucketTime))_\(device)"
+            let device = sample.sourceDeviceKey ?? sample.sourceDevice ?? "Apple Health"
+            let bucketKey = "\(Int64(bucketTime))_\(device)"
             
-            if var existing = buckets[key] {
+            if var existing = buckets[bucketKey] {
                 existing.sum += bpm
                 existing.count += 1
-                buckets[key] = existing
+                buckets[bucketKey] = existing
             } else {
-                buckets[key] = (sum: bpm, count: 1, timestamp: Date(timeIntervalSince1970: bucketTime), device: device)
+                buckets[bucketKey] = (
+                    sum: bpm,
+                    count: 1,
+                    timestamp: Date(timeIntervalSince1970: bucketTime),
+                    device: device,
+                    host: sample.hostDeviceName,
+                    sensor: sample.sensorSourceName,
+                    key: sample.sourceDeviceKey,
+                    color: sample.sourceColor
+                )
             }
         }
+        
+        let tzOffsetMin = Calendar.current.timeZone.secondsFromGMT() / 60
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
         
         return buckets.values.map { b in
             let avgBpm = (round((b.sum / Double(b.count)) * 10.0)) / 10.0
             let bucketEpoch = Int64(b.timestamp.timeIntervalSince1970)
+            let finalDevice = b.key ?? b.device
             return HealthTelemetryRecord(
                 id: UUID().uuidString,
                 userId: "healthkit",
@@ -647,9 +793,15 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 unit: "bpm",
                 startTime: b.timestamp,
                 endTime: b.timestamp.addingTimeInterval(bucketIntervalSeconds),
-                sourceDevice: b.device,
-                externalId: "hr_\(b.device)_\(bucketEpoch)",
-                semantics: "interval_avg"
+                sourceDevice: finalDevice,
+                externalId: "hr_\(finalDevice)_\(bucketEpoch)",
+                semantics: "interval_avg",
+                tzOffsetMin: tzOffsetMin,
+                localDate: f.string(from: b.timestamp),
+                hostDeviceName: b.host,
+                sensorSourceName: b.sensor,
+                sourceDeviceKey: finalDevice,
+                sourceColor: b.color
             )
         }.sorted { $0.startTime < $1.startTime }
     }

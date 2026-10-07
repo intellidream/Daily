@@ -10,6 +10,10 @@ export interface HealthTelemetryRow {
   start_time: string; // ISO-8601 UTC
   end_time: string | null; // ISO-8601 UTC
   source_device: string | null;
+  host_device_name?: string | null;
+  sensor_source_name?: string | null;
+  source_device_key?: string | null;
+  source_color?: string | null;
   external_id?: string | null;
   source_id?: string | null;
   semantics?: string | null;
@@ -170,10 +174,21 @@ export interface VitalSummaryItem {
   timestamp: string;
 }
 
+export interface DeviceMetricItem {
+  value: number;
+  source_key: string;
+  source_color: string;
+  timestamp?: string;
+  score?: number;
+}
+
 export interface DailyHealthSummaryPayload {
   date: string;
   engine_version: string;
   computed_at: string;
+  sources?: string[];
+  all_devices_view?: Record<string, DeviceMetricItem>;
+  sources_breakdown?: Record<string, Record<string, number>>;
   sleep: {
     primary_session: SleepSession | null;
     all_sessions: SleepSession[];

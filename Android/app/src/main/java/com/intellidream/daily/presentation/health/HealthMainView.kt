@@ -557,16 +557,19 @@ private fun DeviceSelectorMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isFiltered = selectedSource != null
+    val activeColor = selectedSource?.let {
+        runCatching { Color(android.graphics.Color.parseColor(it.colorHex)) }.getOrNull()
+    } ?: ThemeColors.accentCyan
 
     Box {
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (isFiltered) ThemeColors.accentCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f))
+                .background(if (isFiltered) activeColor.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f))
                 .border(
                     1.dp,
-                    if (isFiltered) ThemeColors.accentCyan.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.12f),
+                    if (isFiltered) activeColor.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.12f),
                     CircleShape
                 )
                 .clickable { expanded = true },
@@ -575,7 +578,7 @@ private fun DeviceSelectorMenu(
             Icon(
                 imageVector = Icons.Rounded.Watch,
                 contentDescription = "Device Selector",
-                tint = if (isFiltered) ThemeColors.accentCyan else Color.White.copy(alpha = 0.85f),
+                tint = if (isFiltered) activeColor else Color.White.copy(alpha = 0.85f),
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -609,8 +612,22 @@ private fun DeviceSelectorMenu(
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
             availableSources.forEach { source ->
+                val sourceColor = runCatching { Color(android.graphics.Color.parseColor(source.colorHex)) }.getOrDefault(ThemeColors.accentCyan)
                 DropdownMenuItem(
-                    text = { Text(source.displayName, color = Color.White) },
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(sourceColor)
+                            )
+                            Text(source.displayName, color = Color.White)
+                        }
+                    },
                     leadingIcon = {
                         val icon = when (source) {
                             is DeviceSource.HealthConnect -> Icons.Rounded.Favorite
@@ -620,13 +637,13 @@ private fun DeviceSelectorMenu(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = ThemeColors.accentCyan,
+                            tint = sourceColor,
                             modifier = Modifier.size(18.dp)
                         )
                     },
                     trailingIcon = {
                         if (selectedSource == source) {
-                            Icon(Icons.Rounded.Check, contentDescription = null, tint = ThemeColors.accentCyan)
+                            Icon(Icons.Rounded.Check, contentDescription = null, tint = sourceColor)
                         }
                     },
                     onClick = {

@@ -253,9 +253,23 @@ data class HealthTelemetryRecord(
     @SerialName("external_id") val externalId: String? = null,
     @SerialName("source_id") val sourceId: String? = null,
     val semantics: String? = null,
+    @kotlinx.serialization.Transient
+    val hostDeviceName: String? = null,
+    @kotlinx.serialization.Transient
+    val sensorSourceName: String? = null,
+    @kotlinx.serialization.Transient
+    val sourceDeviceKey: String? = null,
+    @kotlinx.serialization.Transient
+    val sourceColor: String? = null,
     @SerialName("tz_offset_min") val tzOffsetMin: Int? = null,
     @SerialName("local_date") val localDate: String? = null
 ) {
+    val effectiveSourceKey: String
+        get() = sourceDeviceKey?.takeIf { it.isNotEmpty() } ?: sourceDevice ?: "Unknown"
+
+    val effectiveColor: String
+        get() = sourceColor?.takeIf { it.isNotEmpty() } ?: DeviceColorPalette.getColorForSource(effectiveSourceKey)
+
     val normalizedType: String
         get() = type.trim().lowercase().replace("_", "").replace(" ", "")
 
@@ -676,6 +690,9 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
     object Manual : DeviceSource("Manual Entry", "manual")
     data class Other(val name: String) : DeviceSource(name, name)
 
+    val colorHex: String
+        get() = DeviceColorPalette.getColorForSource(displayName)
+
     val isVirtualEngine: Boolean
         get() = when (this) {
             is Other -> {
@@ -695,6 +712,10 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
         fun from(name: String?): DeviceSource {
             val clean = name?.trim() ?: return Other("Unknown")
             if (clean.isEmpty()) return Other("Unknown")
+            // Preserve full compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - Pixel Watch 5")
+            if (clean.contains(" - ")) {
+                return Other(clean)
+            }
             val lower = clean.lowercase()
             return when {
                 lower.contains("fitbit") -> Fitbit
@@ -763,3 +784,24 @@ data class SleepAIContext(
     val narrativeSynthesis: String,
     val suggestedPrompts: List<String>
 )
+
+object DeviceColorPalette {
+    val PALETTE = listOf(
+        "#00D09C", // Emerald (Oura green)
+        "#3897F0", // Electric Blue (Pixel / Google)
+        "#FF6B4A", // Coral / Orange (Activity)
+        "#AF52DE", // Violet / Purple (HealthKit)
+        "#FF2D55", // Rose / Crimson
+        "#34C759", // Apple Green
+        "#FF9500", // Amber
+        "#5856D6", // Indigo
+        "#00C7BE"  // Cyan / Teal
+    )
+
+    fun getColorForSource(sourceKey: String): String {
+        if (sourceKey.isEmpty()) return "#3897F0"
+        val hash = sourceKey.hashCode().let { if (it < 0) -it else it }
+        return PALETTE[hash % PALETTE.size]
+    }
+}
+

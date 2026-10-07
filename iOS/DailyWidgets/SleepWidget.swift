@@ -276,9 +276,10 @@ public struct SleepWidgetView: View {
 
                     Spacer()
 
-                    HStack(spacing: 3) {
-                        Image(systemName: "applewatch")
-                            .font(.system(size: 8))
+                    HStack(spacing: 3.5) {
+                        Circle()
+                            .fill(Color(hex: entry.snapshot.sourceColor ?? DeviceColorPalette.getColor(for: entry.snapshot.sourceDevice)))
+                            .frame(width: 5, height: 5)
                         Text(entry.snapshot.sourceDevice)
                             .font(.system(size: 8.5, weight: .semibold))
                     }
@@ -315,9 +316,10 @@ public struct SleepWidgetView: View {
 
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Image(systemName: "applewatch")
-                        .font(.system(size: 9))
+                HStack(spacing: 4.5) {
+                    Circle()
+                        .fill(Color(hex: entry.snapshot.sourceColor ?? DeviceColorPalette.getColor(for: entry.snapshot.sourceDevice)))
+                        .frame(width: 6, height: 6)
                     Text(entry.snapshot.sourceDevice)
                         .font(.system(size: 9, weight: .semibold))
                 }

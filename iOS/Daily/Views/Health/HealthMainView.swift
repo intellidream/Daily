@@ -195,7 +195,7 @@ public struct HealthMainView: View {
                     }
                 } label: {
                     HStack {
-                        Label(source.displayName, systemImage: source.systemImage)
+                        Text("● \(source.displayName)")
                         if healthService.selectedDeviceSource == source {
                             Image(systemName: "checkmark")
                         }
@@ -204,16 +204,17 @@ public struct HealthMainView: View {
             }
         } label: {
             let isFiltered = healthService.selectedDeviceSource != nil
+            let activeColor = Color(hex: healthService.selectedDeviceSource?.colorHex ?? "#00E5FF")
             let iconName = healthService.selectedDeviceSource?.systemImage ?? "applewatch.radiowaves.left.and.right"
             Image(systemName: iconName)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(isFiltered ? ThemeColors.accentCyan : .white.opacity(0.85))
+                .foregroundColor(isFiltered ? activeColor : .white.opacity(0.85))
                 .frame(width: 36, height: 36)
                 .background(
-                    Circle().fill(isFiltered ? ThemeColors.accentCyan.opacity(0.2) : Color.white.opacity(0.08))
-                        .overlay(Circle().strokeBorder(isFiltered ? ThemeColors.accentCyan.opacity(0.6) : Color.white.opacity(0.12), lineWidth: 1))
+                    Circle().fill(isFiltered ? activeColor.opacity(0.2) : Color.white.opacity(0.08))
+                        .overlay(Circle().strokeBorder(isFiltered ? activeColor.opacity(0.6) : Color.white.opacity(0.12), lineWidth: 1))
                 )
-                .shadow(color: isFiltered ? ThemeColors.accentCyan.opacity(0.3) : .clear, radius: 4)
+                .shadow(color: isFiltered ? activeColor.opacity(0.3) : .clear, radius: 4)
         }
         .buttonStyle(.plain)
     }

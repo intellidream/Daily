@@ -200,6 +200,7 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
     public let restingHeartRate: Double?
     public let hrvMs: Double?
     public let sourceDevice: String
+    public let sourceColor: String?
     public let lastUpdated: Date
     
     private enum CodingKeys: String, CodingKey {
@@ -229,6 +230,7 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         case restingHeartRate
         case hrvMs
         case sourceDevice
+        case sourceColor
         case lastUpdated
     }
 
@@ -259,6 +261,7 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         restingHeartRate: Double? = nil,
         hrvMs: Double? = nil,
         sourceDevice: String = "Apple Watch",
+        sourceColor: String? = nil,
         lastUpdated: Date = Date()
     ) {
         self.hasData = hasData
@@ -287,6 +290,7 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         self.restingHeartRate = restingHeartRate
         self.hrvMs = hrvMs
         self.sourceDevice = sourceDevice
+        self.sourceColor = sourceColor ?? DeviceColorPalette.getColor(for: sourceDevice)
         self.lastUpdated = lastUpdated
     }
 
@@ -330,7 +334,9 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         self.restorativePercent = try container.decode(Int.self, forKey: .restorativePercent)
         self.restingHeartRate = try container.decodeIfPresent(Double.self, forKey: .restingHeartRate)
         self.hrvMs = try container.decodeIfPresent(Double.self, forKey: .hrvMs)
-        self.sourceDevice = try container.decodeIfPresent(String.self, forKey: .sourceDevice) ?? "Apple Watch"
+        let dev = try container.decodeIfPresent(String.self, forKey: .sourceDevice) ?? "Apple Watch"
+        self.sourceDevice = dev
+        self.sourceColor = try container.decodeIfPresent(String.self, forKey: .sourceColor) ?? DeviceColorPalette.getColor(for: dev)
         self.lastUpdated = try container.decodeIfPresent(Date.self, forKey: .lastUpdated) ?? Date()
     }
 
@@ -362,6 +368,7 @@ public struct SleepWidgetSnapshot: Sendable, Codable {
         try container.encodeIfPresent(restingHeartRate, forKey: .restingHeartRate)
         try container.encodeIfPresent(hrvMs, forKey: .hrvMs)
         try container.encode(sourceDevice, forKey: .sourceDevice)
+        try container.encodeIfPresent(sourceColor, forKey: .sourceColor)
         try container.encode(lastUpdated, forKey: .lastUpdated)
     }
 }
@@ -876,6 +883,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     public func updateSleepSnapshot(from session: SleepSession?, restingHeartRate: Double? = nil, hrvMs: Double? = nil) {
         let snapshot: SleepWidgetSnapshot
         if let session = session, session.asleepSeconds > 0 {
+            let color = DeviceColorPalette.getColor(for: session.sourceDevice)
             snapshot = SleepWidgetSnapshot(
                 hasData: true,
                 sleepScore: session.sleepScore,
@@ -903,6 +911,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
                 restingHeartRate: restingHeartRate,
                 hrvMs: hrvMs,
                 sourceDevice: session.sourceDevice,
+                sourceColor: color,
                 lastUpdated: Date()
             )
         } else {

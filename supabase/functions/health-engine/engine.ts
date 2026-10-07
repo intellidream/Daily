@@ -1387,11 +1387,56 @@ export function computeDailyHealthSummary(input: EngineInput): HealthDailySummar
 
   // Calculate raw_watermark (maximum created_at or start_time across telemetry)
   let watermarkMs = 0;
+  const sourceKeys = new Set<string>();
   for (const r of telemetry) {
     const tMs = toEpochMs(r.created_at || r.start_time);
     if (tMs > watermarkMs) watermarkMs = tMs;
+    const key = (r.source_device_key || r.source_device || '').trim();
+    if (key.length > 0 && key !== 'Unknown') {
+      sourceKeys.add(key);
+    }
   }
   const rawWatermark = watermarkMs > 0 ? new Date(watermarkMs).toISOString() : null;
+
+  // Build All Devices View (freshest / primary value per metric)
+  const allDevicesView: Record<string, any> = {};
+  if (activitySummary.total_steps > 0) {
+    allDevicesView['steps'] = {
+      value: activitySummary.total_steps,
+      source_key: activitySummary.source_device || 'Smartwatch',
+      source_color: '#3897F0'
+    };
+  }
+  if (sleepResult.primarySession && sleepResult.primarySession.asleep_seconds > 0) {
+    allDevicesView['sleep_duration_seconds'] = {
+      value: sleepResult.primarySession.asleep_seconds,
+      source_key: sleepResult.primarySession.source_device || 'Oura Ring',
+      source_color: '#00D09C',
+      score: sleepResult.primarySession.sleep_score
+    };
+  }
+  if (cardioSummary.resting_bpm && cardioSummary.resting_bpm > 0) {
+    allDevicesView['resting_heart_rate'] = {
+      value: cardioSummary.resting_bpm,
+      source_key: vitalsMap['restingheartrate']?.source_device || sleepResult.primarySession?.source_device || 'Wearable',
+      source_color: '#00D09C'
+    };
+  }
+  if (activitySummary.active_calories > 0) {
+    allDevicesView['active_calories'] = {
+      value: activitySummary.active_calories,
+      source_key: activitySummary.source_device || 'Smartwatch',
+      source_color: '#FF6B4A'
+    };
+  }
+  if (stressSummary) {
+    allDevicesView['stress'] = {
+      value: stressSummary.current_score,
+      source_key: 'Biometric Engine',
+      source_color: '#AF52DE',
+      score: stressSummary.current_score
+    };
+  }
 
   const computedAt = new Date().toISOString();
 
@@ -1399,6 +1444,8 @@ export function computeDailyHealthSummary(input: EngineInput): HealthDailySummar
     date: targetDate,
     engine_version: 'v1.0',
     computed_at: computedAt,
+    sources: Array.from(sourceKeys).sort(),
+    all_devices_view: allDevicesView,
     sleep: {
       primary_session: sleepResult.primarySession,
       all_sessions: sleepResult.allSessions,
