@@ -186,8 +186,8 @@ An exhaustive audit of `health_telemetry` revealed **359,028 rows**, of which **
 | **Android Emulator** | `Medium_Phone_API_36.1` | Launched app, verified Health Hub 5 tabs and biometrics render smoothly | **VERIFIED (Visual)** |
 | **Google Pixel 9 Pro** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, launched `MainActivity`, verified foreground refresh & bucketing | **VERIFIED LIVE** |
 | **Samsung Galaxy Z Fold 8** | Physical Device (`adb` TLS) | Installed `app-debug.apk`, verified layout, bucketing, and background sync | **VERIFIED LIVE** |
-| **WinUI 3 Compilation** | Windows 11 Parallels VM | `dotnet build -c Debug WinUI\Daily.WinUI\Daily.WinUI.csproj` | **0 Errors, 0 Warnings** |
-| **WinUI 3 Live Verification** | Windows 11 Parallels VM | Launched `Daily.WinUI.exe` via Task Scheduler, captured screenshot | **VERIFIED LIVE** |
+| **WinUI 3 Compilation** | Windows 11 Parallels VM | `dotnet build -c Debug WinUI\Daily.WinUI\Daily.WinUI.csproj` | **0 Errors, 518 Warnings** |
+| **WinUI 3 5-Tab Verification** | Windows 11 Parallels VM | Launched `Daily.WinUI.exe` in interactive Session 1, executed automated Force Sync & tab switching via Task Scheduler; verified and captured all 5 tabs in native 4K | **VERIFIED LIVE (All 5 Tabs)** |
 | **Supabase Remote DB** | Cloud Postgres | Migration applied, legacy tables dropped, retention function active, `pg_cron` scheduled | **VERIFIED** |
 | **Supabase Edge Function** | Cloud Deno Runtime | `health-engine` deployed with multi-session sleep score & 5-min downsampling guard | **VERIFIED** |
 
@@ -198,8 +198,11 @@ An exhaustive audit of `health_telemetry` revealed **359,028 rows**, of which **
 Screenshots and telemetry traces captured during verification:
 - `simulaphone_v4_health.png` / `simulaphone_v4_vitals.png`: iOS Simulator dashboard showing live canonical health vitals with 5-minute downsampled bucketing.
 - `android_emu_health_hub2.png`: Android emulator 5-tab Health Hub (Overview, Sleep, Stress, Vitals, Trends) with hourly cadence histogram, Curious Monkey mascot, and heart metrics.
-- `windows_v3_health_hub.png`: Demonstrates the unified WinUI 3 Health Hub running live on Windows 11 with 141 steps, 11 kcal, and 83 bpm.
-- `windows_v3_clean_dashboard.png`: WinUI 3 desktop dashboard after removing duplicate widgets.
+- `windows_v4_tab0_overview.png`: WinUI 3 Health Hub Tab 0 (Overview) with 187 Steps, 11 kcal, 46 Stress, 24h Steps Cadence histogram (peak 141 steps/hr), Sleep & Stress cards.
+- `windows_v4_tab1_sleep.png`: WinUI 3 Health Hub Tab 1 (Sleep Studio) with Sleep Architecture donut ring, stage breakdown (Deep, REM, Core, Awake), and clinical hypnogram canvas.
+- `windows_v4_tab2_stress.png`: WinUI 3 Health Hub Tab 2 (Stress Studio) with Monkey mascot Baseline, Stress Score 46, Autonomic Balance (35% Sympathetic / 65% Parasympathetic), Drivers, and Box Breathing player (4-4-4-4).
+- `windows_v4_tab3_heart.png`: WinUI 3 Health Hub Tab 3 (Heart & Vitals) with Continuous Intraday Heart Rate spline canvas, 4 clinical zones, and Resting Heart Rate (74 bpm live).
+- `windows_v4_tab4_trends.png`: WinUI 3 Health Hub Tab 4 (Trends) with 7-Day Steps trend chart (12,613 total, avg 1,802, peak 6,104) and weekly metrics.
 - `pixel9pro_v3_refresh.png`: Google Pixel 9 Pro running the updated APK with smart foreground refresh and live biometrics.
 
 ---
@@ -208,5 +211,6 @@ Screenshots and telemetry traces captured during verification:
 
 - `cec8823`: `feat(health): V3 cleanup, 3-tier retention in Supabase, smart refresh, and WinUI widget deduplication`
 - `4412343`: `fix(winui): remove orphaned XAML tags in MainPage.xaml`
+- `06420da`: `feat(health): 5-minute continuous heart rate bucketing and automated pg_cron retention`
 - `20261007123000_20261007_v3_automated_retention_and_pg_cron.sql`: Automated retention function fix and `pg_cron` daily schedule.
-- `Docs/Features/Unified_Health_Vitals_V3_Retention_Refresh.md`: Architectural specification and deployment record for V3 & continuous HR optimization.
+- `Docs/Features/Unified_Health_Vitals_V3_Retention_Refresh.md`: Architectural specification and deployment record for V3, continuous HR downsampling, and Windows 11 verification.
