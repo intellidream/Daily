@@ -20,8 +20,31 @@ class HealthRemoteService(
                 dev == null || !DeviceSource.from(dev).isVirtualEngine
             }
             if (realRecords.isEmpty()) return@withContext true
+            val externalIds = realRecords.mapNotNull { it.externalId }.filter { it.isNotEmpty() }
+            val existingIds = mutableSetOf<String>()
             
-            for (chunk in realRecords.chunked(200)) {
+            if (externalIds.isNotEmpty()) {
+                try {
+                    val existing = clientManager.client.postgrest["health_telemetry"]
+                        .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("external_id")) {
+                            filter {
+                                isIn("external_id", externalIds)
+                            }
+                        }.decodeList<Map<String, String>>()
+                    existingIds.addAll(existing.mapNotNull { it["external_id"] })
+                } catch (e: Exception) {
+                    android.util.Log.w("HealthRemoteService", "Failed to fetch existing external_ids: ${e.message}")
+                }
+            }
+
+            val newRecords = realRecords.filter {
+                val extId = it.externalId
+                extId == null || !existingIds.contains(extId)
+            }
+
+            if (newRecords.isEmpty()) return@withContext true
+            
+            for (chunk in newRecords.chunked(200)) {
                 clientManager.client.postgrest["health_telemetry"].insert(chunk)
             }
             true
