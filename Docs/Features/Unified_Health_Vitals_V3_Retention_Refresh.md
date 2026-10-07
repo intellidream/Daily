@@ -57,11 +57,21 @@ flowchart TD
     T2 -->|After 90 Days| T3
 ```
 
-- **Tier 1 (Raw Telemetry):** Rows in `health_telemetry` older than 2 days are pruned (`start_time < NOW() - INTERVAL '2 days'`). Intraday samples are only required while the day is being formed; once summarized into `health_daily_summary`, raw rows are safely discarded.
+- **Tier 1 (Raw Telemetry):** Rows in `health_telemetry` older than 2 days are pruned (`COALESCE(local_date, start_time::date) < CURRENT_DATE - INTERVAL '2 days'`). Intraday samples are only required while the day is being formed; once summarized into `health_daily_summary`, raw rows are safely discarded.
 - **Tier 2 (Full Daily Summaries):** Kept for 90 days. Contains full JSON structures (`hourly_steps`, `sleep_stages_json`, `hypnogram`, `stress_samples`) enabling detailed interactive timeline drill-downs.
 - **Tier 3 (Archived Trends):** For days older than 90 days, the heavy JSON columns (`hourly_steps`, `sleep_stages_json`, `raw_payload`) are set to `NULL`. The scalar indicators (`steps`, `active_calories`, `resting_heart_rate`, `sleep_asleep_s`, `sleep_score`, `stress_avg`) remain fully intact for charting long-term annual trends.
 
-### 2.3 Edge Function Enhancements (`health-engine`)
+### 2.3 Automated Daily Purge via `pg_cron`
+To guarantee `health_telemetry` remains permanently bounded without requiring manual intervention, PostgreSQL's `pg_cron` extension was enabled in Supabase and configured via migration `20261007123000_20261007_v3_automated_retention_and_pg_cron.sql`:
+- **Job Schedule:** `0 3 * * *` (daily at 03:00 UTC).
+- **Execution Target:** `SELECT public.apply_health_data_retention();`
+- **Initial Purge Execution Results (Oct 7, 2026):**
+  - Total records before purge: **359,028** (table + index size: 130 MB).
+  - Legacy records purged: **232,644** rows older than 2 days.
+  - Remaining records: **126,384** (bounded strictly within the `[today - 2 days, today]` window).
+  - PostgreSQL maintenance executed: `VACUUM ANALYZE public.health_telemetry;`.
+
+### 2.4 Edge Function Enhancements (`health-engine`)
 When sleep is logged as fragmented sessions or daytime naps without a single dominant nocturnal period (`primarySession`), the engine previously left `sleep_asleep_s` undefined.
 In `supabase/functions/health-engine/engine.ts`:
 - Total sleep duration now aggregates all valid sleep stage sessions (`naps_json` and fragmented sleep intervals) if `primarySession.durationSeconds` is missing.
