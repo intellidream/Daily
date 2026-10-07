@@ -1149,17 +1149,37 @@ public final class HealthDataService: ObservableObject {
         
         guard !prepared.isEmpty else { return }
         
+        var newRecords = prepared
+        do {
+            let externalIds = prepared.map { $0.externalId ?? "" }.filter { !$0.isEmpty }
+            struct IdResponse: Decodable { let external_id: String }
+            let existing: [IdResponse] = try await supabase.from("health_telemetry")
+                .select("external_id")
+                .in("external_id", values: externalIds)
+                .execute()
+                .value
+            let existingSet = Set(existing.map { $0.external_id })
+            newRecords = prepared.filter {
+                guard let extId = $0.externalId else { return true }
+                return !existingSet.contains(extId)
+            }
+        } catch {
+            print("[HealthDataService] Warning: Could not fetch existing external_ids: \(error)")
+        }
+        
+        guard !newRecords.isEmpty else { return }
+        
         var anyChunkSucceeded = false
         var affectedDates = Set<String>()
-        for r in prepared {
+        for r in newRecords {
             affectedDates.insert(r.localDate ?? isoDateFormatter.string(from: r.startTime))
         }
         
         let batchSize = 200
-        for i in stride(from: 0, to: prepared.count, by: batchSize) {
-            let chunk = Array(prepared[i..<min(i + batchSize, prepared.count)])
+        for i in stride(from: 0, to: newRecords.count, by: batchSize) {
+            let chunk = Array(newRecords[i..<min(i + batchSize, newRecords.count)])
             do {
-                try await supabase.from("health_telemetry").upsert(chunk).execute()
+                try await supabase.from("health_telemetry").insert(chunk).execute()
                 anyChunkSucceeded = true
             } catch {
                 print("[HealthDataService] Warning: Failed to sync telemetry batch: \(error.localizedDescription)")

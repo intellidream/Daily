@@ -176,7 +176,7 @@ class HealthConnectManager(private val context: Context) {
                 val extId = "hr_${userId}_$bucketEpoch"
                 telemetry.add(
                     HealthTelemetryRecord(
-                        id = java.util.UUID.nameUUIDFromBytes(extId.toByteArray()).toString(),
+                        id = java.util.UUID.randomUUID().toString(),
                         userId = userId,
                         type = "heart_rate",
                         value = avgBpm,
@@ -463,7 +463,7 @@ class HealthConnectManager(private val context: Context) {
                 val extId = "hr_local_${primaryDevice}_$bucketEpoch"
                 telemetry.add(
                     HealthTelemetryRecord(
-                        id = java.util.UUID.nameUUIDFromBytes(extId.toByteArray()).toString(),
+                        id = java.util.UUID.randomUUID().toString(),
                         userId = "local_health_connect",
                         type = "heart_rate",
                         value = avgBpm,
