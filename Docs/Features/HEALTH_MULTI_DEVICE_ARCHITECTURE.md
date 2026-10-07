@@ -101,4 +101,5 @@ To prevent uploading duplicate rows:
 | **Android Emulator** | `Medium_Phone_API_36.1` | Installed, launched, tested Device Selector & colored dots | **VERIFIED (Visual)** |
 | **iOS Simulator** | `SimulaPhone` (iOS 26.2) | Installed, launched via `-startTabHealth`, Health Hub verified | **VERIFIED (Visual)** |
 | **Physical iPhone** | `Schmitz` (iPhone 16 Pro) | Built, codesigned with Apple Dev profile, deployed via `devicectl` | **DEPLOYED & VERIFIED** |
-| **Physical Android** | `TRAPPER` / `RADAR` | Tested on live telemetry from Supabase & Health Connect | **READY FOR ATTACH** |
+| **Physical Android (TRAPPER)** | Google Pixel 9 Pro (`caiman`, wireless adb `192.168.3.8:39221`) | Streamed install `app-debug.apk`, launched PID 16104 | **DEPLOYED & VERIFIED LIVE** |
+| **Physical Android (RADAR)** | Samsung Galaxy Z Fold 8 (`SM-F971B`, wireless adb `192.168.3.64:32995`) | Streamed install `app-debug.apk`, launched PID 30513 | **DEPLOYED & VERIFIED LIVE** |
