@@ -87,7 +87,21 @@ To prevent uploading duplicate rows:
 - Both clients maintain `lastPushedTelemetryEpochMs`.
 - Only records with `startTime >= watermark` or `endTime >= watermark` are pushed to Supabase.
 - An additional `in("external_id", batch)` probe drops any existing IDs prior to insertion.
-- The `health-engine` Edge Function is invoked with a 3-minute throttle per date, preventing rate-limit exhaustion.
+### 3.3 Telemetry Sanitization & Purge Execution (October 8, 2026)
+To eliminate duplicate legacy bare records uploaded prior to the multi-device architecture deployment:
+- Executed targeted purge of all non-compound device rows (`source_device NOT LIKE '% - %'`) in `health_telemetry`:
+  - `Apple Health`: 36 legacy records purged
+  - `Apple Watch`: 1 legacy record purged
+  - `Google Health`: 140 legacy records purged
+  - `Oura Ring`: 296 legacy records purged
+  - `com.android.healthconnect.phone.j1ee...`: 88 legacy records purged
+  - `com.android.healthconnect.phone.j5b7...`: 8 legacy records purged
+  - `com.fitbit.FitbitMobile`: 948 legacy records purged
+  - `com.google.android.apps.fitness`: 84 legacy records purged
+  - `com.intellidream.daily.debug`: 1 legacy record purged
+  - **Total Legacy Records Purged:** 1,602 rows
+- Remaining records in `health_telemetry`: 100% compound-keyed (`[Host] - [Sensor]`).
+- Re-invoked `health-engine` edge function for current active date (`2026-10-08`) and previous date (`2026-10-07`), successfully regenerating `health_daily_summary` with clean, unified compound sources.
 
 ---
 
