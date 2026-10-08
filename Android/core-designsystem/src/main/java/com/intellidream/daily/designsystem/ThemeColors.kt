@@ -20,6 +20,7 @@ object ThemeColors {
     val accentPurple = Color(0xFFAF52DE)
     val accentGreen = Color(0xFF00E676)
     val accentOrange = Color(0xFFFF9500)
+    val accentYellow = Color(0xFFFFD600)
     val glowPurple = Color(0xFF8A2BE2)
 
     // Status colors

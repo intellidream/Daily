@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -175,9 +176,13 @@ fun NewsReaderSheet(
                     )
             )
 
+            val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+            val isFoldable = configuration.screenWidthDp >= 600
+
             // Sheet Card (iOS page sheet style: 95% height, rounded top corners)
             Box(
                 modifier = Modifier
+                    .widthIn(max = if (isFoldable) 700.dp else androidx.compose.ui.unit.Dp.Unspecified)
                     .fillMaxWidth()
                     .fillMaxHeight(0.95f)
                     .align(Alignment.BottomCenter)

@@ -97,6 +97,8 @@ fun DashboardView(
     onNavigateToTagdos: () -> Unit = {},
     onNavigateToNews: () -> Unit = {},
     onNavigateToWeather: () -> Unit = {},
+    forceSingleColumn: Boolean = false,
+    onBriefingClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
@@ -151,7 +153,7 @@ fun DashboardView(
     }
 
     val configuration = LocalConfiguration.current
-    val isFoldableOrTablet = configuration.screenWidthDp >= 600
+    val isFoldableOrTablet = configuration.screenWidthDp >= 600 && !forceSingleColumn
 
     val renderWidget: @Composable (DashboardWidgetConfig, () -> Unit) -> Unit = { config, onLongClick ->
         DashboardWidgetRenderer(
@@ -195,7 +197,13 @@ fun DashboardView(
                 userProfile = userProfile,
                 onAvatarTapped = onOpenSettings,
                 onCustomizeTapped = onOpenCustomize,
-                onBriefingTapped = { showBriefingSheet = true }
+                onBriefingTapped = {
+                    if (onBriefingClick != null) {
+                        onBriefingClick()
+                    } else {
+                        showBriefingSheet = true
+                    }
+                }
             )
         }
 
@@ -279,8 +287,8 @@ fun DashboardView(
         }
     }
 
-    // Smart Briefing Modal Sheet
-    if (showBriefingSheet) {
+    // Smart Briefing Modal Sheet (compact phone mode only; on foldable, onBriefingClick routes to right pane)
+    if (showBriefingSheet && onBriefingClick == null) {
         SmartBriefingBottomSheet(
             repository = smartBriefingRepository,
             userProfile = userProfile,

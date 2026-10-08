@@ -112,9 +112,56 @@ fun SmartBriefingBottomSheet(
     newsRepository: NewsRepository,
     onDismiss: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            repository.stopSpeech()
+            onDismiss()
+        },
+        sheetState = sheetState,
+        containerColor = Color(0xFF070E1A),
+        contentColor = Color.White,
+        tonalElevation = 0.dp,
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        SmartBriefingContent(
+            repository = repository,
+            userProfile = userProfile,
+            settings = settings,
+            weather = weather,
+            locationName = locationName,
+            healthRepository = healthRepository,
+            habitsRepository = habitsRepository,
+            smartLedgerRepository = smartLedgerRepository,
+            tagdosRepository = tagdosRepository,
+            newsRepository = newsRepository,
+            onDismiss = onDismiss,
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+        )
+    }
+}
+
+@Composable
+fun SmartBriefingContent(
+    repository: SmartBriefingRepository,
+    userProfile: UserProfile?,
+    settings: AppSettings,
+    weather: WeatherResponse?,
+    locationName: String,
+    healthRepository: HealthDataRepository,
+    habitsRepository: HabitsRepository,
+    smartLedgerRepository: SmartLedgerRepository,
+    tagdosRepository: TagdosRepository,
+    newsRepository: NewsRepository,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val activeBriefing by repository.activeBriefing.collectAsState()
     val isLoading by repository.isLoading.collectAsState()
@@ -208,36 +255,22 @@ fun SmartBriefingBottomSheet(
         repository.markBriefingAsRead()
     }
 
-    ModalBottomSheet(
-        onDismissRequest = {
-            repository.stopSpeech()
-            onDismiss()
-        },
-        sheetState = sheetState,
-        containerColor = Color(0xFF070E1A),
-        contentColor = Color.White,
-        tonalElevation = 0.dp,
-        dragHandle = null,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF091222),
-                            Color(0xFF050A14),
-                            Color.Black
-                        )
+    Box(
+        modifier = modifier
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF091222),
+                        Color(0xFF050A14),
+                        Color.Black
                     )
                 )
+            )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // 1. Navigation Action Bar with Diurnal Greeting Status Pill
+            // 1. Navigation Action Bar with Diurnal Greeting Status Pill
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -488,7 +521,6 @@ fun SmartBriefingBottomSheet(
             }
         }
     }
-}
 
 @Composable
 private fun BriefingCard(

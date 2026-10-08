@@ -17,13 +17,26 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Newspaper
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.WaterDrop
+import com.intellidream.daily.presentation.foldable.DailyFoldableCompanionPane
+import com.intellidream.daily.presentation.foldable.FoldableDetailHeader
+import com.intellidream.daily.presentation.foldable.SmartBriefingFoldablePane
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -179,90 +192,160 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
-                    Crossfade(targetState = if (showCustomize) "customize" else if (showSettings) "settings" else "root", label = "ScreenCrossfade") { screen ->
-                        when (screen) {
-                            "customize" -> {
-                                BackHandler { showCustomize = false }
-                                CustomizeDashboardScreen(
-                                    settings = settings,
-                                    onUpdateSettings = { transform: (AppSettings) -> AppSettings ->
-                                        scope.launch { settingsRepository.updateSettings(transform) }
-                                    },
-                                    onBackClick = { showCustomize = false }
-                                )
-                            }
-                            "settings" -> {
-                                BackHandler { showSettings = false }
-                                SettingsScreen(
-                                    settings = settings,
-                                    userProfile = authState.profile,
-                                    onUpdateSettings = { transform ->
-                                        scope.launch { settingsRepository.updateSettings(transform) }
-                                    },
-                                    onSignOutClick = {
-                                        scope.launch {
-                                            settingsRepository.updateSettings { it.copy(isGuestMode = false) }
-                                            authRepository.signOut()
-                                            showSettings = false
+                    val configuration = LocalConfiguration.current
+                    val isFoldable = configuration.screenWidthDp >= 600
+
+                    if (isFoldable) {
+                        DailyRootScreen(
+                            userProfile = authState.profile,
+                            settings = settings,
+                            weather = weather,
+                            forecast = forecast,
+                            hourlyForecasts = hourlyForecasts,
+                            dailySummaries = dailySummaries,
+                            locationName = locationName,
+                            locationSource = locationSource,
+                            isAutoLocation = isAutoLocation,
+                            weatherError = weatherError,
+                            isWeatherLoading = isWeatherLoading,
+                            habitsRepository = habitsRepository,
+                            healthRepository = healthRepository,
+                            smartLedgerRepository = smartLedgerRepository,
+                            financeDataRepository = financeDataRepository,
+                            tagdosRepository = tagdosRepository,
+                            newsRepository = newsRepository,
+                            smartBriefingRepository = smartBriefingRepository,
+                            weatherRepository = weatherRepository,
+                            onRefreshWeather = {
+                                scope.launch {
+                                    weatherRepository.refreshWeather(
+                                        force = true,
+                                        unitSystem = settings.weatherUnitSystem,
+                                        onSuccess = { w, f, city, lat, lon ->
+                                            scope.launch { weatherCacheRepository.saveCache(w, f, city, lat, lon) }
                                         }
-                                    },
-                                    onBackClick = { showSettings = false }
-                                )
-                            }
-                            else -> {
-                                DailyRootScreen(
-                                    userProfile = authState.profile,
-                                    settings = settings,
-                                    weather = weather,
-                                    forecast = forecast,
-                                    hourlyForecasts = hourlyForecasts,
-                                    dailySummaries = dailySummaries,
-                                    locationName = locationName,
-                                    locationSource = locationSource,
-                                    isAutoLocation = isAutoLocation,
-                                    weatherError = weatherError,
-                                    isWeatherLoading = isWeatherLoading,
-                                    habitsRepository = habitsRepository,
-                                    healthRepository = healthRepository,
-                                    smartLedgerRepository = smartLedgerRepository,
-                                    financeDataRepository = financeDataRepository,
-                                    tagdosRepository = tagdosRepository,
-                                    newsRepository = newsRepository,
-                                    smartBriefingRepository = smartBriefingRepository,
-                                    weatherRepository = weatherRepository,
-                                    onRefreshWeather = {
-                                        scope.launch {
-                                            weatherRepository.refreshWeather(
-                                                force = true,
-                                                unitSystem = settings.weatherUnitSystem,
-                                                onSuccess = { w, f, city, lat, lon ->
-                                                    scope.launch { weatherCacheRepository.saveCache(w, f, city, lat, lon) }
-                                                }
-                                            )
-                                        }
-                                    },
-                                    onSelectManualLocation = { lat, lon, name ->
-                                        scope.launch {
-                                            weatherRepository.setManualLocation(lat, lon, name, settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
-                                                scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
-                                            }
-                                        }
-                                    },
-                                    onResetToAutoLocation = {
-                                        scope.launch {
-                                            weatherRepository.resetToAutoLocation(settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
-                                                scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
-                                            }
-                                        }
-                                    },
-                                    selectedTab = selectedTab,
-                                    onSelectTab = { selectedTab = it },
-                                    onOpenCustomize = { showCustomize = true },
-                                    onOpenSettings = { showSettings = true },
-                                    onUpdateSettings = { transform ->
-                                        scope.launch { settingsRepository.updateSettings(transform) }
+                                    )
+                                }
+                            },
+                            onSelectManualLocation = { lat, lon, name ->
+                                scope.launch {
+                                    weatherRepository.setManualLocation(lat, lon, name, settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
+                                        scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
                                     }
-                                )
+                                }
+                            },
+                            onResetToAutoLocation = {
+                                scope.launch {
+                                    weatherRepository.resetToAutoLocation(settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
+                                        scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
+                                    }
+                                }
+                            },
+                            selectedTab = selectedTab,
+                            onSelectTab = { selectedTab = it },
+                            showSettings = showSettings,
+                            onSetShowSettings = { showSettings = it },
+                            showCustomize = showCustomize,
+                            onSetShowCustomize = { showCustomize = it },
+                            onSignOutClick = {
+                                scope.launch {
+                                    settingsRepository.updateSettings { it.copy(isGuestMode = false) }
+                                    authRepository.signOut()
+                                    showSettings = false
+                                }
+                            },
+                            onOpenCustomize = { showCustomize = true },
+                            onOpenSettings = { showSettings = true },
+                            onUpdateSettings = { transform ->
+                                scope.launch { settingsRepository.updateSettings(transform) }
+                            }
+                        )
+                    } else {
+                        Crossfade(targetState = if (showCustomize) "customize" else if (showSettings) "settings" else "root", label = "ScreenCrossfade") { screen ->
+                            when (screen) {
+                                "customize" -> {
+                                    BackHandler { showCustomize = false }
+                                    CustomizeDashboardScreen(
+                                        settings = settings,
+                                        onUpdateSettings = { transform: (AppSettings) -> AppSettings ->
+                                            scope.launch { settingsRepository.updateSettings(transform) }
+                                        },
+                                        onBackClick = { showCustomize = false }
+                                    )
+                                }
+                                "settings" -> {
+                                    BackHandler { showSettings = false }
+                                    SettingsScreen(
+                                        settings = settings,
+                                        userProfile = authState.profile,
+                                        onUpdateSettings = { transform ->
+                                            scope.launch { settingsRepository.updateSettings(transform) }
+                                        },
+                                        onSignOutClick = {
+                                            scope.launch {
+                                                settingsRepository.updateSettings { it.copy(isGuestMode = false) }
+                                                authRepository.signOut()
+                                                showSettings = false
+                                            }
+                                        },
+                                        onBackClick = { showSettings = false }
+                                    )
+                                }
+                                else -> {
+                                    DailyRootScreen(
+                                        userProfile = authState.profile,
+                                        settings = settings,
+                                        weather = weather,
+                                        forecast = forecast,
+                                        hourlyForecasts = hourlyForecasts,
+                                        dailySummaries = dailySummaries,
+                                        locationName = locationName,
+                                        locationSource = locationSource,
+                                        isAutoLocation = isAutoLocation,
+                                        weatherError = weatherError,
+                                        isWeatherLoading = isWeatherLoading,
+                                        habitsRepository = habitsRepository,
+                                        healthRepository = healthRepository,
+                                        smartLedgerRepository = smartLedgerRepository,
+                                        financeDataRepository = financeDataRepository,
+                                        tagdosRepository = tagdosRepository,
+                                        newsRepository = newsRepository,
+                                        smartBriefingRepository = smartBriefingRepository,
+                                        weatherRepository = weatherRepository,
+                                        onRefreshWeather = {
+                                            scope.launch {
+                                                weatherRepository.refreshWeather(
+                                                    force = true,
+                                                    unitSystem = settings.weatherUnitSystem,
+                                                    onSuccess = { w, f, city, lat, lon ->
+                                                        scope.launch { weatherCacheRepository.saveCache(w, f, city, lat, lon) }
+                                                    }
+                                                )
+                                            }
+                                        },
+                                        onSelectManualLocation = { lat, lon, name ->
+                                            scope.launch {
+                                                weatherRepository.setManualLocation(lat, lon, name, settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
+                                                    scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
+                                                }
+                                            }
+                                        },
+                                        onResetToAutoLocation = {
+                                            scope.launch {
+                                                weatherRepository.resetToAutoLocation(settings.weatherUnitSystem) { w, f, city, lLat, lLon ->
+                                                    scope.launch { weatherCacheRepository.saveCache(w, f, city, lLat, lLon) }
+                                                }
+                                            }
+                                        },
+                                        selectedTab = selectedTab,
+                                        onSelectTab = { selectedTab = it },
+                                        onOpenCustomize = { showCustomize = true },
+                                        onOpenSettings = { showSettings = true },
+                                        onUpdateSettings = { transform ->
+                                            scope.launch { settingsRepository.updateSettings(transform) }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -434,11 +517,30 @@ fun DailyRootScreen(
     onResetToAutoLocation: () -> Unit,
     selectedTab: NavigationTab = NavigationTab.Dashboard,
     onSelectTab: (NavigationTab) -> Unit = {},
+    showSettings: Boolean = false,
+    onSetShowSettings: ((Boolean) -> Unit)? = null,
+    showCustomize: Boolean = false,
+    onSetShowCustomize: ((Boolean) -> Unit)? = null,
+    onSignOutClick: (() -> Unit)? = null,
     onOpenCustomize: () -> Unit,
     onOpenSettings: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit = {}
 ) {
-    BackHandler(enabled = selectedTab != NavigationTab.Dashboard) {
+    val configuration = LocalConfiguration.current
+    val isFoldable = configuration.screenWidthDp >= 600
+
+    var showFoldableBriefing by remember { mutableStateOf(false) }
+
+    // Intercept back gestures: on foldable, collapse the right pane back to Companion/Dashboard
+    BackHandler(enabled = isFoldable && (selectedTab != NavigationTab.Dashboard || showSettings || showCustomize || showFoldableBriefing)) {
+        if (showCustomize) onSetShowCustomize?.invoke(false)
+        else if (showSettings) onSetShowSettings?.invoke(false)
+        else if (showFoldableBriefing) showFoldableBriefing = false
+        else onSelectTab(NavigationTab.Dashboard)
+    }
+
+    // On standard phone mode, back returns to Dashboard
+    BackHandler(enabled = !isFoldable && selectedTab != NavigationTab.Dashboard) {
         onSelectTab(NavigationTab.Dashboard)
     }
 
@@ -458,23 +560,23 @@ fun DailyRootScreen(
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
     ) {
-        val configuration = LocalConfiguration.current
-        val maxContentWidth = if (configuration.screenWidthDp >= 900) 1080.dp else if (configuration.screenWidthDp >= 600) 900.dp else 760.dp
-
-        // Main Tab Content
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Box(
+        if (isFoldable) {
+            // =========================================================================
+            // ADAPTIVE DUAL-PANE FOLDABLE / TABLET ARCHITECTURE (Galaxy Z Fold 8 & Foldables)
+            // =========================================================================
+            Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = maxContentWidth)
+                    .statusBarsPadding(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                when (selectedTab) {
-                NavigationTab.Dashboard -> {
+                // --- 1. Master Pane (Left): Dashboard & Anchored Capsule ---
+                Box(
+                    modifier = Modifier
+                        .weight(1.08f)
+                        .fillMaxHeight()
+                ) {
                     DashboardView(
                         userProfile = userProfile,
                         settings = settings,
@@ -491,141 +593,457 @@ fun DailyRootScreen(
                         newsRepository = newsRepository,
                         smartBriefingRepository = smartBriefingRepository,
                         onRefreshWeather = onRefreshWeather,
-                        onOpenCustomize = onOpenCustomize,
-                        onOpenSettings = onOpenSettings,
+                        onOpenCustomize = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(true)
+                        },
+                        onOpenSettings = {
+                            showFoldableBriefing = false
+                            onSetShowCustomize?.invoke(false)
+                            onSetShowSettings?.invoke(true)
+                        },
                         onUpdateSettings = onUpdateSettings,
-                        onNavigateToHabits = { onSelectTab(NavigationTab.Habits) },
-                        onNavigateToHealth = { onSelectTab(NavigationTab.Health) },
-                        onNavigateToFinances = { onSelectTab(NavigationTab.Finances) },
-                        onNavigateToTagdos = { onSelectTab(NavigationTab.Tagdos) },
-                        onNavigateToNews = { onSelectTab(NavigationTab.News) },
-                        onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                        onNavigateToHabits = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Habits)
+                        },
+                        onNavigateToHealth = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Health)
+                        },
+                        onNavigateToFinances = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Finances)
+                        },
+                        onNavigateToTagdos = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Tagdos)
+                        },
+                        onNavigateToNews = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.News)
+                        },
+                        onNavigateToWeather = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Weather)
+                        },
+                        forceSingleColumn = true,
+                        onBriefingClick = {
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            showFoldableBriefing = true
+                        },
+                        modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp)
                     )
-                }
-                NavigationTab.Weather -> {
-                    WeatherDetailView(
-                        weather = weather,
-                        hourlyForecasts = hourlyForecasts,
-                        dailySummaries = dailySummaries,
-                        locationName = locationName,
-                        locationSource = locationSource,
-                        isAutoLocation = isAutoLocation,
-                        isLoading = isWeatherLoading,
-                        errorMessage = weatherError,
-                        settings = settings,
-                        weatherRepository = weatherRepository,
-                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
-                        onRefreshWeather = onRefreshWeather,
-                        onSelectManualLocation = onSelectManualLocation,
-                        onResetToAutoLocation = onResetToAutoLocation
-                    )
-                }
-                NavigationTab.Finances -> {
-                    com.intellidream.daily.presentation.finances.FinancesMainView(
-                        smartLedgerRepository = smartLedgerRepository,
-                        financeDataRepository = financeDataRepository,
-                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
-                    )
-                }
-                NavigationTab.Habits -> {
-                    com.intellidream.daily.presentation.habits.HabitsMainView(
-                        repository = habitsRepository,
-                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
-                    )
-                }
-                NavigationTab.Health -> {
-                    com.intellidream.daily.presentation.health.HealthMainView(
-                        repository = healthRepository,
-                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
-                    )
-                }
-                NavigationTab.Tagdos -> {
-                    com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
-                        repository = tagdosRepository,
-                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
-                    )
-                }
-                NavigationTab.News -> {
-                    com.intellidream.daily.presentation.news.NewsFeedView(
-                        repository = newsRepository,
-                        settings = settings,
-                        onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
-                    )
-                }
-                else -> {
-                    // Secondary Tab placeholder screen
-                    Column(
+
+                    // Option A: Floating Glass Capsule anchored at bottom of Master pane
+                    FloatingGlassCapsule(
+                        selectedTab = selectedTab,
+                        onTabSelected = { tab ->
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(tab)
+                        },
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.Top,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = selectedTab.displayName,
-                                color = Color.White,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            GlassButton(
-                                onClick = onOpenSettings,
-                                cornerRadius = 12.dp,
-                                paddingHorizontal = 10.dp,
-                                paddingVertical = 10.dp
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Settings,
-                                    contentDescription = "Settings",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 16.dp)
+                    )
+                }
+
+                // --- 2. Subtle Crease / Hinge Divider ---
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(1.dp)
+                        .background(Color.White.copy(alpha = 0.08f))
+                )
+
+                // --- 3. Detail Pane (Right): Companion or Hub or Settings or Briefing ---
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(end = 16.dp, top = 4.dp)
+                ) {
+                    when {
+                        showCustomize -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Customize Dashboard",
+                                    icon = Icons.Rounded.Tune,
+                                    iconTint = ThemeColors.accentPurple,
+                                    subtitle = "Reorder & Toggle Widgets",
+                                    onCloseClick = { onSetShowCustomize?.invoke(false) }
+                                )
+                                CustomizeDashboardScreen(
+                                    settings = settings,
+                                    onUpdateSettings = onUpdateSettings,
+                                    onBackClick = { onSetShowCustomize?.invoke(false) }
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        GlassCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            cornerRadius = 20.dp,
-                            padding = 24.dp,
-                            intensity = GlassIntensity.Medium
-                        ) {
-                            Column {
-                                Text(
-                                    text = "${selectedTab.displayName} Hub",
-                                    color = ThemeColors.accentBlue,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
+                        showSettings -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Settings & Profile",
+                                    icon = Icons.Rounded.Settings,
+                                    iconTint = ThemeColors.accentBlue,
+                                    subtitle = userProfile?.email ?: "Account & Preferences",
+                                    onCloseClick = { onSetShowSettings?.invoke(false) }
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Full parity feature for ${selectedTab.displayName} is scheduled in upcoming phases with Room offline cache and Supabase realtime synchronization.",
-                                    color = ThemeColors.textSecondary,
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp
+                                SettingsScreen(
+                                    settings = settings,
+                                    userProfile = userProfile,
+                                    onUpdateSettings = onUpdateSettings,
+                                    onSignOutClick = { onSignOutClick?.invoke() },
+                                    onBackClick = { onSetShowSettings?.invoke(false) }
+                                )
+                            }
+                        }
+                        showFoldableBriefing -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Smart Briefing",
+                                    icon = Icons.Rounded.AutoAwesome,
+                                    iconTint = ThemeColors.accentCyan,
+                                    subtitle = "Diurnal Intelligence Narration",
+                                    onCloseClick = { showFoldableBriefing = false }
+                                )
+                                SmartBriefingFoldablePane(
+                                    repository = smartBriefingRepository,
+                                    userProfile = userProfile,
+                                    settings = settings,
+                                    weather = weather,
+                                    locationName = locationName,
+                                    healthRepository = healthRepository,
+                                    habitsRepository = habitsRepository,
+                                    smartLedgerRepository = smartLedgerRepository,
+                                    tagdosRepository = tagdosRepository,
+                                    newsRepository = newsRepository,
+                                    onDismiss = { showFoldableBriefing = false }
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.Dashboard -> {
+                            // Option B: Persistent Companion View
+                            DailyFoldableCompanionPane(
+                                userProfile = userProfile,
+                                settings = settings,
+                                weather = weather,
+                                healthRepository = healthRepository,
+                                habitsRepository = habitsRepository,
+                                smartLedgerRepository = smartLedgerRepository,
+                                financeDataRepository = financeDataRepository,
+                                tagdosRepository = tagdosRepository,
+                                newsRepository = newsRepository,
+                                smartBriefingRepository = smartBriefingRepository,
+                                onOpenHub = { tab ->
+                                    showFoldableBriefing = false
+                                    onSetShowSettings?.invoke(false)
+                                    onSetShowCustomize?.invoke(false)
+                                    onSelectTab(tab)
+                                },
+                                onOpenBriefing = {
+                                    onSetShowSettings?.invoke(false)
+                                    onSetShowCustomize?.invoke(false)
+                                    showFoldableBriefing = true
+                                },
+                                onOpenNewsArticle = { _ ->
+                                    onSelectTab(NavigationTab.News)
+                                }
+                            )
+                        }
+                        selectedTab == NavigationTab.Health -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Health Studio",
+                                    icon = Icons.Rounded.Favorite,
+                                    iconTint = ThemeColors.accentPink,
+                                    subtitle = "Biometrics & Sleep",
+                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                                com.intellidream.daily.presentation.health.HealthMainView(
+                                    repository = healthRepository,
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.Habits -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Habits & Routines",
+                                    icon = Icons.Rounded.WaterDrop,
+                                    iconTint = ThemeColors.accentCyan,
+                                    subtitle = "Hydration & Smoke Quitting",
+                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                                com.intellidream.daily.presentation.habits.HabitsMainView(
+                                    repository = habitsRepository,
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.Finances -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Smart Ledger",
+                                    icon = Icons.Rounded.AccountBalanceWallet,
+                                    iconTint = ThemeColors.accentGreen,
+                                    subtitle = "Personal Finances & Wealth",
+                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                                com.intellidream.daily.presentation.finances.FinancesMainView(
+                                    smartLedgerRepository = smartLedgerRepository,
+                                    financeDataRepository = financeDataRepository,
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.Tagdos -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Tagdos & Notes",
+                                    icon = Icons.Rounded.Checklist,
+                                    iconTint = ThemeColors.accentYellow,
+                                    subtitle = "Mental Stream & Quick Notes",
+                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                                com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
+                                    repository = tagdosRepository,
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.News -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Curated News",
+                                    icon = Icons.Rounded.Newspaper,
+                                    iconTint = ThemeColors.accentBlue,
+                                    subtitle = "Feeds & Deep Read",
+                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                                com.intellidream.daily.presentation.news.NewsFeedView(
+                                    repository = newsRepository,
+                                    settings = settings,
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.Weather -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDetailHeader(
+                                    title = "Weather Radar",
+                                    icon = Icons.Rounded.Cloud,
+                                    iconTint = ThemeColors.accentYellow,
+                                    subtitle = locationName,
+                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
+                                )
+                                WeatherDetailView(
+                                    weather = weather,
+                                    hourlyForecasts = hourlyForecasts,
+                                    dailySummaries = dailySummaries,
+                                    locationName = locationName,
+                                    locationSource = locationSource,
+                                    isAutoLocation = isAutoLocation,
+                                    isLoading = isWeatherLoading,
+                                    errorMessage = weatherError,
+                                    settings = settings,
+                                    weatherRepository = weatherRepository,
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    onRefreshWeather = onRefreshWeather,
+                                    onSelectManualLocation = onSelectManualLocation,
+                                    onResetToAutoLocation = onResetToAutoLocation
                                 )
                             }
                         }
                     }
                 }
             }
-        }
-    }
+        } else {
+            // =========================================================================
+            // STANDARD COMPACT PHONE ARCHITECTURE (< 600dp, e.g. Pixel 9 Pro or Folded Cover Screen)
+            // =========================================================================
+            val maxContentWidth = 760.dp
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .widthIn(max = maxContentWidth)
+                ) {
+                    when (selectedTab) {
+                        NavigationTab.Dashboard -> {
+                            DashboardView(
+                                userProfile = userProfile,
+                                settings = settings,
+                                weather = weather,
+                                forecast = forecast,
+                                hourlyForecasts = hourlyForecasts,
+                                locationName = locationName,
+                                isWeatherLoading = isWeatherLoading,
+                                habitsRepository = habitsRepository,
+                                healthRepository = healthRepository,
+                                smartLedgerRepository = smartLedgerRepository,
+                                financeDataRepository = financeDataRepository,
+                                tagdosRepository = tagdosRepository,
+                                newsRepository = newsRepository,
+                                smartBriefingRepository = smartBriefingRepository,
+                                onRefreshWeather = onRefreshWeather,
+                                onOpenCustomize = onOpenCustomize,
+                                onOpenSettings = onOpenSettings,
+                                onUpdateSettings = onUpdateSettings,
+                                onNavigateToHabits = { onSelectTab(NavigationTab.Habits) },
+                                onNavigateToHealth = { onSelectTab(NavigationTab.Health) },
+                                onNavigateToFinances = { onSelectTab(NavigationTab.Finances) },
+                                onNavigateToTagdos = { onSelectTab(NavigationTab.Tagdos) },
+                                onNavigateToNews = { onSelectTab(NavigationTab.News) },
+                                onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                            )
+                        }
+                        NavigationTab.Weather -> {
+                            WeatherDetailView(
+                                weather = weather,
+                                hourlyForecasts = hourlyForecasts,
+                                dailySummaries = dailySummaries,
+                                locationName = locationName,
+                                locationSource = locationSource,
+                                isAutoLocation = isAutoLocation,
+                                isLoading = isWeatherLoading,
+                                errorMessage = weatherError,
+                                settings = settings,
+                                weatherRepository = weatherRepository,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                onRefreshWeather = onRefreshWeather,
+                                onSelectManualLocation = onSelectManualLocation,
+                                onResetToAutoLocation = onResetToAutoLocation
+                            )
+                        }
+                        NavigationTab.Finances -> {
+                            com.intellidream.daily.presentation.finances.FinancesMainView(
+                                smartLedgerRepository = smartLedgerRepository,
+                                financeDataRepository = financeDataRepository,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                            )
+                        }
+                        NavigationTab.Habits -> {
+                            com.intellidream.daily.presentation.habits.HabitsMainView(
+                                repository = habitsRepository,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                            )
+                        }
+                        NavigationTab.Health -> {
+                            com.intellidream.daily.presentation.health.HealthMainView(
+                                repository = healthRepository,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                            )
+                        }
+                        NavigationTab.Tagdos -> {
+                            com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
+                                repository = tagdosRepository,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                            )
+                        }
+                        NavigationTab.News -> {
+                            com.intellidream.daily.presentation.news.NewsFeedView(
+                                repository = newsRepository,
+                                settings = settings,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                            )
+                        }
+                        else -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.Top,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = selectedTab.displayName,
+                                        color = Color.White,
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    GlassButton(
+                                        onClick = onOpenSettings,
+                                        cornerRadius = 12.dp,
+                                        paddingHorizontal = 10.dp,
+                                        paddingVertical = 10.dp
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Settings,
+                                            contentDescription = "Settings",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
 
-        // Floating Glass Capsule Navigation at the bottom
-        FloatingGlassCapsule(
-            selectedTab = selectedTab,
-            onTabSelected = onSelectTab,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp)
-        )
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                GlassCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    cornerRadius = 20.dp,
+                                    padding = 24.dp,
+                                    intensity = GlassIntensity.Medium
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "${selectedTab.displayName} Hub",
+                                            color = ThemeColors.accentBlue,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "Full parity feature for ${selectedTab.displayName} is scheduled in upcoming phases with Room offline cache and Supabase realtime synchronization.",
+                                            color = ThemeColors.textSecondary,
+                                            fontSize = 14.sp,
+                                            lineHeight = 20.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Floating Glass Capsule Navigation at the bottom (Centered on phone mode)
+            FloatingGlassCapsule(
+                selectedTab = selectedTab,
+                onTabSelected = onSelectTab,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp)
+            )
+        }
     }
 }
