@@ -568,14 +568,14 @@ fun DailyRootScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.Top
             ) {
                 // --- 1. Master Pane (Left): Dashboard & Anchored Capsule ---
                 Box(
                     modifier = Modifier
-                        .weight(1.08f)
+                        .weight(1f)
                         .fillMaxHeight()
+                        .padding(start = 16.dp, end = 12.dp, top = 4.dp)
                 ) {
                     DashboardView(
                         userProfile = userProfile,
@@ -646,7 +646,7 @@ fun DailyRootScreen(
                             onSetShowCustomize?.invoke(false)
                             showFoldableBriefing = true
                         },
-                        modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp)
+                        modifier = Modifier.fillMaxSize()
                     )
 
                     // Option A: Floating Glass Capsule anchored at bottom of Master pane
@@ -678,7 +678,7 @@ fun DailyRootScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .padding(end = 16.dp, top = 4.dp)
+                        .padding(start = 12.dp, end = 16.dp, top = 4.dp)
                 ) {
                     when {
                         showCustomize -> {
@@ -716,28 +716,20 @@ fun DailyRootScreen(
                             }
                         }
                         showFoldableBriefing -> {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Smart Briefing",
-                                    icon = Icons.Rounded.AutoAwesome,
-                                    iconTint = ThemeColors.accentCyan,
-                                    subtitle = "Diurnal Intelligence Narration",
-                                    onCloseClick = { showFoldableBriefing = false }
-                                )
-                                SmartBriefingFoldablePane(
-                                    repository = smartBriefingRepository,
-                                    userProfile = userProfile,
-                                    settings = settings,
-                                    weather = weather,
-                                    locationName = locationName,
-                                    healthRepository = healthRepository,
-                                    habitsRepository = habitsRepository,
-                                    smartLedgerRepository = smartLedgerRepository,
-                                    tagdosRepository = tagdosRepository,
-                                    newsRepository = newsRepository,
-                                    onDismiss = { showFoldableBriefing = false }
-                                )
-                            }
+                            SmartBriefingFoldablePane(
+                                repository = smartBriefingRepository,
+                                userProfile = userProfile,
+                                settings = settings,
+                                weather = weather,
+                                locationName = locationName,
+                                healthRepository = healthRepository,
+                                habitsRepository = habitsRepository,
+                                smartLedgerRepository = smartLedgerRepository,
+                                tagdosRepository = tagdosRepository,
+                                newsRepository = newsRepository,
+                                onDismiss = { showFoldableBriefing = false },
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                         selectedTab == NavigationTab.Dashboard -> {
                             // Option B: Persistent Companion View

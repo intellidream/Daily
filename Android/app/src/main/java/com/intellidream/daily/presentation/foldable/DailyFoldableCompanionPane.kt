@@ -1,7 +1,5 @@
 package com.intellidream.daily.presentation.foldable
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,13 +25,17 @@ import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Newspaper
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -62,12 +65,12 @@ import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.GlassIntensity
 import com.intellidream.daily.designsystem.MonkeyMascotView
 import com.intellidream.daily.designsystem.MonkeySize
+import com.intellidream.daily.designsystem.NavigationTab
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.health.HealthDataRepository
 import com.intellidream.daily.model.AppSettings
 import com.intellidream.daily.model.BriefingTimeSlot
 import com.intellidream.daily.model.MonkeyMood
-import com.intellidream.daily.designsystem.NavigationTab
 import com.intellidream.daily.model.NewsArticle
 import com.intellidream.daily.model.UserProfile
 import com.intellidream.daily.model.WeatherResponse
@@ -77,11 +80,12 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Signature Foldable Companion Pane displayed in the right pane on expanded displays
- * (Samsung Galaxy Z Fold 8, Google Pixel 9 Pro Fold) when no secondary Hub or sheet is active.
+ * Signature Foldable Companion Pane displayed in the secondary / detail pane on expanded displays
+ * (Samsung Galaxy Z Fold 8, Google Pixel 9 Pro Fold) when no hub or sheet is explicitly open.
  *
- * Provides a live biometric vitals pulse, interactive Smart Briefing audio launcher,
- * and quick-glance companion hubs to maintain high utility across the unfolded screen canvas.
+ * Provides a live diurnal intelligence header adapted to the time of day,
+ * concentric recovery rings with animated stress mascot, Smart Briefing audio trigger,
+ * and a rich Executive Multi-Hub Digest summarizing biometrics, habits, wealth, and news.
  */
 @Composable
 fun DailyFoldableCompanionPane(
@@ -125,6 +129,7 @@ fun DailyFoldableCompanionPane(
 
     // Tagdos Telemetry
     val quickNotes by tagdosRepository.quickNotes.collectAsState()
+    val latestNote = quickNotes.firstOrNull()
 
     // Briefing Telemetry
     val activeBriefing by smartBriefingRepository.activeBriefing.collectAsState()
@@ -136,46 +141,65 @@ fun DailyFoldableCompanionPane(
     val sleepScore = primarySleep?.sleepScore ?: 0
     val sleepProgress = (sleepScore.toFloat() / 100f).coerceIn(0f, 1f)
 
+    // Diurnal Wish and Icon adapted to the time of day (1:1 with Smart Briefing bottom button)
+    val diurnalWish = activeBriefing?.narrative?.closingWish ?: slot.defaultClosingWish
+    val slotIcon: ImageVector = when (slot) {
+        BriefingTimeSlot.MORNING -> Icons.Rounded.WbSunny
+        BriefingTimeSlot.INTRADAY -> Icons.Rounded.WbSunny
+        BriefingTimeSlot.EVENING -> Icons.Rounded.NightsStay
+        BriefingTimeSlot.NIGHTLY -> Icons.Rounded.NightsStay
+    }
+
     val todayFormatted = remember {
         SimpleDateFormat("EEEE · MMMM d", Locale.getDefault()).format(Date())
     }
 
     LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 90.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Companion Header Pill
+        // 1. Diurnal Intelligence Header (Matching Smart Briefing action button wording)
         item(key = "companion_header") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(ThemeColors.accentGreen)
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = slotIcon,
+                            contentDescription = null,
+                            tint = ThemeColors.accentCyan,
+                            modifier = Modifier.size(13.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "COMPANION PULSE",
-                            color = ThemeColors.accentGreen,
+                            text = slot.displayName.uppercase(),
+                            color = ThemeColors.accentCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
                         )
                     }
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = todayFormatted,
+                        text = diurnalWish,
                         color = Color.White,
                         fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.3).sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = todayFormatted,
+                        color = ThemeColors.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
@@ -205,7 +229,7 @@ fun DailyFoldableCompanionPane(
             }
         }
 
-        // 2. Concentric Rings & Mascot Hero Card
+        // 2. Concentric Recovery Rings & Mascot Hero Card
         item(key = "companion_rings_hero") {
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -289,7 +313,7 @@ fun DailyFoldableCompanionPane(
             }
         }
 
-        // 3. Smart Briefing Quick Launcher
+        // 3. Smart Briefing Quick Launcher Card
         item(key = "companion_briefing_card") {
             val auraBrush = Brush.horizontalGradient(
                 listOf(
@@ -393,64 +417,250 @@ fun DailyFoldableCompanionPane(
             }
         }
 
-        // 4. Companion Hub Quick Navigation Cards
-        item(key = "companion_hub_cards") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // 4. Executive Multi-Hub Intelligence Digest (Full rich live summary replacing duplicate buttons)
+        item(key = "executive_digest_header") {
+            Text(
+                text = "EXECUTIVE SUMMARY",
+                color = ThemeColors.textSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+        }
+
+        // Hub Digest 1: Health & Vitals
+        item(key = "digest_health") {
+            ExecutiveDigestCard(
+                title = "Health & Vitals",
+                subtitle = "Sleep, Recovery & Biometrics",
+                icon = Icons.Rounded.Favorite,
+                iconTint = ThemeColors.accentPink,
+                onClick = { onOpenHub(NavigationTab.Health) }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DigestMetricPill(
+                        label = "HEART",
+                        value = if (displayBpm > 0.0) "${displayBpm.roundToInt()} BPM" else "-- BPM",
+                        color = ThemeColors.accentPink
+                    )
+                    DigestMetricPill(
+                        label = "RECOVERY",
+                        value = if (sleepScore > 0) "$sleepScore%" else "--",
+                        color = ThemeColors.accentPurple
+                    )
+                    DigestMetricPill(
+                        label = "STEPS",
+                        value = "$totalSteps",
+                        color = ThemeColors.accentOrange
+                    )
+                    DigestMetricPill(
+                        label = "ENERGY",
+                        value = "${totalCalories.roundToInt()} kcal",
+                        color = ThemeColors.accentCyan
+                    )
+                }
+            }
+        }
+
+        // Hub Digest 2: Habits & Routines
+        item(key = "digest_habits") {
+            ExecutiveDigestCard(
+                title = "Habits & Routines",
+                subtitle = "Hydration & Smoke Cessation",
+                icon = Icons.Rounded.WaterDrop,
+                iconTint = ThemeColors.accentCyan,
+                onClick = { onOpenHub(NavigationTab.Habits) }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Water: ${waterTotal.roundToInt()} / ${waterGoal.roundToInt()} ml",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${(hydrationProgress * 100).roundToInt()}%",
+                            color = ThemeColors.accentCyan,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { hydrationProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = ThemeColors.accentCyan,
+                        trackColor = ThemeColors.accentCyan.copy(alpha = 0.15f)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            tint = if (smokesTotal == 0) ThemeColors.accentGreen else ThemeColors.accentOrange,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = if (smokesTotal == 0) "Smoke-free today · Perfect clean streak" else "$smokesTotal smokes logged today",
+                            color = if (smokesTotal == 0) ThemeColors.accentGreen else ThemeColors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        // Hub Digest 3: Smart Ledger & Money
+        item(key = "digest_finances") {
+            val netWorthEUR = parsedLedger.formattedNetWorthEUR
+            ExecutiveDigestCard(
+                title = "Smart Ledger",
+                subtitle = "Wealth, Cashflow & Net Worth",
+                icon = Icons.Rounded.AccountBalanceWallet,
+                iconTint = ThemeColors.accentGreen,
+                onClick = { onOpenHub(NavigationTab.Finances) }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "NET WORTH",
+                            color = ThemeColors.textMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                        Text(
+                            text = if (parsedLedger.netWorth > 0.0) netWorthEUR else "Track Assets",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "INFLOW",
+                                color = ThemeColors.accentGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "+${parsedLedger.incomingTotal.roundToInt()} Lei",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "OUTFLOW",
+                                color = ThemeColors.accentPink,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "-${parsedLedger.outgoingTotal.roundToInt()} Lei",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Hub Digest 4: Tagdos & Notes
+        item(key = "digest_tagdos") {
+            ExecutiveDigestCard(
+                title = "Tagdos & Notes",
+                subtitle = "${quickNotes.size} Active Notes & Memos",
+                icon = Icons.Rounded.Checklist,
+                iconTint = ThemeColors.accentYellow,
+                onClick = { onOpenHub(NavigationTab.Tagdos) }
+            ) {
+                val preview = latestNote?.displayTitle?.takeIf { it.isNotBlank() } ?: latestNote?.content?.trim()?.take(85)
                 Text(
-                    text = "QUICK HUBS",
-                    color = ThemeColors.textSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                    text = if (!preview.isNullOrBlank()) "\"$preview...\"" else "Capture ideas, quick memos, or tasks into your mental stream.",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
 
-                // Health Studio Hub Shortcut
-                CompanionHubRow(
-                    title = "Health Studio & Biometrics",
-                    subtitle = if (displayBpm > 0.0) "${displayBpm.roundToInt()} BPM · $totalSteps Steps" else "Track sleep, vitals and stress",
-                    icon = Icons.Rounded.Favorite,
-                    iconTint = ThemeColors.accentPink,
-                    onClick = { onOpenHub(NavigationTab.Health) }
-                )
-
-                // Finances & Smart Ledger Shortcut
-                val ledgerNetWorth = parsedLedger.netWorth
-                val netWorthDisplay = if (ledgerNetWorth > 0.0) parsedLedger.formattedNetWorthEUR else "Track assets & ledger"
-                CompanionHubRow(
-                    title = "Smart Ledger & Finances",
-                    subtitle = if (ledgerNetWorth > 0.0) "Net Worth: $netWorthDisplay" else "Track transactions & assets",
-                    icon = Icons.Rounded.AccountBalanceWallet,
-                    iconTint = ThemeColors.accentGreen,
-                    onClick = { onOpenHub(NavigationTab.Finances) }
-                )
-
-                // Habits Shortcut with Quick Hydration
-                CompanionHubRow(
-                    title = "Habits & Routines",
-                    subtitle = "$waterTotal / $waterGoal ml water · $smokesTotal smokes",
-                    icon = Icons.Rounded.WaterDrop,
-                    iconTint = ThemeColors.accentCyan,
-                    onClick = { onOpenHub(NavigationTab.Habits) }
-                )
-
-                // News Feed Shortcut
-                CompanionHubRow(
-                    title = "Curated News & Briefing",
-                    subtitle = latestArticle?.title ?: "Read full RSS and AI feeds",
-                    icon = Icons.Rounded.Newspaper,
-                    iconTint = ThemeColors.accentBlue,
-                    onClick = { onOpenHub(NavigationTab.News) }
-                )
-
-                // Weather Detail Shortcut
-                if (weather != null) {
-                    CompanionHubRow(
-                        title = "${weather.name} · ${weather.main.temp.roundToInt()}°",
-                        subtitle = weather.weather.firstOrNull()?.description?.replaceFirstChar { it.uppercase() } ?: "Current conditions",
-                        icon = Icons.Rounded.Cloud,
-                        iconTint = ThemeColors.accentYellow,
-                        onClick = { onOpenHub(NavigationTab.Weather) }
+        // Hub Digest 5: News & Briefings
+        item(key = "digest_news") {
+            ExecutiveDigestCard(
+                title = "News & Briefings",
+                subtitle = "Curated Intelligence",
+                icon = Icons.Rounded.Newspaper,
+                iconTint = ThemeColors.accentBlue,
+                onClick = { onOpenHub(NavigationTab.News) }
+            ) {
+                if (latestArticle != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = latestArticle.title,
+                            color = Color.White.copy(alpha = 0.95f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 18.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = latestArticle.publicationName ?: "Curated Feed",
+                                color = ThemeColors.accentBlue,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "•",
+                                color = ThemeColors.textMuted,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = latestArticle.relativeTimeFormatted,
+                                color = ThemeColors.textSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Curated morning & intraday intelligence feeds are ready for deep reading.",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 13.sp
                     )
                 }
             }
@@ -488,74 +698,105 @@ private fun RingMetricItem(
     }
 }
 
+/**
+ * Signature Executive Digest Card rendering live summary content for a specific Hub.
+ */
 @Composable
-private fun CompanionHubRow(
+private fun ExecutiveDigestCard(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     iconTint: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
 ) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick),
-        cornerRadius = 16.dp,
-        padding = 14.dp,
+        cornerRadius = 18.dp,
+        padding = 16.dp,
         intensity = GlassIntensity.Medium
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Card Header
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(20.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(iconTint.copy(alpha = 0.15f))
+                            .border(1.dp, iconTint.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column {
+                        Text(
+                            text = title,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = subtitle,
+                            color = ThemeColors.textSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = title,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = subtitle,
-                        color = ThemeColors.textSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.4f),
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.size(20.dp)
-            )
+            // Custom Content Body
+            content()
         }
+    }
+}
+
+@Composable
+private fun DigestMetricPill(
+    label: String,
+    value: String,
+    color: Color
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            color = color,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.5.sp
+        )
     }
 }

@@ -158,6 +158,7 @@ fun SmartBriefingContent(
     tagdosRepository: TagdosRepository,
     newsRepository: NewsRepository,
     onDismiss: () -> Unit,
+    showHeader: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -270,7 +271,8 @@ fun SmartBriefingContent(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // 1. Navigation Action Bar with Diurnal Greeting Status Pill
+            // 1. Navigation Action Bar with Diurnal Greeting Status Pill (hidden in foldable mode where FoldableDetailHeader is used)
+            if (showHeader) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -365,8 +367,9 @@ fun SmartBriefingContent(
                         }
                     }
                 }
+            }
 
-                // 2. Body Content
+            // 2. Body Content
                 if (isLoading || record == null) {
                     Box(
                         modifier = Modifier
