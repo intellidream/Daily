@@ -60,7 +60,9 @@ fun FinancesMainView(
     smartLedgerRepository: SmartLedgerRepository,
     financeDataRepository: FinanceDataRepository,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp,
+    applyStatusBarsPadding: Boolean = true
 ) {
     val activeSubTab by financeDataRepository.activeSubTab.collectAsState()
     val ledger by smartLedgerRepository.parsedLedger.collectAsState()
@@ -91,7 +93,7 @@ fun FinancesMainView(
         modifier = modifier
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
-            .statusBarsPadding()
+            .then(if (applyStatusBarsPadding) Modifier.statusBarsPadding() else Modifier)
             .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -99,7 +101,7 @@ fun FinancesMainView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = horizontalPadding, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -192,7 +194,7 @@ fun FinancesMainView(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = horizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {

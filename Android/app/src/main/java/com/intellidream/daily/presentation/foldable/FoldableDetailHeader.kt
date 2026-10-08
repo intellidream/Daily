@@ -45,6 +45,55 @@ import com.intellidream.daily.designsystem.ThemeColors
 import kotlin.math.roundToInt
 
 /**
+ * Minimalist interactive horizontal drag handle pill for foldable secondary panes.
+ * Provides a clean visual cue indicating swipe-down to dismiss without consuming
+ * header space or duplicating hub titles and close buttons.
+ */
+@Composable
+fun FoldableDragHandle(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val animatedOffset by animateFloatAsState(dragOffsetY, label = "DragHandleOffset")
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .offset { IntOffset(0, animatedOffset.roundToInt()) }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (dragOffsetY > 60f) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onDismiss()
+                        }
+                        dragOffsetY = 0f
+                    },
+                    onDragCancel = { dragOffsetY = 0f },
+                    onVerticalDrag = { change, dragAmount ->
+                        if (dragAmount > 0 || dragOffsetY > 0) {
+                            change.consume()
+                            dragOffsetY = (dragOffsetY + dragAmount * 0.85f).coerceAtLeast(0f)
+                        }
+                    }
+                )
+            }
+            .padding(top = 8.dp, bottom = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(5.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.35f))
+        )
+    }
+}
+
+/**
  * Signature Liquid Glass top header bar for the secondary / detail pane on foldables.
  * Features an interactive top drag handle supporting swipe-down to dismiss,
  * title with category icon, and a consistent 40dp circular Liquid Glass (X) close button.

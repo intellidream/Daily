@@ -66,51 +66,15 @@ fun SmartBriefingFoldablePane(
     Column(
         modifier = modifier.fillMaxSize()
     ) {
-        // Single unified header with circular 40dp close button, TTS action, and swipe-down dismiss
-        FoldableDetailHeader(
-            title = "Smart Briefing",
-            icon = Icons.Rounded.AutoAwesome,
-            iconTint = ThemeColors.accentCyan,
-            subtitle = slot.displayName,
-            onCloseClick = {
+        // Minimalist top drag handle pill supporting swipe-down dismiss
+        FoldableDragHandle(
+            onDismiss = {
                 repository.stopSpeech()
                 onDismiss()
-            },
-            trailingContent = {
-                activeBriefing?.let { rec ->
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .shadow(4.dp, CircleShape)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSpeaking) ThemeColors.accentCyan.copy(alpha = 0.25f)
-                                else Color(0xFF080F1E).copy(alpha = 0.72f)
-                            )
-                            .border(
-                                1.dp,
-                                if (isSpeaking) Brush.linearGradient(listOf(ThemeColors.accentCyan, ThemeColors.accentBlue))
-                                else Brush.linearGradient(listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f))),
-                                CircleShape
-                            )
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                repository.toggleSpeechReadout(rec.narrative.fullConcatenatedText)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isSpeaking) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
-                            contentDescription = "Read Aloud",
-                            tint = if (isSpeaking) ThemeColors.accentCyan else Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
             }
         )
 
-        // Typewriter narrative body (header is omitted to prevent duplicate navigation bars)
+        // Typewriter narrative body with its native greeting pill, TTS voice control, and circular close action
         SmartBriefingContent(
             repository = repository,
             userProfile = userProfile,
@@ -123,7 +87,8 @@ fun SmartBriefingFoldablePane(
             tagdosRepository = tagdosRepository,
             newsRepository = newsRepository,
             onDismiss = onDismiss,
-            showHeader = false,
+            showHeader = true,
+            horizontalPadding = 0.dp,
             modifier = Modifier.fillMaxSize()
         )
     }

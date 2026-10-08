@@ -94,7 +94,8 @@ fun WeatherDetailView(
     onRefreshWeather: () -> Unit,
     onSelectManualLocation: (Double, Double, String) -> Unit,
     onResetToAutoLocation: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp
 ) {
     var showingSearchSheet by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -144,7 +145,7 @@ fun WeatherDetailView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = horizontalPadding, vertical = 8.dp)
         ) {
         // Top Location Bar
         TopLocationBar(

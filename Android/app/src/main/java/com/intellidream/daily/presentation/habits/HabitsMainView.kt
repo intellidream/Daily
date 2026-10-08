@@ -82,7 +82,8 @@ import java.util.Locale
 fun HabitsMainView(
     repository: HabitsRepository,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp
 ) {
     val activeHabit by repository.activeHabit.collectAsState()
     val waterGoal by repository.waterGoal.collectAsState()
@@ -138,7 +139,7 @@ fun HabitsMainView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = horizontalPadding)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

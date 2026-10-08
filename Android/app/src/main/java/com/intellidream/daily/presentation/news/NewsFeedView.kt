@@ -113,7 +113,8 @@ fun categoryIcon(category: FeedCategory): androidx.compose.ui.graphics.vector.Im
 fun NewsFeedView(
     repository: NewsRepository,
     settings: AppSettings,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp
 ) {
     val feeds by repository.feeds.collectAsState()
     val selectedFeed by repository.selectedFeed.collectAsState()
@@ -200,7 +201,7 @@ fun NewsFeedView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = horizontalPadding, vertical = 8.dp)
         ) {
             // Pinned Top Glass Header Bar
             NewsHeaderBar(

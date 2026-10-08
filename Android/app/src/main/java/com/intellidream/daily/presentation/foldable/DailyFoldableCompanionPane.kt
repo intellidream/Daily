@@ -150,23 +150,25 @@ fun DailyFoldableCompanionPane(
         BriefingTimeSlot.NIGHTLY -> Icons.Rounded.NightsStay
     }
 
-    val todayFormatted = remember {
-        SimpleDateFormat("EEEE · MMMM d", Locale.getDefault()).format(Date())
-    }
-
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 90.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(top = 8.dp, bottom = 90.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Diurnal Intelligence Header (Matching Smart Briefing action button wording)
+        // 1. Diurnal Intelligence Header (Matching left HeaderGreetingView 56dp height & vertical alignment)
         item(key = "companion_header") {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(top = 4.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -194,12 +196,6 @@ fun DailyFoldableCompanionPane(
                         letterSpacing = (-0.3).sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = todayFormatted,
-                        color = ThemeColors.textSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
                     )
                 }
 

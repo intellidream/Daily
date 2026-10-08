@@ -37,19 +37,26 @@ The architecture ensures that when the device is unfolded or used on an expanded
     - **Customize Dashboard**: Live reorderable widget list with instant master-pane visual reflection.
     - **Settings & Profile**: Cloud account sync, appearance themes, and biometric preferences.
 
-### 2. Symmetrical Margins & Liquid Glass Controls
-- **Width Symmetry**:
+### 2. Symmetrical Margins, Full Content Width & Liquid Glass Controls
+- **Width Symmetry & Elimination of Double Margin Discrepancy**:
   - Master pane and secondary pane both use `weight(1f)`.
   - Left pane padding: `start = 16.dp, end = 12.dp`.
   - Right pane padding: `start = 12.dp, end = 16.dp`.
-  - Both panes share identical 969px card content widths on typical foldable viewports, eliminating previous width discrepancies.
-- **40dp Circular Liquid Glass Controls**:
-  - All close buttons and secondary action buttons across the right pane (`FoldableDetailHeader`) use 40dp circular shapes (`CircleShape`) with subtle translucent glass backgrounds (`Color(0xFF080F1E).copy(alpha = 0.72f)`) and white gradient borders, matching the master pane header buttons 1:1.
-- **Swipe-Down Dismiss Ergonomics**:
-  - The top header bar and pill handle in `FoldableDetailHeader` attach `detectVerticalDragGestures` with physics-based offset animations and haptic feedback. Dragging down smoothly collapses the active hub back to the Companion workspace, restoring bottom-sheet-like ergonomics without modal disruption.
+  - Previously, detail hubs internally applied `padding(horizontal = 20.dp)` in addition to the container's outer margins, causing hub cards in the right pane to measure narrower (873 px) than the master pane (969 px).
+  - All hub views (`HealthMainView`, `HabitsMainView`, `FinancesMainView`, `TagdosNotesHubView`, `NewsFeedView`, `WeatherDetailView`, `SettingsScreen`, `CustomizeDashboardScreen`, `SmartBriefingBottomSheet`) now accept a parameterized `horizontalPadding: Dp = 20.dp` and `applyStatusBarsPadding: Boolean = true`.
+  - When hosted inside the foldable secondary pane, `horizontalPadding = 0.dp` and `applyStatusBarsPadding = false` are passed, yielding exact 1:1 card widths of 969 px across both panes.
+- **Vertical Alignment Parity (`y = 290 px`)**:
+  - The left `HeaderGreetingView` occupies `56.dp` total height (48dp content + 8dp vertical padding), followed by `top = 8.dp` and `spacedBy = 14.dp` inside the dashboard LazyColumn.
+  - The right `DailyFoldableCompanionPane` header row is calibrated to identical dimensions (`height(56.dp)`, `padding(top = 4.dp, bottom = 4.dp)`), with redundant date text omitted (as the master header already displays it).
+  - The LazyColumn on the right applies `contentPadding = PaddingValues(top = 8.dp, bottom = 90.dp)` with `verticalArrangement = Arrangement.spacedBy(14.dp)`.
+  - Both the left Weather card and the right Hero tile (concentric progress rings) begin at the exact identical vertical coordinate `y = 290 px` (`78 dp`).
+- **Minimalist Hub Drag Handle (`FoldableDragHandle`)**:
+  - Redundant artificial top headers (category icon, title, subtitle, circular X button) above secondary hubs were eliminated to let the hub's own content shine cleanly.
+  - Hubs now display only a subtle, elegant horizontal drag handle (`FoldableDragHandle`): a 48x5dp rounded capsule with `detectVerticalDragGestures`, physics-based vertical offset animations, and haptic feedback.
+  - Hubs can be dismissed smoothly via drag-down on the handle, back gesture swipe, or the hub's internal back button.
 - **Smart Briefing Foldable Polish**:
-  - `SmartBriefingContent(showHeader = false)` suppresses the internal redundant navigation bar in foldable mode.
-  - The single unified `FoldableDetailHeader` incorporates the TTS Speaker toggle in its `trailingContent`, eliminating duplicate headers and duplicate close buttons.
+  - `SmartBriefingContent(showHeader = true, horizontalPadding = 0.dp)` is embedded directly with `FoldableDragHandle`.
+  - Redundant duplicate close buttons were removed, providing a clean diurnal intelligence console.
 
 ### 3. Capsule Navigation Placement: Option A (Master-Pane Bottom Anchor)
 - Rather than stretching or centering the floating navigation capsule across the crease (which strains thumb ergonomics and can be obstructed by physical hinges), the capsule is anchored at:
@@ -77,7 +84,7 @@ The architecture ensures that when the device is unfolded or used on an expanded
 | File | Purpose |
 |---|---|
 | [`FoldableLayoutState.kt`](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/foldable/FoldableLayoutState.kt) | Sealed target states (`Companion`, `Hub`, `Settings`, `Customize`, `Briefing`, `NewsArticleDetail`). |
-| [`FoldableDetailHeader.kt`](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/foldable/FoldableDetailHeader.kt) | Liquid Glass top bar with drag handle pill, swipe-down dismiss gestures, category glyph, title, subtitle, and 40dp circular close button. |
+| [`FoldableDetailHeader.kt`](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/foldable/FoldableDetailHeader.kt) | Contains `FoldableDragHandle`, a minimalist liquid glass drag pill (48x5dp) with vertical swipe gestures, offset animation, and haptic feedback. |
 | [`DailyFoldableCompanionPane.kt`](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/foldable/DailyFoldableCompanionPane.kt) | Persistent Companion with diurnal wish header, concentric rings, live BPM/mascot, briefing teaser, and rich Executive Multi-Hub Digest cards. |
 | [`SmartBriefingFoldablePane.kt`](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/foldable/SmartBriefingFoldablePane.kt) | Embedded right-pane presentation for Smart Briefing with unified header, TTS toggle, and drag-down dismiss. |
 | [`SmartBriefingBottomSheet.kt`](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/briefing/SmartBriefingBottomSheet.kt) | Added `showHeader: Boolean = true` parameter to `SmartBriefingContent` to suppress duplicate navigation rows on foldables. |

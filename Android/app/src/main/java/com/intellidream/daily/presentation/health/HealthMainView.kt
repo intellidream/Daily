@@ -101,7 +101,8 @@ import kotlin.math.roundToInt
 fun HealthMainView(
     repository: HealthDataRepository,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp
 ) {
     val activeSubTab by repository.activeSubTab.collectAsState()
     val selectedDateMillis by repository.selectedDate.collectAsState()
@@ -185,13 +186,13 @@ fun HealthMainView(
                 onSelectSource = { repository.setDeviceFilter(it) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .padding(horizontal = horizontalPadding, vertical = 12.dp)
             )
 
             // Scrollable Content
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Sub-Tab Switcher

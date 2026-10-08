@@ -61,7 +61,9 @@ import com.intellidream.daily.model.DashboardWidgetType
 fun CustomizeDashboardScreen(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp,
+    applyStatusBarsPadding: Boolean = true
 ) {
     val widgets = settings.dashboardWidgets
 
@@ -73,8 +75,8 @@ fun CustomizeDashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .then(if (applyStatusBarsPadding) Modifier.statusBarsPadding() else Modifier)
+                .padding(horizontal = horizontalPadding, vertical = 12.dp)
         ) {
             // Header bar
             Row(

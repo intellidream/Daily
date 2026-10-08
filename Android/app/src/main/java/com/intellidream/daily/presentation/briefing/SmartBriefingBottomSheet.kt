@@ -159,6 +159,7 @@ fun SmartBriefingContent(
     newsRepository: NewsRepository,
     onDismiss: () -> Unit,
     showHeader: Boolean = true,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -276,7 +277,7 @@ fun SmartBriefingContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                        .padding(horizontal = horizontalPadding, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -416,7 +417,7 @@ fun SmartBriefingContent(
                                     completeInstantly(items.size, totalWords)
                                 }
                             }
-                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                            .padding(horizontal = horizontalPadding, vertical = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         // Sequential Card Reveal

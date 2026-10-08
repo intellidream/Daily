@@ -77,7 +77,9 @@ fun SettingsScreen(
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
     onSignOutClick: () -> Unit,
     onBackClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp,
+    applyStatusBarsPadding: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
 
@@ -89,13 +91,13 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                .then(if (applyStatusBarsPadding) Modifier.statusBarsPadding() else Modifier)
         ) {
             // Top Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = horizontalPadding, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -129,7 +131,7 @@ fun SettingsScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = horizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 1. Account Section

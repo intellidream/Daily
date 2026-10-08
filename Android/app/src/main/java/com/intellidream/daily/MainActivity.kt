@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WaterDrop
 import com.intellidream.daily.presentation.foldable.DailyFoldableCompanionPane
 import com.intellidream.daily.presentation.foldable.FoldableDetailHeader
+import com.intellidream.daily.presentation.foldable.FoldableDragHandle
 import com.intellidream.daily.presentation.foldable.SmartBriefingFoldablePane
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -683,35 +684,27 @@ fun DailyRootScreen(
                     when {
                         showCustomize -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Customize Dashboard",
-                                    icon = Icons.Rounded.Tune,
-                                    iconTint = ThemeColors.accentPurple,
-                                    subtitle = "Reorder & Toggle Widgets",
-                                    onCloseClick = { onSetShowCustomize?.invoke(false) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSetShowCustomize?.invoke(false) })
                                 CustomizeDashboardScreen(
                                     settings = settings,
                                     onUpdateSettings = onUpdateSettings,
-                                    onBackClick = { onSetShowCustomize?.invoke(false) }
+                                    onBackClick = { onSetShowCustomize?.invoke(false) },
+                                    horizontalPadding = 0.dp,
+                                    applyStatusBarsPadding = false
                                 )
                             }
                         }
                         showSettings -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Settings & Profile",
-                                    icon = Icons.Rounded.Settings,
-                                    iconTint = ThemeColors.accentBlue,
-                                    subtitle = userProfile?.email ?: "Account & Preferences",
-                                    onCloseClick = { onSetShowSettings?.invoke(false) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSetShowSettings?.invoke(false) })
                                 SettingsScreen(
                                     settings = settings,
                                     userProfile = userProfile,
                                     onUpdateSettings = onUpdateSettings,
                                     onSignOutClick = { onSignOutClick?.invoke() },
-                                    onBackClick = { onSetShowSettings?.invoke(false) }
+                                    onBackClick = { onSetShowSettings?.invoke(false) },
+                                    horizontalPadding = 0.dp,
+                                    applyStatusBarsPadding = false
                                 )
                             }
                         }
@@ -762,90 +755,61 @@ fun DailyRootScreen(
                         }
                         selectedTab == NavigationTab.Health -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Health Studio",
-                                    icon = Icons.Rounded.Favorite,
-                                    iconTint = ThemeColors.accentPink,
-                                    subtitle = "Biometrics & Sleep",
-                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
                                 com.intellidream.daily.presentation.health.HealthMainView(
                                     repository = healthRepository,
-                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    horizontalPadding = 0.dp
                                 )
                             }
                         }
                         selectedTab == NavigationTab.Habits -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Habits & Routines",
-                                    icon = Icons.Rounded.WaterDrop,
-                                    iconTint = ThemeColors.accentCyan,
-                                    subtitle = "Hydration & Smoke Quitting",
-                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
                                 com.intellidream.daily.presentation.habits.HabitsMainView(
                                     repository = habitsRepository,
-                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    horizontalPadding = 0.dp
                                 )
                             }
                         }
                         selectedTab == NavigationTab.Finances -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Smart Ledger",
-                                    icon = Icons.Rounded.AccountBalanceWallet,
-                                    iconTint = ThemeColors.accentGreen,
-                                    subtitle = "Personal Finances & Wealth",
-                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
                                 com.intellidream.daily.presentation.finances.FinancesMainView(
                                     smartLedgerRepository = smartLedgerRepository,
                                     financeDataRepository = financeDataRepository,
-                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    horizontalPadding = 0.dp,
+                                    applyStatusBarsPadding = false
                                 )
                             }
                         }
                         selectedTab == NavigationTab.Tagdos -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Tagdos & Notes",
-                                    icon = Icons.Rounded.Checklist,
-                                    iconTint = ThemeColors.accentYellow,
-                                    subtitle = "Mental Stream & Quick Notes",
-                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
                                 com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
                                     repository = tagdosRepository,
-                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    horizontalPadding = 0.dp,
+                                    applyStatusBarsPadding = false
                                 )
                             }
                         }
                         selectedTab == NavigationTab.News -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Curated News",
-                                    icon = Icons.Rounded.Newspaper,
-                                    iconTint = ThemeColors.accentBlue,
-                                    subtitle = "Feeds & Deep Read",
-                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
                                 com.intellidream.daily.presentation.news.NewsFeedView(
                                     repository = newsRepository,
                                     settings = settings,
-                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    horizontalPadding = 0.dp
                                 )
                             }
                         }
                         selectedTab == NavigationTab.Weather -> {
                             Column(modifier = Modifier.fillMaxSize()) {
-                                FoldableDetailHeader(
-                                    title = "Weather Radar",
-                                    icon = Icons.Rounded.Cloud,
-                                    iconTint = ThemeColors.accentYellow,
-                                    subtitle = locationName,
-                                    onCloseClick = { onSelectTab(NavigationTab.Dashboard) }
-                                )
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
                                 WeatherDetailView(
                                     weather = weather,
                                     hourlyForecasts = hourlyForecasts,
@@ -860,7 +824,8 @@ fun DailyRootScreen(
                                     onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
                                     onRefreshWeather = onRefreshWeather,
                                     onSelectManualLocation = onSelectManualLocation,
-                                    onResetToAutoLocation = onResetToAutoLocation
+                                    onResetToAutoLocation = onResetToAutoLocation,
+                                    horizontalPadding = 0.dp
                                 )
                             }
                         }

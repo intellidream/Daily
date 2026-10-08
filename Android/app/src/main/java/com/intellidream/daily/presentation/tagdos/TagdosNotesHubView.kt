@@ -90,7 +90,9 @@ import java.util.Locale
 @Composable
 fun TagdosNotesHubView(
     repository: TagdosRepository,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
+    applyStatusBarsPadding: Boolean = true
 ) {
     val streams by repository.streams.collectAsState()
     val quickNotes by repository.quickNotes.collectAsState()
@@ -138,13 +140,13 @@ fun TagdosNotesHubView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                .then(if (applyStatusBarsPadding) Modifier.statusBarsPadding() else Modifier)
         ) {
             // MARK: - Top Navigation Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = horizontalPadding, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -248,7 +250,7 @@ fun TagdosNotesHubView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = horizontalPadding, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -378,7 +380,7 @@ fun TagdosNotesHubView(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = horizontalPadding, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (isNotesTab) {
