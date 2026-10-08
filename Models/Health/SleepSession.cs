@@ -9,12 +9,37 @@ namespace Daily.Models.Health
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
         public bool IsNap { get; set; } = false;
+        public string SourceDevice { get; set; } = "Unknown";
+        public bool HasGranularHypnogram { get; set; } = true;
         public List<HealthTelemetry> Stages { get; set; } = new();
 
-        public double DeepSeconds => Stages.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
-        public double RemSeconds => Stages.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
-        public double LightSeconds => Stages.Where(x => x.SleepCategory == "Core").Sum(x => x.DurationSeconds);
-        public double AwakeSeconds => Stages.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
+        private double? _deepSeconds;
+        public double DeepSeconds
+        {
+            get => _deepSeconds ?? Stages.Where(x => x.SleepCategory == "Deep").Sum(x => x.DurationSeconds);
+            set => _deepSeconds = value;
+        }
+
+        private double? _remSeconds;
+        public double RemSeconds
+        {
+            get => _remSeconds ?? Stages.Where(x => x.SleepCategory == "REM").Sum(x => x.DurationSeconds);
+            set => _remSeconds = value;
+        }
+
+        private double? _lightSeconds;
+        public double LightSeconds
+        {
+            get => _lightSeconds ?? Stages.Where(x => x.SleepCategory == "Core" || x.SleepCategory == "Light").Sum(x => x.DurationSeconds);
+            set => _lightSeconds = value;
+        }
+
+        private double? _awakeSeconds;
+        public double AwakeSeconds
+        {
+            get => _awakeSeconds ?? Stages.Where(x => x.SleepCategory == "Awake").Sum(x => x.DurationSeconds);
+            set => _awakeSeconds = value;
+        }
         private double? _asleepSeconds;
         public double AsleepSeconds
         {

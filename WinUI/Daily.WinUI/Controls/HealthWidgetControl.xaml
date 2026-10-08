@@ -4,172 +4,163 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:Daily_WinUI.Controls"
     mc:Ignorable="d"
     Loaded="UserControl_Loaded"
     Unloaded="UserControl_Unloaded">
 
-    <Grid Padding="12">
+    <Grid Padding="12" Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="12" Padding="12,6" Tapped="Header_Tapped">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    
-                    <FontIcon Glyph="&#xE95E;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" Margin="0,0,8,0" />
-                    <TextBlock Grid.Column="1" Text="Vitals" FontSize="14" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
-                    
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Text="Today" FontSize="11" Foreground="White" Opacity="0.7" VerticalAlignment="Center" />
-                        <Ellipse Width="6" Height="6" Fill="{x:Bind SourceDotColor, Mode=OneWay}" ToolTipService.ToolTip="{x:Bind SourceTooltip, Mode=OneWay}" />
-                    </StackPanel>
-                </Grid>
+        <!-- Header: Health & Vitals + Device Origin Chip + "Open Hub >" -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Title & Icon -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Tapped="Header_Tapped">
+                <Border Width="28" Height="28" CornerRadius="14" Background="#1FFF2D55">
+                    <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF2D55" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="Health &amp; Vitals" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
+            </StackPanel>
+
+            <!-- Device Origin Badge (Center/Right) -->
+            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" Visibility="{x:Bind HasDeviceAttribution, Mode=OneWay}">
+                <controls:DeviceOriginBadge DeviceName="{x:Bind DominantDeviceName, Mode=OneWay}" IsCompact="True" />
+            </StackPanel>
+
+            <!-- Open Hub Button -->
+            <Border Grid.Column="2" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="8,4" Tapped="Header_Tapped">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="Open Hub" FontSize="11" FontWeight="SemiBold" Foreground="#FF2D55" VerticalAlignment="Center" />
+                    <FontIcon Glyph="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF2D55" VerticalAlignment="Center" />
+                </StackPanel>
             </Border>
         </Grid>
 
         <!-- Main Content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <!-- TOP ROW: Steps + Kcal + Heart Rate -->
-                <Grid Grid.Row="0" Margin="0,0,0,12" Background="Transparent" Tapped="Header_Tapped">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Steps -->
-                    <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="16" Opacity="0.5" Margin="0,0,0,4" />
-                        <TextBlock Text="{x:Bind StepsText, Mode=OneWay}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" />
-                        <TextBlock Text="steps" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
-                    </StackPanel>
-
-                    <Border Grid.Column="1" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4" />
-
-                    <!-- Kcal -->
-                    <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xEC4A;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#FF9800" Margin="0,0,0,4" />
-                        <TextBlock Text="{x:Bind CaloriesText, Mode=OneWay}" FontSize="20" FontWeight="Bold" Foreground="#FF9800" HorizontalAlignment="Center" />
-                        <TextBlock Text="kcal" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
-                    </StackPanel>
-
-                    <Border Grid.Column="3" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4" />
-
-                    <!-- Heart Rate -->
-                    <StackPanel Grid.Column="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#F44336" Margin="0,0,0,4" />
-                        <TextBlock Text="{x:Bind HeartRateText, Mode=OneWay}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" />
-                        <TextBlock Text="bpm" FontSize="10" Opacity="0.5" HorizontalAlignment="Center" />
-                    </StackPanel>
-                </Grid>
-
-                <!-- SLEEP SECTION -->
-                <Border Grid.Row="1" Background="#0F7C4DFF" CornerRadius="8" Padding="12" Margin="0,0,0,12" Tapped="Sleep_Tapped">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" Margin="0,0,0,12">
-                            <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#7C4DFF" />
-                            <TextBlock Text="{x:Bind SleepText, Mode=OneWay}" FontSize="18" FontWeight="Bold" />
-                            <TextBlock Text="total" FontSize="12" Opacity="0.5" VerticalAlignment="Bottom" Margin="0,0,0,2" />
-                        </StackPanel>
-
-                        <!-- Sleep Stages -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Deep -->
-                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                <Border Height="3" CornerRadius="1.5" Background="#3F51B5" Margin="0,0,0,4" HorizontalAlignment="Stretch" />
-                                <TextBlock Text="DEEP" FontSize="9" Opacity="0.7" HorizontalAlignment="Center" />
-                                <TextBlock Text="{x:Bind DeepSleepText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
-                            </StackPanel>
-
-                            <!-- Light -->
-                            <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                <Border Height="3" CornerRadius="1.5" Background="#7C4DFF" Margin="0,0,0,4" HorizontalAlignment="Stretch" />
-                                <TextBlock Text="LIGHT" FontSize="9" Opacity="0.7" HorizontalAlignment="Center" />
-                                <TextBlock Text="{x:Bind LightSleepText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
-                            </StackPanel>
-
-                            <!-- REM -->
-                            <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                                <Border Height="3" CornerRadius="1.5" Background="#00BCD4" Margin="0,0,0,4" HorizontalAlignment="Stretch" />
-                                <TextBlock Text="REM" FontSize="9" Opacity="0.7" HorizontalAlignment="Center" />
-                                <TextBlock Text="{x:Bind RemSleepText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
-                            </StackPanel>
-
-                            <!-- Awake -->
-                            <StackPanel Grid.Column="3" HorizontalAlignment="Center">
-                                <Border Height="3" CornerRadius="1.5" Background="#FF9800" Margin="0,0,0,4" HorizontalAlignment="Stretch" />
-                                <TextBlock Text="AWAKE" FontSize="9" Opacity="0.7" HorizontalAlignment="Center" />
-                                <TextBlock Text="{x:Bind AwakeSleepText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!-- VITALS GRID: HRV, RHR, RESP, SpO2 -->
-                <Border Grid.Row="2" Background="{ThemeResource AppGlassColorBrush}" CornerRadius="8" Padding="12" Tapped="Vitals_Tapped">
+            <StackPanel Spacing="10">
+                <!-- 4-COLUMN VITALS GLANCE (Matching iOS/Android HealthDashboardCard) -->
+                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12,10" Tapped="Header_Tapped">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="1" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="1" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="1" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                            <TextBlock Text="HRV" FontSize="9" Opacity="0.5" HorizontalAlignment="Center" />
-                            <TextBlock Text="{x:Bind HrvText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        <!-- 1. STEPS -->
+                        <StackPanel Grid.Column="0" Spacing="3" Padding="4,0">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <FontIcon Glyph="&#xE7EE;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF2D55" />
+                                <TextBlock Text="STEPS" FontSize="9.5" FontWeight="Bold" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind StepsText, Mode=OneWay}" FontSize="18" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                            
+                            <!-- Steps Progress Bar towards 10k -->
+                            <ProgressBar Value="{x:Bind StepsProgressValue, Mode=OneWay}" Maximum="100" Height="3" CornerRadius="1.5" Foreground="#FF2D55" Background="{ThemeResource AppGlassBorderColorBrush}" />
+                            
+                            <StackPanel Orientation="Horizontal" Spacing="3" Margin="0,1,0,0">
+                                <FontIcon Glyph="&#xEC4A;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FF9500" />
+                                <TextBlock Text="{x:Bind CaloriesSummaryText, Mode=OneWay}" FontSize="9.5" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            </StackPanel>
                         </StackPanel>
 
-                        <Border Grid.Column="1" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4" />
+                        <Border Grid.Column="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2" />
 
-                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                            <TextBlock Text="RHR" FontSize="9" Opacity="0.5" HorizontalAlignment="Center" />
-                            <TextBlock Text="{x:Bind RhrText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        <!-- 2. HEART -->
+                        <StackPanel Grid.Column="2" Spacing="3" Padding="6,0">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <FontIcon Glyph="&#xEC92;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF2D55" />
+                                <TextBlock Text="HEART" FontSize="9.5" FontWeight="Bold" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind HeartRateText, Mode=OneWay}" FontSize="18" FontWeight="Bold" Foreground="#FF2D55" />
+                            <TextBlock Text="{x:Bind RestingHeartRateSummaryText, Mode=OneWay}" FontSize="9.5" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,4,0,0" />
                         </StackPanel>
 
-                        <Border Grid.Column="3" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4" />
+                        <Border Grid.Column="3" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2" />
 
-                        <StackPanel Grid.Column="4" HorizontalAlignment="Center">
-                            <TextBlock Text="RESP" FontSize="9" Opacity="0.5" HorizontalAlignment="Center" />
-                            <TextBlock Text="{x:Bind RespText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        <!-- 3. SLEEP -->
+                        <StackPanel Grid.Column="4" Spacing="3" Padding="6,0" Tapped="Sleep_Tapped">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#00C7BE" />
+                                <TextBlock Text="SLEEP" FontSize="9.5" FontWeight="Bold" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind SleepText, Mode=OneWay}" FontSize="18" FontWeight="Bold" Foreground="#00C7BE" />
+                            <TextBlock Text="{x:Bind SleepEfficiencySummaryText, Mode=OneWay}" FontSize="9.5" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,4,0,0" />
                         </StackPanel>
 
-                        <Border Grid.Column="5" Width="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,4" />
+                        <Border Grid.Column="5" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2" />
 
-                        <StackPanel Grid.Column="6" HorizontalAlignment="Center">
-                            <TextBlock Text="SpO2" FontSize="9" Opacity="0.5" HorizontalAlignment="Center" />
-                            <TextBlock Text="{x:Bind Spo2Text, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                        <!-- 4. STRESS -->
+                        <StackPanel Grid.Column="6" Spacing="3" Padding="4,0" Tapped="Stress_Tapped">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{x:Bind MonkeyMoodEmoji, Mode=OneWay}" FontSize="10" />
+                                <TextBlock Text="STRESS" FontSize="9.5" FontWeight="Bold" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind StressScoreText, Mode=OneWay}" FontSize="18" FontWeight="Bold" Foreground="{x:Bind StressScoreBrush, Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind StressLevelLabelText, Mode=OneWay}" FontSize="9.5" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Grid>
                 </Border>
-            </Grid>
+
+                <!-- SECONDARY ROW: 4-Metric Vitals Bar (HRV, RHR, SpO2, Respiratory) -->
+                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="12,8" Tapped="Vitals_Tapped">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="1" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="1" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="1" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- HRV -->
+                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                            <TextBlock Text="HRV" FontSize="9" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{x:Bind HrvText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2" />
+
+                        <!-- RHR -->
+                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                            <TextBlock Text="RHR" FontSize="9" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{x:Bind RhrText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="3" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2" />
+
+                        <!-- SpO2 -->
+                        <StackPanel Grid.Column="4" HorizontalAlignment="Center">
+                            <TextBlock Text="SpO2" FontSize="9" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{x:Bind Spo2Text, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="5" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2" />
+
+                        <!-- Respiratory Rate -->
+                        <StackPanel Grid.Column="6" HorizontalAlignment="Center">
+                            <TextBlock Text="RESP" FontSize="9" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{x:Bind RespText, Mode=OneWay}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

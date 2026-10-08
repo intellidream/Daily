@@ -24,8 +24,7 @@ namespace Daily_WinUI.Services
             {
                 new WidgetModel { Title = "Weather", ComponentType = "WeatherWidget", ColumnSpan = 2, RowSpan = 1 },
                 new WidgetModel { Title = "Finances", ComponentType = "FinancesWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Vitals", ComponentType = "HealthWidget", ColumnSpan = 1, RowSpan = 1 },
-                new WidgetModel { Title = "Health Data", ComponentType = "HealthTelemetryWidget", ColumnSpan = 2, RowSpan = 1 },
+                new WidgetModel { Title = "Health & Vitals", ComponentType = "HealthWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "Habits", ComponentType = "HabitsWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 }
@@ -52,13 +51,12 @@ namespace Daily_WinUI.Services
                 }
             }
 
-            // Remove NewsRecommendationsWidget from the dashboard widgets list
-            widgets.RemoveAll(w => w.ComponentType == "NewsRecommendationsWidget");
-
-            // Ensure new widgets are available even if the user has a saved configuration
-            if (!widgets.Any(w => w.ComponentType == "HealthTelemetryWidget"))
+            // Purge obsolete and orphaned widgets
+            int removed = widgets.RemoveAll(w => w.ComponentType == "NewsRecommendationsWidget" || w.ComponentType == "HealthTelemetryWidget");
+            if (removed > 0 && !string.IsNullOrEmpty(json))
             {
-                widgets.Add(new WidgetModel { Title = "Health Data", ComponentType = "HealthTelemetryWidget", ColumnSpan = 2, RowSpan = 1 });
+                _settingsService.Settings.WinUIDashboardWidgetsJson = Newtonsoft.Json.JsonConvert.SerializeObject(widgets);
+                _ = _settingsService.SaveSettingsAsync();
             }
 
             return Task.FromResult(widgets);

@@ -6,8 +6,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Daily.Models.Health;
-using Daily.Services.Health;
 using Daily.Services;
+using Daily.Services.Health;
 using Daily_WinUI.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -33,7 +33,17 @@ namespace Daily_WinUI.Views
         private List<SleepSession> _allSleepSessions = new();
 
         private bool _isSyncing = false;
+        public bool IsSyncing => _isSyncing;
         public bool IsNotSyncing => !_isSyncing;
+        public Visibility SyncRingVisibility => _isSyncing ? Visibility.Visible : Visibility.Collapsed;
+        public Visibility SyncIconVisibility => !_isSyncing ? Visibility.Visible : Visibility.Collapsed;
+
+        // Multi-Device Filter State
+        private string? _selectedDeviceFilter = null; // null = All Devices
+        public ObservableCollection<DeviceFilterItem> AvailableDevices { get; } = new();
+
+        // Selected Stage Pill State for Hypnogram
+        private HealthTelemetry? _selectedStage = null;
 
         // Chart Data Collections
         public ObservableCollection<HealthChartData> HourlyStepsCollection { get; } = new();
@@ -44,6 +54,7 @@ namespace Daily_WinUI.Views
         public ObservableCollection<HealthChartData> CaloriesHistory { get; } = new();
         public ObservableCollection<HealthChartData> WeightHistory { get; } = new();
         public ObservableCollection<HealthChartData> HrvHistory { get; } = new();
+        public ObservableCollection<NapDisplayItem> DaytimeNapsList { get; } = new();
 
         // Box Breathing State
         private DispatcherTimer? _breathingTimer;
@@ -113,6 +124,11 @@ namespace Daily_WinUI.Views
                 _healthService.OnSelectedDateChanged += OnSelectedDateChanged;
             }
 
+            if (_healthHubService != null)
+            {
+                _healthHubService.OnDailySummaryChanged += OnDailySummaryChanged;
+            }
+
             UpdateDayNavigatorUi();
             await LoadDataAsync();
         }
@@ -130,7 +146,21 @@ namespace Daily_WinUI.Views
                 _healthService.OnSelectedDateChanged -= OnSelectedDateChanged;
             }
 
+            if (_healthHubService != null)
+            {
+                _healthHubService.OnDailySummaryChanged -= OnDailySummaryChanged;
+            }
+
             StopBreathingExercise();
+        }
+
+        private void OnDailySummaryChanged(HealthDailySummaryRecord? record)
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                _currentSummary = record;
+                await RefreshDerivedDataAsync();
+            });
         }
 
         private void OnSelectedDateChanged()
@@ -160,94 +190,9 @@ namespace Daily_WinUI.Views
             return Task.CompletedTask;
         }
 
-        private void UpdateDayNavigatorUi()
-        {
-            var today = DateTime.Today;
-            if (_selectedDate == today)
-            {
-                SelectedDateTextBlock.Text = $"Today, {_selectedDate:ddd, MMM d, yyyy}";
-                if (NextDayButton != null) NextDayButton.IsEnabled = false;
-                if (JumpTodayButton != null) JumpTodayButton.Visibility = Visibility.Collapsed;
-            }
-            else if (_selectedDate == today.AddDays(-1))
-            {
-                SelectedDateTextBlock.Text = $"Yesterday, {_selectedDate:ddd, MMM d, yyyy}";
-                if (NextDayButton != null) NextDayButton.IsEnabled = true;
-                if (JumpTodayButton != null) JumpTodayButton.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                SelectedDateTextBlock.Text = $"{_selectedDate:ddd, MMM d, yyyy}";
-                if (NextDayButton != null) NextDayButton.IsEnabled = _selectedDate < today;
-                if (JumpTodayButton != null) JumpTodayButton.Visibility = Visibility.Visible;
-            }
-        }
-
-        private void PrevDayButton_Click(object sender, RoutedEventArgs e)
-        {
-            _selectedDate = _selectedDate.AddDays(-1);
-            if (_healthService != null) _healthService.SelectedDate = _selectedDate;
-            else
-            {
-                UpdateDayNavigatorUi();
-                _ = LoadDataAsync();
-            }
-        }
-
-        private void NextDayButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_selectedDate < DateTime.Today)
-            {
-                _selectedDate = _selectedDate.AddDays(1);
-                if (_healthService != null) _healthService.SelectedDate = _selectedDate;
-                else
-                {
-                    UpdateDayNavigatorUi();
-                    _ = LoadDataAsync();
-                }
-            }
-        }
-
-        private void JumpTodayButton_Click(object sender, RoutedEventArgs e)
-        {
-            _selectedDate = DateTime.Today;
-            if (_healthService != null) _healthService.SelectedDate = _selectedDate;
-            else
-            {
-                UpdateDayNavigatorUi();
-                _ = LoadDataAsync();
-            }
-        }
-
-        private async void SyncButton_Click(object sender, RoutedEventArgs e)
-        {
-            await RefreshFromTitleBarAsync();
-        }
-
-        public async Task RefreshFromTitleBarAsync()
-        {
-            if (_isSyncing) return;
-            _isSyncing = true;
-            OnPropertyChanged(nameof(IsNotSyncing));
-
-            try
-            {
-                if (_healthService != null)
-                {
-                    await _healthService.PullDeltasAsync();
-                }
-                await LoadDataAsync();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[HealthDetailPage] Sync failed: {ex.Message}");
-            }
-            finally
-            {
-                _isSyncing = false;
-                OnPropertyChanged(nameof(IsNotSyncing));
-            }
-        }
+        // ==========================================
+        // DATA LOADING & DERIVATIONS
+        // ==========================================
 
         public async Task LoadDataAsync()
         {
@@ -283,16 +228,38 @@ namespace Daily_WinUI.Views
 
                 PopulateHourlySteps();
                 PopulateHeartRate();
+                PopulateDaytimeNaps();
+                PopulateAvailableDevices();
                 await LoadTrendsHistoryAsync();
 
-                NotifyAllProperties();
-                DrawSleepHypnogram();
-                DrawSleepXAxis();
+                await RefreshDerivedDataAsync();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[HealthDetailPage] LoadDataAsync error: {ex.Message}");
             }
+        }
+
+        public async Task RefreshFromTitleBarAsync()
+        {
+            await LoadDataAsync();
+        }
+
+        private static SolidColorBrush GetDeviceColorBrush(string? dev)
+        {
+            return new SolidColorBrush(DeviceColorPalette.ParseColor(DeviceColorPalette.GetColor(dev)));
+        }
+
+        private Task RefreshDerivedDataAsync()
+        {
+            NotifyAllProperties();
+
+            // Re-render visual canvas graphs
+            DrawSleepHypnogram();
+            DrawSleepXAxis();
+            DrawStageProportions();
+
+            return Task.CompletedTask;
         }
 
         private void PopulateHourlySteps()
@@ -371,6 +338,131 @@ namespace Daily_WinUI.Views
             }
         }
 
+        private void PopulateDaytimeNaps()
+        {
+            DaytimeNapsList.Clear();
+            var naps = _currentSummary?.Summary?.Sleep?.Naps;
+            if (naps != null && naps.Any())
+            {
+                foreach (var nap in naps)
+                {
+                    DateTimeOffset.TryParse(nap.StartTime, out var sDto);
+                    DateTimeOffset.TryParse(nap.EndTime, out var eDto);
+                    int mins = nap.DurationSeconds > 0 ? (int)Math.Round(nap.DurationSeconds / 60.0) : 0;
+                    string timeRange = sDto != default && eDto != default
+                        ? $"{sDto.LocalDateTime:HH:mm} - {eDto.LocalDateTime:HH:mm}"
+                        : "--:--";
+
+                    DaytimeNapsList.Add(new NapDisplayItem
+                    {
+                        TimeRange = timeRange,
+                        DurationText = $"{mins} minutes restorative nap",
+                        NapMinutesText = $"{mins} min",
+                        DeviceName = nap.SourceDevice ?? nap.Tracker ?? "Device"
+                    });
+                }
+            }
+        }
+
+        private void PopulateAvailableDevices()
+        {
+            AvailableDevices.Clear();
+
+            // First entry: All Devices (Consolidated)
+            AvailableDevices.Add(new DeviceFilterItem
+            {
+                DeviceName = "",
+                DisplayName = "All Devices (Consolidated)",
+                SegoeGlyph = "\xEB51",
+                ColorBrush = new SolidColorBrush(Color.FromArgb(255, 255, 45, 85)),
+                IsSelected = string.IsNullOrEmpty(_selectedDeviceFilter)
+            });
+
+            var discovered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // From sleep session
+            if (!string.IsNullOrEmpty(_primarySleepSession?.SourceDevice) && !DeviceSource.IsVirtual(_primarySleepSession.SourceDevice))
+            {
+                discovered.Add(_primarySleepSession.SourceDevice);
+            }
+
+            // From all sleep sessions
+            foreach (var s in _allSleepSessions)
+            {
+                if (!string.IsNullOrEmpty(s.SourceDevice) && !DeviceSource.IsVirtual(s.SourceDevice))
+                {
+                    discovered.Add(s.SourceDevice);
+                }
+            }
+
+            // From vitals
+            if (_currentSummary?.Summary?.Vitals != null)
+            {
+                foreach (var v in _currentSummary.Summary.Vitals.Values)
+                {
+                    if (!string.IsNullOrEmpty(v.SourceDevice) && !DeviceSource.IsVirtual(v.SourceDevice))
+                    {
+                        discovered.Add(v.SourceDevice);
+                    }
+                }
+            }
+
+            // From metrics
+            foreach (var m in _metrics)
+            {
+                if (!string.IsNullOrEmpty(m.SourceDevice) && !DeviceSource.IsVirtual(m.SourceDevice))
+                {
+                    discovered.Add(m.SourceDevice);
+                }
+            }
+
+            foreach (var dev in discovered)
+            {
+                var src = DeviceSource.From(dev);
+                AvailableDevices.Add(new DeviceFilterItem
+                {
+                    DeviceName = dev,
+                    DisplayName = src.DisplayName,
+                    SegoeGlyph = src.SegoeGlyph,
+                    ColorBrush = GetDeviceColorBrush(dev),
+                    IsSelected = string.Equals(_selectedDeviceFilter, dev, StringComparison.OrdinalIgnoreCase)
+                });
+            }
+
+            RebuildDeviceMenuFlyout();
+        }
+
+        private void RebuildDeviceMenuFlyout()
+        {
+            if (DeviceMenuFlyout == null) return;
+            DeviceMenuFlyout.Items.Clear();
+
+            foreach (var item in AvailableDevices)
+            {
+                var menuItem = new MenuFlyoutItem
+                {
+                    Text = item.DisplayName,
+                    Icon = new FontIcon { Glyph = item.SegoeGlyph, FontFamily = new FontFamily("Segoe Fluent Icons"), Foreground = item.ColorBrush },
+                    Tag = item.DeviceName
+                };
+
+                menuItem.Click += (s, e) =>
+                {
+                    if (s is MenuFlyoutItem mi)
+                    {
+                        string? target = mi.Tag as string;
+                        _selectedDeviceFilter = string.IsNullOrEmpty(target) ? null : target;
+                        PopulateAvailableDevices();
+                        OnPropertyChanged(nameof(SelectedDeviceLabel));
+                        OnPropertyChanged(nameof(SelectedDeviceDotBrush));
+                        OnPropertyChanged(nameof(SelectedDeviceGlyph));
+                    }
+                };
+
+                DeviceMenuFlyout.Items.Add(menuItem);
+            }
+        }
+
         private async Task LoadTrendsHistoryAsync()
         {
             StepsHistory.Clear();
@@ -424,11 +516,158 @@ namespace Daily_WinUI.Views
         }
 
         // ==========================================
-        // OVERVIEW TAB PROPERTIES
+        // TOPBAR PROPERTIES & COMMANDS
         // ==========================================
 
-        public string StepsText => _currentSummary?.Steps?.ToString("N0") ?? GetMetricValueString(VitalType.Steps, "N0");
-        public string CaloriesText => _currentSummary?.ActiveKcal?.ToString("N0") ?? GetMetricValueString(VitalType.ActiveEnergy, "N0");
+        public Visibility JumpTodayVisibility => _selectedDate.Date != DateTime.Today ? Visibility.Visible : Visibility.Collapsed;
+
+        public string SelectedDeviceLabel
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_selectedDeviceFilter)) return "All Devices";
+                return DeviceSource.From(_selectedDeviceFilter).DisplayName;
+            }
+        }
+
+        public SolidColorBrush SelectedDeviceDotBrush
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_selectedDeviceFilter)) return new SolidColorBrush(Color.FromArgb(255, 255, 45, 85));
+                return GetDeviceColorBrush(_selectedDeviceFilter);
+            }
+        }
+
+        public string SelectedDeviceGlyph
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_selectedDeviceFilter)) return "\xEB51";
+                return DeviceSource.From(_selectedDeviceFilter).SegoeGlyph;
+            }
+        }
+
+        public string DominantDeviceName
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter)) return _selectedDeviceFilter;
+                if (!string.IsNullOrEmpty(_primarySleepSession?.SourceDevice) && !DeviceSource.IsVirtual(_primarySleepSession.SourceDevice))
+                {
+                    return _primarySleepSession.SourceDevice;
+                }
+                var firstDev = AvailableDevices.FirstOrDefault(d => !string.IsNullOrEmpty(d.DeviceName));
+                return firstDev?.DeviceName ?? "";
+            }
+        }
+
+        public bool HasDominantDevice => !string.IsNullOrWhiteSpace(DominantDeviceName);
+
+        private void UpdateDayNavigatorUi()
+        {
+            if (SelectedDateTextBlock != null)
+            {
+                if (_selectedDate.Date == DateTime.Today)
+                {
+                    SelectedDateTextBlock.Text = "Today";
+                }
+                else if (_selectedDate.Date == DateTime.Today.AddDays(-1))
+                {
+                    SelectedDateTextBlock.Text = "Yesterday";
+                }
+                else
+                {
+                    SelectedDateTextBlock.Text = _selectedDate.ToString("ddd, MMM d");
+                }
+            }
+
+            OnPropertyChanged(nameof(JumpTodayVisibility));
+        }
+
+        private async void PrevDayButton_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedDate = _selectedDate.AddDays(-1);
+            if (_healthService != null) _healthService.SelectedDate = _selectedDate;
+            UpdateDayNavigatorUi();
+            await LoadDataAsync();
+        }
+
+        private async void NextDayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedDate.Date >= DateTime.Today) return;
+            _selectedDate = _selectedDate.AddDays(1);
+            if (_healthService != null) _healthService.SelectedDate = _selectedDate;
+            UpdateDayNavigatorUi();
+            await LoadDataAsync();
+        }
+
+        private async void JumpTodayButton_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedDate = DateTime.Today;
+            if (_healthService != null) _healthService.SelectedDate = _selectedDate;
+            UpdateDayNavigatorUi();
+            await LoadDataAsync();
+        }
+
+        private async void SyncButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isSyncing) return;
+            _isSyncing = true;
+            OnPropertyChanged(nameof(IsSyncing));
+            OnPropertyChanged(nameof(IsNotSyncing));
+            OnPropertyChanged(nameof(SyncRingVisibility));
+            OnPropertyChanged(nameof(SyncIconVisibility));
+
+            try
+            {
+                if (_healthHubService != null)
+                {
+                    await _healthHubService.PullDeltasAsync();
+                }
+                await LoadDataAsync();
+            }
+            finally
+            {
+                _isSyncing = false;
+                OnPropertyChanged(nameof(IsSyncing));
+                OnPropertyChanged(nameof(IsNotSyncing));
+                OnPropertyChanged(nameof(SyncRingVisibility));
+                OnPropertyChanged(nameof(SyncIconVisibility));
+            }
+        }
+
+        // ==========================================
+        // TAB 0: OVERVIEW PROPERTIES
+        // ==========================================
+
+        public string StepsText
+        {
+            get
+            {
+                double steps = _currentSummary?.Steps ?? GetMetric(VitalType.Steps)?.Value ?? 0;
+                return steps > 0 ? steps.ToString("N0") : "--";
+            }
+        }
+
+        public double StepsProgressValue
+        {
+            get
+            {
+                double steps = _currentSummary?.Steps ?? GetMetric(VitalType.Steps)?.Value ?? 0;
+                return Math.Min(100.0, Math.Max(0.0, (steps / 10000.0) * 100.0));
+            }
+        }
+
+        public string CaloriesText
+        {
+            get
+            {
+                double kcal = _currentSummary?.ActiveKcal ?? GetMetric(VitalType.ActiveEnergy)?.Value ?? 0;
+                return kcal > 0 ? $"{kcal:N0}" : "--";
+            }
+        }
+
         public string SleepText
         {
             get
@@ -449,224 +688,534 @@ namespace Daily_WinUI.Views
             }
         }
 
-        public string DistanceText => GetMetricValueWithUnit(VitalType.Distance, "km", 2);
-        public string FloorsText => GetMetricValueWithUnit(VitalType.FloorsClimbed, "fl", 0);
-        public string SpeedText => GetMetricValueWithUnit(VitalType.WalkingSpeed, "km/h", 1);
+        public string DistanceText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.Distance);
+                if (m?.Value > 0) return $"{m.Value / 1000.0:F1} km";
+                double steps = _currentSummary?.Steps ?? 0;
+                if (steps > 0) return $"{steps * 0.00075:F1} km";
+                return "-- km";
+            }
+        }
+
+        public string FloorsText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.FloorsClimbed);
+                return m?.Value > 0 ? $"{m.Value:F0} floors" : "-- floors";
+            }
+        }
+
+        public string SpeedText => "-- km/h";
 
         public string HourlyStepsMaxText
         {
             get
             {
-                var max = HourlyStepsCollection.Any() ? HourlyStepsCollection.Max(x => x.Value) : 0;
+                if (!HourlyStepsCollection.Any()) return "";
+                var max = HourlyStepsCollection.Max(x => x.Value);
                 return max > 0 ? $"Peak: {max:N0} steps/hr" : "";
             }
         }
 
-        // 8 Vitals
-        public string HeartRateText => GetMetricValueWithUnit(VitalType.HeartRate, "bpm", 0);
-        public string RhrText => _currentSummary?.Rhr.HasValue == true ? $"{_currentSummary.Rhr.Value:F0} bpm" : GetMetricValueWithUnit(VitalType.RestingHeartRate, "bpm", 0);
-        public string HrvText => _currentSummary?.HrvSdnn.HasValue == true ? $"{_currentSummary.HrvSdnn.Value:F0} ms" : GetMetricValueWithUnit(VitalType.HeartRateVariabilitySDNN, "ms", 0);
-        public string Spo2Text => _currentSummary?.Spo2.HasValue == true ? $"{_currentSummary.Spo2.Value:F0}%" : GetMetricValueWithUnit(VitalType.OxygenSaturation, "%", 0);
-        public string BloodPressureText
+        // ==========================================
+        // TAB 1: SLEEP STUDIO PROPERTIES
+        // ==========================================
+
+        public string SleepSourceDevice => _primarySleepSession?.SourceDevice ?? DominantDeviceName;
+
+        public string TotalSleepText => SleepText;
+
+        public string SleepScheduleAndEfficiencyText
         {
             get
             {
-                var sys = GetMetric(VitalType.BloodPressureSystolic);
-                var dia = GetMetric(VitalType.BloodPressureDiastolic);
-                if (sys != null && dia != null) return $"{sys.Value:F0}/{dia.Value:F0}";
-                return "--";
+                string inBed = TimeInBedText;
+                string eff = SleepEfficiencySummaryText;
+                return $"{inBed} in bed • {eff}";
             }
         }
-        public string RespText => GetMetricValueWithUnit(VitalType.RespiratoryRate, "br/m", 1);
-        public string GlucoseText => GetMetricValueWithUnit(VitalType.BloodGlucose, "mg/dL", 0);
-        public string WeightText => _currentSummary?.Weight.HasValue == true ? $"{_currentSummary.Weight.Value:F1} kg" : GetMetricValueWithUnit(VitalType.Weight, "kg", 1);
-
-        // Body Composition
-        public string BodyFatText => GetMetricValueWithUnit(VitalType.BodyFatPercentage, "%", 1);
-        public string BmiText => GetMetricValueWithUnit(VitalType.BodyMassIndex, "", 1);
-        public string LeanMassText => GetMetricValueWithUnit(VitalType.LeanBodyMass, "kg", 1);
-
-        // ==========================================
-        // SLEEP STUDIO TAB PROPERTIES
-        // ==========================================
 
         public string SleepScoreText
         {
             get
             {
-                var score = _currentSummary?.SleepScore ?? _primarySleepSession?.SleepScore;
-                return (score.HasValue && score.Value > 0) ? score.Value.ToString() : "--";
+                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                return score > 0 ? score.ToString() : "--";
             }
         }
 
-        public string SleepScheduleText
+        public string SleepQualityRatingText
+        {
+            get
+            {
+                var rating = _currentSummary?.Summary?.Sleep?.PrimarySession?.QualityRating;
+                if (!string.IsNullOrEmpty(rating)) return rating.ToUpperInvariant();
+
+                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                if (score >= 85) return "EXCELLENT";
+                if (score >= 70) return "GOOD";
+                if (score >= 50) return "FAIR";
+                if (score > 0) return "NEEDS ATTENTION";
+                return "NO DATA";
+            }
+        }
+
+        public string BedtimeText
+        {
+            get
+            {
+                if (_primarySleepSession != null && _primarySleepSession.StartTime != default)
+                {
+                    return _primarySleepSession.StartTime.ToString("HH:mm");
+                }
+                return "--:--";
+            }
+        }
+
+        public string WakeTimeText
+        {
+            get
+            {
+                if (_primarySleepSession != null && _primarySleepSession.EndTime != default)
+                {
+                    return _primarySleepSession.EndTime.ToString("HH:mm");
+                }
+                return "--:--";
+            }
+        }
+
+        public string SleepScheduleText => $"{BedtimeText} - {WakeTimeText}";
+
+        public string TimeInBedText
         {
             get
             {
                 if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0)
                 {
-                    return $"{_primarySleepSession.BedtimeFormatted} - {_primarySleepSession.WakeTimeFormatted}";
+                    var ts = TimeSpan.FromSeconds(_primarySleepSession.DurationSeconds);
+                    return $"{(int)ts.TotalHours}h {ts.Minutes}m";
                 }
-                var primary = _currentSummary?.Summary?.Sleep?.PrimarySession;
-                if (primary != null && DateTime.TryParse(primary.StartTime, out var s) && DateTime.TryParse(primary.EndTime, out var e))
-                {
-                    return $"{s:HH:mm} - {e:HH:mm}";
-                }
-                return "No Sleep Logged";
+                return "--";
             }
         }
 
-        public string SleepEfficiencyText
+        public string SleepEfficiencySummaryText
         {
             get
             {
-                if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0)
-                {
-                    return $"Efficiency: {_primarySleepSession.EfficiencyPercent}%";
-                }
-                return "Efficiency: --";
+                int eff = _currentSummary?.Summary?.Sleep?.PrimarySession?.EfficiencyPercent ?? 0;
+                if (eff > 0) return $"{eff}% eff";
+                return "--%";
             }
         }
 
-        public string TotalSleepText => _primarySleepSession?.TotalAsleepFormatted ?? "--";
-        public string TimeInBedText => _primarySleepSession?.TimeInBedFormatted ?? "--";
-        public string AwakeCountText => _primarySleepSession != null ? _primarySleepSession.AwakeCount.ToString() : "--";
-        public string RestorativePctText => _primarySleepSession != null && _primarySleepSession.DurationSeconds > 0 ? $"{_primarySleepSession.RestorativePercent}%" : "--";
-
-        public string SleepVerdictQualityText
+        public string RestorativePctText
         {
             get
             {
-                var verdict = _currentSummary?.Summary?.Sleep?.Guidance?.Verdict;
-                if (verdict != null && !string.IsNullOrEmpty(verdict.Headline))
+                int rest = _currentSummary?.Summary?.Sleep?.PrimarySession?.RestorativePercent ?? 0;
+                if (rest > 0) return $"{rest}%";
+
+                double deep = _primarySleepSession?.DeepSeconds ?? 0;
+                double rem = _primarySleepSession?.RemSeconds ?? 0;
+                double asleep = _primarySleepSession?.AsleepSeconds ?? 0;
+                if (asleep > 0)
                 {
-                    return verdict.Headline;
+                    return $"{((deep + rem) / asleep) * 100:F0}%";
                 }
-                int score = _currentSummary?.SleepScore ?? _primarySleepSession?.SleepScore ?? 0;
-                return score switch
-                {
-                    >= 85 => "Optimal Sleep Quality",
-                    >= 75 => "Good Recovery",
-                    >= 60 => "Fair / Suboptimal",
-                    > 0 => "Restless / Low Recovery",
-                    _ => "Awaiting Telemetry"
-                };
+                return "--%";
             }
         }
+
+        public string SleepVerdictQualityText => SleepQualityRatingText;
 
         public string SleepVerdictSummaryText
         {
             get
             {
-                var verdict = _currentSummary?.Summary?.Sleep?.Guidance?.Verdict;
-                if (verdict != null && !string.IsNullOrEmpty(verdict.Narrative))
+                var narrative = _currentSummary?.Summary?.Sleep?.Guidance?.Verdict?.Narrative;
+                if (!string.IsNullOrEmpty(narrative)) return narrative;
+                var headline = _currentSummary?.Summary?.Sleep?.Guidance?.Verdict?.Headline;
+                if (!string.IsNullOrEmpty(headline)) return headline;
+
+                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                if (score >= 85) return "Optimal restorative sleep cycle with balanced REM and Deep architecture.";
+                if (score >= 70) return "Sufficient overall sleep duration with normal sleep stage continuity.";
+                if (score > 0) return "Mild fragmentation or reduced restorative stages detected. Consider an earlier bedtime.";
+                return "No sleep telemetry recorded for this night.";
+            }
+        }
+
+        public string HypnogramHeaderTitle => _primarySleepSession?.HasGranularHypnogram == true && _primarySleepSession?.Stages?.Any() == true
+            ? "Clinical Sleep Hypnogram"
+            : "Sleep Stage Proportions";
+
+        public Visibility GranularHypnogramVisibility => _primarySleepSession?.HasGranularHypnogram == true && _primarySleepSession?.Stages?.Any() == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        public Visibility StageProportionVisibility => _primarySleepSession?.HasGranularHypnogram != true || _primarySleepSession?.Stages?.Any() != true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        public Visibility HasNapsVisibility => DaytimeNapsList.Any() ? Visibility.Visible : Visibility.Collapsed;
+
+        // Selected Stage Inspection Pill Properties
+        public Visibility SelectedStagePillVisibility => _selectedStage != null ? Visibility.Visible : Visibility.Collapsed;
+
+        public SolidColorBrush SelectedStageColorBrush
+        {
+            get
+            {
+                if (_selectedStage == null) return new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                return _selectedStage.SleepCategory switch
                 {
-                    return verdict.Narrative;
-                }
-                int score = _currentSummary?.SleepScore ?? _primarySleepSession?.SleepScore ?? 0;
-                return score switch
-                {
-                    >= 85 => "Excellent restorative architecture with solid deep and REM cycles.",
-                    >= 75 => "Healthy restorative stages supporting autonomic nervous balance.",
-                    >= 60 => "Elevated wakefulness or delayed sleep onset observed.",
-                    > 0 => "Short duration or insufficient deep sleep stages.",
-                    _ => "Wear your smartwatch or fitness ring tonight to track sleep stages."
+                    "Deep" => new SolidColorBrush(Color.FromArgb(255, 57, 73, 171)),
+                    "REM" => new SolidColorBrush(Color.FromArgb(255, 38, 198, 218)),
+                    "Awake" => new SolidColorBrush(Color.FromArgb(255, 255, 112, 67)),
+                    _ => new SolidColorBrush(Color.FromArgb(255, 66, 165, 245))
                 };
             }
         }
 
-        public string DeepDurationText => _primarySleepSession != null ? _primarySleepSession.DeepFormatted : "--";
-        public string DeepPercentText => _primarySleepSession != null && _primarySleepSession.AsleepSeconds > 0 ? $"{_primarySleepSession.DeepPercent}%" : "--";
-        public string RemDurationText => _primarySleepSession != null ? _primarySleepSession.RemFormatted : "--";
-        public string RemPercentText => _primarySleepSession != null && _primarySleepSession.AsleepSeconds > 0 ? $"{_primarySleepSession.RemPercent}%" : "--";
-        public string LightDurationText => _primarySleepSession != null ? _primarySleepSession.LightFormatted : "--";
-        public string LightPercentText => _primarySleepSession != null && _primarySleepSession.AsleepSeconds > 0 ? $"{_primarySleepSession.LightPercent}%" : "--";
-        public string AwakeDurationText => _primarySleepSession != null ? _primarySleepSession.AwakeFormatted : "--";
-        public string AwakePercentText => _primarySleepSession != null && _primarySleepSession.DurationSeconds > 0 ? $"{_primarySleepSession.AwakePercent}%" : "--";
+        public string SelectedStageName => _selectedStage != null ? $"{_selectedStage.SleepCategory} Sleep" : "";
+
+        public string SelectedStageTimeRange => _selectedStage != null ? $"{_selectedStage.LocalStartTime:HH:mm} - {_selectedStage.LocalEndTime:HH:mm}" : "";
+
+        public string SelectedStageDurationText => _selectedStage != null ? $"{(int)(_selectedStage.DurationSeconds / 60)} min" : "";
+
+        private void ClearStageSelection_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedStage = null;
+            OnPropertyChanged(nameof(SelectedStagePillVisibility));
+            OnPropertyChanged(nameof(SelectedStageColorBrush));
+            OnPropertyChanged(nameof(SelectedStageName));
+            OnPropertyChanged(nameof(SelectedStageTimeRange));
+            OnPropertyChanged(nameof(SelectedStageDurationText));
+        }
+
+        // Stage Breakdown Card Formats
+        public string DeepDurationText => FormatSecondsToHoursMins(_primarySleepSession?.DeepSeconds ?? 0);
+        public string DeepPercentText => CalculateStagePercent(_primarySleepSession?.DeepSeconds ?? 0);
+
+        public string RemDurationText => FormatSecondsToHoursMins(_primarySleepSession?.RemSeconds ?? 0);
+        public string RemPercentText => CalculateStagePercent(_primarySleepSession?.RemSeconds ?? 0);
+
+        public string LightDurationText => FormatSecondsToHoursMins(_primarySleepSession?.LightSeconds ?? 0);
+        public string LightPercentText => CalculateStagePercent(_primarySleepSession?.LightSeconds ?? 0);
+
+        public string AwakeDurationText => FormatSecondsToHoursMins(_primarySleepSession?.AwakeSeconds ?? 0);
+        public string AwakePercentText => CalculateStagePercent(_primarySleepSession?.AwakeSeconds ?? 0);
+
+        private string FormatSecondsToHoursMins(double seconds)
+        {
+            if (seconds <= 0) return "--";
+            var ts = TimeSpan.FromSeconds(seconds);
+            if (ts.TotalMinutes < 60) return $"{(int)ts.TotalMinutes}m";
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        }
+
+        private string CalculateStagePercent(double stageSec)
+        {
+            double total = _primarySleepSession?.TotalStagesSeconds ?? 0;
+            if (total <= 0) total = _primarySleepSession?.DurationSeconds ?? 0;
+            if (total <= 0) return "--%";
+            return $"{(stageSec / total) * 100:F0}%";
+        }
+
+        // AI Sleep Hygiene Tips
+        public string TipCircadianText => "Maintain a consistent sleep window within ±30 minutes to synchronize cortisol and melatonin output.";
+        public string TipClimateText => "Keep your bedroom temperature between 18-20°C (65-68°F) with optimal cross-ventilation for deep sleep.";
+        public string TipNutritionText => "Avoid caffeine within 8 hours and heavy meals within 2.5 hours of bedtime to prevent elevated resting HR.";
+        public string TipWindDownText => "Dim overhead lights and shift to warm lighting 60 minutes before bedtime to support natural melatonin.";
 
         // ==========================================
-        // STRESS STUDIO TAB PROPERTIES
+        // HYPNOGRAM & PROPORTIONS CANVAS RENDERING
         // ==========================================
 
-        public string StressScoreText => _currentSummary?.StressAvg?.ToString() ?? GetMetricValueString(VitalType.Stress, "0");
+        private void SleepHypnogramCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            DrawSleepHypnogram();
+            DrawSleepXAxis();
+        }
+
+        private void StageProportionCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            DrawStageProportions();
+        }
+
+        private void DrawSleepHypnogram()
+        {
+            if (SleepHypnogramCanvas == null) return;
+            SleepHypnogramCanvas.Children.Clear();
+
+            var stages = _primarySleepSession?.Stages;
+            if (stages == null || !stages.Any()) return;
+
+            double canvasWidth = SleepHypnogramCanvas.ActualWidth;
+            double canvasHeight = SleepHypnogramCanvas.ActualHeight;
+            if (canvasWidth <= 0 || canvasHeight <= 0) return;
+
+            var minTime = _primarySleepSession!.StartTime;
+            var maxTime = _primarySleepSession.EndTime;
+            double totalSeconds = (maxTime - minTime).TotalSeconds;
+            if (totalSeconds <= 0) return;
+
+            double rowHeight = 30;
+            double[] rowTops = new double[] { 6, 42, 78, 114 };
+
+            // Horizontal lane guide lines
+            for (int r = 0; r < 4; r++)
+            {
+                var guide = new Rectangle
+                {
+                    Width = canvasWidth,
+                    Height = 1,
+                    Fill = new SolidColorBrush(Color.FromArgb(16, 255, 255, 255))
+                };
+                Canvas.SetLeft(guide, 0);
+                Canvas.SetTop(guide, rowTops[r] + rowHeight + 2);
+                SleepHypnogramCanvas.Children.Add(guide);
+            }
+
+            // Sleep stage blocks
+            foreach (var item in stages)
+            {
+                double elapsed = (item.LocalStartTime - minTime).TotalSeconds;
+                double left = Math.Max(0, (elapsed / totalSeconds) * canvasWidth);
+                double duration = Math.Max((item.LocalEndTime - item.LocalStartTime).TotalSeconds, item.DurationSeconds);
+                double width = Math.Max((duration / totalSeconds) * canvasWidth, 3.0);
+
+                int rowIndex = item.SleepCategory switch
+                {
+                    "Awake" => 0,
+                    "REM" => 1,
+                    "Deep" => 3,
+                    _ => 2 // Core / Light
+                };
+
+                var color = item.SleepCategory switch
+                {
+                    "Awake" => Color.FromArgb(255, 255, 112, 67),
+                    "REM" => Color.FromArgb(255, 38, 198, 218),
+                    "Deep" => Color.FromArgb(255, 57, 73, 171),
+                    _ => Color.FromArgb(255, 66, 165, 245)
+                };
+
+                var block = new Border
+                {
+                    Width = width,
+                    Height = rowHeight,
+                    Background = new SolidColorBrush(color),
+                    CornerRadius = new CornerRadius(4),
+                    Tag = item
+                };
+
+                block.PointerPressed += (s, e) =>
+                {
+                    if (s is Border b && b.Tag is HealthTelemetry st)
+                    {
+                        if (_selectedStage == st)
+                        {
+                            _selectedStage = null;
+                        }
+                        else
+                        {
+                            _selectedStage = st;
+                        }
+
+                        OnPropertyChanged(nameof(SelectedStagePillVisibility));
+                        OnPropertyChanged(nameof(SelectedStageColorBrush));
+                        OnPropertyChanged(nameof(SelectedStageName));
+                        OnPropertyChanged(nameof(SelectedStageTimeRange));
+                        OnPropertyChanged(nameof(SelectedStageDurationText));
+                    }
+                };
+
+                ToolTipService.SetToolTip(block, $"{item.SleepCategory}: {item.LocalStartTime:HH:mm} - {item.LocalEndTime:HH:mm} ({(int)(duration / 60)} min)");
+
+                Canvas.SetLeft(block, left);
+                Canvas.SetTop(block, rowTops[rowIndex]);
+                SleepHypnogramCanvas.Children.Add(block);
+            }
+        }
+
+        private void DrawSleepXAxis()
+        {
+            if (SleepXAxisCanvas == null) return;
+            SleepXAxisCanvas.Children.Clear();
+
+            var stages = _primarySleepSession?.Stages;
+            if (stages == null || !stages.Any()) return;
+
+            double canvasWidth = SleepXAxisCanvas.ActualWidth;
+            if (canvasWidth <= 0) return;
+
+            var minTime = _primarySleepSession!.StartTime;
+            var maxTime = _primarySleepSession.EndTime;
+            double totalSeconds = (maxTime - minTime).TotalSeconds;
+            if (totalSeconds <= 0) return;
+
+            var startHour = new DateTime(minTime.Year, minTime.Month, minTime.Day, minTime.Hour, 0, 0);
+            var endHour = maxTime.AddHours(1);
+
+            for (var cur = startHour; cur <= endHour; cur = cur.AddHours(1))
+            {
+                if (cur >= minTime && cur <= maxTime)
+                {
+                    double left = ((cur - minTime).TotalSeconds / totalSeconds) * canvasWidth;
+                    var tb = new TextBlock
+                    {
+                        Text = cur.ToString("HH:mm"),
+                        FontSize = 9.5,
+                        Foreground = (Brush)Application.Current.Resources["AppFgMutedColorBrush"]
+                    };
+                    Canvas.SetLeft(tb, Math.Max(0, left - 12));
+                    Canvas.SetTop(tb, 2);
+                    SleepXAxisCanvas.Children.Add(tb);
+                }
+            }
+        }
+
+        private void DrawStageProportions()
+        {
+            if (StageProportionCanvas == null) return;
+            StageProportionCanvas.Children.Clear();
+
+            double width = StageProportionCanvas.ActualWidth;
+            double height = StageProportionCanvas.ActualHeight;
+            if (width <= 0 || height <= 0) return;
+
+            double deep = _primarySleepSession?.DeepSeconds ?? 0;
+            double rem = _primarySleepSession?.RemSeconds ?? 0;
+            double light = _primarySleepSession?.LightSeconds ?? 0;
+            double awake = _primarySleepSession?.AwakeSeconds ?? 0;
+            double total = deep + rem + light + awake;
+            if (total <= 0) return;
+
+            double currentX = 0;
+
+            void AddSegment(double sec, Color col)
+            {
+                if (sec <= 0) return;
+                double segWidth = Math.Max(4, (sec / total) * width);
+                var rect = new Rectangle
+                {
+                    Width = segWidth,
+                    Height = height,
+                    Fill = new SolidColorBrush(col),
+                    RadiusX = 3,
+                    RadiusY = 3
+                };
+                Canvas.SetLeft(rect, currentX);
+                Canvas.SetTop(rect, 0);
+                StageProportionCanvas.Children.Add(rect);
+                currentX += segWidth + 2;
+            }
+
+            AddSegment(deep, Color.FromArgb(255, 57, 73, 171));
+            AddSegment(rem, Color.FromArgb(255, 38, 198, 218));
+            AddSegment(light, Color.FromArgb(255, 66, 165, 245));
+            AddSegment(awake, Color.FromArgb(255, 255, 112, 67));
+        }
+
+        // ==========================================
+        // TAB 2: STRESS STUDIO PROPERTIES
+        // ==========================================
+
+        public string StressScoreText
+        {
+            get
+            {
+                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                return score > 0 ? score.ToString() : "--";
+            }
+        }
+
+        public SolidColorBrush StressScoreBrush
+        {
+            get
+            {
+                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                if (score <= 0) return new SolidColorBrush(Color.FromArgb(180, 255, 255, 255));
+                if (score <= 25) return new SolidColorBrush(Color.FromArgb(255, 52, 199, 89));
+                if (score <= 50) return new SolidColorBrush(Color.FromArgb(255, 56, 151, 240));
+                if (score <= 75) return new SolidColorBrush(Color.FromArgb(255, 255, 149, 0));
+                return new SolidColorBrush(Color.FromArgb(255, 255, 45, 85));
+            }
+        }
+
+        public string StressLevelLabelText
+        {
+            get
+            {
+                var lvl = _currentSummary?.Summary?.Stress?.CurrentLevel;
+                if (!string.IsNullOrEmpty(lvl)) return lvl;
+
+                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                if (score <= 0) return "No Data";
+                if (score <= 25) return "Calm";
+                if (score <= 50) return "Low";
+                if (score <= 75) return "Moderate";
+                return "High";
+            }
+        }
 
         public string MonkeyMoodEmoji
         {
             get
             {
-                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood?.ToLowerInvariant() ?? "zen";
-                return mood switch
+                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood;
+                if (!string.IsNullOrEmpty(mood))
                 {
-                    "zen" => "🧘",
-                    "calm" => "🍵",
-                    "alert" => "👀",
-                    "agitated" => "🐒",
-                    _ => "🐵"
-                };
+                    return mood.ToLowerInvariant() switch
+                    {
+                        "zen" => "🧘",
+                        "happy" => "🐵",
+                        "curious" => "🐒",
+                        "alert" => "👀",
+                        "wired" => "⚡",
+                        "exhausted" => "💤",
+                        _ => "🐵"
+                    };
+                }
+
+                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                if (score <= 0) return "🐵";
+                if (score <= 25) return "🧘";
+                if (score <= 50) return "🐵";
+                if (score <= 75) return "⚡";
+                return "💤";
             }
         }
 
-        public string MonkeyMoodLabelText
-        {
-            get
-            {
-                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood?.ToLowerInvariant() ?? "zen";
-                return mood switch
-                {
-                    "zen" => "Zen Monkey (Rest & Recovery)",
-                    "calm" => "Calm Monkey (Steady Balance)",
-                    "alert" => "Alert Monkey (Active Demand)",
-                    "agitated" => "Agitated Monkey (High Stress)",
-                    _ => "Baseline"
-                };
-            }
-        }
-
-        public string MonkeyMoodDescriptionText
-        {
-            get
-            {
-                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood?.ToLowerInvariant() ?? "zen";
-                return mood switch
-                {
-                    "zen" => "Deeply relaxed. Your parasympathetic nervous system is dominating recovery.",
-                    "calm" => "Balanced autonomic tone. Steady cognitive flow without notable strain.",
-                    "alert" => "Elevated sympathetic activation. Productive drive with moderate metabolic strain.",
-                    "agitated" => "Sympathetic spike detected. Take 4 minutes for box breathing to re-center.",
-                    _ => "Autonomic telemetry logged regularly from your wearable sensor."
-                };
-            }
-        }
+        public SolidColorBrush MonkeyMoodBorderBrush => StressScoreBrush;
 
         public SolidColorBrush MonkeyMoodBackgroundBrush
         {
             get
             {
-                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood?.ToLowerInvariant() ?? "zen";
-                return mood switch
-                {
-                    "zen" => new SolidColorBrush(Color.FromArgb(30, 76, 175, 80)),
-                    "calm" => new SolidColorBrush(Color.FromArgb(30, 0, 188, 212)),
-                    "alert" => new SolidColorBrush(Color.FromArgb(30, 255, 179, 0)),
-                    "agitated" => new SolidColorBrush(Color.FromArgb(30, 244, 67, 54)),
-                    _ => new SolidColorBrush(Color.FromArgb(30, 150, 150, 150))
-                };
+                var solid = StressScoreBrush.Color;
+                return new SolidColorBrush(Color.FromArgb(30, solid.R, solid.G, solid.B));
             }
         }
 
-        public SolidColorBrush MonkeyMoodBorderBrush
+        public string MonkeyMoodLabelText => StressLevelLabelText;
+
+        public string MonkeyMoodDescriptionText
         {
             get
             {
-                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood?.ToLowerInvariant() ?? "zen";
-                return mood switch
-                {
-                    "zen" => new SolidColorBrush(Color.FromArgb(255, 76, 175, 80)),
-                    "calm" => new SolidColorBrush(Color.FromArgb(255, 0, 188, 212)),
-                    "alert" => new SolidColorBrush(Color.FromArgb(255, 255, 179, 0)),
-                    "agitated" => new SolidColorBrush(Color.FromArgb(255, 244, 67, 54)),
-                    _ => new SolidColorBrush(Color.FromArgb(255, 150, 150, 150))
-                };
+                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                if (score <= 25) return "Zen mode. Autonomic parasympathetic dominance indicates excellent recovery.";
+                if (score <= 50) return "Balanced homeostasis. Physiological strain remains within normal limits.";
+                if (score <= 75) return "Elevated sympathetic activation. Recommended: 5 minutes of box breathing.";
+                if (score > 75) return "High autonomic strain. Consider resting, hydrating, and avoiding intensive stimuli.";
+                return "No real-time stress data recorded for this period.";
             }
         }
 
@@ -674,14 +1223,8 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                var ab = _currentSummary?.Summary?.Stress?.AutonomicBalance;
-                if (ab != null)
-                {
-                    return ab.ParasympatheticPercent >= ab.SympatheticPercent
-                        ? "Parasympathetic Dominant (Recovery)"
-                        : "Sympathetic Dominant (Activation)";
-                }
-                return "Balanced Autonomic State";
+                int para = _currentSummary?.Summary?.Stress?.AutonomicBalance?.ParasympatheticPercent ?? 50;
+                return para >= 50 ? "Parasympathetic Dominant" : "Sympathetic Dominant";
             }
         }
 
@@ -689,65 +1232,57 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                var ab = _currentSummary?.Summary?.Stress?.AutonomicBalance;
-                if (ab != null && (ab.ParasympatheticPercent > 0 || ab.SympatheticPercent > 0))
-                {
-                    return ab.ParasympatheticPercent;
-                }
-                return 65;
+                var balance = _currentSummary?.Summary?.Stress?.AutonomicBalance;
+                if (balance != null) return balance.ParasympatheticPercent;
+                int score = _currentSummary?.StressAvg ?? 0;
+                return Math.Max(10, Math.Min(90, 100 - score));
             }
         }
 
-        public string SympatheticLabelText
+        public string SympatheticLabelText => $"Sympathetic {100 - (int)ParasympatheticRatioPct}%";
+        public string ParasympatheticLabelText => $"Parasympathetic {(int)ParasympatheticRatioPct}%";
+
+        // 4 Stress Drivers
+        public string DriverActivityText => $"{DriverActivityPct:F0}%";
+        public double DriverActivityPct
         {
             get
             {
-                double sym = 100 - ParasympatheticRatioPct;
-                return $"Sympathetic: {sym:F0}%";
+                double steps = _currentSummary?.Steps ?? 0;
+                return Math.Min(100.0, Math.Max(10.0, (steps / 10000.0) * 100.0));
             }
         }
-
-        public string ParasympatheticLabelText => $"Parasympathetic: {ParasympatheticRatioPct:F0}%";
-
-        // Drivers
-        public string DriverActivityText => $"{DriverActivityPct:F0}%";
-        public double DriverActivityPct => 25.0;
 
         public string DriverSleepText => $"{DriverSleepPct:F0}%";
-        public double DriverSleepPct => 20.0;
-
-        public string DriverHrvText
+        public double DriverSleepPct
         {
             get
             {
-                var d = _currentSummary?.Summary?.Stress?.BiometricDrivers;
-                if (d != null && d.CurrentHrvMs.HasValue && d.BaselineHrvMs > 0)
-                {
-                    double diff = Math.Max(0, (1.0 - (d.CurrentHrvMs.Value / d.BaselineHrvMs)) * 100);
-                    return $"{diff:F0}%";
-                }
-                return "15%";
+                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                return score > 0 ? Math.Max(5.0, 100.0 - score) : 25.0;
             }
         }
 
+        public string DriverHrvText => $"{DriverHrvPct:F0}%";
         public double DriverHrvPct
         {
             get
             {
-                var d = _currentSummary?.Summary?.Stress?.BiometricDrivers;
-                if (d != null && d.CurrentHrvMs.HasValue && d.BaselineHrvMs > 0)
+                var drivers = _currentSummary?.Summary?.Stress?.BiometricDrivers;
+                if (drivers?.CurrentHrvMs.HasValue == true && drivers.BaselineHrvMs > 0)
                 {
-                    return Math.Clamp((1.0 - (d.CurrentHrvMs.Value / d.BaselineHrvMs)) * 100, 0, 100);
+                    double ratio = drivers.CurrentHrvMs.Value / drivers.BaselineHrvMs;
+                    return Math.Min(100.0, Math.Max(0.0, (1.0 - ratio) * 100.0));
                 }
-                return 15.0;
+                return 20.0;
             }
         }
 
         public string DriverSpikesText => $"{DriverSpikesPct:F0}%";
-        public double DriverSpikesPct => 10.0;
+        public double DriverSpikesPct => Math.Min(100.0, Math.Max(5.0, (_currentSummary?.StressAvg ?? 25) * 0.4));
 
-        // Box Breathing
-        public string BreathingButtonText => _isBreathingActive ? "Stop Exercise" : "Start Box Breathing";
+        // Box Breathing Player
+        public string BreathingButtonText => _isBreathingActive ? "Stop" : "Start Exercise";
 
         private void BreathingButton_Click(object sender, RoutedEventArgs e)
         {
@@ -766,30 +1301,31 @@ namespace Daily_WinUI.Views
             _isBreathingActive = true;
             _breathingPhase = 0;
             _breathingSecondsLeft = 4;
-            UpdateBreathingUi();
-
-            _breathingTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _breathingTimer.Tick += BreathingTimer_Tick;
-            _breathingTimer.Start();
-
             OnPropertyChanged(nameof(BreathingButtonText));
+
+            if (_breathingTimer == null)
+            {
+                _breathingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _breathingTimer.Tick += BreathingTimer_Tick;
+            }
+
+            UpdateBreathingDisplay();
+            _breathingTimer.Start();
         }
 
         private void StopBreathingExercise()
         {
-            if (_breathingTimer != null)
-            {
-                _breathingTimer.Stop();
-                _breathingTimer.Tick -= BreathingTimer_Tick;
-            }
             _isBreathingActive = false;
-            BreathingPhaseText.Text = "Ready";
-            BreathingTimerText.Text = "4s";
-            BreathingCircle.Width = 90;
-            BreathingCircle.Height = 90;
-            BreathingCircle.CornerRadius = new CornerRadius(45);
-
+            _breathingTimer?.Stop();
             OnPropertyChanged(nameof(BreathingButtonText));
+
+            if (BreathingPhaseText != null) BreathingPhaseText.Text = "Ready";
+            if (BreathingTimerText != null) BreathingTimerText.Text = "4s";
+            if (BreathingCircle != null)
+            {
+                BreathingCircle.Width = 90;
+                BreathingCircle.Height = 90;
+            }
         }
 
         private void BreathingTimer_Tick(object? sender, object e)
@@ -800,52 +1336,130 @@ namespace Daily_WinUI.Views
                 _breathingPhase = (_breathingPhase + 1) % 4;
                 _breathingSecondsLeft = 4;
             }
-            UpdateBreathingUi();
+            UpdateBreathingDisplay();
         }
 
-        private void UpdateBreathingUi()
+        private void UpdateBreathingDisplay()
         {
-            string phaseName = _breathingPhase switch
-            {
-                0 => "Inhale...",
-                1 => "Hold Breath",
-                2 => "Exhale...",
-                _ => "Hold Empty"
-            };
+            if (BreathingPhaseText == null || BreathingTimerText == null || BreathingCircle == null) return;
 
-            BreathingPhaseText.Text = phaseName;
+            string[] phases = new[] { "Inhale", "Hold", "Exhale", "Hold" };
+            BreathingPhaseText.Text = phases[_breathingPhase];
             BreathingTimerText.Text = $"{_breathingSecondsLeft}s";
 
-            // Visual expansion / contraction
-            double targetSize = _breathingPhase switch
+            // Circle animation width
+            if (_breathingPhase == 0) // Inhale expanding
             {
-                0 => 90 + ((4 - _breathingSecondsLeft) * 7.5),
-                1 => 120,
-                2 => 120 - ((4 - _breathingSecondsLeft) * 7.5),
-                _ => 90
-            };
-
-            BreathingCircle.Width = targetSize;
-            BreathingCircle.Height = targetSize;
-            BreathingCircle.CornerRadius = new CornerRadius(targetSize / 2.0);
+                BreathingCircle.Width = 70 + (4 - _breathingSecondsLeft) * 10;
+                BreathingCircle.Height = BreathingCircle.Width;
+            }
+            else if (_breathingPhase == 2) // Exhale shrinking
+            {
+                BreathingCircle.Width = 110 - (4 - _breathingSecondsLeft) * 10;
+                BreathingCircle.Height = BreathingCircle.Width;
+            }
         }
 
         // ==========================================
-        // HEART & VITALS TAB PROPERTIES
+        // TAB 3: HEART & VITALS PROPERTIES
         // ==========================================
+
+        public string HeartRateText
+        {
+            get
+            {
+                var intraday = _currentSummary?.Summary?.Cardiovascular?.IntradayHeartRate;
+                if (intraday != null && intraday.Any())
+                {
+                    var lastPt = intraday.LastOrDefault(p => p.Bpm > 0);
+                    if (lastPt != null) return $"{lastPt.Bpm:N0} bpm";
+                }
+                var m = GetMetric(VitalType.HeartRate);
+                if (m?.Value > 0) return $"{m.Value:N0} bpm";
+                double rhr = _currentSummary?.Rhr ?? GetMetric(VitalType.RestingHeartRate)?.Value ?? 0;
+                return rhr > 0 ? $"{rhr:N0} bpm" : "-- bpm";
+            }
+        }
 
         public string AvgHeartRateText
         {
             get
             {
-                if (HeartRateCollection.Any())
-                {
-                    double avg = Math.Round(HeartRateCollection.Average(x => x.Value ?? 0), 0);
-                    return $"{avg:F0} bpm avg";
-                }
+                double? avg = _currentSummary?.Summary?.Cardiovascular?.AverageHeartRateBpm;
+                if (avg.HasValue && avg.Value > 0) return $"{avg.Value:F0} bpm avg";
+                if (HeartRateCollection.Any()) return $"{HeartRateCollection.Average(x => x.Value ?? 0):F0} bpm avg";
                 return "-- bpm avg";
             }
         }
+
+        public string RhrText
+        {
+            get
+            {
+                double rhr = _currentSummary?.Rhr ?? GetMetric(VitalType.RestingHeartRate)?.Value ?? 0;
+                return rhr > 0 ? $"{rhr:F0} bpm" : "-- bpm";
+            }
+        }
+
+        public string HrvText
+        {
+            get
+            {
+                double hrv = _currentSummary?.HrvSdnn ?? _currentSummary?.HrvRmssd ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value ?? 0;
+                return hrv > 0 ? $"{hrv:F0} ms" : "-- ms";
+            }
+        }
+
+        public string Spo2Text
+        {
+            get
+            {
+                double spo2 = _currentSummary?.Spo2 ?? GetMetric(VitalType.OxygenSaturation)?.Value ?? 0;
+                return spo2 > 0 ? $"{spo2:F0}%" : "--%";
+            }
+        }
+
+        public string BloodPressureText
+        {
+            get
+            {
+                var sys = GetMetric(VitalType.BloodPressureSystolic)?.Value;
+                var dia = GetMetric(VitalType.BloodPressureDiastolic)?.Value;
+                if (sys.HasValue && dia.HasValue) return $"{sys:F0}/{dia:F0} mmHg";
+                return "--/-- mmHg";
+            }
+        }
+
+        public string RespText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.RespiratoryRate);
+                return m?.Value > 0 ? $"{m.Value:F0} br/m" : "-- br/m";
+            }
+        }
+
+        public string GlucoseText
+        {
+            get
+            {
+                var m = GetMetric(VitalType.BloodGlucose);
+                return m?.Value > 0 ? $"{m.Value:F0} mg/dL" : "-- mg/dL";
+            }
+        }
+
+        public string WeightText
+        {
+            get
+            {
+                double wt = _currentSummary?.Weight ?? GetMetric(VitalType.Weight)?.Value ?? 0;
+                return wt > 0 ? $"{wt:F1} kg" : "-- kg";
+            }
+        }
+
+        public string BodyFatText => GetMetricValueWithUnit(VitalType.BodyFatPercentage, "%", 1);
+        public string BmiText => GetMetricValueString(VitalType.BodyMassIndex, "F1");
+        public string LeanMassText => GetMetricValueWithUnit(VitalType.LeanBodyMass, "kg", 1);
 
         public string HrRestingPctText => CalculateHrZonePercent(0, 100);
         public string HrFatBurnPctText => CalculateHrZonePercent(100, 120);
@@ -861,7 +1475,7 @@ namespace Daily_WinUI.Views
         }
 
         // ==========================================
-        // TRENDS TAB PROPERTIES
+        // TAB 4: TRENDS PROPERTIES
         // ==========================================
 
         public string StepsAvgText => CalculateTrendAvg(StepsHistory, "N0");
@@ -901,126 +1515,6 @@ namespace Daily_WinUI.Views
         }
 
         // ==========================================
-        // HYPNOGRAM CANVAS RENDERING
-        // ==========================================
-
-        private void SleepHypnogramCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            DrawSleepHypnogram();
-            DrawSleepXAxis();
-        }
-
-        private void DrawSleepHypnogram()
-        {
-            if (SleepHypnogramCanvas == null) return;
-            SleepHypnogramCanvas.Children.Clear();
-
-            var stages = _primarySleepSession?.Stages;
-            if (stages == null || !stages.Any()) return;
-
-            double canvasWidth = SleepHypnogramCanvas.ActualWidth;
-            double canvasHeight = SleepHypnogramCanvas.ActualHeight;
-            if (canvasWidth <= 0 || canvasHeight <= 0) return;
-
-            var minTime = _primarySleepSession!.StartTime;
-            var maxTime = _primarySleepSession.EndTime;
-            double totalSeconds = (maxTime - minTime).TotalSeconds;
-            if (totalSeconds <= 0) return;
-
-            double rowHeight = 32;
-            double[] rowTops = new double[] { 6, 46, 86, 126 };
-
-            // Horizontal lane guide lines
-            for (int r = 0; r < 4; r++)
-            {
-                var guide = new Rectangle
-                {
-                    Width = canvasWidth,
-                    Height = 1,
-                    Fill = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255))
-                };
-                Canvas.SetLeft(guide, 0);
-                Canvas.SetTop(guide, rowTops[r] + rowHeight + 2);
-                SleepHypnogramCanvas.Children.Add(guide);
-            }
-
-            // Sleep stage blocks
-            foreach (var item in stages)
-            {
-                double left = ((item.LocalStartTime - minTime).TotalSeconds / totalSeconds) * canvasWidth;
-                double duration = Math.Max((item.LocalEndTime - item.LocalStartTime).TotalSeconds, item.DurationSeconds);
-                double width = Math.Max((duration / totalSeconds) * canvasWidth, 3.0);
-
-                int rowIndex = item.SleepCategory switch
-                {
-                    "Awake" => 0,
-                    "REM" => 1,
-                    "Deep" => 3,
-                    _ => 2 // Core / Light
-                };
-
-                var color = item.SleepCategory switch
-                {
-                    "Awake" => Color.FromArgb(255, 255, 112, 67),
-                    "REM" => Color.FromArgb(255, 38, 198, 218),
-                    "Deep" => Color.FromArgb(255, 57, 73, 171),
-                    _ => Color.FromArgb(255, 66, 165, 245)
-                };
-
-                var block = new Border
-                {
-                    Width = width,
-                    Height = rowHeight,
-                    Background = new SolidColorBrush(color),
-                    CornerRadius = new CornerRadius(4)
-                };
-                ToolTipService.SetToolTip(block, $"{item.SleepCategory}: {item.LocalStartTime:HH:mm} - {item.LocalEndTime:HH:mm} ({(int)(duration / 60)} min)");
-
-                Canvas.SetLeft(block, left);
-                Canvas.SetTop(block, rowTops[rowIndex]);
-                SleepHypnogramCanvas.Children.Add(block);
-            }
-        }
-
-        private void DrawSleepXAxis()
-        {
-            if (SleepXAxisCanvas == null) return;
-            SleepXAxisCanvas.Children.Clear();
-
-            var stages = _primarySleepSession?.Stages;
-            if (stages == null || !stages.Any()) return;
-
-            double canvasWidth = SleepXAxisCanvas.ActualWidth;
-            if (canvasWidth <= 0) return;
-
-            var minTime = _primarySleepSession!.StartTime;
-            var maxTime = _primarySleepSession.EndTime;
-            double totalSeconds = (maxTime - minTime).TotalSeconds;
-            if (totalSeconds <= 0) return;
-
-            var startHour = new DateTime(minTime.Year, minTime.Month, minTime.Day, minTime.Hour, 0, 0);
-            var endHour = maxTime.AddHours(1);
-
-            for (var cur = startHour; cur <= endHour; cur = cur.AddHours(1))
-            {
-                if (cur >= minTime && cur <= maxTime)
-                {
-                    double left = ((cur - minTime).TotalSeconds / totalSeconds) * canvasWidth;
-                    var tb = new TextBlock
-                    {
-                        Text = cur.ToString("HH:mm"),
-                        FontSize = 10,
-                        Opacity = 0.5,
-                        Foreground = (Brush)Application.Current.Resources["AppFgMutedColorBrush"]
-                    };
-                    Canvas.SetLeft(tb, Math.Max(0, left - 14));
-                    Canvas.SetTop(tb, 2);
-                    SleepXAxisCanvas.Children.Add(tb);
-                }
-            }
-        }
-
-        // ==========================================
         // TAB SELECTION & NAVIGATION
         // ==========================================
 
@@ -1030,6 +1524,7 @@ namespace Daily_WinUI.Views
             {
                 DrawSleepHypnogram();
                 DrawSleepXAxis();
+                DrawStageProportions();
             }
         }
 
@@ -1084,5 +1579,22 @@ namespace Daily_WinUI.Views
         public string Label { get; set; } = string.Empty;
         public double Value { get; set; }
         public string FormattedValue { get; set; } = string.Empty;
+    }
+
+    public class NapDisplayItem
+    {
+        public string TimeRange { get; set; } = string.Empty;
+        public string DurationText { get; set; } = string.Empty;
+        public string NapMinutesText { get; set; } = string.Empty;
+        public string DeviceName { get; set; } = string.Empty;
+    }
+
+    public class DeviceFilterItem
+    {
+        public string DeviceName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string SegoeGlyph { get; set; } = "\xE95E";
+        public SolidColorBrush ColorBrush { get; set; } = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        public bool IsSelected { get; set; }
     }
 }

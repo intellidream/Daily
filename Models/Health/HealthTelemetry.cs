@@ -81,14 +81,18 @@ namespace Daily.Models.Health
             : (EndTime.HasValue && EndTime.Value > StartTime ? EndTime.Value : StartTime);
 
         [Newtonsoft.Json.JsonIgnore]
-        public DateTime LocalStartTime => StartTime.Kind == DateTimeKind.Utc 
-            ? StartTime.ToLocalTime() 
-            : DateTime.SpecifyKind(StartTime, DateTimeKind.Utc).ToLocalTime();
+        public DateTime LocalStartTime => StartTime.Kind == DateTimeKind.Local
+            ? StartTime
+            : (StartTime.Kind == DateTimeKind.Utc 
+                ? StartTime.ToLocalTime() 
+                : DateTime.SpecifyKind(StartTime, DateTimeKind.Utc).ToLocalTime());
 
         [Newtonsoft.Json.JsonIgnore]
-        public DateTime LocalEndTime => EffectiveEndTime.Kind == DateTimeKind.Utc 
-            ? EffectiveEndTime.ToLocalTime() 
-            : DateTime.SpecifyKind(EffectiveEndTime, DateTimeKind.Utc).ToLocalTime();
+        public DateTime LocalEndTime => EffectiveEndTime.Kind == DateTimeKind.Local
+            ? EffectiveEndTime
+            : (EffectiveEndTime.Kind == DateTimeKind.Utc 
+                ? EffectiveEndTime.ToLocalTime() 
+                : DateTime.SpecifyKind(EffectiveEndTime, DateTimeKind.Utc).ToLocalTime());
 
         [Newtonsoft.Json.JsonIgnore]
         public string SleepCategory

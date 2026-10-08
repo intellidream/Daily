@@ -143,6 +143,10 @@ namespace Daily.Models.Health
         [JsonProperty("primary_session")]
         public CanonicalSleepSession? PrimarySession { get; set; }
 
+        [JsonPropertyName("all_sessions")]
+        [JsonProperty("all_sessions")]
+        public List<CanonicalSleepSession> AllSessions { get; set; } = new();
+
         [JsonPropertyName("naps")]
         [JsonProperty("naps")]
         public List<NapSession> Naps { get; set; } = new();
@@ -158,6 +162,14 @@ namespace Daily.Models.Health
 
     public class CanonicalSleepSession
     {
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [JsonPropertyName("is_nap")]
+        [JsonProperty("is_nap")]
+        public bool IsNap { get; set; }
+
         [JsonPropertyName("start_time")]
         [JsonProperty("start_time")]
         public string StartTime { get; set; } = string.Empty;
@@ -178,17 +190,33 @@ namespace Daily.Models.Health
         [JsonProperty("deep_seconds")]
         public int DeepSeconds { get; set; }
 
+        [JsonPropertyName("deep_percent")]
+        [JsonProperty("deep_percent")]
+        public int DeepPercent { get; set; }
+
         [JsonPropertyName("rem_seconds")]
         [JsonProperty("rem_seconds")]
         public int RemSeconds { get; set; }
+
+        [JsonPropertyName("rem_percent")]
+        [JsonProperty("rem_percent")]
+        public int RemPercent { get; set; }
 
         [JsonPropertyName("light_seconds")]
         [JsonProperty("light_seconds")]
         public int LightSeconds { get; set; }
 
+        [JsonPropertyName("light_percent")]
+        [JsonProperty("light_percent")]
+        public int LightPercent { get; set; }
+
         [JsonPropertyName("awake_seconds")]
         [JsonProperty("awake_seconds")]
         public int AwakeSeconds { get; set; }
+
+        [JsonPropertyName("awake_percent")]
+        [JsonProperty("awake_percent")]
+        public int AwakePercent { get; set; }
 
         [JsonPropertyName("awake_count")]
         [JsonProperty("awake_count")]
@@ -202,9 +230,29 @@ namespace Daily.Models.Health
         [JsonProperty("sleep_score")]
         public int SleepScore { get; set; }
 
+        [JsonPropertyName("quality_rating")]
+        [JsonProperty("quality_rating")]
+        public string? QualityRating { get; set; }
+
+        [JsonPropertyName("restorative_percent")]
+        [JsonProperty("restorative_percent")]
+        public int RestorativePercent { get; set; }
+
+        [JsonPropertyName("has_granular_hypnogram")]
+        [JsonProperty("has_granular_hypnogram")]
+        public bool HasGranularHypnogram { get; set; } = true;
+
         [JsonPropertyName("tracker")]
         [JsonProperty("tracker")]
         public string? Tracker { get; set; }
+
+        [JsonPropertyName("source_device")]
+        [JsonProperty("source_device")]
+        public string? SourceDevice { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string EffectiveSourceDevice => !string.IsNullOrEmpty(SourceDevice) ? SourceDevice : (Tracker ?? "Canonical");
 
         [JsonPropertyName("stages")]
         [JsonProperty("stages")]
@@ -213,9 +261,25 @@ namespace Daily.Models.Health
 
     public class SleepStageRecord
     {
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
         [JsonPropertyName("stage")]
         [JsonProperty("stage")]
-        public string Stage { get; set; } = string.Empty; // "awake", "rem", "light", "deep"
+        public string? StageRaw { get; set; }
+
+        [JsonPropertyName("stage_type")]
+        [JsonProperty("stage_type")]
+        public string? StageTypeRaw { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string Stage
+        {
+            get => !string.IsNullOrEmpty(StageTypeRaw) ? StageTypeRaw : (StageRaw ?? string.Empty);
+            set => StageTypeRaw = value;
+        }
 
         [JsonPropertyName("start_time")]
         [JsonProperty("start_time")]
@@ -228,10 +292,18 @@ namespace Daily.Models.Health
         [JsonPropertyName("duration_seconds")]
         [JsonProperty("duration_seconds")]
         public int DurationSeconds { get; set; }
+
+        [JsonPropertyName("source_device")]
+        [JsonProperty("source_device")]
+        public string? SourceDevice { get; set; }
     }
 
     public class NapSession
     {
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
         [JsonPropertyName("start_time")]
         [JsonProperty("start_time")]
         public string StartTime { get; set; } = string.Empty;
@@ -247,6 +319,10 @@ namespace Daily.Models.Health
         [JsonPropertyName("tracker")]
         [JsonProperty("tracker")]
         public string? Tracker { get; set; }
+
+        [JsonPropertyName("source_device")]
+        [JsonProperty("source_device")]
+        public string? SourceDevice { get; set; }
     }
 
     public class CanonicalSleepGuidance

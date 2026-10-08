@@ -678,25 +678,35 @@ namespace Daily_WinUI.Services
                 return (null, new List<SleepSession>());
             }
 
-            DateTime.TryParse(primary.StartTime, out var start);
-            DateTime.TryParse(primary.EndTime, out var end);
+            DateTimeOffset.TryParse(primary.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var startDto);
+            DateTimeOffset.TryParse(primary.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var endDto);
+            var start = startDto != default ? startDto.LocalDateTime : (DateTime.TryParse(primary.StartTime, out var sParsed) ? sParsed : date.Date.AddHours(23));
+            var end = endDto != default ? endDto.LocalDateTime : (DateTime.TryParse(primary.EndTime, out var eParsed) ? eParsed : date.Date.AddDays(1).AddHours(7));
 
             var session = new SleepSession
             {
-                StartTime = start != default ? start : date.Date.AddHours(23),
-                EndTime = end != default ? end : date.Date.AddDays(1).AddHours(7),
+                StartTime = start,
+                EndTime = end,
                 IsNap = false,
                 DurationSeconds = primary.DurationSeconds,
                 AsleepSeconds = primary.AsleepSeconds,
-                SleepScore = primary.SleepScore > 0 ? primary.SleepScore : (summary?.SleepScore ?? 0)
+                DeepSeconds = primary.DeepSeconds,
+                RemSeconds = primary.RemSeconds,
+                LightSeconds = primary.LightSeconds,
+                AwakeSeconds = primary.AwakeSeconds,
+                SleepScore = primary.SleepScore > 0 ? primary.SleepScore : (summary?.SleepScore ?? 0),
+                SourceDevice = primary.EffectiveSourceDevice,
+                HasGranularHypnogram = primary.HasGranularHypnogram
             };
 
             if (primary.Stages != null && primary.Stages.Any())
             {
                 session.Stages = primary.Stages.Select(st =>
                 {
-                    DateTime.TryParse(st.StartTime, out var sTime);
-                    DateTime.TryParse(st.EndTime, out var eTime);
+                    DateTimeOffset.TryParse(st.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var sTimeDto);
+                    DateTimeOffset.TryParse(st.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var eTimeDto);
+                    var sTime = sTimeDto != default ? sTimeDto.LocalDateTime : (DateTime.TryParse(st.StartTime, out var stp) ? stp : start);
+                    var eTime = eTimeDto != default ? eTimeDto.LocalDateTime : (DateTime.TryParse(st.EndTime, out var etp) ? etp : sTime.AddSeconds(st.DurationSeconds));
                     var stageKey = st.Stage.ToLowerInvariant() switch
                     {
                         "deep" => "sleep_stage_deep",
@@ -712,12 +722,35 @@ namespace Daily_WinUI.Services
                         Unit = "sec",
                         StartTime = sTime,
                         EndTime = eTime != default ? eTime : sTime.AddSeconds(st.DurationSeconds),
-                        SourceDevice = primary.Tracker ?? "Canonical"
+                        SourceDevice = !string.IsNullOrEmpty(st.SourceDevice) ? st.SourceDevice : primary.EffectiveSourceDevice
                     };
                 }).ToList();
             }
 
             var all = new List<SleepSession> { session };
+            if (summary?.Summary?.Sleep?.AllSessions != null && summary.Summary.Sleep.AllSessions.Count > 1)
+            {
+                foreach (var other in summary.Summary.Sleep.AllSessions.Where(s => s != primary))
+                {
+                    DateTimeOffset.TryParse(other.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var oStartDto);
+                    DateTimeOffset.TryParse(other.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var oEndDto);
+                    all.Add(new SleepSession
+                    {
+                        StartTime = oStartDto != default ? oStartDto.LocalDateTime : date.Date,
+                        EndTime = oEndDto != default ? oEndDto.LocalDateTime : date.Date,
+                        IsNap = other.IsNap,
+                        DurationSeconds = other.DurationSeconds,
+                        AsleepSeconds = other.AsleepSeconds,
+                        DeepSeconds = other.DeepSeconds,
+                        RemSeconds = other.RemSeconds,
+                        LightSeconds = other.LightSeconds,
+                        AwakeSeconds = other.AwakeSeconds,
+                        SleepScore = other.SleepScore,
+                        SourceDevice = other.EffectiveSourceDevice,
+                        HasGranularHypnogram = other.HasGranularHypnogram
+                    });
+                }
+            }
             return (session, all);
         }
 
