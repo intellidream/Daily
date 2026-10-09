@@ -150,7 +150,7 @@ class HabitRemoteService(
             // Fallback to direct tables below
         }
 
-        // 4B. Fallback: Dual-Table Ingestion (habits_daily_summaries + habits_logs)
+        // 4B. Fallback: Dual-Table Ingestion (habits_daily_summaries + habits_logs) ONLY if !fetchedViaRpc (matching iOS)
         if (!fetchedViaRpc) {
             try {
                 val summaries = clientManager.client.postgrest["habits_daily_summaries"]
@@ -173,43 +173,46 @@ class HabitRemoteService(
                     }
                 }
             } catch (_: Exception) {}
-        }
 
-        // Fetch raw habits_logs for 112 days (overrides summaries and populates Room)
-        try {
-            val rawLogs = clientManager.client.postgrest["habits_logs"]
-                .select {
-                    filter {
-                        gte("logged_at", startIso112)
-                        eq("is_deleted", false)
-                        if (userId.isNotEmpty() && userId != "guest") {
-                            eq("user_id", userId)
+            // Fetch raw habits_logs for 112 days (overrides summaries)
+            try {
+                val rawLogs = clientManager.client.postgrest["habits_logs"]
+                    .select {
+                        filter {
+                            gte("logged_at", startIso112)
+                            eq("is_deleted", false)
+                            if (userId.isNotEmpty() && userId != "guest") {
+                                eq("user_id", userId)
+                            }
                         }
+                        order("logged_at", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
+                        limit(5000)
                     }
-                    limit(5000)
-                }
-                .decodeList<HabitLogRecord>()
+                    .decodeList<HabitLogRecord>()
 
-            rawLogsList = rawLogs
+                rawLogsList = rawLogs
 
-            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-            val rawWater = mutableMapOf<String, Double>()
-            val rawSmokes = mutableMapOf<String, Int>()
-            for (l in rawLogs) {
-                val k = sdf.format(java.util.Date(l.loggedAt))
-                if (l.habitType == "water") {
-                    rawWater[k] = (rawWater[k] ?: 0.0) + l.value
-                } else if (l.habitType == "smokes") {
-                    rawSmokes[k] = (rawSmokes[k] ?: 0) + l.value.toInt()
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
                 }
-            }
-            for ((k, v) in rawWater) {
-                waterTotals[k] = v
-            }
-            for ((k, v) in rawSmokes) {
-                smokesTotals[k] = v
-            }
-        } catch (_: Exception) {}
+                val rawWater = mutableMapOf<String, Double>()
+                val rawSmokes = mutableMapOf<String, Int>()
+                for (l in rawLogs) {
+                    val k = sdf.format(java.util.Date(l.loggedAt))
+                    if (l.habitType == "water") {
+                        rawWater[k] = (rawWater[k] ?: 0.0) + l.value
+                    } else if (l.habitType == "smokes") {
+                        rawSmokes[k] = (rawSmokes[k] ?: 0) + l.value.toInt()
+                    }
+                }
+                for ((k, v) in rawWater) {
+                    waterTotals[k] = v
+                }
+                for ((k, v) in rawSmokes) {
+                    smokesTotals[k] = v
+                }
+            } catch (_: Exception) {}
+        }
 
         com.intellidream.daily.model.HabitsConsistencyResult(
             waterTotals = waterTotals,

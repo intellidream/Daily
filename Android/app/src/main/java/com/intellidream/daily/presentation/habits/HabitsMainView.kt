@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -609,7 +610,7 @@ fun HabitsMainView(
             trendDays.maxOfOrNull { it.value } ?: 0.0,
             goalValue,
             1.0
-        ) * 1.15
+        )
 
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
@@ -666,33 +667,32 @@ fun HabitsMainView(
                 ) {
                     trendDays.forEach { day ->
                         val hasValue = day.value > 0.0
-                        val ratio = if (hasValue) (day.value / maxTrendValue).toFloat().coerceIn(0.08f, 1f) else 0f
-                        val barHeight = if (hasValue) (ratio * 70).dp.coerceAtLeast(6.dp) else 4.dp
-                        val barColor = if (activeHabit == HabitType.WATER) {
-                            if (day.isGoalMet) Color(0xFF00FFB2) else ThemeColors.accentCyan
+                        val barHeight = if (hasValue) {
+                            ((day.value / maxTrendValue) * 90.0).dp.coerceIn(6.dp, 90.dp)
                         } else {
-                            if (day.value <= goalValue) Color(0xFF00FFB2) else Color(0xFFFF3B30)
+                            0.dp
+                        }
+                        val barBrush = if (activeHabit == HabitType.WATER) {
+                            Brush.verticalGradient(
+                                colors = listOf(ThemeColors.accentBlue, ThemeColors.accentCyan)
+                            )
+                        } else {
+                            if (day.value <= goalValue) {
+                                Brush.verticalGradient(
+                                    colors = listOf(Color(0xFF00E5FF), Color(0xFF00FFB2))
+                                )
+                            } else {
+                                Brush.verticalGradient(
+                                    colors = listOf(Color(0xFFFF9500), Color(0xFFFF3B30))
+                                )
+                            }
                         }
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Bottom,
-                            modifier = Modifier.height(105.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            val labelText = if (hasValue) {
-                                if (activeHabit == HabitType.WATER) {
-                                    if (day.value >= 1000.0) {
-                                        val liters = day.value / 1000.0
-                                        if (liters % 1.0 == 0.0) "${liters.toInt()}L" else String.format(Locale.US, "%.1fL", liters)
-                                    } else {
-                                        "${day.value.toInt()}"
-                                    }
-                                } else {
-                                    "${day.value.toInt()}"
-                                }
-                            } else {
-                                "-"
-                            }
+                            val labelText = if (hasValue) "${day.value.toInt()}" else "-"
 
                             Text(
                                 text = labelText,
@@ -701,17 +701,25 @@ fun HabitsMainView(
                                 color = if (hasValue) (if (day.isGoalMet) Color(0xFF00FFB2) else Color.White.copy(alpha = 0.8f)) else ThemeColors.textSecondary
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
-
+                            // Bar track container matching iOS 90dp height
                             Box(
                                 modifier = Modifier
                                     .width(22.dp)
-                                    .height(barHeight)
-                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                    .background(if (hasValue) barColor else Color.White.copy(alpha = 0.06f))
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
+                                    .height(90.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.White.copy(alpha = 0.06f)),
+                                contentAlignment = Alignment.BottomCenter
+                            ) {
+                                if (hasValue) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(barHeight)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(barBrush)
+                                    )
+                                }
+                            }
 
                             Text(
                                 text = day.dayLabel,
@@ -873,14 +881,23 @@ fun HabitsMainView(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Heatmap Grid: 16 columns of 7 days
+                // Heatmap Grid: 16 columns of 7 days (horizontal scroll with trailing anchor matching iOS)
                 val weeks = heatmapCells.chunked(7)
+                val heatmapScrollState = rememberScrollState()
+                LaunchedEffect(weeks.size) {
+                    if (weeks.isNotEmpty()) {
+                        heatmapScrollState.scrollTo(heatmapScrollState.maxValue)
+                    }
+                }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(heatmapScrollState)
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.5.dp)
                 ) {
                     weeks.forEach { week ->
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(3.5.dp)) {
                             week.forEach { cell ->
                                 val cellColor = if (activeHabit == HabitType.WATER) {
                                     when (cell.intensityLevel) {
@@ -904,11 +921,11 @@ fun HabitsMainView(
 
                                 Box(
                                     modifier = Modifier
-                                        .size(14.dp)
+                                        .size(12.dp)
                                         .clip(RoundedCornerShape(3.dp))
                                         .background(cellColor)
                                         .then(
-                                            if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(3.dp))
+                                            if (isSelected) Modifier.border(1.5.dp, Color.White, RoundedCornerShape(3.dp))
                                             else Modifier
                                         )
                                         .clickable {

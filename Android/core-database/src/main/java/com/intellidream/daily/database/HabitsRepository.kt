@@ -196,75 +196,53 @@ class HabitsRepository(
     private val allSmokesLogs = dao.getAllActiveLogs("smokes")
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    private fun getMergedWaterTotals(
-        totals: Map<String, Double>,
-        logs: List<HabitLogEntity>
-    ): Map<String, Double> {
-        val merged = totals.toMutableMap()
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val roomMap = mutableMapOf<String, Double>()
-        for (l in logs) {
-            val k = sdf.format(Date(l.loggedAt))
-            roomMap[k] = (roomMap[k] ?: 0.0) + l.value
-        }
-        for ((k, v) in roomMap) {
-            merged[k] = v
-        }
-        return merged
-    }
-
-    private fun getMergedSmokesTotals(
-        totals: Map<String, Int>,
-        logs: List<HabitLogEntity>
-    ): Map<String, Int> {
-        val merged = totals.toMutableMap()
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val roomMap = mutableMapOf<String, Int>()
-        for (l in logs) {
-            val k = sdf.format(Date(l.loggedAt))
-            roomMap[k] = (roomMap[k] ?: 0) + l.value.toInt()
-        }
-        for ((k, v) in roomMap) {
-            merged[k] = v
-        }
-        return merged
-    }
-
     // 7-day trend history
     val waterSevenDayHistory: StateFlow<List<HabitTrendDay>> = combine(
         _waterDailyTotals,
-        allWaterLogs,
+        waterTotalToday,
         _waterGoal
-    ) { totals, logs, goal ->
-        val merged = getMergedWaterTotals(totals, logs)
+    ) { totals, todayTotal, goal ->
+        val merged = totals.toMutableMap()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val selectedKey = sdf.format(Date(_selectedDate.value))
+        merged[selectedKey] = todayTotal
         calculateSevenDayHistory(merged, goal, isSmokes = false)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     val smokesSevenDayHistory: StateFlow<List<HabitTrendDay>> = combine(
         _smokesDailyTotals,
-        allSmokesLogs,
+        smokesTotalToday,
         _smokesSettings
-    ) { totals, logs, settings ->
-        val merged = getMergedSmokesTotals(totals, logs)
+    ) { totals, todayTotal, settings ->
+        val merged = totals.toMutableMap()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val selectedKey = sdf.format(Date(_selectedDate.value))
+        merged[selectedKey] = todayTotal
         calculateSevenDayHistory(merged.mapValues { it.value.toDouble() }, settings.baselineDailyCount.toDouble(), isSmokes = true)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     // 112-day consistency heatmap
     val waterConsistencyHeatmap: StateFlow<List<HabitConsistencyCell>> = combine(
         _waterDailyTotals,
-        allWaterLogs,
+        waterTotalToday,
         _waterGoal
-    ) { totals, logs, goal ->
-        val merged = getMergedWaterTotals(totals, logs)
+    ) { totals, todayTotal, goal ->
+        val merged = totals.toMutableMap()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val selectedKey = sdf.format(Date(_selectedDate.value))
+        merged[selectedKey] = todayTotal
         calculateConsistencyHeatmap(merged, goal, isSmokes = false)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     val smokesConsistencyHeatmap: StateFlow<List<HabitConsistencyCell>> = combine(
         _smokesDailyTotals,
-        allSmokesLogs,
+        smokesTotalToday,
         _smokesSettings
-    ) { totals, logs, settings ->
-        val merged = getMergedSmokesTotals(totals, logs)
+    ) { totals, todayTotal, settings ->
+        val merged = totals.toMutableMap()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val selectedKey = sdf.format(Date(_selectedDate.value))
+        merged[selectedKey] = todayTotal
         calculateConsistencyHeatmap(merged.mapValues { it.value.toDouble() }, settings.baselineDailyCount.toDouble(), isSmokes = true)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
@@ -272,11 +250,10 @@ class HabitsRepository(
     val smokesFinancials: StateFlow<SmokesFinancialMetrics> = combine(
         _remoteSmokesFinancials,
         _smokesDailyTotals,
-        allSmokesLogs,
+        selectedDateSmokesLogs,
         _smokesSettings
     ) { remote, totals, logs, settings ->
-        val merged = getMergedSmokesTotals(totals, logs)
-        calculateSmokesFinancials(remote, merged, logs, settings)
+        calculateSmokesFinancials(remote, totals, logs, settings)
     }.stateIn(scope, SharingStarted.Eagerly, SmokesFinancialMetrics())
 
     // Convenience Navigation Getters
@@ -683,7 +660,7 @@ class HabitsRepository(
     private fun calculateSmokesFinancials(
         remoteRpc: com.intellidream.daily.model.SmokesFinancialsRpcResult?,
         map: Map<String, Int>,
-        entities: List<HabitLogEntity>,
+        entities: List<com.intellidream.daily.model.HabitLogRecord>,
         settings: SmokesSettings
     ): SmokesFinancialMetrics {
         val now = System.currentTimeMillis()
