@@ -55,8 +55,9 @@ The architecture ensures that when the device is unfolded or used on an expanded
   - Hubs now display only a subtle, elegant horizontal drag handle (`FoldableDragHandle`): a 48x5dp rounded capsule with `detectVerticalDragGestures`, physics-based vertical offset animations, and haptic feedback.
   - Hubs can be dismissed smoothly via drag-down on the handle, back gesture swipe, or the hub's internal back button.
 - **Smart Briefing Foldable Polish**:
-  - `SmartBriefingContent(showHeader = true, horizontalPadding = 0.dp)` is embedded directly with `FoldableDragHandle`.
-  - Redundant duplicate close buttons were removed, providing a clean diurnal intelligence console.
+  - The briefing container fills the secondary pane laterally edge-to-edge without outer horizontal margins (`start = 0.dp, end = 0.dp`).
+  - Elevated modal presentation with `RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)`, luminous gradient border, drop shadow (`16.dp`), and full vertical gradient background (`Color(0xFF091222)` -> `Color(0xFF050A14)` -> `Black`) wrapping `FoldableDragHandle`.
+  - Content within the sheet retains a generous `horizontalPadding = 20.dp` and `navigationBarsPadding`, creating elegant breathing room between the lateral sheet borders and cards, perfectly matching the full-screen non-foldable presentation.
 
 ### 3. Capsule Navigation Placement: Option A (Master-Pane Bottom Anchor)
 - Rather than stretching or centering the floating navigation capsule across the crease (which strains thumb ergonomics and can be obstructed by physical hinges), the capsule is anchored at:

@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -64,7 +66,33 @@ fun SmartBriefingFoldablePane(
     val slot = activeBriefing?.slot ?: BriefingTimeSlot.current()
 
     Column(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            .shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            )
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF091222),
+                        Color(0xFF050A14),
+                        Color.Black
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.06f),
+                        Color.Transparent
+                    )
+                ),
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            )
     ) {
         // Minimalist top drag handle pill supporting swipe-down dismiss
         FoldableDragHandle(
@@ -74,7 +102,7 @@ fun SmartBriefingFoldablePane(
             }
         )
 
-        // Typewriter narrative body with its native greeting pill, TTS voice control, and circular close action
+        // Typewriter narrative body with its native greeting pill, TTS voice control, circular close action, and consistent 20dp margin
         SmartBriefingContent(
             repository = repository,
             userProfile = userProfile,
@@ -88,8 +116,11 @@ fun SmartBriefingFoldablePane(
             newsRepository = newsRepository,
             onDismiss = onDismiss,
             showHeader = true,
-            horizontalPadding = 0.dp,
-            modifier = Modifier.fillMaxSize()
+            horizontalPadding = 20.dp,
+            applyBackground = false,
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
         )
     }
 }

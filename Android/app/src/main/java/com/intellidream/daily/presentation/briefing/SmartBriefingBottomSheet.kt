@@ -160,6 +160,7 @@ fun SmartBriefingContent(
     onDismiss: () -> Unit,
     showHeader: Boolean = true,
     horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp,
+    applyBackground: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -259,14 +260,20 @@ fun SmartBriefingContent(
 
     Box(
         modifier = modifier
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF091222),
-                        Color(0xFF050A14),
-                        Color.Black
+            .then(
+                if (applyBackground) {
+                    Modifier.background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xFF091222),
+                                Color(0xFF050A14),
+                                Color.Black
+                            )
+                        )
                     )
-                )
+                } else {
+                    Modifier
+                }
             )
     ) {
         Column(

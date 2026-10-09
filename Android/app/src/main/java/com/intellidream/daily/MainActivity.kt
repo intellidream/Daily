@@ -679,7 +679,13 @@ fun DailyRootScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .padding(start = 12.dp, end = 16.dp, top = 4.dp)
+                        .then(
+                            if (showFoldableBriefing) {
+                                Modifier.padding(top = 4.dp)
+                            } else {
+                                Modifier.padding(start = 12.dp, end = 16.dp, top = 4.dp)
+                            }
+                        )
                 ) {
                     when {
                         showCustomize -> {
