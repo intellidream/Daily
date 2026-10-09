@@ -153,6 +153,42 @@ object FlexibleStringSerializer : KSerializer<String?> {
     }
 }
 
+object FlexibleDoubleSerializer : KSerializer<Double> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("FlexibleDoubleSerializer", PrimitiveKind.DOUBLE)
+
+    override fun serialize(encoder: Encoder, value: Double) {
+        encoder.encodeDouble(value)
+    }
+
+    override fun deserialize(decoder: Decoder): Double {
+        val jsonDecoder = decoder as? JsonDecoder ?: return try { decoder.decodeDouble() } catch (_: Exception) { 0.0 }
+        val element = jsonDecoder.decodeJsonElement()
+        return when (element) {
+            is JsonPrimitive -> element.content.toDoubleOrNull() ?: 0.0
+            else -> 0.0
+        }
+    }
+}
+
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+object FlexibleNullableDoubleSerializer : KSerializer<Double?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("FlexibleNullableDoubleSerializer", PrimitiveKind.DOUBLE)
+
+    override fun serialize(encoder: Encoder, value: Double?) {
+        if (value != null) encoder.encodeDouble(value) else encoder.encodeNull()
+    }
+
+    override fun deserialize(decoder: Decoder): Double? {
+        val jsonDecoder = decoder as? JsonDecoder ?: return try { decoder.decodeDouble() } catch (_: Exception) { null }
+        val element = jsonDecoder.decodeJsonElement()
+        return when (element) {
+            is JsonPrimitive -> element.content.toDoubleOrNull()
+            is JsonNull -> null
+            else -> null
+        }
+    }
+}
+
 // MARK: - Habit Log Record
 
 @Serializable
@@ -265,6 +301,63 @@ data class UserPreferencesRecord(
     val smokes_currency: String? = null,
     val smokes_quit_date: String? = null,
     val water_goal: Double? = null
+)
+
+// MARK: - Server RPC & Consistency Heatmap Models
+
+@Serializable
+data class HabitsConsistencyParams(
+    val p_habit_type: String,
+    val p_start_date: String,
+    val p_end_date: String
+)
+
+@Serializable
+data class HabitsConsistencyRow(
+    val day: String = "",
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    @SerialName("total_value")
+    val total_value: Double = 0.0,
+    @SerialName("log_count")
+    val log_count: Int? = null
+) {
+    val normalizedDayKey: String
+        get() = if (day.length >= 10) day.substring(0, 10) else day
+}
+
+@Serializable
+data class HabitsDailySummaryRow(
+    @SerialName("habit_type")
+    val habit_type: String = "",
+    val date: String = "",
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    @SerialName("total_value")
+    val total_value: Double = 0.0,
+    @SerialName("log_count")
+    val log_count: Int? = null
+) {
+    val normalizedDayKey: String
+        get() = if (date.length >= 10) date.substring(0, 10) else date
+}
+
+@Serializable
+data class SmokesFinancialsParams(
+    val p_since_date: String
+)
+
+@Serializable
+data class SmokesFinancialsRpcResult(
+    @Serializable(with = FlexibleNullableDoubleSerializer::class)
+    @SerialName("total_smoked")
+    val total_smoked: Double? = null,
+    @SerialName("days_tracked")
+    val days_tracked: Int? = null
+)
+
+data class HabitsConsistencyResult(
+    val waterTotals: Map<String, Double> = emptyMap(),
+    val smokesTotals: Map<String, Int> = emptyMap(),
+    val recentRawLogs: List<HabitLogRecord> = emptyList()
 )
 
 // MARK: - Smokes Settings & Financial Metrics

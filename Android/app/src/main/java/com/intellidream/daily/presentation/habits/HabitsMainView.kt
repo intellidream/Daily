@@ -605,6 +605,11 @@ fun HabitsMainView(
         // 7-Day Performance Bar Chart
         val trendDays = if (activeHabit == HabitType.WATER) waterHistory else smokesHistory
         val goalValue = if (activeHabit == HabitType.WATER) waterGoal else smokesSettings.baselineDailyCount.toDouble()
+        val maxTrendValue = maxOf(
+            trendDays.maxOfOrNull { it.value } ?: 0.0,
+            goalValue,
+            1.0
+        ) * 1.15
 
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
@@ -612,13 +617,45 @@ fun HabitsMainView(
             padding = 14.dp
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "7-DAY PERFORMANCE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ThemeColors.textSecondary,
-                    letterSpacing = 1.sp
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "7-DAY PERFORMANCE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ThemeColors.textSecondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = if (activeHabit == HabitType.WATER) "Hydration Volume" else "Tobacco Reduction",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (activeHabit == HabitType.WATER) ThemeColors.accentCyan else Color(0xFFFFB800))
+                        )
+                        Text(
+                            text = if (activeHabit == HabitType.WATER) "Goal: ${goalValue.toInt()} ml" else "Limit: ${goalValue.toInt()}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ThemeColors.textSecondary
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -628,34 +665,40 @@ fun HabitsMainView(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     trendDays.forEach { day ->
-                        val ratio = (day.value / goalValue.coerceAtLeast(1.0)).toFloat().coerceIn(0.05f, 1f)
+                        val hasValue = day.value > 0.0
+                        val ratio = if (hasValue) (day.value / maxTrendValue).toFloat().coerceIn(0.08f, 1f) else 0f
+                        val barHeight = if (hasValue) (ratio * 70).dp.coerceAtLeast(6.dp) else 4.dp
                         val barColor = if (activeHabit == HabitType.WATER) {
                             if (day.isGoalMet) Color(0xFF00FFB2) else ThemeColors.accentCyan
                         } else {
-                            if (day.value > goalValue) Color(0xFFFF3B30) else Color(0xFF00FFB2)
+                            if (day.value <= goalValue) Color(0xFF00FFB2) else Color(0xFFFF3B30)
                         }
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Bottom,
-                            modifier = Modifier.height(100.dp)
+                            modifier = Modifier.height(105.dp)
                         ) {
-                            val labelText = if (activeHabit == HabitType.WATER) {
-                                if (day.value >= 1000.0) {
-                                    val liters = day.value / 1000.0
-                                    if (liters % 1.0 == 0.0) "${liters.toInt()}L" else String.format(Locale.US, "%.1fL", liters)
+                            val labelText = if (hasValue) {
+                                if (activeHabit == HabitType.WATER) {
+                                    if (day.value >= 1000.0) {
+                                        val liters = day.value / 1000.0
+                                        if (liters % 1.0 == 0.0) "${liters.toInt()}L" else String.format(Locale.US, "%.1fL", liters)
+                                    } else {
+                                        "${day.value.toInt()}"
+                                    }
                                 } else {
-                                    "${day.value.toInt()}ml"
+                                    "${day.value.toInt()}"
                                 }
                             } else {
-                                "${day.value.toInt()}"
+                                "-"
                             }
 
                             Text(
                                 text = labelText,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = ThemeColors.textSecondary
+                                color = if (hasValue) (if (day.isGoalMet) Color(0xFF00FFB2) else Color.White.copy(alpha = 0.8f)) else ThemeColors.textSecondary
                             )
 
                             Spacer(modifier = Modifier.height(4.dp))
@@ -663,9 +706,9 @@ fun HabitsMainView(
                             Box(
                                 modifier = Modifier
                                     .width(22.dp)
-                                    .height((ratio * 65).dp.coerceAtLeast(4.dp))
+                                    .height(barHeight)
                                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                    .background(barColor)
+                                    .background(if (hasValue) barColor else Color.White.copy(alpha = 0.06f))
                             )
 
                             Spacer(modifier = Modifier.height(6.dp))
@@ -674,7 +717,7 @@ fun HabitsMainView(
                                 text = day.dayLabel,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = ThemeColors.textSecondary
+                                color = if (hasValue) Color.White else ThemeColors.textSecondary
                             )
                         }
                     }
@@ -697,19 +740,63 @@ fun HabitsMainView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "112-DAY CONSISTENCY HEATMAP",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ThemeColors.textSecondary,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "16 WEEKS",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ThemeColors.textSecondary
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "112-DAY CONSISTENCY HEATMAP",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ThemeColors.textSecondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = if (activeHabit == HabitType.WATER) "Hydration Consistency (16 Weeks)" else "Tobacco Discipline (16 Weeks)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    // Intensity scale legend matching iOS
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (activeHabit == HabitType.WATER) "Less" else "Low",
+                            fontSize = 9.sp,
+                            color = ThemeColors.textSecondary
+                        )
+                        for (level in 0..4) {
+                            val legendColor = if (activeHabit == HabitType.WATER) {
+                                when (level) {
+                                    4 -> Color(0xFF00FFB2)
+                                    3 -> ThemeColors.accentBlue.copy(alpha = 0.85f)
+                                    2 -> ThemeColors.accentCyan.copy(alpha = 0.55f)
+                                    1 -> ThemeColors.accentCyan.copy(alpha = 0.30f)
+                                    else -> Color.White.copy(alpha = 0.06f)
+                                }
+                            } else {
+                                when (level) {
+                                    4 -> Color(0xFFFF3B30)
+                                    3 -> Color(0xFFFF9500)
+                                    2 -> Color(0xFFFFB800)
+                                    1 -> Color(0xFF00FFB2)
+                                    else -> Color.White.copy(alpha = 0.06f)
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(legendColor)
+                            )
+                        }
+                        Text(
+                            text = if (activeHabit == HabitType.WATER) "More" else "High",
+                            fontSize = 9.sp,
+                            color = ThemeColors.textSecondary
+                        )
+                    }
                 }
 
                 // Interactive detail pill if cell tapped
@@ -720,34 +807,64 @@ fun HabitsMainView(
                 ) {
                     selectedHeatmapCell?.let { cell ->
                         Column {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(ThemeColors.accentCyan.copy(alpha = 0.15f))
-                                    .clickable {
-                                        repository.selectDate(cell.date)
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White.copy(alpha = 0.08f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = cell.tooltip,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = "View Day →",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ThemeColors.accentCyan
-                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = cell.tooltip,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color.White
+                                        )
+
+                                        val statusTag = if (activeHabit == HabitType.WATER) {
+                                            if (cell.isGoalMet) "Goal Met ✓" to Color(0xFF00FFB2) else "Under Goal" to ThemeColors.textSecondary
+                                        } else {
+                                            if (cell.value <= 0.0) {
+                                                "Smoke Free ✨" to Color(0xFF00FFB2)
+                                            } else if (cell.isGoalMet) {
+                                                "Under Limit ✓" to Color(0xFF00FFB2)
+                                            } else {
+                                                "Over Limit ✕" to Color(0xFFFF3B30)
+                                            }
+                                        }
+
+                                        Text(
+                                            text = statusTag.first,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = statusTag.second
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(ThemeColors.accentCyan.copy(alpha = 0.15f))
+                                            .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.35f), CircleShape)
+                                            .clickable {
+                                                repository.selectDate(cell.date)
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = "View Day →",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ThemeColors.accentCyan
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -768,18 +885,18 @@ fun HabitsMainView(
                                 val cellColor = if (activeHabit == HabitType.WATER) {
                                     when (cell.intensityLevel) {
                                         4 -> Color(0xFF00FFB2)
-                                        3 -> ThemeColors.accentCyan
-                                        2 -> ThemeColors.accentCyan.copy(alpha = 0.6f)
-                                        1 -> ThemeColors.accentCyan.copy(alpha = 0.3f)
-                                        else -> Color.White.copy(alpha = 0.05f)
+                                        3 -> ThemeColors.accentBlue.copy(alpha = 0.85f)
+                                        2 -> ThemeColors.accentCyan.copy(alpha = 0.55f)
+                                        1 -> ThemeColors.accentCyan.copy(alpha = 0.30f)
+                                        else -> Color.White.copy(alpha = 0.06f)
                                     }
                                 } else {
                                     when (cell.intensityLevel) {
-                                        4 -> Color(0xFF00FFB2)
-                                        3 -> ThemeColors.accentCyan
+                                        4 -> Color(0xFFFF3B30)
+                                        3 -> Color(0xFFFF9500)
                                         2 -> Color(0xFFFFB800)
-                                        1 -> Color(0xFFFF9500)
-                                        else -> Color(0xFFFF3B30)
+                                        1 -> Color(0xFF00FFB2)
+                                        else -> Color.White.copy(alpha = 0.06f)
                                     }
                                 }
 

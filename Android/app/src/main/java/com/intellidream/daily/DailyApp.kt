@@ -53,7 +53,7 @@ class DailyApp : Application() {
         weatherCacheRepository = WeatherCacheRepository(this)
         weatherRepository = WeatherRepository()
         dailyDatabase = com.intellidream.daily.database.DailyDatabase.getDatabase(this)
-        habitsRepository = com.intellidream.daily.database.HabitsRepository(dailyDatabase.habitLogDao())
+        habitsRepository = com.intellidream.daily.database.HabitsRepository(dailyDatabase.habitLogDao(), context = this)
         habitRemoteService = com.intellidream.daily.network.HabitRemoteService()
         healthRepository = com.intellidream.daily.health.HealthDataRepository(
             context = this,
@@ -91,6 +91,17 @@ class DailyApp : Application() {
             }
             override suspend fun deleteLog(logId: String): Boolean {
                 return habitRemoteService.deleteLog(logId)
+            }
+            override suspend fun fetchHabitsConsistency(
+                userId: String,
+                startDateStr: String,
+                endDateStr: String,
+                startIso112: String
+            ): com.intellidream.daily.model.HabitsConsistencyResult {
+                return habitRemoteService.fetchHabitsConsistency(userId, startDateStr, endDateStr, startIso112)
+            }
+            override suspend fun fetchSmokesFinancials(sinceIso: String): com.intellidream.daily.model.SmokesFinancialsRpcResult? {
+                return habitRemoteService.fetchSmokesFinancials(sinceIso)
             }
         }
 

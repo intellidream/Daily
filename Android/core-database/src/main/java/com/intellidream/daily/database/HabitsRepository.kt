@@ -37,16 +37,37 @@ interface HabitSyncHandler {
     suspend fun pullUserPreferences(userId: String): com.intellidream.daily.model.UserPreferencesRecord?
     suspend fun pullGoals(userId: String): List<com.intellidream.daily.model.HabitGoalRecord>
     suspend fun deleteLog(logId: String): Boolean
+    suspend fun fetchHabitsConsistency(
+        userId: String,
+        startDateStr: String,
+        endDateStr: String,
+        startIso112: String
+    ): com.intellidream.daily.model.HabitsConsistencyResult = com.intellidream.daily.model.HabitsConsistencyResult()
+    suspend fun fetchSmokesFinancials(sinceIso: String): com.intellidream.daily.model.SmokesFinancialsRpcResult? = null
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HabitsRepository(
     private val dao: HabitLogDao,
+    private val context: android.content.Context? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
     var syncHandler: HabitSyncHandler? = null
     var currentUserId: String = "guest"
     var onWaterLogged: ((amountMl: Double, timestamp: Long) -> Unit)? = null
+
+    // Daily aggregate dictionaries cached locally for 0ms instant rendering (mirroring iOS HabitsService)
+    private val _waterDailyTotals = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val waterDailyTotals: StateFlow<Map<String, Double>> = _waterDailyTotals.asStateFlow()
+
+    private val _smokesDailyTotals = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val smokesDailyTotals: StateFlow<Map<String, Int>> = _smokesDailyTotals.asStateFlow()
+
+    private val _remoteSmokesFinancials = MutableStateFlow<com.intellidream.daily.model.SmokesFinancialsRpcResult?>(null)
+
+    init {
+        loadCachedDailyTotals()
+    }
 
     // State
     private val _selectedDate = MutableStateFlow(getStartOfDay(System.currentTimeMillis()))
@@ -175,27 +196,87 @@ class HabitsRepository(
     private val allSmokesLogs = dao.getAllActiveLogs("smokes")
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    private fun getMergedWaterTotals(
+        totals: Map<String, Double>,
+        logs: List<HabitLogEntity>
+    ): Map<String, Double> {
+        val merged = totals.toMutableMap()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val roomMap = mutableMapOf<String, Double>()
+        for (l in logs) {
+            val k = sdf.format(Date(l.loggedAt))
+            roomMap[k] = (roomMap[k] ?: 0.0) + l.value
+        }
+        for ((k, v) in roomMap) {
+            merged[k] = v
+        }
+        return merged
+    }
+
+    private fun getMergedSmokesTotals(
+        totals: Map<String, Int>,
+        logs: List<HabitLogEntity>
+    ): Map<String, Int> {
+        val merged = totals.toMutableMap()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val roomMap = mutableMapOf<String, Int>()
+        for (l in logs) {
+            val k = sdf.format(Date(l.loggedAt))
+            roomMap[k] = (roomMap[k] ?: 0) + l.value.toInt()
+        }
+        for ((k, v) in roomMap) {
+            merged[k] = v
+        }
+        return merged
+    }
+
     // 7-day trend history
-    val waterSevenDayHistory: StateFlow<List<HabitTrendDay>> = combine(allWaterLogs, _waterGoal) { logs, goal ->
-        calculateSevenDayHistory(logs, goal)
+    val waterSevenDayHistory: StateFlow<List<HabitTrendDay>> = combine(
+        _waterDailyTotals,
+        allWaterLogs,
+        _waterGoal
+    ) { totals, logs, goal ->
+        val merged = getMergedWaterTotals(totals, logs)
+        calculateSevenDayHistory(merged, goal, isSmokes = false)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    val smokesSevenDayHistory: StateFlow<List<HabitTrendDay>> = combine(allSmokesLogs, _smokesSettings) { logs, settings ->
-        calculateSevenDayHistory(logs, settings.baselineDailyCount.toDouble(), isSmokes = true)
+    val smokesSevenDayHistory: StateFlow<List<HabitTrendDay>> = combine(
+        _smokesDailyTotals,
+        allSmokesLogs,
+        _smokesSettings
+    ) { totals, logs, settings ->
+        val merged = getMergedSmokesTotals(totals, logs)
+        calculateSevenDayHistory(merged.mapValues { it.value.toDouble() }, settings.baselineDailyCount.toDouble(), isSmokes = true)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     // 112-day consistency heatmap
-    val waterConsistencyHeatmap: StateFlow<List<HabitConsistencyCell>> = combine(allWaterLogs, _waterGoal) { logs, goal ->
-        calculateConsistencyHeatmap(logs, goal, isSmokes = false)
+    val waterConsistencyHeatmap: StateFlow<List<HabitConsistencyCell>> = combine(
+        _waterDailyTotals,
+        allWaterLogs,
+        _waterGoal
+    ) { totals, logs, goal ->
+        val merged = getMergedWaterTotals(totals, logs)
+        calculateConsistencyHeatmap(merged, goal, isSmokes = false)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    val smokesConsistencyHeatmap: StateFlow<List<HabitConsistencyCell>> = combine(allSmokesLogs, _smokesSettings) { logs, settings ->
-        calculateConsistencyHeatmap(logs, settings.baselineDailyCount.toDouble(), isSmokes = true)
+    val smokesConsistencyHeatmap: StateFlow<List<HabitConsistencyCell>> = combine(
+        _smokesDailyTotals,
+        allSmokesLogs,
+        _smokesSettings
+    ) { totals, logs, settings ->
+        val merged = getMergedSmokesTotals(totals, logs)
+        calculateConsistencyHeatmap(merged.mapValues { it.value.toDouble() }, settings.baselineDailyCount.toDouble(), isSmokes = true)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     // Smokes financial metrics
-    val smokesFinancials: StateFlow<SmokesFinancialMetrics> = combine(allSmokesLogs, _smokesSettings) { logs, settings ->
-        calculateSmokesFinancials(logs, settings)
+    val smokesFinancials: StateFlow<SmokesFinancialMetrics> = combine(
+        _remoteSmokesFinancials,
+        _smokesDailyTotals,
+        allSmokesLogs,
+        _smokesSettings
+    ) { remote, totals, logs, settings ->
+        val merged = getMergedSmokesTotals(totals, logs)
+        calculateSmokesFinancials(remote, merged, logs, settings)
     }.stateIn(scope, SharingStarted.Eagerly, SmokesFinancialMetrics())
 
     // Convenience Navigation Getters
@@ -303,6 +384,55 @@ class HabitsRepository(
                     }
                 }
             } catch (_: Exception) {}
+
+            // 3. Batch query 112 days (16 full weeks) of consistency history (mirroring iOS HabitsService)
+            try {
+                val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val cal = Calendar.getInstance()
+                val todayStart = getStartOfDay(cal.timeInMillis)
+                val heatStartCal = Calendar.getInstance().apply {
+                    timeInMillis = todayStart
+                    add(Calendar.DAY_OF_YEAR, -111)
+                }
+                val startStr = sdfDate.format(heatStartCal.time)
+                val endStr = sdfDate.format(Date(todayStart))
+                val startIso112 = java.time.Instant.ofEpochMilli(heatStartCal.timeInMillis).toString()
+
+                val consistencyResult = handler.fetchHabitsConsistency(userId, startStr, endStr, startIso112)
+                val newWater = _waterDailyTotals.value.toMutableMap()
+                val newSmokes = _smokesDailyTotals.value.toMutableMap()
+
+                for ((k, v) in consistencyResult.waterTotals) {
+                    newWater[k] = v
+                }
+                for ((k, v) in consistencyResult.smokesTotals) {
+                    newSmokes[k] = v
+                }
+
+                _waterDailyTotals.value = newWater
+                _smokesDailyTotals.value = newSmokes
+                saveCachedDailyTotals()
+
+                // Insert active raw historical logs into Room
+                if (consistencyResult.recentRawLogs.isNotEmpty()) {
+                    val locallyDeletedIds = dao.getDeletedLogIds().toSet()
+                    val activeEntities = consistencyResult.recentRawLogs
+                        .filter { !it.isDeleted && !locallyDeletedIds.contains(it.id) }
+                        .map { HabitLogEntity.fromRecord(it, syncedAt = System.currentTimeMillis()) }
+                    if (activeEntities.isNotEmpty()) {
+                        dao.insertAll(activeEntities)
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 4. Fetch Smokes Financials
+            try {
+                val quitStartIso = java.time.Instant.ofEpochMilli(_smokesSettings.value.quitStartDate).toString()
+                val rpcResult = handler.fetchSmokesFinancials(quitStartIso)
+                if (rpcResult != null) {
+                    _remoteSmokesFinancials.value = rpcResult
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -372,6 +502,14 @@ class HabitsRepository(
             metadata = metaJson
         )
 
+        // Optimistically update daily totals map immediately (0ms latency, mirroring iOS)
+        val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dateKey = sdfDate.format(Date(logTime))
+        val updatedWater = _waterDailyTotals.value.toMutableMap()
+        updatedWater[dateKey] = (updatedWater[dateKey] ?: 0.0) + totalAmount
+        _waterDailyTotals.value = updatedWater
+        saveCachedDailyTotals()
+
         scope.launch {
             dao.insert(HabitLogEntity.fromRecord(record))
             syncHandler?.pushLog(record)
@@ -403,6 +541,14 @@ class HabitsRepository(
             metadata = metaJson
         )
 
+        // Optimistically update daily totals map immediately (0ms latency, mirroring iOS)
+        val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dateKey = sdfDate.format(Date(logTime))
+        val updatedSmokes = _smokesDailyTotals.value.toMutableMap()
+        updatedSmokes[dateKey] = (updatedSmokes[dateKey] ?: 0) + totalCount
+        _smokesDailyTotals.value = updatedSmokes
+        saveCachedDailyTotals()
+
         scope.launch {
             dao.insert(HabitLogEntity.fromRecord(record))
             syncHandler?.pushLog(record)
@@ -412,6 +558,7 @@ class HabitsRepository(
     fun deleteLog(id: String) {
         scope.launch {
             dao.softDelete(id)
+            saveCachedDailyTotals()
             syncHandler?.deleteLog(id)
         }
     }
@@ -436,32 +583,26 @@ class HabitsRepository(
     // MARK: - Calculation Helpers
 
     private fun calculateSevenDayHistory(
-        entities: List<HabitLogEntity>,
+        map: Map<String, Double>,
         goal: Double,
         isSmokes: Boolean = false
     ): List<HabitTrendDay> {
         val sdfKey = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val sdfLabel = SimpleDateFormat("EEE", Locale.US)
-        val map = mutableMapOf<String, Double>()
-
-        for (e in entities) {
-            val key = sdfKey.format(Date(e.loggedAt))
-            map[key] = (map[key] ?: 0.0) + e.value
-        }
-
         val result = mutableListOf<HabitTrendDay>()
-        val cal = Calendar.getInstance()
+        val todayStart = getStartOfDay(System.currentTimeMillis())
 
-        // 7 days ending today
-        for (i in 6 downTo 0) {
+        // 7 days ending today (day 0 is 6 days ago, day 6 is today, matching iOS)
+        for (i in 0 until 7) {
             val loopCal = Calendar.getInstance().apply {
-                timeInMillis = cal.timeInMillis
-                add(Calendar.DAY_OF_YEAR, -i)
+                timeInMillis = todayStart
+                add(Calendar.DAY_OF_YEAR, i - 6)
             }
             val key = sdfKey.format(loopCal.time)
-            val label = sdfLabel.format(loopCal.time)
+            val isToday = loopCal.timeInMillis == todayStart
+            val label = if (isToday) "Today" else sdfLabel.format(loopCal.time)
             val value = map[key] ?: 0.0
-            val met = if (isSmokes) value <= goal else value >= goal
+            val met = if (isSmokes) value <= goal else value >= goal && goal > 0.0
 
             result.add(
                 HabitTrendDay(
@@ -477,50 +618,53 @@ class HabitsRepository(
     }
 
     private fun calculateConsistencyHeatmap(
-        entities: List<HabitLogEntity>,
+        map: Map<String, Double>,
         goal: Double,
         isSmokes: Boolean = false
     ): List<HabitConsistencyCell> {
         val sdfKey = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val sdfTooltip = SimpleDateFormat("MMM d, yyyy", Locale.US)
-        val map = mutableMapOf<String, Double>()
-
-        for (e in entities) {
-            val key = sdfKey.format(Date(e.loggedAt))
-            map[key] = (map[key] ?: 0.0) + e.value
-        }
-
         val cells = mutableListOf<HabitConsistencyCell>()
-        val totalDays = 112 // 16 weeks
+        val totalDays = 112 // 16 full weeks
+        val todayStart = getStartOfDay(System.currentTimeMillis())
 
-        for (i in (totalDays - 1) downTo 0) {
+        // 112 days ending today (index 0 is 111 days ago, index 111 is today, matching iOS)
+        for (i in 0 until totalDays) {
             val loopCal = Calendar.getInstance().apply {
-                add(Calendar.DAY_OF_YEAR, -i)
+                timeInMillis = todayStart
+                add(Calendar.DAY_OF_YEAR, i - (totalDays - 1))
             }
             val dateKey = sdfKey.format(loopCal.time)
             val tooltipDate = sdfTooltip.format(loopCal.time)
             val value = map[dateKey] ?: 0.0
 
             val intensity = if (isSmokes) {
+                val baseline = goal
+                val ratio = if (baseline > 0) value / baseline else 0.0
                 when {
-                    value == 0.0 -> 4 // Smoke-free max positive intensity
-                    value <= goal * 0.5 -> 3
-                    value <= goal -> 2
-                    value <= goal * 1.5 -> 1
-                    else -> 0
+                    value <= 0.0 -> 0 // Smoke-free / no logs (dark neutral)
+                    ratio < 0.5 -> 1  // Green: low consumption, great discipline (<50%)
+                    ratio < 0.8 -> 2  // Yellow: moderate (50%-80%)
+                    ratio <= 1.0 -> 3 // Orange: close to baseline limit (80%-100%)
+                    else -> 4         // Red: exceeded baseline (>100%)
                 }
             } else {
+                val ratio = if (goal > 0) value / goal else 0.0
                 when {
-                    value <= 0.0 -> 0
-                    value < goal * 0.4 -> 1
-                    value < goal * 0.75 -> 2
-                    value < goal -> 3
-                    else -> 4
+                    value <= 0.0 -> 0 // 0 / no logs: dark neutral
+                    ratio < 0.50 -> 1 // 30% cyan
+                    ratio < 0.75 -> 2 // 55% cyan
+                    ratio < 1.00 -> 3 // 85% blue
+                    else -> 4         // 100%+ goal met: mint green
                 }
             }
 
-            val isGoalMet = if (isSmokes) value <= goal else value >= goal
-            val tooltip = "$tooltipDate: ${value.toInt()} ${if (isSmokes) "cigs" else "ml"}"
+            val isGoalMet = if (isSmokes) value <= goal else value >= goal && goal > 0.0
+            val tooltip = if (isSmokes) {
+                if (value == 0.0) "$tooltipDate: 0 cigs" else "$tooltipDate: ${value.toInt()} cigs (Limit: ${goal.toInt()})"
+            } else {
+                "$tooltipDate: ${value.toInt()} ml"
+            }
 
             cells.add(
                 HabitConsistencyCell(
@@ -537,15 +681,41 @@ class HabitsRepository(
     }
 
     private fun calculateSmokesFinancials(
+        remoteRpc: com.intellidream.daily.model.SmokesFinancialsRpcResult?,
+        map: Map<String, Int>,
         entities: List<HabitLogEntity>,
         settings: SmokesSettings
     ): SmokesFinancialMetrics {
         val now = System.currentTimeMillis()
         val startDate = settings.quitStartDate.coerceAtMost(now)
-        val daysTracked = ((now - startDate) / (1000L * 60 * 60 * 24)).toInt().coerceAtLeast(1)
+        val defaultDays = ((now - startDate) / (1000L * 60 * 60 * 24)).toInt().coerceAtLeast(1)
+
+        val rpcDays = remoteRpc?.days_tracked
+        val daysTracked: Int = if (rpcDays != null && rpcDays > 0) {
+            rpcDays
+        } else {
+            defaultDays
+        }
+
+        val rpcTotalSmoked = remoteRpc?.total_smoked
+        val totalSmoked: Int = if (rpcTotalSmoked != null) {
+            rpcTotalSmoked.toInt()
+        } else {
+            // Local calculation from daily totals
+            var sum = 0
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            for (dayOffset in 0 until daysTracked) {
+                val d = Calendar.getInstance().apply {
+                    timeInMillis = now
+                    add(Calendar.DAY_OF_YEAR, -dayOffset)
+                }
+                val k = sdf.format(d.time)
+                sum += map[k] ?: 0
+            }
+            sum
+        }
 
         val totalExpectedCigs = daysTracked * settings.baselineDailyCount
-        val totalSmoked = entities.sumOf { it.value }.toInt()
         val cigsAvoided = (totalExpectedCigs - totalSmoked).coerceAtLeast(0)
         val costPerCig = settings.costPerCig
         val moneySaved = cigsAvoided * costPerCig
@@ -573,6 +743,54 @@ class HabitsRepository(
             timeSinceLastSmokeMillis = timeSince,
             lastSmokeType = lastSmokeType
         )
+    }
+
+    // MARK: - Persistent Storage of Daily Totals
+
+    private fun loadCachedDailyTotals() {
+        val p = context?.getSharedPreferences("habits_daily_cache", android.content.Context.MODE_PRIVATE) ?: return
+        val wJson = p.getString("water_daily_totals", null)
+        val sJson = p.getString("smokes_daily_totals", null)
+
+        if (!wJson.isNullOrEmpty()) {
+            try {
+                val json = org.json.JSONObject(wJson)
+                val map = mutableMapOf<String, Double>()
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    map[k] = json.optDouble(k, 0.0)
+                }
+                _waterDailyTotals.value = map
+            } catch (_: Exception) {}
+        }
+
+        if (!sJson.isNullOrEmpty()) {
+            try {
+                val json = org.json.JSONObject(sJson)
+                val map = mutableMapOf<String, Int>()
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    map[k] = json.optInt(k, 0)
+                }
+                _smokesDailyTotals.value = map
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun saveCachedDailyTotals() {
+        val p = context?.getSharedPreferences("habits_daily_cache", android.content.Context.MODE_PRIVATE) ?: return
+        val wMap = _waterDailyTotals.value
+        val sMap = _smokesDailyTotals.value
+
+        val wJson = org.json.JSONObject(wMap as Map<*, *>).toString()
+        val sJson = org.json.JSONObject(sMap as Map<*, *>).toString()
+
+        p.edit()
+            .putString("water_daily_totals", wJson)
+            .putString("smokes_daily_totals", sJson)
+            .apply()
     }
 
     companion object {
