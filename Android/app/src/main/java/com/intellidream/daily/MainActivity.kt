@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.Newspaper
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WaterDrop
+import com.intellidream.daily.presentation.briefing.SmartBriefingBottomSheet
 import com.intellidream.daily.presentation.foldable.DailyFoldableCompanionPane
 import com.intellidream.daily.presentation.foldable.FoldableDetailHeader
 import com.intellidream.daily.presentation.foldable.FoldableDragHandle
@@ -674,18 +675,12 @@ fun DailyRootScreen(
                         .background(Color.White.copy(alpha = 0.08f))
                 )
 
-                // --- 3. Detail Pane (Right): Companion or Hub or Settings or Briefing ---
+                // --- 3. Detail Pane (Right): Companion or Hub or Settings ---
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .then(
-                            if (showFoldableBriefing) {
-                                Modifier.padding(top = 4.dp)
-                            } else {
-                                Modifier.padding(start = 12.dp, end = 16.dp, top = 4.dp)
-                            }
-                        )
+                        .padding(start = 12.dp, end = 16.dp, top = 4.dp)
                 ) {
                     when {
                         showCustomize -> {
@@ -713,22 +708,6 @@ fun DailyRootScreen(
                                     applyStatusBarsPadding = false
                                 )
                             }
-                        }
-                        showFoldableBriefing -> {
-                            SmartBriefingFoldablePane(
-                                repository = smartBriefingRepository,
-                                userProfile = userProfile,
-                                settings = settings,
-                                weather = weather,
-                                locationName = locationName,
-                                healthRepository = healthRepository,
-                                habitsRepository = habitsRepository,
-                                smartLedgerRepository = smartLedgerRepository,
-                                tagdosRepository = tagdosRepository,
-                                newsRepository = newsRepository,
-                                onDismiss = { showFoldableBriefing = false },
-                                modifier = Modifier.fillMaxSize()
-                            )
                         }
                         selectedTab == NavigationTab.Dashboard -> {
                             // Option B: Persistent Companion View
@@ -837,6 +816,23 @@ fun DailyRootScreen(
                         }
                     }
                 }
+            }
+
+            // Centered Smart Briefing Modal for Foldable (matching NewsReaderSheet & HabitGuidanceSheet)
+            if (showFoldableBriefing) {
+                SmartBriefingBottomSheet(
+                    repository = smartBriefingRepository,
+                    userProfile = userProfile,
+                    settings = settings,
+                    weather = weather,
+                    locationName = locationName,
+                    healthRepository = healthRepository,
+                    habitsRepository = habitsRepository,
+                    smartLedgerRepository = smartLedgerRepository,
+                    tagdosRepository = tagdosRepository,
+                    newsRepository = newsRepository,
+                    onDismiss = { showFoldableBriefing = false }
+                )
             }
         } else {
             // =========================================================================

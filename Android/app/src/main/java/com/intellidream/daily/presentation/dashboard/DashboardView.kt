@@ -283,7 +283,11 @@ fun DashboardView(
     val shouldAutoShowBriefing by smartBriefingRepository.shouldPresentMorningAutomatically.collectAsState()
     LaunchedEffect(shouldAutoShowBriefing) {
         if (shouldAutoShowBriefing) {
-            showBriefingSheet = true
+            if (onBriefingClick != null) {
+                onBriefingClick()
+            } else {
+                showBriefingSheet = true
+            }
         }
     }
 

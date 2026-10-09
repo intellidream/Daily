@@ -32,8 +32,8 @@ The architecture ensures that when the device is unfolded or used on an expanded
     - **Habits Tracker**: Hydration logging, smoke cessation counters, and daily routines.
     - **Smart Ledger**: Transaction DSL editor, net worth breakdown, and watchlist quotes.
     - **Tagdos & Notes**: Quick memos, mental stream, and task checklists.
-    - **Curated News & Reader**: RSS feed browsing and distraction-free reader mode (`widthIn(max = 700.dp)` for optimal reading measure).
-    - **Smart Briefing Console**: Full typewriter diurnal narration and TTS voice controls embedded directly without a modal sheet.
+    - **Curated News & Reader**: RSS feed browsing and centered distraction-free reader mode (`widthIn(max = 700.dp)` for optimal reading measure).
+    - **Centered Modal Intelligence**: Smart Briefing (`SmartBriefingBottomSheet`), News Reader (`NewsReaderSheet`), and Clinical Guidance (`HabitGuidanceSheet`) display as centered modal sheets (`sheetMaxWidth = 700.dp`) over both panes with dimming scrim, preserving the underlying dual-pane layout.
     - **Customize Dashboard**: Live reorderable widget list with instant master-pane visual reflection.
     - **Settings & Profile**: Cloud account sync, appearance themes, and biometric preferences.
 
@@ -54,10 +54,10 @@ The architecture ensures that when the device is unfolded or used on an expanded
   - Redundant artificial top headers (category icon, title, subtitle, circular X button) above secondary hubs were eliminated to let the hub's own content shine cleanly.
   - Hubs now display only a subtle, elegant horizontal drag handle (`FoldableDragHandle`): a 48x5dp rounded capsule with `detectVerticalDragGestures`, physics-based vertical offset animations, and haptic feedback.
   - Hubs can be dismissed smoothly via drag-down on the handle, back gesture swipe, or the hub's internal back button.
-- **Smart Briefing Foldable Polish**:
-  - The briefing container fills the secondary pane laterally edge-to-edge without outer horizontal margins (`start = 0.dp, end = 0.dp`).
-  - Elevated modal presentation with `RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)`, luminous gradient border, drop shadow (`16.dp`), and full vertical gradient background (`Color(0xFF091222)` -> `Color(0xFF050A14)` -> `Black`) wrapping `FoldableDragHandle`.
-  - Content within the sheet retains a generous `horizontalPadding = 20.dp` and `navigationBarsPadding`, creating elegant breathing room between the lateral sheet borders and cards, perfectly matching the full-screen non-foldable presentation.
+- **Centered Smart Briefing Architecture (Parity with News & Clinical Guidance)**:
+  - Rather than being constrained to the secondary pane, Smart Briefing opens as a centered modal sheet overlay (`SmartBriefingBottomSheet` with `sheetMaxWidth = 700.dp`), exactly matching the centered presentation of `NewsReaderSheet` and `HabitGuidanceSheet`.
+  - Features Material 3 spring gestures with drag down to dismiss (including the signature 48x5dp liquid glass pill drag handle), rounded top corners (`topStart = 28.dp, topEnd = 28.dp`), dark backdrop dimming scrim over both panes, and generous `20.dp` internal padding.
+  - Leaves the secondary pane (Companion or active Hub) completely intact beneath the sheet.
 
 ### 3. Capsule Navigation Placement: Option A (Master-Pane Bottom Anchor)
 - Rather than stretching or centering the floating navigation capsule across the crease (which strains thumb ergonomics and can be obstructed by physical hinges), the capsule is anchored at:

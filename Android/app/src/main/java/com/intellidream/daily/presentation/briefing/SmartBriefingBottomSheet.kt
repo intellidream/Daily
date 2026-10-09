@@ -120,10 +120,26 @@ fun SmartBriefingBottomSheet(
             onDismiss()
         },
         sheetState = sheetState,
+        sheetMaxWidth = 700.dp,
         containerColor = Color(0xFF070E1A),
         contentColor = Color.White,
         tonalElevation = 0.dp,
-        dragHandle = null,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(5.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.35f))
+                )
+            }
+        },
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         SmartBriefingContent(
