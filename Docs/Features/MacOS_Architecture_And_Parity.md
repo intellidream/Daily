@@ -11,19 +11,21 @@ The macOS client is built with pure Swift & SwiftUI, referencing the iOS applica
 ```mermaid
 flowchart TD
     subgraph Shared Core ["DailyCore (Swift Package)"]
-        M[Models: Health, Habits, Finances, News, TagDoS, Weather]
-        S[Services: Supabase, HealthData, Habits, TagdosStore, Weather]
-        K[Storage: GroupDefaults, KeychainManager]
+        M["Models: Health, Habits, Finances, News, TagDoS, Weather"]
+        S["Services: Supabase, HealthData, Habits, TagdosStore, Weather"]
+        K["Storage: GroupDefaults, KeychainManager"]
     end
 
     subgraph Native MacOS ["MacOS Native App (DayOne.app)"]
         MW["Primary Window (Liquid Glass Canvas)"]
         MB["MenuBar Companion Popover (Quick Drop)"]
+        LLM["LaunchAtLoginManager (SMAppService)"]
         
         MW --> M
         MW --> S
         MB --> S
         MB -->|"Expand to Full Window"| MW
+        LLM -->|"ServiceManagement"| MW
     end
 
     subgraph Remote Cloud ["Supabase Cloud Synchronization"]
@@ -47,8 +49,11 @@ flowchart TD
 
 To solve the productivity trade-off between quick glance access and expansive desktop deep work, DayOne on macOS implements a **Hybrid Companion** model:
 
-### 2.1 Persistent MenuBarExtra Companion ("Quick Drop")
-- Always resident in the macOS menu bar with a crisp status icon (`sparkles`).
+### 2.1 Persistent & Dynamic MenuBarExtra Companion ("Quick Drop")
+- Always resident in the macOS menu bar with dynamic telemetry modes:
+  - **Icon Only**: Minimalist sparkling jewel icon (`sparkles`).
+  - **Icon & Weather (Default)**: Live outdoor temperature in the status bar (e.g. `✨ 21°`), kept fresh via `WeatherService.shared`.
+  - **Icon & Heart Rate**: Live latest biometric pulse (e.g. `✨ ♥68`), dynamically updating as telemetry arrives.
 - Clicking drops down a sleek, mobile-proportioned Liquid Glass popover (360x480 pt):
   - **Live Weather & Vitals Glance**: Instant outdoor temperature, conditions, and real-time heart rate / daily steps.
   - **One-Click Hydration Logging**: Quick `+250 ml` and `+500 ml` tap targets that synchronously update today's intake and dispatch background sync without needing to switch windows.
@@ -61,15 +66,26 @@ To solve the productivity trade-off between quick glance access and expansive de
 - **Dual-Navigation Paradigm**:
   - **Floating Liquid Glass Capsule (Default)**: Bottom-anchored glass capsule with 120Hz spring physics, touch/trackpad scrub navigation, and specular edge highlight borders.
   - **Collapsible Desktop Sidebar (Option)**: Sleek left-aligned navigation drawer displaying all 8 sections with keyboard shortcut tags (`⌘1`–`⌘7`, `⌘,`). Can be toggled with `⌘S` or the traffic-light-aligned sidebar button.
-- **Window Management**:
+- **Window Management & Responsive Desktop Framing**:
   - Minimum window constraints (440x650 pt).
-  - Responsive layout dynamically adapts between compact mobile-canvas view and multi-column wide dashboard cards.
+  - Responsive layout dynamically adapts: on compact windows it behaves as an agile mobile canvas; on widened desktop/ultrawide displays, the content is framed and centered (`maxWidth: 880`) to ensure comfortable reading geometry and prevent uncontrolled horizontal distortion of cards.
 
 ---
 
-## 3. Desktop Ergonomics & Shortcuts
+## 3. Desktop Ergonomics, Settings & System Integration
 
-### 3.1 Keyboard Shortcuts
+### 3.1 Launch at Login (`SMAppService`)
+- Implemented via `LaunchAtLoginManager.swift` leveraging Apple's modern `ServiceManagement` (`SMAppService.mainApp`).
+- Integrated cleanly into **macOS Desktop Integration** in `SettingsView.swift`:
+  - Instant toggle with live status indicators (`Active`, `Requires Approval`, `Disabled`).
+  - Quick action to open macOS System Settings Login Items when user approval is needed.
+
+### 3.2 Dedicated macOS Settings Section (`MacOSSettingsSection`)
+- Configures **Default Navigation Style** (Floating Pill vs Desktop Sidebar).
+- Configures **Menu Bar Companion Title** (Icon Only, Icon & Weather, Icon & Heart Rate).
+- Lists built-in keyboard navigation shortcuts for user discovery.
+
+### 3.3 Keyboard Shortcuts Cheatsheet
 | Shortcut | Action | Scope |
 | :--- | :--- | :--- |
 | `⌘1` | Navigate to **Dashboard** | Global Window |
@@ -82,9 +98,9 @@ To solve the productivity trade-off between quick glance access and expansive de
 | `⌘,` | Open **Settings** | Global Window |
 | `⌘S` | Toggle Collapsible Sidebar | Main Window |
 | `⌘R` | Force Flush Sync (Habits & Health) | Main Window |
-| `⌘N` | Create Quick Note / Memo | Menu Commands |
+| `⌘N` | Create Quick Note in TagDoS | Menu Commands |
 
-### 3.2 Trackpad Haptics & Visual Feedback
+### 3.4 Trackpad Haptics & Visual Feedback
 - Leverages macOS `NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)` on force-touch trackpads for button activations, tab switches, and habit log gestures.
 - Custom cursor hover states (`onHover`) with specular highlights and card elevation transitions.
 
@@ -95,7 +111,7 @@ To solve the productivity trade-off between quick glance access and expansive de
 | Subsystem | macOS Implementation | Parity Status with iOS |
 | :--- | :--- | :---: |
 | **Authentication** | `LoginView.swift` (Google PKCE via `ASWebAuthenticationSession` with `NSWindow` anchor, Apple Sign-In, Guest Mode) | 100% |
-| **Modular Dashboard** | `DashboardView`, `ModularDashboardLayout`, 7 modular cards | 100% |
+| **Modular Dashboard** | `DashboardView`, `ModularDashboardLayout`, 7 modular cards, centered desktop framing | 100% |
 | **Health Hub** | `HealthMainView`, `SleepStudioView`, `StressStudioView`, `VitalMetricTile`, `DeviceOriginBadge` | 100% (Consumer) |
 | **Habits & Hydration**| `HabitsMainView`, `WaterProgressWaveView`, `SmokesLungsGaugeView`, quick logging | 100% |
 | **Finances & Ledger** | `FinancesMainView`, `AddLedgerItemSheet`, `SmartLedgerEditorSheet`, quick adjust | 100% |
@@ -103,7 +119,8 @@ To solve the productivity trade-off between quick glance access and expansive de
 | **Weather** | `WeatherDetailView`, `HourlyForecastCarousel`, `DailyForecastCard`, atmospheric tiles | 100% |
 | **News Reader** | `NewsFeedView`, `NewsReaderView`, `ArticleWebView` (`NSViewRepresentable` + `WKWebView`) | 100% |
 | **Smart Briefing** | `SmartBriefingOverlayView`, `FadingTypewriterText` | 100% |
-| **Settings** | `SettingsView`, 8 configuration sections + `MediumLoginSheet` | 100% |
+| **Settings** | `SettingsView`, `MacOSSettingsSection`, `AppearanceSettingsSection`, `AboutSettingsSection` | 100% |
+| **Launch at Login** | `LaunchAtLoginManager` with `SMAppService` | 100% (macOS exclusive) |
 
 ---
 
@@ -115,12 +132,12 @@ Native macOS build and execution verification executed directly on macOS host:
    - `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO`
    - **Result**: `** BUILD SUCCEEDED **` (0 warnings, 0 errors).
 2. **Process Liveness**:
-   - Executed binary `Daily.app/Contents/MacOS/Daily -testDefaultDashboard`.
-   - **Result**: Process initialized and remained active without hitches.
+   - Executed binary `Daily.app/Contents/MacOS/Daily -startTabSettings`.
+   - **Result**: `PROCESS_LIVENESS_SUCCESS: Daily.app running with PID 95828`. Process initialized cleanly with 0 console warnings or errors.
 3. **Multi-Tab Launch Arguments Verification**:
-   - Tested `-startTabNews`: **PASS**
-   - Tested `-startTabHealth`: **PASS**
-   - Tested `-startTabFinances`: **PASS**
-   - Tested `-startTabHabits`: **PASS**
-   - Tested `-startTabTagdos`: **PASS**
-   - Tested `-startTabSettings`: **PASS**
+   - Tested `-startTabNews`: **PASS** (PID 95863)
+   - Tested `-startTabHealth`: **PASS** (PID 95867)
+   - Tested `-startTabFinances`: **PASS** (PID 95880)
+   - Tested `-startTabHabits`: **PASS** (PID 95885)
+   - Tested `-startTabTagdos`: **PASS** (PID 95888)
+   - Tested `-startTabSettings`: **PASS** (PID 95828)

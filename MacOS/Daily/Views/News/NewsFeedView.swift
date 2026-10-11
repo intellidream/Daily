@@ -66,6 +66,7 @@ public struct NewsFeedView: View {
             VStack(spacing: 0) {
                 // Pinned Top Glass Header Bar with Search & Category Action
                 headerBar
+                    .frame(maxWidth: 880)
                     .padding(.horizontal, 20)
                     .padding(.top, 14)
                     .padding(.bottom, 12)
@@ -95,6 +96,8 @@ public struct NewsFeedView: View {
                             }
                         }
                     }
+                    .frame(maxWidth: 880)
+                    .frame(maxWidth: .infinity)
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
                     .padding(.bottom, 110) // Leave room for FloatingGlassCapsule

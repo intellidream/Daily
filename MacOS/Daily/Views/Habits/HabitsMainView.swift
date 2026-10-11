@@ -82,6 +82,8 @@ public struct HabitsMainView: View {
                     )
                     .id("analyticsBottom")
                 }
+                .frame(maxWidth: 880)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 110) // Leave space for FloatingGlassCapsule
             }

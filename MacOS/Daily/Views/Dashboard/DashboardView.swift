@@ -65,7 +65,9 @@ public struct DashboardView: View {
                     }
                 }
             }
-            .padding(.top, 14) // Standard Apple HIG breathing room below Dynamic Island / status bar
+            .frame(maxWidth: 880)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 14) // Standard Apple HIG breathing room
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }

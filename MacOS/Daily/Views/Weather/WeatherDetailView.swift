@@ -67,6 +67,8 @@ public struct WeatherDetailView: View {
                         errorCard(message: error)
                     }
                 }
+                .frame(maxWidth: 880)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
                 .padding(.bottom, 110) // Clear floating navigation capsule

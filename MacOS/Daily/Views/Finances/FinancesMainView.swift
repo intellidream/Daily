@@ -52,6 +52,7 @@ public struct FinancesMainView: View {
             VStack(spacing: 0) {
                 // Top Header Bar
                 headerBar
+                    .frame(maxWidth: 880)
                     .padding(.horizontal, 20)
                     .padding(.top, 14)
                     .padding(.bottom, 12)
@@ -69,6 +70,8 @@ public struct FinancesMainView: View {
                                 moneySection
                             }
                         }
+                        .frame(maxWidth: 880)
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal, 20)
                         .padding(.top, 6)
                         .padding(.bottom, 110) // Clearance for floating navigation capsule

@@ -5,6 +5,9 @@ import AppKit
 @main
 struct DailyMacOSApp: App {
     @ObservedObject private var settingsService = SettingsService.shared
+    @ObservedObject private var weatherService = WeatherService.shared
+    @ObservedObject private var healthService = HealthDataService.shared
+    @AppStorage("menuBarDisplayMode") private var menuBarDisplayModeRaw: String = MenuBarDisplayMode.iconAndWeather.rawValue
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) private var openWindow
     
@@ -37,19 +40,37 @@ struct DailyMacOSApp: App {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("Quick Note in TagDoS") {
-                    // Open TagDoS or quick memo
+                    if let url = URL(string: "daily://tagdos") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
         
         // Persistent MenuBarExtra Companion (Quick Drop-down)
-        MenuBarExtra("DayOne", systemImage: "sparkles") {
+        MenuBarExtra {
             MenuBarCompanionView(onOpenFullApp: { requestedTab in
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")
+                if let tab = requestedTab, let url = URL(string: "daily://\(tab.rawValue)") {
+                    NSWorkspace.shared.open(url)
+                }
             })
             .preferredColorScheme(colorScheme)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                if menuBarDisplayModeRaw == MenuBarDisplayMode.iconAndWeather.rawValue {
+                    if let temp = weatherService.currentWeather?.main.temp {
+                        Text("\(Int(round(temp)))°")
+                    }
+                } else if menuBarDisplayModeRaw == MenuBarDisplayMode.iconAndVitals.rawValue {
+                    if let bpm = healthService.latestBpm ?? (healthService.restingBpm > 0 ? healthService.restingBpm : nil) {
+                        Text("♥\(Int(round(bpm)))")
+                    }
+                }
+            }
         }
         .menuBarExtraStyle(.window)
     }

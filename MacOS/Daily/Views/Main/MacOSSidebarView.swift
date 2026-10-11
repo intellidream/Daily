@@ -114,13 +114,13 @@ public struct MacOSSidebarView: View {
                     .fill(LinearGradient(colors: [ThemeColors.accentBlue, ThemeColors.accentCyan], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 28, height: 28)
                     .overlay {
-                        Text(String((user.email ?? user.displayName ?? "U").prefix(1)).uppercased())
+                        Text(String((user.fullName ?? user.email ?? "U").prefix(1)).uppercased())
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.white)
                     }
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName ?? "User")
+                    Text(user.fullName ?? "User")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)

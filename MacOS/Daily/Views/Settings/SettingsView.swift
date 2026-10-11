@@ -54,6 +54,9 @@ public struct SettingsView: View {
                     // Appearance Section
                     AppearanceSettingsSection()
                     
+                    // macOS Integration Section
+                    MacOSSettingsSection()
+                    
                     // Features Configuration Section
                     FeaturesSettingsSection()
                         .id("features")
@@ -69,13 +72,15 @@ public struct SettingsView: View {
                     // Data & Cloud Sync Section
                     DataSyncSettingsSection()
                 
-                // About DayOne
-                AboutSettingsSection()
-                    .id("about")
+                    // About DayOne
+                    AboutSettingsSection()
+                        .id("about")
+                }
+                .frame(maxWidth: 740)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 140) // Leave space for FloatingGlassCapsule
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 140) // Leave space for FloatingGlassCapsule
-        }
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-scrollToAbout") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

@@ -65,9 +65,11 @@ public struct TagdosNotesHubView: View {
             VStack(spacing: 0) {
                 // Top Navigation Bar
                 navigationBar
+                    .frame(maxWidth: 880)
 
                 // Stream Selector Tabs (1 to 5 + Notes)
                 streamSelectorBar
+                    .frame(maxWidth: 880)
                     .padding(.top, 8)
                     .padding(.bottom, 12)
 
@@ -89,6 +91,8 @@ public struct TagdosNotesHubView: View {
                             }
                         }
                     }
+                    .frame(maxWidth: 880)
+                    .frame(maxWidth: .infinity)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
                 }
