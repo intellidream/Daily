@@ -282,10 +282,11 @@ private final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentatio
     }
     
     func start(url: URL, callbackScheme: String, continuation: CheckedContinuation<URL, Error>) {
-        let authSession = ASWebAuthenticationSession(
-            url: url,
-            callbackURLScheme: callbackScheme
-        ) { [weak self] callbackUrl, error in
+        // Explicitly typed as @Sendable without capturing self or any actor-isolated state.
+        // This ensures the Swift compiler does NOT generate MainActor isolation assertions,
+        // allowing ASWebAuthenticationSession to safely invoke this completion handler
+        // on its background XPC queue (com.apple.NSXPCConnection...SafariLaunchAgent).
+        let completion: @Sendable (URL?, (any Error)?) -> Void = { callbackUrl, error in
             if let error = error {
                 continuation.resume(throwing: error)
             } else if let callbackUrl = callbackUrl {
@@ -297,8 +298,13 @@ private final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentatio
                     userInfo: [NSLocalizedDescriptionKey: "No callback received from authentication session."]
                 ))
             }
-            self?.session = nil
         }
+        
+        let authSession = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: callbackScheme,
+            completionHandler: completion
+        )
         
         authSession.presentationContextProvider = self
         authSession.prefersEphemeralWebBrowserSession = false
