@@ -6,8 +6,15 @@
 - **Simulator First, Physical Device Delivery**:
   - **iOS**: Rigorously test work on the iOS simulator (SimulaPhone) first (including mock/edge cases and visual inspection); once verified, build, deploy, and verify live on the physical iPhone ("Schmitz").
   - **Android**: Rigorously test work on the Android emulator (`Medium_Phone_API_36.1` on Mac) first (including mock/edge cases, UI dump, and visual inspection); once verified, build, deploy via `adb`, and verify live on the physical **Google Pixel 9 Pro**, **Samsung Galaxy Z Fold 8 ("RADAR")**, and **Samsung Galaxy S25 Edge** (if connected).
+  - **macOS**: Rigorously test work natively on the host Mac; verify window management, hidden title bar chrome, MenuBarExtra popover, keyboard shortcuts, trackpad haptics, and live Supabase telemetry consumption before deployment.
 - **Modern Native Architecture**:
   - For Android: Pure Kotlin with Jetpack Compose (Liquid Glass design system, 120Hz smooth scrolling), local-first Room database cache (`synced_at` dirty tracking), WorkManager for background sync, Supabase Kotlin SDK, Android Health Connect integration, and Jetpack Glance widgets.
+  - For macOS: Pure Swift & SwiftUI targeting macOS 15.0+, leveraging `DailyCore` for domain models and business logic. Hybrid architecture combining a full Liquid Glass window (floating pill navigation as default, collapsible sidebar as option, fast `⌘1-7` shortcuts) with a persistent `MenuBarExtra` drop-down companion popover. Health functions in consumer-only mode, ingesting telemetry seamlessly from Supabase.
+- **macOS Development Workflow**:
+  - 1. Implement feature/architecture cleanly in `MacOS/` referencing `iOS/` as golden standard without modifying `iOS/` files.
+  - 2. Rigorously build and test execution natively on macOS.
+  - 3. Only after verification passes, document thoroughly in `Docs/Features/`.
+  - 4. Create clean, descriptive commits with proper titles and summaries, and push to remote.
 - **Android Stability & Anti-Hang Execution**:
   - Never chain interactive or blocking commands with `sleep` in shell invocations.
   - For Gradle builds, invoke cleanly (`./gradlew assembleDebug`) and do not mix multiple build, install, and sleep tasks in a single compound command.
