@@ -114,6 +114,20 @@ To solve the productivity trade-off between quick glance access and expansive de
 - **Habit Consistency Heatmap & Trend Tooltips**: Hovering across the 112-day consistency grid or 7-day trend bars instantly displays day, volume, and goal progress without requiring selection clicks.
 - **SmartLedger Modal Productivity Shortcuts**: `SmartLedgerEditorSheet` and `SmartLedgerQuickAdjustSheet` support `⌘Return` for instant save & apply and `Esc` for immediate cancellation/dismissal.
 
+### 3.7 Dedicated macOS HIG Iconography & Dock Asset Architecture
+- **macOS HIG Super-Ellipse Squircle Geometry**: Unlike iOS icons which use a full-bleed square canvas with system-clipped corners, macOS Dock and Finder icons require baked-in transparent margins (~100pt), an 824x824 body centered in a 1024x1024 transparent canvas, and a 185pt super-ellipse corner radius.
+- **Multi-Layer Realistic Shadows**:
+  - **Ambient Shadow**: Large blur (24pt), downward offset (-14pt), 25% black alpha to lift the icon off desktop wallpapers.
+  - **Contact Shadow**: Tight blur (8pt), contact offset (-4pt), 20% black alpha anchoring the squircle to the Dock shelf.
+  - **Top Specular Rim & Outer Stroke**: 1pt border defining the squircle boundary across both Light and Dark macOS desktop appearances.
+- **Full Resolution Matrix in Asset Catalog (`AppIcon.appiconset`)**:
+  - `icon_16x16.png` (16x16 @1x) & `icon_16x16@2x.png` (32x32 @2x) — Menu Bar, Status & Finder list views.
+  - `icon_32x32.png` (32x32 @1x) & `icon_32x32@2x.png` (64x64 @2x) — Spotlight search results & Finder column views.
+  - `icon_128x128.png` (128x128 @1x) & `icon_128x128@2x.png` (256x256 @2x) — Finder icon grid & Cmd+Tab App Switcher.
+  - `icon_256x256.png` (256x256 @1x) & `icon_256x256@2x.png` (512x512 @2x) — macOS Dock at standard zoom.
+  - `icon_512x512.png` (512x512 @1x) & `icon_512x512@2x.png` (1024x1024 @2x) — Retina Dock magnification & Launchpad.
+- **Automated Generator Tool**: Provided `Scripts/generate_macos_appicon.swift`, allowing reproducible generation of all 10 macOS scale variants directly from source artwork using CoreGraphics and `sips`.
+
 ---
 
 ## 4. Component Parity & Implementation Map
@@ -131,6 +145,7 @@ To solve the productivity trade-off between quick glance access and expansive de
 | **Smart Briefing** | `SmartBriefingOverlayView`, `FadingTypewriterText` | 100% |
 | **Settings** | `SettingsView`, `MacOSSettingsSection`, `AppearanceSettingsSection`, `AboutSettingsSection` | 100% |
 | **Launch at Login** | `LaunchAtLoginManager` with `SMAppService` | 100% (macOS exclusive) |
+| **Iconography & Dock** | `AppIcon.appiconset` (10 scales, HIG squircle + ambient/contact shadows) | 100% (macOS HIG) |
 
 ---
 
