@@ -166,3 +166,7 @@ Native macOS build and execution verification executed directly on macOS host:
    - Tested `-startTabHabits`: **PASS** (PID 95885)
    - Tested `-startTabTagdos`: **PASS** (PID 95888)
    - Tested `-startTabSettings`: **PASS** (PID 95828)
+4. **Authentication Session Thread Isolation Fix**:
+   - Addressed `EXC_BREAKPOINT (SIGTRAP)` caused by Swift Concurrency `@MainActor` dispatch assertion (`_dispatch_assert_queue_fail`) when `ASWebAuthenticationSession` callbacks arrive on background XPC queues (`com.apple.NSXPCConnection.m-user.com.apple.SafariLaunchAgent`).
+   - Resolved by decoupling auth session lifecycle to `WebAuthCoordinator`, a nonisolated `@unchecked Sendable` coordinator that safely dispatches session presentation to the main thread while receiving completion and error callbacks off-actor without actor-isolation assertion traps.
+

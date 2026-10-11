@@ -151,12 +151,17 @@ public struct LoginView: View {
     // MARK: - Handlers
     
     private func triggerGoogleSignIn() {
-        guard let window = NSApplication.shared.windows.first else {
+        let window = NSApplication.shared.keyWindow
+            ?? NSApplication.shared.mainWindow
+            ?? NSApplication.shared.windows.first(where: { $0.canBecomeMain && $0.isVisible && !($0 is NSPanel) })
+            ?? NSApplication.shared.windows.first
+        
+        guard let anchor = window else {
             return
         }
         
         Task {
-            _ = await authService.signInWithGoogle(presentationAnchor: window)
+            _ = await authService.signInWithGoogle(presentationAnchor: anchor)
         }
     }
     

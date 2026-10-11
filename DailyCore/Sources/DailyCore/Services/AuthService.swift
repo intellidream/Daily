@@ -17,9 +17,8 @@ public final class AuthService: NSObject, ObservableObject {
     private let storage = GroupDefaults.shared
     private let keychain = KeychainManager.shared
     
-    // Holds the active ASWebAuthenticationSession and context helper to prevent premature deallocation
-    private var webAuthSession: ASWebAuthenticationSession?
-    private var presentationHelper: PresentationContextHelper?
+    // Holds the active ASWebAuthenticationSession coordinator to prevent premature deallocation
+    private var webAuthCoordinator: WebAuthCoordinator?
     
     public var currentUser: UserProfile? {
         sessionState.profile
@@ -111,29 +110,22 @@ public final class AuthService: NSObject, ObservableObject {
             
             statusMessage = "Waiting for Google authorization..."
             
-            let callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
-                let session = ASWebAuthenticationSession(
-                    url: signInUrl,
-                    callbackURLScheme: callbackScheme
-                ) { url, error in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                    } else if let url = url {
-                        continuation.resume(returning: url)
-                    } else {
-                        continuation.resume(throwing: NSError(domain: "AuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No callback received."]))
-                    }
+            let coordinator = WebAuthCoordinator(anchor: presentationAnchor)
+            self.webAuthCoordinator = coordinator
+            
+            let callbackURL: URL
+            do {
+                callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+                    coordinator.start(
+                        url: signInUrl,
+                        callbackScheme: callbackScheme,
+                        continuation: continuation
+                    )
                 }
-                
-                let helper = PresentationContextHelper(anchor: presentationAnchor)
-                self.presentationHelper = helper
-                session.presentationContextProvider = helper
-                session.prefersEphemeralWebBrowserSession = false
-                self.webAuthSession = session
-                
-                if !session.start() {
-                    continuation.resume(throwing: NSError(domain: "AuthService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to present auth session."]))
-                }
+                self.webAuthCoordinator = nil
+            } catch {
+                self.webAuthCoordinator = nil
+                throw error
             }
             
             statusMessage = "Exchanging session..."
@@ -270,10 +262,15 @@ public final class AuthService: NSObject, ObservableObject {
     }
 }
 
-// MARK: - ASWebAuthenticationPresentationContextProviding Helper
+// MARK: - ASWebAuthenticationSession Coordinator (Off-MainActor Safe)
 
-private final class PresentationContextHelper: NSObject, ASWebAuthenticationPresentationContextProviding {
+/// Coordinates ASWebAuthenticationSession presentation and execution.
+/// Because this class is nonisolated, its completion handlers called by ASWebAuthenticationSession
+/// from background XPC queues (e.g. SafariLaunchAgent) do not trigger Swift Concurrency
+/// actor-isolation check traps.
+private final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentationContextProviding, @unchecked Sendable {
     private let anchor: ASPresentationAnchor
+    private var session: ASWebAuthenticationSession?
     
     init(anchor: ASPresentationAnchor) {
         self.anchor = anchor
@@ -282,5 +279,43 @@ private final class PresentationContextHelper: NSObject, ASWebAuthenticationPres
     
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         anchor
+    }
+    
+    func start(url: URL, callbackScheme: String, continuation: CheckedContinuation<URL, Error>) {
+        let authSession = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: callbackScheme
+        ) { [weak self] callbackUrl, error in
+            if let error = error {
+                continuation.resume(throwing: error)
+            } else if let callbackUrl = callbackUrl {
+                continuation.resume(returning: callbackUrl)
+            } else {
+                continuation.resume(throwing: NSError(
+                    domain: "AuthService",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "No callback received from authentication session."]
+                ))
+            }
+            self?.session = nil
+        }
+        
+        authSession.presentationContextProvider = self
+        authSession.prefersEphemeralWebBrowserSession = false
+        self.session = authSession
+        
+        if !authSession.start() {
+            self.session = nil
+            continuation.resume(throwing: NSError(
+                domain: "AuthService",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to present auth session."]
+            ))
+        }
+    }
+    
+    func cancel() {
+        session?.cancel()
+        session = nil
     }
 }
