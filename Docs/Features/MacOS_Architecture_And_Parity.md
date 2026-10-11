@@ -104,6 +104,11 @@ To solve the productivity trade-off between quick glance access and expansive de
 - Leverages macOS `NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)` on force-touch trackpads for button activations, tab switches, and habit log gestures.
 - Custom cursor hover states (`onHover`) with specular highlights and card elevation transitions.
 
+### 3.5 Desktop Drag & Drop & System Document Actions
+- **Drag & Drop File Ingestion**: TagDoS active memo cards support dragging and dropping images, PDFs, and documents directly from macOS Finder (`.dropDestination(for: URL.self)`). Incoming files are securely accessed, categorized with correct MIME types, and persisted to `TagdosStore`.
+- **Default Application Handoff**: Attachment preview sheets feature an "Open in Default App" action (`NSWorkspace.shared.open(url)`) allowing files to be viewed or edited in macOS Preview, TextEdit, or their native applications.
+- **Top System Menu Bar Integration**: A dedicated **Navigate** menu is registered in the macOS menu bar (`CommandMenu("Navigate")`) exposing instant shortcuts (`⌘1`–`⌘7`, `⌘R`, `⌘N`) and cloud sync.
+
 ---
 
 ## 4. Component Parity & Implementation Map

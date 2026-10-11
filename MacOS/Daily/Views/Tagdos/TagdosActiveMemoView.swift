@@ -18,6 +18,7 @@ public struct TagdosActiveMemoView: View {
     @State private var downloadingAttachmentId: UUID? = nil
     @State private var previewAttachment: TagDoAttachment? = nil
     @State private var previewURL: URL? = nil
+    @State private var isTargetedForDrop: Bool = false
 
     public init(streamId: UUID, streamNumber: Int) {
         self.streamId = streamId
@@ -132,8 +133,41 @@ public struct TagdosActiveMemoView: View {
         .background(
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color.white.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(isTargetedForDrop ? ThemeColors.accentCyan : Color.white.opacity(0.08), lineWidth: isTargetedForDrop ? 2 : 1))
         )
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let selectedURL = urls.first else { return false }
+            let hasAccess = selectedURL.startAccessingSecurityScopedResource()
+            defer { if hasAccess { selectedURL.stopAccessingSecurityScopedResource() } }
+            
+            if let data = try? Data(contentsOf: selectedURL) {
+                let fileName = selectedURL.lastPathComponent
+                let ext = selectedURL.pathExtension.lowercased()
+                let mimeType: String
+                switch ext {
+                case "pdf": mimeType = "application/pdf"
+                case "png": mimeType = "image/png"
+                case "jpg", "jpeg": mimeType = "image/jpeg"
+                case "gif": mimeType = "image/gif"
+                default: mimeType = "application/octet-stream"
+                }
+                
+                Task {
+                    try? await store.addAttachment(
+                        streamId: streamId,
+                        data: data,
+                        fileName: fileName,
+                        mimeType: mimeType
+                    )
+                }
+                return true
+            }
+            return false
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isTargetedForDrop = targeted
+            }
+        }
         .onChange(of: selectedPhotoItem) { _, newItem in
             guard let newItem = newItem else { return }
             Task {
@@ -471,14 +505,29 @@ struct AttachmentPreviewSheet: View {
                             .foregroundColor(Color.white.opacity(0.6))
 
                         if let url = initialURL ?? TagdosAttachmentManager.shared.getLocalFileURL(for: attachment) {
-                            ShareLink(item: url) {
-                                Label("Share Document", systemImage: "square.and.arrow.up")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundColor(.black)
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 10)
-                                    .background(ThemeColors.accentCyan)
-                                    .clipShape(Capsule())
+                            HStack(spacing: 12) {
+                                ShareLink(item: url) {
+                                    Label("Share Document", systemImage: "square.and.arrow.up")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        .foregroundColor(.black)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 9)
+                                        .background(ThemeColors.accentCyan)
+                                        .clipShape(Capsule())
+                                }
+                                
+                                Button {
+                                    NSWorkspace.shared.open(url)
+                                } label: {
+                                    Label("Open in App", systemImage: "arrow.up.forward.app")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 9)
+                                        .background(Color.white.opacity(0.12))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -491,6 +540,17 @@ struct AttachmentPreviewSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                         .foregroundColor(ThemeColors.accentCyan)
+                }
+                if let url = initialURL ?? TagdosAttachmentManager.shared.getLocalFileURL(for: attachment) {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            NSWorkspace.shared.open(url)
+                        } label: {
+                            Image(systemName: "arrow.up.forward.app")
+                                .foregroundColor(ThemeColors.accentCyan)
+                        }
+                        .help("Open in Default macOS Application")
+                    }
                 }
             }
         }

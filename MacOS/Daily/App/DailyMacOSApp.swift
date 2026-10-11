@@ -46,6 +46,53 @@ struct DailyMacOSApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
+            CommandMenu("Navigate") {
+                Button("Dashboard") {
+                    if let url = URL(string: "daily://dashboard") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("1", modifiers: .command)
+                
+                Button("Finances & Markets") {
+                    if let url = URL(string: "daily://finances") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("2", modifiers: .command)
+                
+                Button("TagDoS Notes & Tasks") {
+                    if let url = URL(string: "daily://tagdos") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("3", modifiers: .command)
+                
+                Button("Health & Vitals") {
+                    if let url = URL(string: "daily://health") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("4", modifiers: .command)
+                
+                Button("Habits & Cravings") {
+                    if let url = URL(string: "daily://habits") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("5", modifiers: .command)
+                
+                Button("Weather & Forecast") {
+                    if let url = URL(string: "daily://weather") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("6", modifiers: .command)
+                
+                Button("News & Articles") {
+                    if let url = URL(string: "daily://news") { NSWorkspace.shared.open(url) }
+                }
+                .keyboardShortcut("7", modifiers: .command)
+                
+                Divider()
+                
+                Button("Sync with Cloud") {
+                    Task { @MainActor in
+                        await HabitsService.shared.flushOfflineQueue()
+                        await HabitsService.shared.loadDataForSelectedDate()
+                        await HealthDataService.shared.refreshIfStale()
+                    }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+            }
         }
         
         // Persistent MenuBarExtra Companion (Quick Drop-down)
