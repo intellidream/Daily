@@ -102,6 +102,7 @@ public struct HabitHistoryAndHeatmapView: View {
                                     .foregroundColor(day.amount > 0 ? .white : ThemeColors.fgMutedDark)
                             }
                             .frame(maxWidth: .infinity)
+                            .help("\(day.dayLabel): \(Int(day.amount)) \(habitType == .water ? "ml" : "cigs") (Goal: \(Int(goalValue)))")
                         }
                     }
                     .frame(height: 125)
@@ -286,6 +287,12 @@ public struct HabitHistoryAndHeatmapView: View {
                                                     }
                                             }
                                             .buttonStyle(.plain)
+                                            .onHover { isHovered in
+                                                if isHovered {
+                                                    selectedHeatmapCell = cell
+                                                }
+                                            }
+                                            .help("\(cell.dateFormatted): \(Int(cell.value)) \(habitType == .water ? "ml" : "cigs")")
                                         }
                                     }
                                     .id(colIndex)

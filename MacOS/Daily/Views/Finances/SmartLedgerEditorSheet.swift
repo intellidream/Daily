@@ -104,6 +104,7 @@ public struct SmartLedgerEditorSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .keyboardShortcut(.escape, modifiers: [])
                     .foregroundColor(ThemeColors.fgMutedDark)
                 }
                 
@@ -112,6 +113,7 @@ public struct SmartLedgerEditorSheet: View {
                         ledgerStore.saveLedgerText(editingText)
                         dismiss()
                     }
+                    .keyboardShortcut(.return, modifiers: .command)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(ThemeColors.accentGreen)
                 }

@@ -109,6 +109,11 @@ To solve the productivity trade-off between quick glance access and expansive de
 - **Default Application Handoff**: Attachment preview sheets feature an "Open in Default App" action (`NSWorkspace.shared.open(url)`) allowing files to be viewed or edited in macOS Preview, TextEdit, or their native applications.
 - **Top System Menu Bar Integration**: A dedicated **Navigate** menu is registered in the macOS menu bar (`CommandMenu("Navigate")`) exposing instant shortcuts (`⌘1`–`⌘7`, `⌘R`, `⌘N`) and cloud sync.
 
+### 3.6 Desktop Hover Inspection & Modal Shortcuts (Hubs 4–6)
+- **Sleep Hypnogram Hover Inspection**: Moving the mouse or trackpad pointer over hypnogram stage blocks triggers smooth hover selection (`.onHover`) and native macOS tooltips (`.help`), displaying stage name, time interval, and duration in minutes.
+- **Habit Consistency Heatmap & Trend Tooltips**: Hovering across the 112-day consistency grid or 7-day trend bars instantly displays day, volume, and goal progress without requiring selection clicks.
+- **SmartLedger Modal Productivity Shortcuts**: `SmartLedgerEditorSheet` and `SmartLedgerQuickAdjustSheet` support `⌘Return` for instant save & apply and `Esc` for immediate cancellation/dismissal.
+
 ---
 
 ## 4. Component Parity & Implementation Map

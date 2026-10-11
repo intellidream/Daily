@@ -65,6 +65,7 @@ public struct SmartLedgerQuickAdjustSheet: View {
                     Button("Închide") {
                         dismiss()
                     }
+                    .keyboardShortcut(.escape, modifiers: [])
                     .foregroundColor(ThemeColors.fgMutedDark)
                 }
                 
@@ -85,6 +86,7 @@ public struct SmartLedgerQuickAdjustSheet: View {
                         saveManualChanges()
                         dismiss()
                     }
+                    .keyboardShortcut(.return, modifiers: .command)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(ThemeColors.accentGreen)
                 }

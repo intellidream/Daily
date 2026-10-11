@@ -113,6 +113,14 @@ public struct SleepHypnogramView: View {
                                     }
                                 }
                             }
+                            .onHover { isHovered in
+                                if isHovered {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        selectedStage = stage
+                                    }
+                                }
+                            }
+                            .help("\(stage.stageType.rawValue): \(formatTime(stage.startTime)) - \(formatTime(stage.endTime)) (\(Int(round(stage.durationMinutes))) min)")
                     }
                 }
             }
