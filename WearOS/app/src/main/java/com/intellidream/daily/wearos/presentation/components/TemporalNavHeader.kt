@@ -2,14 +2,15 @@ package com.intellidream.daily.wearos.presentation.components
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,17 +37,20 @@ fun TemporalNavHeader(
 
     Row(
         modifier = modifier
-            .fillMaxWidth()
-            .height(32.dp),
+            .fillMaxWidth(0.92f)
+            .height(34.dp)
+            .clip(RoundedCornerShape(17.dp))
+            .background(Color(0xFF161A22))
+            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(17.dp))
+            .padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Previous Button (‹)
         Box(
             modifier = Modifier
-                .size(width = 36.dp, height = 28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.White.copy(alpha = 0.12f))
+                .size(width = 34.dp, height = 28.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .clickable {
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                     onPrevious()
@@ -56,7 +60,7 @@ fun TemporalNavHeader(
             Text(
                 text = "‹",
                 color = accentColor,
-                fontSize = 17.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -66,7 +70,7 @@ fun TemporalNavHeader(
             text = title,
             color = Color.White,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f)
         )
@@ -75,25 +79,24 @@ fun TemporalNavHeader(
         if (canGoForward) {
             Box(
                 modifier = Modifier
-                    .size(width = 36.dp, height = 28.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
-                    .clickable {
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        onNext()
-                    },
+                    .size(width = 34.dp, height = 28.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onNext()
+                },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "›",
                     color = accentColor,
-                    fontSize = 17.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         } else {
             // Invisible placeholder for balanced layout centering
-            Box(modifier = Modifier.size(width = 36.dp, height = 28.dp))
+            Box(modifier = Modifier.size(width = 34.dp, height = 28.dp))
         }
     }
 }

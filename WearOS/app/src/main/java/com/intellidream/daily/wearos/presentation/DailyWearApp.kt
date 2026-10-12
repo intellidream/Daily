@@ -53,11 +53,12 @@ fun DailyWearApp(targetPage: Int = -1) {
     }
 
     DailyWearTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colors.background)
-        ) {
+        com.google.android.horologist.compose.layout.AppScaffold {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colors.background)
+            ) {
             if (isAuthenticated) {
                 // Canonical 5-Page Horizontal Pager matching watchOS & ZeppOS
                 val pagerState = rememberPagerState(
@@ -92,4 +93,5 @@ fun DailyWearApp(targetPage: Int = -1) {
             }
         }
     }
+}
 }

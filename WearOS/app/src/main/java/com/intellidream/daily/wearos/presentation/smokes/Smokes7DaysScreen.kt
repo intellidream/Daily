@@ -1,6 +1,7 @@
 package com.intellidream.daily.wearos.presentation.smokes
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,39 +32,37 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
-import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.rotary.onRotaryScrollEvent
-import java.time.OffsetDateTime
-import java.time.Instant
-import java.time.ZoneId
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
+import com.google.android.horologist.annotations.ExperimentalHorologistApi
+import com.google.android.horologist.compose.layout.ScalingLazyColumn
+import com.google.android.horologist.compose.layout.ScalingLazyColumnState
+import com.google.android.horologist.compose.layout.ScreenScaffold
+import com.google.android.horologist.compose.layout.rememberResponsiveColumnState
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import com.intellidream.daily.wearos.domain.model.SmokeDayBucket
 import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
+import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
 import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun Smokes7DaysScreen(
     sessionManager: WatchSessionManager,
@@ -78,14 +77,15 @@ fun Smokes7DaysScreen(
     var isLoading by remember { mutableStateOf(initialCached == null) }
 
     val scope = rememberCoroutineScope()
-    val listState = rememberScalingLazyListState()
+    val columnState = rememberResponsiveColumnState(
+        rotaryMode = ScalingLazyColumnState.RotaryMode.Snap
+    )
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
     val localDateFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayLabelFmt = remember { SimpleDateFormat("EEE", Locale.getDefault()) }
     val weekTitleFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
 
-    // Monday-to-Sunday calculation
     fun getWeekWindow(offset: Int): Pair<Calendar, Calendar> {
         val cal = Calendar.getInstance()
         cal.set(Calendar.HOUR_OF_DAY, 0)
@@ -116,7 +116,6 @@ fun Smokes7DaysScreen(
         }
     }
 
-    // Fast local memory cache hit when weekOffset changes: 0ms UI update
     LaunchedEffect(weekOffset) {
         val cached = sessionManager.getSmokesWeek(weekOffset)
         if (cached != null) {
@@ -168,7 +167,7 @@ fun Smokes7DaysScreen(
                     val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                         .select {
                             filter {
-                                eq("habit_type", "smokes")
+                                eq("habit_type", "smoke")
                                 eq("is_deleted", false)
                                 and {
                                     gte("logged_at", startStr)
@@ -242,41 +241,41 @@ fun Smokes7DaysScreen(
         String.format(Locale.US, "%.1f", weeklyAverage)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
+    ScreenScaffold(
+        scrollState = columnState
     ) {
         ScalingLazyColumn(
-            state = listState,
-            autoCentering = null,
-            contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            columnState = columnState,
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Header
+            // Screen Title
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.LocalFireDepartment,
                         contentDescription = null,
-                        tint = Color(0xFFFF5555),
-                        modifier = Modifier.size(15.dp)
+                        tint = DailyWearColors.SmokeRed,
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("7 Days", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                    Text(
+                        text = "Smokes 7 Days",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Color.White
+                    )
                 }
             }
 
-            // Temporal Navigation Header
+            // Temporal Navigation Header Pill
             item {
                 TemporalNavHeader(
                     title = weekTitle,
                     canGoForward = weekOffset < 0,
-                    accentColor = Color(0xFFFF5555),
+                    accentColor = DailyWearColors.SmokeRed,
                     onPrevious = {
                         SoundAndHapticFeedback.playClick(context, view)
                         weekOffset -= 1
@@ -287,35 +286,50 @@ fun Smokes7DaysScreen(
                             weekOffset += 1
                         }
                     },
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
 
-            // 7 Days Chart (Mon to Sun)
+            // 7 Days Bar Chart
             item {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 if (isLoading && buckets.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF141820)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            indicatorColor = DailyWearColors.SmokeRed
+                        )
                     }
                 } else {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(84.dp)
-                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth(0.92f)
+                            .height(104.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF141820))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         val maxVal = maxOf(dailyGoal.toDouble(), buckets.maxOfOrNull { it.total } ?: 1.0)
 
                         // Baseline Line (Dashed red)
                         val baselineY = 1f - (dailyGoal / maxVal).toFloat().coerceIn(0f, 1f)
                         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                            val lineY = size.height * 0.80f * baselineY
                             drawLine(
-                                color = Color(0xFFFF5252).copy(alpha = 0.5f),
-                                start = Offset(0f, size.height * baselineY),
-                                end = Offset(size.width, size.height * baselineY),
-                                strokeWidth = 2f,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                                color = DailyWearColors.SmokeRed.copy(alpha = 0.4f),
+                                start = Offset(0f, lineY),
+                                end = Offset(size.width, lineY),
+                                strokeWidth = 1.5f,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f), 0f)
                             )
                         }
 
@@ -342,17 +356,17 @@ fun Smokes7DaysScreen(
                                         if (totalFrac > 0) {
                                             Column(
                                                 modifier = Modifier
-                                                    .width(13.dp)
+                                                    .width(14.dp)
                                                     .fillMaxHeight(totalFrac)
-                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .clip(RoundedCornerShape(4.dp))
                                             ) {
-                                                // Stacked Heat on top (Blue)
+                                                // Stacked Heat on top (Indigo)
                                                 if (heatFrac > 0) {
                                                     Box(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .weight(heatFrac)
-                                                            .background(Color(0xFF1E90FF))
+                                                            .background(DailyWearColors.HeatIndigo)
                                                     )
                                                 }
                                                 // Cig below (Red)
@@ -361,26 +375,26 @@ fun Smokes7DaysScreen(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .weight(cigFrac)
-                                                            .background(if (item.isToday) Color(0xFFFF3B30) else Color(0xFFD84315))
+                                                            .background(if (item.isToday) DailyWearColors.SmokeRed else DailyWearColors.SmokeRed.copy(alpha = 0.65f))
                                                     )
                                                 }
                                             }
                                         } else {
                                             Box(
                                                 modifier = Modifier
-                                                    .width(13.dp)
-                                                    .height(3.dp)
+                                                    .width(14.dp)
+                                                    .height(4.dp)
                                                     .clip(RoundedCornerShape(2.dp))
-                                                    .background(Color(0xFF222222))
+                                                    .background(Color.White.copy(alpha = 0.08f))
                                             )
                                         }
                                     }
-                                    Spacer(Modifier.height(3.dp))
+                                    Spacer(Modifier.height(4.dp))
                                     Text(
                                         text = item.dayLabel,
-                                        fontSize = 9.sp,
-                                        fontWeight = if (item.isToday) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (item.isToday) Color(0xFFFF5555) else Color.Gray
+                                        fontSize = 10.sp,
+                                        fontWeight = if (item.isToday) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (item.isToday) DailyWearColors.SmokeRed else Color.White.copy(alpha = 0.5f)
                                     )
                                 }
                             }
@@ -389,33 +403,56 @@ fun Smokes7DaysScreen(
                 }
             }
 
-            // Summary Row: Avg & Base
+            // Summary Card: Daily Average & Goal Baseline
             item {
-                Spacer(Modifier.height(6.dp))
-                Row(
+                Spacer(Modifier.height(8.dp))
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxWidth(0.92f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF141820))
+                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🔥", fontSize = 11.sp)
-                        Spacer(Modifier.width(2.dp))
-                        Text(
-                            text = "Avg: $formattedAvg/d",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "DAILY AVERAGE",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.45f)
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "$formattedAvg /d",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "BASELINE",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.45f)
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "$dailyGoal max",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = DailyWearColors.SmokeRed
+                            )
+                        }
                     }
-                    Text(
-                        text = "Base: $dailyGoal",
-                        fontSize = 10.sp,
-                        color = Color.Gray
-                    )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(16.dp))
             }
         }
     }

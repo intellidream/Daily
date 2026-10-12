@@ -1,14 +1,14 @@
 package com.intellidream.daily.wearos.presentation.about
 
+import android.content.Context
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,21 +17,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -39,21 +36,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
-import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.dialog.Alert
 import androidx.wear.compose.material.dialog.Dialog
+import com.google.android.horologist.annotations.ExperimentalHorologistApi
+import com.google.android.horologist.compose.layout.ScalingLazyColumn
+import com.google.android.horologist.compose.layout.ScalingLazyColumnState
+import com.google.android.horologist.compose.layout.ScreenScaffold
+import com.google.android.horologist.compose.layout.rememberResponsiveColumnState
 import com.intellidream.daily.wearos.R
 import com.intellidream.daily.wearos.data.WatchSessionManager
-import android.content.Context
-import kotlinx.coroutines.launch
+import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
+import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun AboutScreen(
     sessionManager: WatchSessionManager,
@@ -61,11 +62,12 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    val listState = rememberScalingLazyListState()
-    val scope = rememberCoroutineScope()
+    val columnState = rememberResponsiveColumnState(
+        rotaryMode = ScalingLazyColumnState.RotaryMode.Snap
+    )
     var showUnpairDialog by remember { mutableStateOf(false) }
-    var syncText by remember { mutableStateOf("synced") }
-    var syncColor by remember { mutableStateOf(Color(0xFFFFCC00)) }
+    var syncText by remember { mutableStateOf("Not Synced") }
+    var syncColor by remember { mutableStateOf(DailyWearColors.SmokeRed) }
 
     LaunchedEffect(isPageActive) {
         try {
@@ -75,189 +77,210 @@ fun AboutScreen(
             val lastSyncTime = lastSyncStr?.toLongOrNull() ?: 0L
             if (lastSyncStatus == "no_new_data") {
                 syncText = "No New Data"
-                syncColor = Color(0xFFFFCC00)
+                syncColor = DailyWearColors.CoffeeOrange
             } else if (lastSyncTime > 0) {
                 val fmt = SimpleDateFormat("d MMM, HH:mm:ss", Locale.getDefault())
                 val dtStr = fmt.format(Date(lastSyncTime))
                 syncText = "Synced at $dtStr"
-                syncColor = Color(0xFFFFCC00)
+                syncColor = DailyWearColors.WaterCyan
             } else {
                 syncText = "Not Synced"
-                syncColor = Color(0xFFFF3B30)
+                syncColor = DailyWearColors.SmokeRed
             }
         } catch (_: Exception) {}
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    ScreenScaffold(
+        scrollState = columnState
+    ) {
         ScalingLazyColumn(
-            state = listState,
-            autoCentering = null,
-            contentPadding = PaddingValues(top = 22.dp, bottom = 28.dp, start = 8.dp, end = 8.dp),
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            columnState = columnState,
+            modifier = Modifier.fillMaxSize()
         ) {
+            // App Logo & Identity
             item {
-                Spacer(Modifier.height(8.dp))
-                // Orbit Logo
+                Spacer(Modifier.height(4.dp))
                 Image(
                     painter = painterResource(id = R.drawable.orbit_logo),
-                    contentDescription = "DayOne Orbit Logo",
+                    contentDescription = "Daily Orbit Logo",
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
                 )
             }
 
             item {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp)
                 ) {
-                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "DayOne Orbit",
-                        fontSize = 15.sp,
+                        text = "Daily Orbit",
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "v1.0",
+                        text = "Pixel Watch Edition • v1.0",
                         fontSize = 11.sp,
-                        color = Color.Gray,
+                        color = Color.White.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center
                     )
                 }
             }
 
+            // Connection & Health Telemetry Card
             item {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.15f))
-                )
-                Spacer(Modifier.height(6.dp))
-            }
-
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .padding(horizontal = 4.dp)
+                        .fillMaxWidth(0.92f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF141820))
+                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Status:", fontSize = 11.sp, color = Color.Gray)
-                        Text("Connected", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF4CAF50))
-                    }
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Status",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(DailyWearColors.SmokeGreen)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = "Connected",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = DailyWearColors.SmokeGreen
+                                )
+                            }
+                        }
 
-                    Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color.White.copy(alpha = 0.06f))
+                        )
+                        Spacer(Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Health:", fontSize = 11.sp, color = Color.Gray)
-                        Text(syncText, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = syncColor)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Health",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = syncText,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = syncColor
+                            )
+                        }
                     }
                 }
             }
 
+            // Unpair Watch Full-Width Action Chip
             item {
                 Spacer(Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.15f))
-                )
-                Spacer(Modifier.height(10.dp))
-            }
-
-            item {
-                Button(
-                    onClick = {
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        showUnpairDialog = true
-                    },
-                    modifier = Modifier
-                        .width(128.dp)
-                        .height(32.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(backgroundColor = Color(0x33FF3B30))
+                        .fillMaxWidth(0.92f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(DailyWearColors.SmokeRedTonal)
+                        .border(1.dp, DailyWearColors.SmokeRed.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+                        .clickable {
+                            SoundAndHapticFeedback.playClick(context, view)
+                            showUnpairDialog = true
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "Unpair Watch",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFFF3B30)
+                        fontWeight = FontWeight.Bold,
+                        color = DailyWearColors.SmokeRed
                     )
                 }
                 Spacer(Modifier.height(16.dp))
             }
         }
+    }
 
-        // Unpair Confirmation Dialog
-        if (showUnpairDialog) {
-            Dialog(
-                showDialog = true,
-                onDismissRequest = { showUnpairDialog = false }
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black)
-                        .padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
+    // Unpair Confirmation Dialog
+    if (showUnpairDialog) {
+        Dialog(
+            showDialog = true,
+            onDismissRequest = { showUnpairDialog = false }
+        ) {
+            Alert(
+                title = {
                     Text(
                         text = "Unpair Watch?",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "This will disconnect this watch from your account.",
-                        fontSize = 10.sp,
-                        color = Color.Gray,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        Button(
-                            onClick = { showUnpairDialog = false },
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF333333)),
-                            modifier = Modifier.weight(1f).height(32.dp).padding(end = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Cancel", fontSize = 11.sp, color = Color.White)
-                        }
+                },
+                content = {
+                    item {
+                        Text(
+                            text = "This will disconnect this watch from your Daily account.",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    item {
+                        Spacer(Modifier.height(10.dp))
                         Button(
                             onClick = {
                                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                                 showUnpairDialog = false
                                 sessionManager.logout()
                             },
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFFF3B30)),
-                            modifier = Modifier.weight(1f).height(32.dp).padding(start = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
+                            colors = ButtonDefaults.buttonColors(backgroundColor = DailyWearColors.SmokeRed),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
                         ) {
-                            Text("Unpair", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Unpair", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        Button(
+                            onClick = {
+                                SoundAndHapticFeedback.playClick(context, view)
+                                showUnpairDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF262A32)),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                        ) {
+                            Text("Cancel", fontSize = 12.sp, color = Color.LightGray)
                         }
                     }
                 }
-            }
+            )
         }
     }
 }

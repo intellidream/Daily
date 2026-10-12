@@ -8,7 +8,7 @@ fun DailyWearTheme(
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
-        colors = wearColorPalette,
+        colors = dailyWearColorPalette,
         content = content
     )
 }
