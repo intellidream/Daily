@@ -1,9 +1,10 @@
 #!/usr/bin/env swift
 import Cocoa
+import SwiftUI
 
 /// Generator script for macOS HIG-compliant Application Icons.
-/// Adapts full-bleed square master icons into Apple HIG squircle geometry with
-/// precise padding, multi-layer drop shadows, inner rim highlights, and all standard resolutions.
+/// Renders authentic continuous super-ellipse squircles with calibrated visual scale,
+/// multi-layer drop shadows, top specular rim highlights, and all standard macOS resolutions.
 
 let fileManager = FileManager.default
 let scriptURL = URL(fileURLWithPath: #file)
@@ -21,109 +22,110 @@ guard let sourceImage = NSImage(contentsOfFile: sourcePath) else {
 
 let canvasSize: CGFloat = 1024
 let bodySize: CGFloat = 824
-let originOffset = (canvasSize - bodySize) / 2.0 // 100pt margins
 let cornerRadius: CGFloat = 185.0
 
-let colorSpace = CGColorSpaceCreateDeviceRGB()
-guard let context = CGContext(
-    data: nil,
-    width: Int(canvasSize),
-    height: Int(canvasSize),
-    bitsPerComponent: 8,
-    bytesPerRow: Int(canvasSize) * 4,
-    space: colorSpace,
-    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-) else {
-    print("❌ Failed to allocate CGContext")
-    exit(1)
-}
+// Scale the source artwork so that the atom graphic (which has inherent 130px padding in the iOS asset)
+// expands from ~615px to ~740px within the 824px squircle body, matching the optical visual weight
+// of native macOS icons like Notes, Spotify, and Calendar.
+let artworkSize: CGFloat = 985.0
 
-let bodyRect = CGRect(x: originOffset, y: originOffset, width: bodySize, height: bodySize)
-let squirclePath = CGPath(roundedRect: bodyRect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+MainActor.assumeIsolated {
+    let iconView = ZStack {
+        Color.clear
+        
+        ZStack {
+            // Background: deep cosmic obsidian gradient
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.08, green: 0.09, blue: 0.12),
+                            Color(red: 0.02, green: 0.02, blue: 0.04)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            
+            // Scaled atom artwork, clipped to the continuous squircle
+            Image(nsImage: sourceImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: artworkSize, height: artworkSize)
+            
+            // Top specular inner highlight & outer edge border
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.25), location: 0.0),
+                            .init(color: Color.white.opacity(0.12), location: 0.2),
+                            .init(color: Color.white.opacity(0.04), location: 0.8),
+                            .init(color: Color.black.opacity(0.30), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1.5
+                )
+        }
+        .frame(width: bodySize, height: bodySize)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        // Layer 1: Ambient Drop Shadow
+        .shadow(color: Color.black.opacity(0.30), radius: 24, x: 0, y: 14)
+        // Layer 2: Contact Shelf Shadow
+        .shadow(color: Color.black.opacity(0.25), radius: 7, x: 0, y: 4)
+    }
+    .frame(width: canvasSize, height: canvasSize)
 
-// Layer 1: Ambient Drop Shadow
-context.saveGState()
-context.setShadow(
-    offset: CGSize(width: 0, height: -14),
-    blur: 24,
-    color: NSColor(white: 0.0, alpha: 0.25).cgColor
-)
-context.addPath(squirclePath)
-context.setFillColor(NSColor.black.cgColor)
-context.fillPath()
-context.restoreGState()
+    let renderer = ImageRenderer(content: iconView)
+    renderer.scale = 1.0
+    guard let cgImage = renderer.cgImage else {
+        print("❌ Failed to render master cgImage via ImageRenderer")
+        exit(1)
+    }
 
-// Layer 2: Contact Shadow
-context.saveGState()
-context.setShadow(
-    offset: CGSize(width: 0, height: -4),
-    blur: 8,
-    color: NSColor(white: 0.0, alpha: 0.20).cgColor
-)
-context.addPath(squirclePath)
-context.setFillColor(NSColor.black.cgColor)
-context.fillPath()
-context.restoreGState()
+    let masterRep = NSBitmapImageRep(cgImage: cgImage)
+    guard let masterPngData = masterRep.representation(using: .png, properties: [:]) else {
+        print("❌ Failed to encode PNG data")
+        exit(1)
+    }
 
-// Layer 3: Clipped Icon Artwork
-context.saveGState()
-context.addPath(squirclePath)
-context.clip()
+    let masterDestURL = targetDir.appendingPathComponent("icon_512x512@2x.png")
+    do {
+        try masterPngData.write(to: masterDestURL)
+        print("✅ Saved master macOS squircle icon to \(masterDestURL.path)")
+    } catch {
+        print("❌ Failed to write master icon: \(error)")
+        exit(1)
+    }
 
-var imageRect = CGRect(origin: .zero, size: sourceImage.size)
-if let cgImage = sourceImage.cgImage(forProposedRect: &imageRect, context: nil, hints: nil) {
-    context.draw(cgImage, in: bodyRect)
-}
-context.restoreGState()
-
-// Layer 4: Top Inner Rim Highlight & Outer Stroke
-context.saveGState()
-context.addPath(squirclePath)
-context.setStrokeColor(NSColor(white: 0.0, alpha: 0.15).cgColor)
-context.setLineWidth(1.0)
-context.strokePath()
-context.restoreGState()
-
-guard let finalCGImage = context.makeImage() else {
-    print("❌ Failed to produce final CGImage")
-    exit(1)
-}
-
-let masterRep = NSBitmapImageRep(cgImage: finalCGImage)
-guard let masterPngData = masterRep.representation(using: .png, properties: [:]) else {
-    print("❌ Failed to encode PNG data")
-    exit(1)
-}
-
-let masterDestURL = targetDir.appendingPathComponent("AppIcon-1024.png")
-try? masterPngData.write(to: masterDestURL)
-print("✅ Saved master macOS squircle icon to \(masterDestURL.path)")
-
-// Standard macOS resolution scales
-let iconSpecs: [(name: String, size: Int)] = [
-    ("icon_16x16.png", 16),
-    ("icon_16x16@2x.png", 32),
-    ("icon_32x32.png", 32),
-    ("icon_32x32@2x.png", 64),
-    ("icon_128x128.png", 128),
-    ("icon_128x128@2x.png", 256),
-    ("icon_256x256.png", 256),
-    ("icon_256x256@2x.png", 512),
-    ("icon_512x512.png", 512),
-    ("icon_512x512@2x.png", 1024)
-]
-
-for spec in iconSpecs {
-    let destURL = targetDir.appendingPathComponent(spec.name)
-    let sipsProcess = Process()
-    sipsProcess.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
-    sipsProcess.arguments = [
-        "-z", "\(spec.size)", "\(spec.size)",
-        masterDestURL.path,
-        "--out", destURL.path
+    // Standard macOS resolution scales
+    let iconSpecs: [(name: String, size: Int)] = [
+        ("icon_16x16.png", 16),
+        ("icon_16x16@2x.png", 32),
+        ("icon_32x32.png", 32),
+        ("icon_32x32@2x.png", 64),
+        ("icon_128x128.png", 128),
+        ("icon_128x128@2x.png", 256),
+        ("icon_256x256.png", 256),
+        ("icon_256x256@2x.png", 512),
+        ("icon_512x512.png", 512)
     ]
-    try? sipsProcess.run()
-    sipsProcess.waitUntilExit()
-}
 
-print("✅ Generated all 10 standard macOS AppIcon scale variants.")
+    for spec in iconSpecs {
+        let destURL = targetDir.appendingPathComponent(spec.name)
+        let sipsProcess = Process()
+        sipsProcess.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+        sipsProcess.arguments = [
+            "-z", "\(spec.size)", "\(spec.size)",
+            masterDestURL.path,
+            "--out", destURL.path
+        ]
+        try? sipsProcess.run()
+        sipsProcess.waitUntilExit()
+    }
+
+    print("✅ Generated all 10 standard macOS AppIcon scale variants.")
+}
