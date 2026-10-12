@@ -62,72 +62,97 @@ public struct NewsFeedView: View {
     }
     
     public var body: some View {
-        LiquidGlassBackground {
-            VStack(spacing: 0) {
-                // Pinned Top Glass Header Bar with Search & Category Action
-                headerBar
-                    .frame(maxWidth: 880)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        // Sub-Tab Switcher (Live Feed / Read Later / Favorites)
-                        subTabSwitcher
-                        
-                        // Feed Publication Picker (when Live Feed selected)
-                        if activeSubTab == .live {
-                            feedPickerRow
-                        }
-                        
-                        // Articles Feed
-                        if newsService.isLoading && displayedArticles.isEmpty {
-                            loadingStateView
-                        } else if displayedArticles.isEmpty {
-                            emptyStateView
-                        } else {
-                            LazyVStack(spacing: 14) {
-                                ForEach(displayedArticles) { article in
-                                    NewsArticleCard(article: article) {
-                                        selectedArticleForReader = article
+        ZStack {
+            LiquidGlassBackground {
+                VStack(spacing: 0) {
+                    // Pinned Top Glass Header Bar with Search & Category Action
+                    headerBar
+                        .frame(maxWidth: 880)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                        .padding(.bottom, 12)
+                    
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 16) {
+                            // Sub-Tab Switcher (Live Feed / Read Later / Favorites)
+                            subTabSwitcher
+                            
+                            // Feed Publication Picker (when Live Feed selected)
+                            if activeSubTab == .live {
+                                feedPickerRow
+                            }
+                            
+                            // Articles Feed
+                            if newsService.isLoading && displayedArticles.isEmpty {
+                                loadingStateView
+                            } else if displayedArticles.isEmpty {
+                                emptyStateView
+                            } else {
+                                LazyVStack(spacing: 14) {
+                                    ForEach(displayedArticles) { article in
+                                        NewsArticleCard(article: article) {
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                selectedArticleForReader = article
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                        .frame(maxWidth: 880)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 4)
+                        .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
                     }
-                    .frame(maxWidth: 880)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 4)
-                    .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
-                }
-                .scrollBounceBehavior(.always, axes: .vertical)
-                .refreshable {
-                    #if canImport(UIKit)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    #endif
-                    if activeSubTab == .live {
-                        await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
-                    } else {
-                        await savedService.syncWithSupabase()
+                    .scrollBounceBehavior(.always, axes: .vertical)
+                    .refreshable {
+                        #if canImport(UIKit)
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        #endif
+                        if activeSubTab == .live {
+                            await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
+                        } else {
+                            await savedService.syncWithSupabase()
+                        }
+                        #if canImport(UIKit)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        #endif
                     }
-                    #if canImport(UIKit)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    #endif
                 }
             }
-        }
-        .sheet(item: $selectedArticleForReader) { article in
-            NewsReaderView(
-                article: article,
-                candidatePool: displayedArticles
-            ) {
-                selectedArticleForReader = nil
+            
+            // In-Place Distraction-Free Article Reader
+            if let article = selectedArticleForReader {
+                NewsReaderView(
+                    article: article,
+                    candidatePool: displayedArticles,
+                    isInSeparateWindow: false,
+                    onOpenInSeparateWindow: {
+                        let articleToOpen = article
+                        let pool = displayedArticles
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedArticleForReader = nil
+                        }
+                        ArticleWindowManager.shared.open(article: articleToOpen, candidatePool: pool)
+                    },
+                    onDismiss: {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            selectedArticleForReader = nil
+                        }
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)
+                ))
+                .zIndex(10)
             }
         }
         .sheet(isPresented: $showManageFeedsSheet) {
             NewsFeedsManagementSheet()
+                .frame(minWidth: 540, idealWidth: 620, minHeight: 480, idealHeight: 620)
         }
         .task {
             if newsService.articles.isEmpty {

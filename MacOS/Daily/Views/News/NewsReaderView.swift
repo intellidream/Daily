@@ -5,6 +5,8 @@ import DailyCore
 public struct NewsReaderView: View {
     public let initialArticle: NewsArticle
     public let candidatePool: [NewsArticle]
+    public let isInSeparateWindow: Bool
+    public let onOpenInSeparateWindow: (() -> Void)?
     public let onDismiss: () -> Void
     
     @State private var currentArticle: NewsArticle
@@ -20,10 +22,14 @@ public struct NewsReaderView: View {
     public init(
         article: NewsArticle,
         candidatePool: [NewsArticle] = [],
+        isInSeparateWindow: Bool = false,
+        onOpenInSeparateWindow: (() -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.initialArticle = article
         self.candidatePool = candidatePool
+        self.isInSeparateWindow = isInSeparateWindow
+        self.onOpenInSeparateWindow = onOpenInSeparateWindow
         self.onDismiss = onDismiss
         self._currentArticle = State(initialValue: article)
     }
@@ -89,15 +95,32 @@ public struct NewsReaderView: View {
     
     private var readerToolbar: some View {
         HStack(spacing: 12) {
-            // Dismiss Button
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.white.opacity(0.8))
+            // Dismiss / Back Button or Traffic lights spacer
+            if isInSeparateWindow {
+                Spacer()
+                    .frame(width: 68) // Clearance for macOS traffic light buttons
+            } else {
+                Button {
+                    onDismiss()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Stories")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white.opacity(0.9))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule().fill(Color.white.opacity(0.08))
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    )
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
+                .help("Back to Feed (Esc)")
             }
-            .buttonStyle(.plain)
             
             // Publication Branding (scrolls horizontally if long)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -125,6 +148,25 @@ public struct NewsReaderView: View {
             
             Spacer(minLength: 4)
             
+            // Open in Separate Window Button (shown in main window)
+            if !isInSeparateWindow, let onOpenInSeparateWindow = onOpenInSeparateWindow {
+                Button {
+                    onOpenInSeparateWindow()
+                } label: {
+                    Image(systemName: "macwindow.badge.plus")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(Color.white.opacity(0.08))
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                        )
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("o", modifiers: [.command])
+                .help("Open in Separate Window (⌘O)")
+            }
+            
             // Read Later Bookmark Button
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -141,6 +183,7 @@ public struct NewsReaderView: View {
                     )
             }
             .buttonStyle(.plain)
+            .help("Save for Later")
             
             // Favorite Star Button
             Button {
@@ -158,9 +201,24 @@ public struct NewsReaderView: View {
                     )
             }
             .buttonStyle(.plain)
+            .help("Favorite")
             
             // Far-right Expandable Menu Button containing collapsed actions
             moreOptionsMenu
+            
+            // Trailing Close Button when in separate window
+            if isInSeparateWindow {
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.white.opacity(0.75))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
+                .help("Close Window (Esc)")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -345,7 +403,7 @@ public struct NewsReaderView: View {
                 )
         )
         .padding(.horizontal, 16)
-        .padding(.bottom, 20)
+        .padding(.bottom, isInSeparateWindow ? 20 : 80)
         .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
     }
     

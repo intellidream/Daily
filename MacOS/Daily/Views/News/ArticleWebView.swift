@@ -80,7 +80,7 @@ public struct ArticleWebView: NSViewRepresentable {
                 .article-wrap {
                     max-width: 820px;
                     margin: 0 auto;
-                    padding: 24px 28px 50px 28px;
+                    padding: 24px 28px 160px 28px;
                 }
                 h1.title {
                     font-size: \(Int(Double(baseFontSize) * 1.6))px;

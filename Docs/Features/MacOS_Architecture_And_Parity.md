@@ -175,3 +175,31 @@ Native macOS build and execution verification executed directly on macOS host:
    - Addressed `EXC_BREAKPOINT (SIGTRAP)` caused by Swift Concurrency `@MainActor` dispatch assertion (`_dispatch_assert_queue_fail`) when `ASWebAuthenticationSession` callbacks arrive on background XPC queues (`com.apple.NSXPCConnection.m-user.com.apple.SafariLaunchAgent`).
    - Resolved by decoupling auth session lifecycle to `WebAuthCoordinator`, a nonisolated `@unchecked Sendable` coordinator that safely dispatches session presentation to the main thread while receiving completion and error callbacks off-actor without actor-isolation assertion traps.
 
+---
+
+## 6. News Reader Architecture & Detachable Window Support
+
+### Technical Root Cause
+Previously, `NewsFeedView.swift` presented `NewsReaderView` using SwiftUI's `.sheet(item: $selectedArticleForReader)`. On macOS (AppKit):
+1. **Modal Pinning**: An AppKit sheet (`NSWindow.beginSheet`) is physically anchored to the parent window's title bar and cannot be moved or dragged independently.
+2. **Zero Intrinsic Content Size**: `NewsReaderView` embeds `ArticleWebView` (`NSViewRepresentable` wrapping `WKWebView`). Web views do not report intrinsic content size to SwiftUI layout engine. Without explicit frame bounds, macOS collapsed the modal sheet to minimal alert dialog dimensions without window resize handles.
+
+### Hybrid Architectural Solution
+To match the ergonomics of premier macOS desktop reading applications (Apple News, Safari Reader, NetNewsWire):
+
+1. **Default In-Place Full Window Reading Canvas**:
+   - Tapping an article card in `NewsFeedView` smoothly transitions in-place into `NewsReaderView` taking up 100% of the main window's width and height.
+   - Naturally resizes and moves with the user's primary application window.
+   - Includes a "Back to Stories" capsule button (`chevron.left`, `Esc` shortcut) to effortlessly return to the feed.
+   - Features adaptive bottom spacing: `bottomRecommendationsBar` uses `padding(.bottom, 80)` to sit cleanly above `FloatingGlassCapsule`, while `ArticleWebView` CSS `.article-wrap` bottom padding is set to `160px` ensuring zero text clipping when scrolling to the bottom.
+
+2. **Detachable Floating Window (`ArticleWindowManager`)**:
+   - A dedicated toolbar button (`macwindow.badge.plus`, tooltip, and `⌘O` shortcut) allows detaching the article into an independent native macOS window.
+   - `ArticleWindowManager.swift` instantiates and manages an `NSWindowController` with style mask `[.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]`, centered with a default size of `1050x780` and `minSize: 680x520`.
+   - Detaching automatically dismisses the in-place reader so users can continue browsing the feed while reading articles in dedicated windows across any display.
+   - In separate window mode (`isInSeparateWindow: true`), the toolbar automatically reserves 68pt leading clearance for macOS traffic light buttons and exposes a native Close button.
+
+3. **Auxiliary Sheet Framing**:
+   - `NewsFeedsManagementSheet` explicitly framed with `.frame(minWidth: 540, idealWidth: 620, minHeight: 480, idealHeight: 620)` to ensure proper desktop proportions.
+
+
