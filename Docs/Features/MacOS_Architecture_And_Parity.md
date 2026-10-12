@@ -202,4 +202,8 @@ To match the ergonomics of premier macOS desktop reading applications (Apple New
 3. **Auxiliary Sheet Framing**:
    - `NewsFeedsManagementSheet` explicitly framed with `.frame(minWidth: 540, idealWidth: 620, minHeight: 480, idealHeight: 620)` to ensure proper desktop proportions.
 
+4. **News Feed Header Clearance & Tab Pinning**:
+   - Resolved vertical crowding under macOS window chrome / traffic light buttons by expanding top clearance to `.padding(.top, 28)`.
+   - Pinned `subTabSwitcher` (Live Feed, Read Later, Favorites) and `feedPickerRow` (Source selector) directly in the top header hierarchy above `ScrollView`, guaranteeing persistent access without scrolling away.
+
 

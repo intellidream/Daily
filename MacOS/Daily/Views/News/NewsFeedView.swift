@@ -65,23 +65,21 @@ public struct NewsFeedView: View {
         ZStack {
             LiquidGlassBackground {
                 VStack(spacing: 0) {
-                    // Pinned Top Glass Header Bar with Search & Category Action
-                    headerBar
-                        .frame(maxWidth: 880)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 14)
-                        .padding(.bottom, 12)
+                    // Pinned Header Section with generous clearance from top window chrome / macOS buttons
+                    VStack(spacing: 12) {
+                        headerBar
+                        subTabSwitcher
+                        if activeSubTab == .live {
+                            feedPickerRow
+                        }
+                    }
+                    .frame(maxWidth: 880)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 28) // Generous top clearance away from macOS buttons / window chrome
+                    .padding(.bottom, 12)
                     
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 16) {
-                            // Sub-Tab Switcher (Live Feed / Read Later / Favorites)
-                            subTabSwitcher
-                            
-                            // Feed Publication Picker (when Live Feed selected)
-                            if activeSubTab == .live {
-                                feedPickerRow
-                            }
-                            
+                        VStack(spacing: 14) {
                             // Articles Feed
                             if newsService.isLoading && displayedArticles.isEmpty {
                                 loadingStateView
@@ -102,7 +100,7 @@ public struct NewsFeedView: View {
                         .frame(maxWidth: 880)
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 20)
-                        .padding(.top, 4)
+                        .padding(.top, 6)
                         .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
                     }
                     .scrollBounceBehavior(.always, axes: .vertical)

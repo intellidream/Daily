@@ -221,7 +221,8 @@ public struct NewsReaderView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, isInSeparateWindow ? 18 : 12)
+        .padding(.bottom, 12)
         .background(
             Color.black.opacity(0.4)
                 .background(.ultraThinMaterial)
