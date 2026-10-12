@@ -24,26 +24,27 @@ let canvasSize: CGFloat = 1024
 let bodySize: CGFloat = 824
 let cornerRadius: CGFloat = 185.0
 
-// Scale the source artwork so that the atom graphic (which has inherent 130px padding in the iOS asset)
-// expands from ~615px to ~740px within the 824px squircle body, matching the optical visual weight
-// of native macOS icons like Notes, Spotify, and Calendar.
-let artworkSize: CGFloat = 985.0
+// Scale the source artwork so that the atom graphic cleanly fills the squircle body (1050pt),
+// eliminating excessive black dead margin and matching the optical weight of Spotify and Notes.
+let artworkSize: CGFloat = 1050.0
 
 MainActor.assumeIsolated {
     let iconView = ZStack {
         Color.clear
         
         ZStack {
-            // Background: deep cosmic obsidian gradient
+            // Background: vibrant cosmic nebula radial gradient illuminating squircle body
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(
-                    LinearGradient(
+                    RadialGradient(
                         colors: [
-                            Color(red: 0.08, green: 0.09, blue: 0.12),
-                            Color(red: 0.02, green: 0.02, blue: 0.04)
+                            Color(red: 0.22, green: 0.15, blue: 0.45),
+                            Color(red: 0.08, green: 0.09, blue: 0.20),
+                            Color(red: 0.03, green: 0.03, blue: 0.07)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        center: .center,
+                        startRadius: 50,
+                        endRadius: 450
                     )
                 )
             
@@ -54,28 +55,28 @@ MainActor.assumeIsolated {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: artworkSize, height: artworkSize)
             
-            // Top specular inner highlight & outer edge border
+            // Luminous accent specular rim & outer edge border (3.5pt)
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
-                        stops: [
-                            .init(color: Color.white.opacity(0.25), location: 0.0),
-                            .init(color: Color.white.opacity(0.12), location: 0.2),
-                            .init(color: Color.white.opacity(0.04), location: 0.8),
-                            .init(color: Color.black.opacity(0.30), location: 1.0)
+                        colors: [
+                            Color.white.opacity(0.65),
+                            Color(red: 0.4, green: 0.7, blue: 1.0).opacity(0.4),
+                            Color(red: 0.8, green: 0.3, blue: 0.9).opacity(0.3),
+                            Color.white.opacity(0.15)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     ),
-                    lineWidth: 1.5
+                    lineWidth: 3.5
                 )
         }
         .frame(width: bodySize, height: bodySize)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         // Layer 1: Ambient Drop Shadow
-        .shadow(color: Color.black.opacity(0.30), radius: 24, x: 0, y: 14)
+        .shadow(color: Color.black.opacity(0.35), radius: 20, x: 0, y: 12)
         // Layer 2: Contact Shelf Shadow
-        .shadow(color: Color.black.opacity(0.25), radius: 7, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 4)
     }
     .frame(width: canvasSize, height: canvasSize)
 

@@ -116,15 +116,15 @@ To solve the productivity trade-off between quick glance access and expansive de
 
 ### 3.7 Dedicated macOS HIG Iconography & Dock Asset Architecture
 - **macOS HIG Continuous Super-Ellipse Squircle Geometry**: Unlike iOS icons which use a full-bleed square canvas with system-clipped corners, macOS Dock and Finder icons require baked-in transparent margins (~100pt), an 824x824 body centered in a 1024x1024 transparent canvas, and a true continuous super-ellipse corner curvature (`RoundedRectangle(cornerRadius: 185, style: .continuous)`).
-- **Artwork Scale & Optical Balance Calibration**:
+- **Artwork Scale & Optical Balance Calibration (Option A)**:
   - The source iOS asset possesses ~130px internal padding. Directly scaling 1024px to the 824px squircle body previously resulted in a compound reduction shrinking the central atom artwork to only ~615px (~60% of canvas), causing it to appear undersized in the macOS Dock alongside standard apps (Notes, Gemini, Spotify).
-  - The generator calibrates internal artwork rendering to 985pt, expanding the active atom graphic to **740px** within the 824px squircle (~5.4% margin), achieving exact 1:1 optical parity with native macOS icons.
-- **Cosmic Obsidian Background & Specular Rim Highlight**:
-  - Replaced flat black background with a deep obsidian linear gradient (`#14171F` to `#05050A`).
-  - Added a 1.5pt specular rim gradient stroke (`white 25%` to `white 4%` to `black 30%`), ensuring crisp border definition and shelf contrast against translucent or dark macOS Dock backgrounds.
+  - The generator calibrates internal artwork rendering to **1050pt**, eliminating dead margin and allowing the luminous orbital rings to command the full squircle volume, achieving exact optical parity with Spotify and Notes.
+- **Radiant Cosmic Nebula Background & Luminous 3.5pt Accent Border**:
+  - Replaced the dark flat void with a radiant cosmic nebula radial gradient (`#382673` electric violet/indigo core transitioning to `#080814` deep space obsidian), giving the squircle body tangible visual mass.
+  - Added a 3.5pt luminous accent gradient border (`white 65%` to cyan/purple to `white 15%`), ensuring the squircle boundary is immediately crisp, defined, and visually prominent against any wallpaper or translucent Dock shelf.
 - **Multi-Layer Realistic Shadows**:
-  - **Ambient Shadow**: Large blur (24pt), downward offset (14pt), 30% black alpha to lift the icon off desktop wallpapers.
-  - **Contact Shadow**: Tight blur (7pt), contact offset (4pt), 25% black alpha anchoring the squircle to the Dock shelf.
+  - **Ambient Shadow**: Large blur (20pt), downward offset (12pt), 35% black alpha to lift the icon off desktop wallpapers.
+  - **Contact Shadow**: Tight blur (6pt), contact offset (4pt), 25% black alpha anchoring the squircle to the Dock shelf.
 - **Full Resolution Matrix in Asset Catalog (`AppIcon.appiconset`)**:
   - `icon_16x16.png` (16x16 @1x) & `icon_16x16@2x.png` (32x32 @2x) — Menu Bar, Status & Finder list views.
   - `icon_32x32.png` (32x32 @1x) & `icon_32x32@2x.png` (64x64 @2x) — Spotlight search results & Finder column views.
