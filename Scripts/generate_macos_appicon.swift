@@ -21,12 +21,13 @@ guard let sourceImage = NSImage(contentsOfFile: sourcePath) else {
 }
 
 let canvasSize: CGFloat = 1024
-let bodySize: CGFloat = 824
-let cornerRadius: CGFloat = 185.0
+let bodySize: CGFloat = 960.0
+let cornerRadius: CGFloat = 215.0
 
-// Scale the source artwork so that the atom graphic cleanly fills the squircle body (1050pt),
-// eliminating excessive black dead margin and matching the optical weight of Spotify and Notes.
-let artworkSize: CGFloat = 1050.0
+// Option B: Full-Bleed / Expanded Scale (960pt squircle body)
+// Atom artwork scaled to 1150pt to command the full visual volume of the card,
+// perfectly matching the physical height and width of Notes, Calendar, and Gemini on the macOS Dock.
+let artworkSize: CGFloat = 1150.0
 
 MainActor.assumeIsolated {
     let iconView = ZStack {
@@ -38,13 +39,13 @@ MainActor.assumeIsolated {
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color(red: 0.22, green: 0.15, blue: 0.45),
-                            Color(red: 0.08, green: 0.09, blue: 0.20),
-                            Color(red: 0.03, green: 0.03, blue: 0.07)
+                            Color(red: 0.20, green: 0.14, blue: 0.40),
+                            Color(red: 0.08, green: 0.08, blue: 0.18),
+                            Color(red: 0.02, green: 0.02, blue: 0.05)
                         ],
                         center: .center,
                         startRadius: 50,
-                        endRadius: 450
+                        endRadius: bodySize * 0.52
                     )
                 )
             
@@ -60,10 +61,10 @@ MainActor.assumeIsolated {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.65),
-                            Color(red: 0.4, green: 0.7, blue: 1.0).opacity(0.4),
-                            Color(red: 0.8, green: 0.3, blue: 0.9).opacity(0.3),
-                            Color.white.opacity(0.15)
+                            Color.white.opacity(0.70),
+                            Color(red: 0.4, green: 0.7, blue: 1.0).opacity(0.45),
+                            Color(red: 0.8, green: 0.3, blue: 0.9).opacity(0.35),
+                            Color.white.opacity(0.20)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -74,9 +75,9 @@ MainActor.assumeIsolated {
         .frame(width: bodySize, height: bodySize)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         // Layer 1: Ambient Drop Shadow
-        .shadow(color: Color.black.opacity(0.35), radius: 20, x: 0, y: 12)
+        .shadow(color: Color.black.opacity(0.35), radius: 12, x: 0, y: 6)
         // Layer 2: Contact Shelf Shadow
-        .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 2)
     }
     .frame(width: canvasSize, height: canvasSize)
 

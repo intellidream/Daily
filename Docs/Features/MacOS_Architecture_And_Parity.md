@@ -115,16 +115,16 @@ To solve the productivity trade-off between quick glance access and expansive de
 - **SmartLedger Modal Productivity Shortcuts**: `SmartLedgerEditorSheet` and `SmartLedgerQuickAdjustSheet` support `⌘Return` for instant save & apply and `Esc` for immediate cancellation/dismissal.
 
 ### 3.7 Dedicated macOS HIG Iconography & Dock Asset Architecture
-- **macOS HIG Continuous Super-Ellipse Squircle Geometry**: Unlike iOS icons which use a full-bleed square canvas with system-clipped corners, macOS Dock and Finder icons require baked-in transparent margins (~100pt), an 824x824 body centered in a 1024x1024 transparent canvas, and a true continuous super-ellipse corner curvature (`RoundedRectangle(cornerRadius: 185, style: .continuous)`).
-- **Artwork Scale & Optical Balance Calibration (Option A)**:
-  - The source iOS asset possesses ~130px internal padding. Directly scaling 1024px to the 824px squircle body previously resulted in a compound reduction shrinking the central atom artwork to only ~615px (~60% of canvas), causing it to appear undersized in the macOS Dock alongside standard apps (Notes, Gemini, Spotify).
-  - The generator calibrates internal artwork rendering to **1050pt**, eliminating dead margin and allowing the luminous orbital rings to command the full squircle volume, achieving exact optical parity with Spotify and Notes.
+- **macOS Full-Bleed Continuous Super-Ellipse Squircle Geometry (Option B)**:
+  - Scaled the squircle body to **`960×960 pt`** within the `1024×1024 pt` canvas with a **215pt continuous corner radius** (`RoundedRectangle(cornerRadius: 215, style: .continuous)`), matching modern desktop apps (Microsoft Edge, Google Chrome) and eliminating the optical perception of an undersized dark card.
+- **Artwork Scale & Optical Balance Calibration**:
+  - The generator calibrates internal artwork rendering to **1150pt**, allowing the luminous orbital rings to command the full visual volume of the squircle body without dead space, matching the physical height and width of Notes, Calendar, and Gemini on the macOS Dock.
 - **Radiant Cosmic Nebula Background & Luminous 3.5pt Accent Border**:
-  - Replaced the dark flat void with a radiant cosmic nebula radial gradient (`#382673` electric violet/indigo core transitioning to `#080814` deep space obsidian), giving the squircle body tangible visual mass.
-  - Added a 3.5pt luminous accent gradient border (`white 65%` to cyan/purple to `white 15%`), ensuring the squircle boundary is immediately crisp, defined, and visually prominent against any wallpaper or translucent Dock shelf.
+  - Filled the squircle with a radiant cosmic nebula radial gradient (`#382673` electric violet/indigo core transitioning to `#080814` deep space obsidian), giving the card rich depth and tangible visual mass.
+  - Added a 3.5pt luminous accent gradient border (`white 70%` to cyan/purple to `white 20%`), ensuring the squircle boundary is immediately crisp, defined, and visually prominent against any wallpaper or translucent Dock shelf.
 - **Multi-Layer Realistic Shadows**:
-  - **Ambient Shadow**: Large blur (20pt), downward offset (12pt), 35% black alpha to lift the icon off desktop wallpapers.
-  - **Contact Shadow**: Tight blur (6pt), contact offset (4pt), 25% black alpha anchoring the squircle to the Dock shelf.
+  - **Ambient Shadow**: Blur (12pt), downward offset (6pt), 35% black alpha to lift the icon off desktop wallpapers.
+  - **Contact Shadow**: Tight blur (4pt), contact offset (2pt), 25% black alpha anchoring the squircle to the Dock shelf.
 - **Full Resolution Matrix in Asset Catalog (`AppIcon.appiconset`)**:
   - `icon_16x16.png` (16x16 @1x) & `icon_16x16@2x.png` (32x32 @2x) — Menu Bar, Status & Finder list views.
   - `icon_32x32.png` (32x32 @1x) & `icon_32x32@2x.png` (64x64 @2x) — Spotlight search results & Finder column views.
