@@ -77,8 +77,9 @@ fun Bubbles7DaysScreen(
     var isLoading by remember { mutableStateOf(initialCached == null) }
 
     val scope = rememberCoroutineScope()
+    // RotaryMode.Scroll provides silky-smooth 60/120Hz scrolling with crown haptic ticks
     val columnState = rememberResponsiveColumnState(
-        rotaryMode = ScalingLazyColumnState.RotaryMode.Snap
+        rotaryMode = ScalingLazyColumnState.RotaryMode.Scroll
     )
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
@@ -215,8 +216,10 @@ fun Bubbles7DaysScreen(
         }
     }
 
-    LaunchedEffect(weekOffset, refreshTrigger) {
-        fetchWeekData()
+    LaunchedEffect(isPageActive, weekOffset, refreshTrigger) {
+        if (isPageActive) {
+            fetchWeekData()
+        }
     }
 
     val weeklyAverage = remember(buckets, weekOffset) {

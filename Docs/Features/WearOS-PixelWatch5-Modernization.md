@@ -67,4 +67,32 @@ This document details the comprehensive modernization of the **Daily WearOS** ap
 - **Verification Results**:
   - App installed via streamed install (`Success`).
   - Native launch of `com.intellidream.daily.wearos/.presentation.MainActivity`.
-  - Visual verification confirmed 132dp hero ring, curved `TimeText`, rounded 48dp quick chips, 7-day stacked bar chart, and fluid rotary crown response.
+  - Visual verification confirmed 122dp unclipped hero ring, curved `TimeText`, rounded 48dp quick chips, 7-day stacked bar chart, and fluid rotary crown response.
+
+---
+
+## 4. Fine-Tuning, Ergonomics & Launcher Polish
+
+### A. Progress Ring Clipping Elimination
+- **Root Cause**: `drawArc` on Canvas without insets centered the stroke on outer bounds `[0, size]`, causing the outer 5dp of the stroke to clip against the item boundary.
+- **Solution**: Set Hero ring container to 122dp and mathematically inset the arc by `strokeWidth / 2f` (`topLeft = Offset(halfStroke, halfStroke)`, `size = Size(width - strokeWidth, height - strokeWidth)`). The circle is 100% contained, perfectly round, and free from any flat clipping.
+
+### B. Consistent Vector Iconography
+- Replaced emoji characters on `QuickAddChip` with native material vector icons matching the headers:
+  - Cigarette button: `Icons.Filled.LocalFireDepartment` (matches the header icon).
+  - Heated tobacco button: `Icons.Filled.Bolt`.
+  - Water button: `Icons.Filled.WaterDrop`.
+  - Coffee button: `Icons.Filled.LocalCafe`.
+
+### C. Smokes Data Loading & Canonical Contract Fix
+- Resolved missing history data on previous days and weeks by querying both `"smokes"` and `"smoke"` (`or { eq("habit_type", "smokes"); eq("habit_type", "smoke") }`), aligning with `DailyCore` and Android.
+- New logs are committed with the canonical `"smokes"` key.
+
+### D. Adaptive Launcher Icon (No White Box)
+- Created `mipmap-anydpi-v26/ic_launcher.xml` and `ic_launcher_round.xml` with background color `#030609` and foreground artwork.
+- Added `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml`, ensuring edge-to-edge circular presentation in the Pixel Watch launcher.
+
+### E. 14-Day Batched Pre-Fetch & Rotary Scroll Fluidity
+- Implemented a 14-day history window pre-fetch on screen active state, grouping records by local date string into the memory cache. Date navigation (`‹ Today ‹ Yesterday ‹ 2 days ago`) is 0ms instantaneous.
+- Switched rotary mode to `ScalingLazyColumnState.RotaryMode.Scroll` for 120Hz high-framerate fluid scrolling with tactile ticks.
+- Set `beyondViewportPageCount = 0` in `HorizontalPager` to avoid mounting multiple heavy screens simultaneously during page transitions.

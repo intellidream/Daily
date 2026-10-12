@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -86,8 +88,9 @@ fun BubblesScreen(
     var isLogging by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+    // RotaryMode.Scroll provides silky-smooth 60/120Hz scrolling with crown haptic ticks
     val columnState = rememberResponsiveColumnState(
-        rotaryMode = ScalingLazyColumnState.RotaryMode.Snap
+        rotaryMode = ScalingLazyColumnState.RotaryMode.Scroll
     )
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
@@ -130,7 +133,7 @@ fun BubblesScreen(
         }
     }
 
-    // Fast local memory cache hit when dayOffset changes: 0ms UI update
+    // 0ms instant UI update on date changes from memory cache
     LaunchedEffect(dayOffset) {
         val cached = sessionManager.getBubblesLogs(targetDateStr)
         if (cached != null) {
@@ -146,97 +149,106 @@ fun BubblesScreen(
         }
     }
 
+    // High-performance batched 14-day pre-fetch: populates local cache so navigation is 0ms instant
     val fetchLogs = {
-        scope.launch {
-            val goalDeferred = async {
-                if (dayOffset == 0 && sessionManager.cachedBubblesGoal == null) {
+        if (isPageActive) {
+            scope.launch {
+                val goalDeferred = async {
+                    if (sessionManager.cachedBubblesGoal == null) {
+                        try {
+                            val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
+                                .select {
+                                    filter {
+                                        eq("habit_type", "water")
+                                        eq("is_deleted", false)
+                                    }
+                                }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+
+                            if (goals.isNotEmpty()) {
+                                val goal = goals.first().target_value?.toInt() ?: 2000
+                                sessionManager.cachedBubblesGoal = goal
+                                dailyGoal = goal
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                val logsDeferred = async {
                     try {
-                        val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
+                        val cal = Calendar.getInstance()
+                        cal.set(Calendar.HOUR_OF_DAY, 0)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
+
+                        // 14-day history window for instant navigation across dates
+                        val startCal = cal.clone() as Calendar
+                        startCal.add(Calendar.DAY_OF_YEAR, -14)
+                        val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
+
+                        val endCal = cal.clone() as Calendar
+                        endCal.add(Calendar.DAY_OF_YEAR, 2)
+                        val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
+
+                        val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
                             .select {
                                 filter {
                                     eq("habit_type", "water")
                                     eq("is_deleted", false)
+                                    and {
+                                        gte("logged_at", startStr)
+                                        lt("logged_at", endStr)
+                                    }
                                 }
-                            }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+                            }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
-                        if (goals.isNotEmpty()) {
-                            val goal = goals.first().target_value?.toInt() ?: 2000
-                            sessionManager.cachedBubblesGoal = goal
-                            dailyGoal = goal
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-
-            val logsDeferred = async {
-                try {
-                    val cal = Calendar.getInstance()
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-                    cal.add(Calendar.DAY_OF_YEAR, dayOffset)
-                    val startOfDay = cal.time
-                    val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
-
-                    val targetDayCal = cal.clone() as Calendar
-
-                    cal.add(Calendar.DAY_OF_YEAR, 1)
-                    val endOfDay = cal.time
-                    val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
-
-                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                        .select {
-                            filter {
-                                eq("habit_type", "water")
-                                eq("is_deleted", false)
-                                and {
-                                    gte("logged_at", startStr)
-                                    lt("logged_at", endStr)
-                                }
+                        // Group logs by date string
+                        val grouped = mutableMapOf<String, MutableList<HabitLog>>()
+                        for (log in logs) {
+                            val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                            if (dStr != null) {
+                                grouped.getOrPut(dStr) { mutableListOf() }.add(log)
                             }
-                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                    val targetStr = localFormat.format(targetDayCal.time)
-                    val dayOnlyLogs = logs.filter { log ->
-                        try {
-                            val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
-                            parsed?.toString() == targetStr
-                        } catch (_: Exception) {
-                            true
                         }
-                    }
 
-                    var tWater = 0
-                    var tCoffee = 0
-                    for (log in dayOnlyLogs) {
-                        val isCoffee = log.metadata?.contains("Coffee") == true
-                        if (isCoffee) tCoffee += log.value.toInt() else tWater += log.value.toInt()
-                    }
+                        // Store in multi-day memory cache
+                        for ((dStr, list) in grouped) {
+                            sessionManager.setBubblesLogs(dStr, list)
+                        }
 
-                    dayLogs = dayOnlyLogs
-                    todayWater = tWater
-                    todayCoffee = tCoffee
-                    todayTotal = tWater + tCoffee
+                        // Update current date's view
+                        val currentLogs = grouped[targetDateStr] ?: emptyList()
+                        dayLogs = currentLogs
 
-                    sessionManager.setBubblesLogs(targetStr, dayOnlyLogs)
-                    if (dayOffset == 0) {
-                        sessionManager.persistWaterTotal(todayTotal)
+                        var tWater = 0
+                        var tCoffee = 0
+                        for (log in currentLogs) {
+                            if (log.metadata?.contains("Coffee") == true) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+                        }
+                        todayWater = tWater
+                        todayCoffee = tCoffee
+                        todayTotal = tWater + tCoffee
+
+                        if (dayOffset == 0) {
+                            sessionManager.persistWaterTotal(todayTotal)
+                        }
+                        SoundAndHapticFeedback.playSuccess(context, view)
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
                     }
-                    SoundAndHapticFeedback.playSuccess(context, view)
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
                 }
-            }
 
-            goalDeferred.await()
-            logsDeferred.await()
+                goalDeferred.await()
+                logsDeferred.await()
+            }
         }
     }
 
-    LaunchedEffect(dayOffset, refreshTrigger) {
-        fetchLogs()
+    LaunchedEffect(isPageActive, dayOffset, refreshTrigger) {
+        if (isPageActive) {
+            fetchLogs()
+        }
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
@@ -365,13 +377,13 @@ fun BubblesScreen(
                 )
             }
 
-            // Hero 132dp Progress Ring
+            // Hero 122dp Progress Ring - Mathematically inset to eliminate clipping
             item {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .padding(vertical = 8.dp)
-                        .size(132.dp)
+                        .padding(vertical = 4.dp)
+                        .size(122.dp)
                         .clickable {
                             SoundAndHapticFeedback.playClick(context, view)
                             if (dayLogs.isNotEmpty()) {
@@ -388,7 +400,10 @@ fun BubblesScreen(
                     val cProgAnim by animateFloatAsState(targetValue = cProg, animationSpec = tween(600))
 
                     androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokeWidth = 11.dp.toPx()
+                        val strokeWidth = 10.dp.toPx()
+                        val halfStroke = strokeWidth / 2f
+                        val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
+                        val arcTopLeft = Offset(halfStroke, halfStroke)
 
                         // Background Track
                         drawArc(
@@ -396,6 +411,8 @@ fun BubblesScreen(
                             startAngle = -90f,
                             sweepAngle = 360f,
                             useCenter = false,
+                            topLeft = arcTopLeft,
+                            size = arcSize,
                             style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                         )
 
@@ -409,6 +426,8 @@ fun BubblesScreen(
                                 startAngle = -90f,
                                 sweepAngle = wSweep,
                                 useCenter = false,
+                                topLeft = arcTopLeft,
+                                size = arcSize,
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                         }
@@ -420,6 +439,8 @@ fun BubblesScreen(
                                 startAngle = -90f + wSweep,
                                 sweepAngle = cSweep,
                                 useCenter = false,
+                                topLeft = arcTopLeft,
+                                size = arcSize,
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                         }
@@ -432,7 +453,7 @@ fun BubblesScreen(
                         Text(
                             text = "$todayTotal",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 32.sp,
+                            fontSize = 30.sp,
                             color = Color.White
                         )
                         Text(
@@ -445,10 +466,10 @@ fun BubblesScreen(
                 }
             }
 
-            // Quick Add Action Chips (48dp full-width touch targets)
+            // Quick Add Action Chips with matching vector icons
             item {
                 QuickAddChip(
-                    icon = "💧",
+                    icon = Icons.Filled.WaterDrop,
                     title = "+150 ml Water",
                     accentColor = DailyWearColors.WaterCyan,
                     onClick = { logWater(150, "Small Water") }
@@ -457,7 +478,7 @@ fun BubblesScreen(
             item {
                 Spacer(Modifier.height(4.dp))
                 QuickAddChip(
-                    icon = "💧",
+                    icon = Icons.Filled.WaterDrop,
                     title = "+300 ml Water",
                     accentColor = DailyWearColors.WaterCyan,
                     onClick = { logWater(300, "Large Water") }
@@ -466,7 +487,7 @@ fun BubblesScreen(
             item {
                 Spacer(Modifier.height(4.dp))
                 QuickAddChip(
-                    icon = "☕",
+                    icon = Icons.Filled.LocalCafe,
                     title = "+100 ml Coffee",
                     accentColor = DailyWearColors.CoffeeOrange,
                     onClick = { logWater(100, "Coffee") }
@@ -498,7 +519,12 @@ fun BubblesScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("💧", fontSize = 12.sp)
+                            Icon(
+                                imageVector = Icons.Filled.WaterDrop,
+                                contentDescription = null,
+                                tint = DailyWearColors.WaterCyan,
+                                modifier = Modifier.size(13.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "$todayWater ml",
@@ -511,7 +537,12 @@ fun BubblesScreen(
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.3f)
                             )
-                            Text("☕", fontSize = 12.sp)
+                            Icon(
+                                imageVector = Icons.Filled.LocalCafe,
+                                contentDescription = null,
+                                tint = DailyWearColors.CoffeeOrange,
+                                modifier = Modifier.size(13.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "$todayCoffee ml",
@@ -569,7 +600,12 @@ fun BubblesScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (isCoffee) "☕" else "💧", fontSize = 13.sp)
+                            Icon(
+                                imageVector = if (isCoffee) Icons.Filled.LocalCafe else Icons.Filled.WaterDrop,
+                                contentDescription = null,
+                                tint = if (isCoffee) DailyWearColors.CoffeeOrange else DailyWearColors.WaterCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 text = "${log.value.toInt()} ml $displayType",

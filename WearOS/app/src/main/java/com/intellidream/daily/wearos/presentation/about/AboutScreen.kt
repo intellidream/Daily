@@ -63,7 +63,7 @@ fun AboutScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val columnState = rememberResponsiveColumnState(
-        rotaryMode = ScalingLazyColumnState.RotaryMode.Snap
+        rotaryMode = ScalingLazyColumnState.RotaryMode.Scroll
     )
     var showUnpairDialog by remember { mutableStateOf(false) }
     var syncText by remember { mutableStateOf("Not Synced") }

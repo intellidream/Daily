@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -86,8 +88,9 @@ fun SmokesScreen(
     var isLogging by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+    // RotaryMode.Scroll provides silky-smooth 60/120Hz scrolling with crown haptic ticks
     val columnState = rememberResponsiveColumnState(
-        rotaryMode = ScalingLazyColumnState.RotaryMode.Snap
+        rotaryMode = ScalingLazyColumnState.RotaryMode.Scroll
     )
     val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
@@ -138,7 +141,7 @@ fun SmokesScreen(
         }
     }
 
-    // Fast local memory cache hit when dayOffset changes: 0ms UI update
+    // 0ms instant UI update on date changes from memory cache
     LaunchedEffect(dayOffset) {
         val cached = sessionManager.getSmokesLogs(targetDateStr)
         if (cached != null) {
@@ -156,98 +159,127 @@ fun SmokesScreen(
         }
     }
 
+    // High-performance batched 14-day pre-fetch supporting both "smokes" and "smoke"
     val fetchLogs = {
-        scope.launch {
-            val goalDeferred = async {
-                if (dayOffset == 0 && sessionManager.cachedSmokesGoal == null) {
-                    try {
-                        val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
-                            .select {
-                                filter {
-                                    eq("habit_type", "smoke")
-                                    eq("is_deleted", false)
-                                }
-                            }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+        if (isPageActive) {
+            scope.launch {
+                val goalDeferred = async {
+                    if (sessionManager.cachedSmokesGoal == null) {
+                        try {
+                            val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
+                                .select {
+                                    filter {
+                                        or {
+                                            eq("habit_type", "smokes")
+                                            eq("habit_type", "smoke")
+                                        }
+                                        eq("is_deleted", false)
+                                    }
+                                }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
 
-                        if (goals.isNotEmpty()) {
-                            val goal = goals.first().target_value?.toInt() ?: 20
-                            sessionManager.cachedSmokesGoal = goal
-                            dailyGoal = goal
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-
-            val logsDeferred = async {
-                try {
-                    val cal = Calendar.getInstance()
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-                    cal.add(Calendar.DAY_OF_YEAR, dayOffset)
-                    val startOfDay = cal.time
-                    val startStr = Instant.ofEpochMilli(startOfDay.time).toString()
-
-                    val targetDayCal = cal.clone() as Calendar
-
-                    cal.add(Calendar.DAY_OF_YEAR, 1)
-                    val endOfDay = cal.time
-                    val endStr = Instant.ofEpochMilli(endOfDay.time).toString()
-
-                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                        .select {
-                            filter {
-                                eq("habit_type", "smoke")
-                                eq("is_deleted", false)
-                                and {
-                                    gte("logged_at", startStr)
-                                    lt("logged_at", endStr)
+                            if (goals.isNotEmpty()) {
+                                val goal = goals.first().target_value?.toInt() ?: 20
+                                sessionManager.cachedSmokesGoal = goal
+                                dailyGoal = goal
+                            } else {
+                                val userId = sessionManager.currentUserId.value
+                                if (userId != null) {
+                                    val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
+                                        .select { filter { eq("id", userId) } }
+                                        .decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
+                                    if (prefs.isNotEmpty()) {
+                                        val g = prefs.first().smokes_baseline ?: 20
+                                        sessionManager.cachedSmokesGoal = g
+                                        dailyGoal = g
+                                    }
                                 }
                             }
-                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                    val targetStr = localFormat.format(targetDayCal.time)
-                    val dayOnlyLogs = logs.filter { log ->
-                        try {
-                            val parsed = HabitDateParser.parseToLocalDate(log.logged_at)
-                            parsed?.toString() == targetStr
-                        } catch (_: Exception) {
-                            true
-                        }
+                        } catch (_: Exception) {}
                     }
-
-                    var tCig = 0
-                    var tHeat = 0
-                    for (log in dayOnlyLogs) {
-                        val count = maxOf(1, log.value.toInt())
-                        val isHeat = log.metadata?.contains("Heated") == true
-                        if (isHeat) tHeat += count else tCig += count
-                    }
-
-                    dayLogs = dayOnlyLogs
-                    todayCig = tCig
-                    todayHeat = tHeat
-                    todayTotal = tCig + tHeat
-
-                    sessionManager.setSmokesLogs(targetStr, dayOnlyLogs)
-                    if (dayOffset == 0) {
-                        sessionManager.persistSmokesTotal(todayTotal)
-                    }
-                    SoundAndHapticFeedback.playSuccess(context, view)
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    android.util.Log.w("SmokesScreen", "Failed to fetch logs: ${e.localizedMessage}")
                 }
-            }
 
-            goalDeferred.await()
-            logsDeferred.await()
+                val logsDeferred = async {
+                    try {
+                        val cal = Calendar.getInstance()
+                        cal.set(Calendar.HOUR_OF_DAY, 0)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
+
+                        // 14-day history window for instant navigation across dates
+                        val startCal = cal.clone() as Calendar
+                        startCal.add(Calendar.DAY_OF_YEAR, -14)
+                        val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
+
+                        val endCal = cal.clone() as Calendar
+                        endCal.add(Calendar.DAY_OF_YEAR, 2)
+                        val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
+
+                        // Query both 'smokes' (canonical) and 'smoke' (legacy)
+                        val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
+                            .select {
+                                filter {
+                                    or {
+                                        eq("habit_type", "smokes")
+                                        eq("habit_type", "smoke")
+                                    }
+                                    eq("is_deleted", false)
+                                    and {
+                                        gte("logged_at", startStr)
+                                        lt("logged_at", endStr)
+                                    }
+                                }
+                            }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
+
+                        // Group logs by local date string
+                        val grouped = mutableMapOf<String, MutableList<HabitLog>>()
+                        for (log in logs) {
+                            val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                            if (dStr != null) {
+                                grouped.getOrPut(dStr) { mutableListOf() }.add(log)
+                            }
+                        }
+
+                        // Store in multi-day memory cache
+                        for ((dStr, list) in grouped) {
+                            sessionManager.setSmokesLogs(dStr, list)
+                        }
+
+                        // Update current date's view
+                        val currentLogs = grouped[targetDateStr] ?: emptyList()
+                        dayLogs = currentLogs
+
+                        var tCig = 0
+                        var tHeat = 0
+                        for (log in currentLogs) {
+                            val count = maxOf(1, log.value.toInt())
+                            val isHeat = log.metadata?.contains("Heated") == true
+                            if (isHeat) tHeat += count else tCig += count
+                        }
+                        todayCig = tCig
+                        todayHeat = tHeat
+                        todayTotal = tCig + tHeat
+
+                        if (dayOffset == 0) {
+                            sessionManager.persistSmokesTotal(todayTotal)
+                        }
+                        SoundAndHapticFeedback.playSuccess(context, view)
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        android.util.Log.w("SmokesScreen", "Failed to fetch logs: ${e.localizedMessage}")
+                    }
+                }
+
+                goalDeferred.await()
+                logsDeferred.await()
+            }
         }
     }
 
-    LaunchedEffect(dayOffset, refreshTrigger) {
-        fetchLogs()
+    LaunchedEffect(isPageActive, dayOffset, refreshTrigger) {
+        if (isPageActive) {
+            fetchLogs()
+        }
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
@@ -299,9 +331,10 @@ fun SmokesScreen(
             val loggedAtStr = isoFormat.format(targetCal.time)
             val currentDateStr = localFormat.format(targetCal.time)
 
+            // Canonical habit_type = "smokes" matching DailyCore and Android
             val newLog = HabitLog(
                 user_id = sessionManager.currentUserId.value,
-                habit_type = "smoke",
+                habit_type = "smokes",
                 value = 1.0,
                 unit = "count",
                 logged_at = loggedAtStr,
@@ -377,13 +410,13 @@ fun SmokesScreen(
                 )
             }
 
-            // Hero 132dp Progress Ring
+            // Hero 122dp Progress Ring - Mathematically inset to eliminate clipping
             item {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .padding(vertical = 8.dp)
-                        .size(132.dp)
+                        .padding(vertical = 4.dp)
+                        .size(122.dp)
                         .clickable {
                             SoundAndHapticFeedback.playClick(context, view)
                             if (dayLogs.isNotEmpty()) {
@@ -397,7 +430,10 @@ fun SmokesScreen(
                     val ringColor = getSmokesColor(todayTotal, dailyGoal)
 
                     androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokeWidth = 11.dp.toPx()
+                        val strokeWidth = 10.dp.toPx()
+                        val halfStroke = strokeWidth / 2f
+                        val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
+                        val arcTopLeft = Offset(halfStroke, halfStroke)
 
                         // Background Track
                         drawArc(
@@ -405,6 +441,8 @@ fun SmokesScreen(
                             startAngle = -90f,
                             sweepAngle = 360f,
                             useCenter = false,
+                            topLeft = arcTopLeft,
+                            size = arcSize,
                             style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                         )
 
@@ -415,6 +453,8 @@ fun SmokesScreen(
                                 startAngle = -90f,
                                 sweepAngle = sweep,
                                 useCenter = false,
+                                topLeft = arcTopLeft,
+                                size = arcSize,
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                         }
@@ -427,7 +467,7 @@ fun SmokesScreen(
                         Text(
                             text = "$todayTotal",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 32.sp,
+                            fontSize = 30.sp,
                             color = if (todayTotal > dailyGoal) DailyWearColors.SmokeRed else Color.White
                         )
                         Text(
@@ -440,10 +480,10 @@ fun SmokesScreen(
                 }
             }
 
-            // Quick Add Action Chips (48dp full-width touch targets)
+            // Quick Add Action Chips with matching vector icons
             item {
                 QuickAddChip(
-                    icon = "🔥",
+                    icon = Icons.Filled.LocalFireDepartment, // Exactly matches top header icon!
                     title = "+1 Cigarette",
                     accentColor = DailyWearColors.SmokeRed,
                     onClick = { logSmoke("Cigarette") }
@@ -452,7 +492,7 @@ fun SmokesScreen(
             item {
                 Spacer(Modifier.height(4.dp))
                 QuickAddChip(
-                    icon = "⚡",
+                    icon = Icons.Filled.Bolt, // Matching vector bolt icon
                     title = "+1 Heated",
                     accentColor = DailyWearColors.HeatIndigo,
                     onClick = { logSmoke("Heated Tobacco") }
@@ -484,7 +524,12 @@ fun SmokesScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🔥", fontSize = 12.sp)
+                            Icon(
+                                imageVector = Icons.Filled.LocalFireDepartment,
+                                contentDescription = null,
+                                tint = DailyWearColors.SmokeRed,
+                                modifier = Modifier.size(13.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "$todayCig Cig",
@@ -497,7 +542,12 @@ fun SmokesScreen(
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.3f)
                             )
-                            Text("⚡", fontSize = 12.sp)
+                            Icon(
+                                imageVector = Icons.Filled.Bolt,
+                                contentDescription = null,
+                                tint = DailyWearColors.HeatIndigo,
+                                modifier = Modifier.size(13.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "$todayHeat Heat",
@@ -555,7 +605,12 @@ fun SmokesScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (isHeat) "⚡" else "🔥", fontSize = 13.sp)
+                            Icon(
+                                imageVector = if (isHeat) Icons.Filled.Bolt else Icons.Filled.LocalFireDepartment,
+                                contentDescription = null,
+                                tint = if (isHeat) DailyWearColors.HeatIndigo else DailyWearColors.SmokeRed,
+                                modifier = Modifier.size(14.dp)
+                            )
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 text = "$count $displayType",
