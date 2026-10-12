@@ -51,6 +51,8 @@ class WatchSessionManager private constructor(private val context: Context) {
         const val KEY_PAIRED_WATCH_ID = "paired_watch_id"
         const val KEY_WATER_TOTAL = "daily_water_total"
         const val KEY_SMOKES_TOTAL = "daily_smokes_total"
+        const val KEY_WATER_GOAL = "water_goal"
+        const val KEY_SMOKES_GOAL = "smokes_goal"
         const val KEY_LAST_HEALTH_SYNC = "last_health_sync_time"
         const val KEY_LAST_HEALTH_SYNC_STATUS = "last_health_sync_status"
 
@@ -97,11 +99,40 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val _currentUserId = MutableStateFlow<String?>(null)
     val currentUserId: StateFlow<String?> = _currentUserId
 
-    // Memory caching to prevent "load from scratch" flashing during navigation
-    var cachedBubblesGoal: Int? = null
+    // Reactive persistent goals (backed by SharedPreferences with immediate 0ms availability)
+    private val _bubblesGoal = MutableStateFlow(
+        prefs.getString(KEY_WATER_GOAL, null)?.toIntOrNull() ?: 2000
+    )
+    val bubblesGoal: StateFlow<Int> = _bubblesGoal
+
+    private val _smokesGoal = MutableStateFlow(
+        prefs.getString(KEY_SMOKES_GOAL, null)?.toIntOrNull() ?: 40
+    )
+    val smokesGoal: StateFlow<Int> = _smokesGoal
+
+    fun setBubblesGoal(goal: Int) {
+        if (goal > 0 && _bubblesGoal.value != goal) {
+            _bubblesGoal.value = goal
+            prefs.edit().putString(KEY_WATER_GOAL, goal.toString()).apply()
+        }
+    }
+
+    fun setSmokesGoal(goal: Int) {
+        if (goal > 0 && _smokesGoal.value != goal) {
+            _smokesGoal.value = goal
+            prefs.edit().putString(KEY_SMOKES_GOAL, goal.toString()).apply()
+        }
+    }
+
+    var cachedBubblesGoal: Int?
+        get() = _bubblesGoal.value
+        set(value) { if (value != null) setBubblesGoal(value) }
+
+    var cachedSmokesGoal: Int?
+        get() = _smokesGoal.value
+        set(value) { if (value != null) setSmokesGoal(value) }
+
     var cachedBubblesLogs: List<HabitLog>? = null
-    
-    var cachedSmokesGoal: Int? = null
     var cachedSmokesLogs: List<HabitLog>? = null
 
     // Multi-day in-memory caching keyed by date string (e.g. "2026-09-09")
@@ -229,6 +260,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                         if (uid != null) {
                             prefs.edit().putString(KEY_USER_ID, uid).apply()
                             _currentUserId.value = uid
+                            fetchGoalsAndPreferences(uid)
                         }
                         _isAuthenticated.value = true
                         _isPairing.value = false
@@ -252,6 +284,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                                     _currentUserId.value = savedUserId
                                     _isAuthenticated.value = true
                                     _isPairing.value = false
+                                    fetchGoalsAndPreferences(savedUserId)
                                 }
                             } else if (_isAuthenticated.value) {
                                 // No stored user — truly logged out
@@ -261,6 +294,50 @@ class WatchSessionManager private constructor(private val context: Context) {
                         }
                     }
                     else -> { /* LoadingFromStorage, NetworkError — no action */ }
+                }
+            }
+        }
+    }
+
+    fun fetchGoalsAndPreferences(userId: String) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    // 1. Fetch user_preferences for smokes_baseline
+                    val prefsList = supabaseClient.postgrest["user_preferences"]
+                        .select {
+                            filter { eq("id", userId) }
+                        }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
+
+                    if (prefsList.isNotEmpty()) {
+                        val base = prefsList.first().smokes_baseline
+                        if (base != null && base > 0) {
+                            setSmokesGoal(base)
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.w("WatchSessionManager", "fetchGoalsAndPreferences prefs: ${e.message}")
+                }
+
+                try {
+                    // 2. Fetch habits_goals for water
+                    val goals = supabaseClient.postgrest["habits_goals"]
+                        .select {
+                            filter {
+                                eq("user_id", userId)
+                                eq("is_deleted", false)
+                            }
+                        }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+
+                    for (g in goals) {
+                        if (g.habit_type == "water" && (g.target_value ?: 0.0) > 0) {
+                            setBubblesGoal(g.target_value!!.toInt())
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.w("WatchSessionManager", "fetchGoalsAndPreferences goals: ${e.message}")
                 }
             }
         }
@@ -287,6 +364,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                             .putString(KEY_REFRESH_TOKEN, existingSession.refreshToken)
                             .putString(KEY_USER_ID, uid)
                             .apply()
+                        fetchGoalsAndPreferences(uid)
                         return@launch
                     }
                 }
@@ -310,6 +388,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                     _currentUserId.value = savedUserId
                     _isAuthenticated.value = true
                     _isPairing.value = false
+                    fetchGoalsAndPreferences(savedUserId)
                     android.util.Log.d("WatchSessionManager", "checkExistingSession: restored session for user $savedUserId")
                 } else {
                     android.util.Log.d("WatchSessionManager", "checkExistingSession: no valid session found, isPairing=${_isPairing.value}, pin=${_pairingCode.value}")
@@ -470,10 +549,18 @@ class WatchSessionManager private constructor(private val context: Context) {
             val session = supabaseClient.auth.currentSessionOrNull()
             if (session != null) {
                 _isAuthenticated.value = true
-                _currentUserId.value = session.user?.id ?: extractUserId(session.accessToken)
+                val uid = session.user?.id ?: extractUserId(session.accessToken)
+                _currentUserId.value = uid
+                if (uid != null) {
+                    fetchGoalsAndPreferences(uid)
+                }
             } else {
                 // Auth plugin has no session at all — full recovery from SharedPreferences
                 recoverFromPreferences()
+                val uid = _currentUserId.value
+                if (uid != null) {
+                    fetchGoalsAndPreferences(uid)
+                }
             }
 
             // Tell screens to re-fetch their data now that auth is fresh

@@ -54,8 +54,10 @@ import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
 import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.util.Calendar
@@ -71,7 +73,7 @@ fun Smokes7DaysScreen(
     val context = LocalContext.current
     val view = LocalView.current
     var weekOffset by remember { mutableIntStateOf(0) }
-    var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedSmokesGoal ?: 20) }
+    val dailyGoal by sessionManager.smokesGoal.collectAsState()
     val initialCached = sessionManager.getSmokesWeek(0)
     var buckets by remember { mutableStateOf<List<SmokeDayBucket>>(initialCached ?: emptyList()) }
     var isLoading by remember { mutableStateOf(initialCached == null) }
@@ -127,9 +129,9 @@ fun Smokes7DaysScreen(
 
     val fetchWeekData: () -> Unit = {
         if (isPageActive) {
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 if (sessionManager.getSmokesWeek(weekOffset) == null) {
-                    isLoading = true
+                    withContext(Dispatchers.Main) { isLoading = true }
                 }
                 val (monCal, nextMonCal) = getWeekWindow(weekOffset)
                 val startStr = Instant.ofEpochMilli(monCal.timeInMillis).toString()
@@ -145,96 +147,59 @@ fun Smokes7DaysScreen(
                     tempBuckets.add(SmokeDayBucket(dStr, lbl, dStr == todayStr))
                 }
 
-                val goalDeferred = async {
-                    if (sessionManager.cachedSmokesGoal == null) {
+                try {
+                    // Query both 'smokes' (canonical) and 'smoke' (legacy)
+                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                or {
+                                    eq("habit_type", "smokes")
+                                    eq("habit_type", "smoke")
+                                }
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
+                            }
+                        }.decodeList<HabitLog>()
+
+                    for (log in logs) {
                         try {
-                            val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
-                                .select {
-                                    filter {
-                                        or {
-                                            eq("habit_type", "smokes")
-                                            eq("habit_type", "smoke")
-                                        }
-                                        eq("is_deleted", false)
-                                    }
-                                }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
-
-                            if (goals.isNotEmpty()) {
-                                val goal = goals.first().target_value?.toInt() ?: 20
-                                dailyGoal = goal
-                                sessionManager.cachedSmokesGoal = goal
-                            } else {
-                                val userId = sessionManager.currentUserId.value
-                                if (userId != null) {
-                                    val prefs = sessionManager.supabaseClient.postgrest["user_preferences"]
-                                        .select { filter { eq("id", userId) } }
-                                        .decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
-                                    if (prefs.isNotEmpty()) {
-                                        val g = prefs.first().smokes_baseline ?: 20
-                                        dailyGoal = g
-                                        sessionManager.cachedSmokesGoal = g
+                            val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
+                            if (localDate != null) {
+                                val logDateStr = localDate.toString()
+                                val bucket = tempBuckets.find { it.dateStr == logDateStr }
+                                if (bucket != null) {
+                                    val count = if (log.value > 0) log.value else 1.0
+                                    val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
+                                    if (isHeat) {
+                                        bucket.heat += count
+                                    } else {
+                                        bucket.cig += count
                                     }
                                 }
                             }
-                        } catch (_: Exception) {}
-                    }
-                }
-
-                val logsDeferred = async {
-                    try {
-                        // Query both 'smokes' (canonical) and 'smoke' (legacy)
-                        val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                            .select {
-                                filter {
-                                    or {
-                                        eq("habit_type", "smokes")
-                                        eq("habit_type", "smoke")
-                                    }
-                                    eq("is_deleted", false)
-                                    and {
-                                        gte("logged_at", startStr)
-                                        lt("logged_at", endStr)
-                                    }
-                                }
-                            }.decodeList<HabitLog>()
-
-                        for (log in logs) {
-                            try {
-                                val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
-                                if (localDate != null) {
-                                    val logDateStr = localDate.toString()
-                                    val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                                    if (bucket != null) {
-                                        val count = if (log.value > 0) log.value else 1.0
-                                        val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
-                                        if (isHeat) {
-                                            bucket.heat += count
-                                        } else {
-                                            bucket.cig += count
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.w("Smokes7Days", "Failed to process log: ${e.message}")
-                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("Smokes7Days", "Failed to process log: ${e.message}")
                         }
+                    }
 
-                        sessionManager.setSmokesWeek(weekOffset, tempBuckets)
+                    sessionManager.setSmokesWeek(weekOffset, tempBuckets)
+                    withContext(Dispatchers.Main) {
                         buckets = tempBuckets
-                        SoundAndHapticFeedback.playSuccess(context, view)
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        android.util.Log.e("Smokes7Days", "Failed to fetch week logs: ${e.message}", e)
+                        isLoading = false
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.e("Smokes7Days", "Failed to fetch week logs: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
                         if (buckets.isEmpty()) {
                             buckets = tempBuckets
                         }
-                    } finally {
                         isLoading = false
                     }
                 }
-
-                goalDeferred.await()
-                logsDeferred.await()
             }
         }
     }

@@ -64,8 +64,10 @@ import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
 import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
@@ -84,7 +86,7 @@ fun BubblesScreen(
     val context = LocalContext.current
     val view = LocalView.current
     var dayOffset by remember { mutableIntStateOf(0) }
-    var dailyGoal by remember { mutableIntStateOf(sessionManager.cachedBubblesGoal ?: 2000) }
+    val dailyGoal by sessionManager.bubblesGoal.collectAsState()
     var isLogging by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
@@ -149,98 +151,75 @@ fun BubblesScreen(
         }
     }
 
-    // High-performance batched 14-day pre-fetch: populates local cache so navigation is 0ms instant
+    // High-performance batched 14-day pre-fetch on background IO dispatcher
     val fetchLogs = {
         if (isPageActive) {
-            scope.launch {
-                val goalDeferred = async {
-                    if (sessionManager.cachedBubblesGoal == null) {
-                        try {
-                            val goals = sessionManager.supabaseClient.postgrest["habits_goals"]
-                                .select {
-                                    filter {
-                                        eq("habit_type", "water")
-                                        eq("is_deleted", false)
-                                    }
-                                }.decodeList<com.intellidream.daily.wearos.domain.model.HabitGoal>()
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val cal = Calendar.getInstance()
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
 
-                            if (goals.isNotEmpty()) {
-                                val goal = goals.first().target_value?.toInt() ?: 2000
-                                sessionManager.cachedBubblesGoal = goal
-                                dailyGoal = goal
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
+                    // 14-day history window for instant navigation across dates
+                    val startCal = cal.clone() as Calendar
+                    startCal.add(Calendar.DAY_OF_YEAR, -14)
+                    val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
 
-                val logsDeferred = async {
-                    try {
-                        val cal = Calendar.getInstance()
-                        cal.set(Calendar.HOUR_OF_DAY, 0)
-                        cal.set(Calendar.MINUTE, 0)
-                        cal.set(Calendar.SECOND, 0)
-                        cal.set(Calendar.MILLISECOND, 0)
+                    val endCal = cal.clone() as Calendar
+                    endCal.add(Calendar.DAY_OF_YEAR, 2)
+                    val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
 
-                        // 14-day history window for instant navigation across dates
-                        val startCal = cal.clone() as Calendar
-                        startCal.add(Calendar.DAY_OF_YEAR, -14)
-                        val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
-
-                        val endCal = cal.clone() as Calendar
-                        endCal.add(Calendar.DAY_OF_YEAR, 2)
-                        val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
-
-                        val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                            .select {
-                                filter {
-                                    eq("habit_type", "water")
-                                    eq("is_deleted", false)
-                                    and {
-                                        gte("logged_at", startStr)
-                                        lt("logged_at", endStr)
-                                    }
+                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                eq("habit_type", "water")
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
                                 }
-                            }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                        // Group logs by date string
-                        val grouped = mutableMapOf<String, MutableList<HabitLog>>()
-                        for (log in logs) {
-                            val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
-                            if (dStr != null) {
-                                grouped.getOrPut(dStr) { mutableListOf() }.add(log)
                             }
-                        }
+                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
 
-                        // Store in multi-day memory cache
-                        for ((dStr, list) in grouped) {
-                            sessionManager.setBubblesLogs(dStr, list)
+                    // Group logs by date string
+                    val grouped = mutableMapOf<String, MutableList<HabitLog>>()
+                    for (log in logs) {
+                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                        if (dStr != null) {
+                            grouped.getOrPut(dStr) { mutableListOf() }.add(log)
                         }
+                    }
 
-                        // Update current date's view
-                        val currentLogs = grouped[targetDateStr] ?: emptyList()
+                    // Store in multi-day memory cache
+                    for ((dStr, list) in grouped) {
+                        sessionManager.setBubblesLogs(dStr, list)
+                    }
+
+                    // Update current date's view
+                    val currentLogs = grouped[targetDateStr] ?: emptyList()
+                    var tWater = 0
+                    var tCoffee = 0
+                    for (log in currentLogs) {
+                        if (log.metadata?.contains("Coffee") == true) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+                    }
+                    val tTotal = tWater + tCoffee
+
+                    withContext(Dispatchers.Main) {
                         dayLogs = currentLogs
-
-                        var tWater = 0
-                        var tCoffee = 0
-                        for (log in currentLogs) {
-                            if (log.metadata?.contains("Coffee") == true) tCoffee += log.value.toInt() else tWater += log.value.toInt()
-                        }
                         todayWater = tWater
                         todayCoffee = tCoffee
-                        todayTotal = tWater + tCoffee
-
-                        if (dayOffset == 0) {
-                            sessionManager.persistWaterTotal(todayTotal)
-                        }
-                        SoundAndHapticFeedback.playSuccess(context, view)
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
+                        todayTotal = tTotal
                     }
-                }
 
-                goalDeferred.await()
-                logsDeferred.await()
+                    if (dayOffset == 0) {
+                        sessionManager.persistWaterTotal(tTotal)
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
+                }
             }
         }
     }
@@ -269,7 +248,7 @@ fun BubblesScreen(
         }
         SoundAndHapticFeedback.playClick(context, view)
 
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
                 sessionManager.supabaseClient.postgrest["habits_logs"]
                     .update({
@@ -316,7 +295,7 @@ fun BubblesScreen(
                 sessionManager.updateBubblesWeekToday(isCoffee = isCoffee, delta = amount.toDouble())
             }
 
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 try {
                     sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
                 } catch (_: Exception) {
@@ -327,6 +306,12 @@ fun BubblesScreen(
             }
         }
     }
+
+    val totalG = maxOf(dailyGoal, 1).toFloat()
+    val wProg = (todayWater.toFloat() / totalG).coerceIn(0f, 1f)
+    val cProg = (todayCoffee.toFloat() / totalG).coerceIn(0f, 1f)
+    val wProgAnim by animateFloatAsState(targetValue = wProg, animationSpec = tween(600))
+    val cProgAnim by animateFloatAsState(targetValue = cProg, animationSpec = tween(600))
 
     ScreenScaffold(
         scrollState = columnState
@@ -392,13 +377,6 @@ fun BubblesScreen(
                             onOpenLogs?.invoke("water", formattedDateTitle, dayLogs, deleteLog)
                         }
                 ) {
-                    val totalG = maxOf(dailyGoal, 1).toFloat()
-                    val wProg = (todayWater.toFloat() / totalG).coerceIn(0f, 1f)
-                    val cProg = (todayCoffee.toFloat() / totalG).coerceIn(0f, 1f)
-
-                    val wProgAnim by animateFloatAsState(targetValue = wProg, animationSpec = tween(600))
-                    val cProgAnim by animateFloatAsState(targetValue = cProg, animationSpec = tween(600))
-
                     androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                         val strokeWidth = 10.dp.toPx()
                         val halfStroke = strokeWidth / 2f
@@ -577,7 +555,7 @@ fun BubblesScreen(
                     )
                 }
 
-                items(dayLogs.size) { index ->
+                items(count = dayLogs.size, key = { dayLogs[it].id }) { index ->
                     val log = dayLogs[index]
                     val isCoffee = log.metadata?.contains("Coffee") == true
                     val isSmall = log.metadata?.contains("Small") == true

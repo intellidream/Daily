@@ -4,12 +4,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class HabitGoal(
-    val target_value: Double?
+    val habit_type: String? = null,
+    val target_value: Double? = null
 )
 
 @Serializable
 data class UserPreference(
-    val smokes_baseline: Int?
+    val smokes_baseline: Int? = null
 )
 
 @Serializable

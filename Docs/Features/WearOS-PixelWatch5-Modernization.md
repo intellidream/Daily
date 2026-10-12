@@ -94,5 +94,36 @@ This document details the comprehensive modernization of the **Daily WearOS** ap
 
 ### E. 14-Day Batched Pre-Fetch & Rotary Scroll Fluidity
 - Implemented a 14-day history window pre-fetch on screen active state, grouping records by local date string into the memory cache. Date navigation (`‹ Today ‹ Yesterday ‹ 2 days ago`) is 0ms instantaneous.
-- Switched rotary mode to `ScalingLazyColumnState.RotaryMode.Scroll` for 120Hz high-framerate fluid scrolling with tactile ticks.
-- Set `beyondViewportPageCount = 0` in `HorizontalPager` to avoid mounting multiple heavy screens simultaneously during page transitions.
+- Switched rotary mode to `ScalingLazyColumnState.RotaryMode.Scroll` for silky-smooth continuous scrolling with tactile ticks.
+
+---
+
+## 5. Performance Engineering, Baseline Persistence & 60fps Optimization
+
+### A. Display Refresh Rate Verification (60.000004 Hz)
+- Direct inspection via `dumpsys display` on the physical Pixel Watch 5 confirmed:
+  - Mode: `fps=60.000004, vsync=60.000004` (supported modes: `[60.0, 30.0, 20.0]`).
+  - Frame budget: **16.6 ms per frame**. Any PostgREST JSON parsing or date calculation on `Dispatchers.Main` caused immediate frame skips and micro-stutters.
+
+### B. Persistent Goals & Smokes Baseline Contract (40 cigs/day)
+- **Problem**: Smokes goal was defaulting to 20 or jumping after network response because `cachedSmokesGoal` was purely transient in-memory.
+- **Root Cause & Contract**: In Supabase, the canonical baseline is stored in `user_preferences.smokes_baseline` (value `40.0`).
+- **Solution in `WatchSessionManager`**:
+  - Added persistent keys: `KEY_WATER_GOAL = "water_goal"` and `KEY_SMOKES_GOAL = "smokes_goal"`.
+  - Exposed reactive `StateFlow<Int>`: `bubblesGoal` (default 2000 or cached) and `smokesGoal` (default 40 or cached).
+  - Implemented `fetchGoalsAndPreferences(userId)` running on `Dispatchers.IO`: fetches both `user_preferences.smokes_baseline` and `habits_goals.target_value`, persisting values to `SharedPreferences` for 0ms cold-start availability.
+  - Subscribed UI via `sessionManager.smokesGoal.collectAsState()` and `sessionManager.bubblesGoal.collectAsState()`, guaranteeing the UI displays the exact target (40 max) on cold start and updates reactively.
+
+### C. Background IO Offloading (`Dispatchers.IO` & `withContext`)
+- **Main Thread Decoupling**: All Supabase queries, JSON deserialization, date sorting (`HabitDateParser`), and bucketing in `BubblesScreen`, `Bubbles7DaysScreen`, `SmokesScreen`, and `Smokes7DaysScreen` now execute strictly on `Dispatchers.IO`.
+- **Atomic UI Dispatch**: Only the final aggregated state (`dayLogs`, `todayTotal`, `buckets`) is dispatched back to Main via `withContext(Dispatchers.Main)`.
+- **Audio/Haptic De-Contention**: Removed `SoundAndHapticFeedback.playSuccess` calls from automated background data fetching, preventing Binder IPC audio buffer contention during swiping and scrolling.
+
+### D. HorizontalPager Pre-Rendering (`beyondViewportPageCount = 1`)
+- Enabled `beyondViewportPageCount = 1` in `HorizontalPager`, keeping 1 page ahead and behind composed and pre-measured in GPU memory.
+- Screen components respect `isPageActive`, so pre-rendered adjacent pages display cached data immediately without initiating premature network calls or haptic effects until activated.
+- Eliminates page swipe hitches and white flashes across all 5 canonical tabs.
+
+### E. Compose Recomposition & List Diffing Optimization
+- Added stable item keys to all `ScalingLazyColumn` lists: `items(count = dayLogs.size, key = { dayLogs[it].id })`.
+- Hoisted arc progress animations (`animateFloatAsState`) out of individual list items into parent composables to avoid recreation on scroll.
