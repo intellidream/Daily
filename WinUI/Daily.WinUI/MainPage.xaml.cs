@@ -536,37 +536,75 @@ public sealed partial class MainPage : Page
 
         if (sender is FrameworkElement fe && fe.DataContext is Daily.Models.WidgetModel widget)
         {
-            switch (widget.ComponentType)
+            if (App.Current.MainWindow is MainWindow mw)
             {
-                case "WeatherWidget":
-                    OpenDetailWindow(typeof(WeatherDetailPage));
-                    break;
-                case "RssFeedWidget":
-                    OpenDetailWindow(typeof(RssFeedDetailPage));
-                    break;
-                case "FinancesWidget":
-                    OpenDetailWindow(typeof(FinancesDetailPage));
-                    break;
-                case "HabitsWidget":
-                    OpenDetailWindow(typeof(HabitsDetailPage));
-                    break;
-                case "HealthWidget":
-                    OpenDetailWindow(typeof(HealthDetailPage));
-                    break;
-                case "CalendarWidget":
-                    OpenDetailWindow(typeof(CalendarDetailPage));
-                    break;
-                case "NotesWidget":
-                case "TagdosWidget":
-                    OpenDetailWindow(typeof(TagdosNotesDetailPage));
-                    break;
+                switch (widget.ComponentType)
+                {
+                    case "WeatherWidget":
+                        mw.NavigateToTab(6);
+                        break;
+                    case "RssFeedWidget":
+                        mw.NavigateToTab(7);
+                        break;
+                    case "FinancesWidget":
+                        mw.NavigateToTab(2);
+                        break;
+                    case "HabitsWidget":
+                        mw.NavigateToTab(5);
+                        break;
+                    case "HealthWidget":
+                        mw.NavigateToTab(4);
+                        break;
+                    case "CalendarWidget":
+                        mw.NavigateToTab(8);
+                        break;
+                    case "NotesWidget":
+                    case "TagdosWidget":
+                        mw.NavigateToTab(3);
+                        break;
+                }
+            }
+            else
+            {
+                switch (widget.ComponentType)
+                {
+                    case "WeatherWidget":
+                        OpenDetailWindow(typeof(WeatherDetailPage));
+                        break;
+                    case "RssFeedWidget":
+                        OpenDetailWindow(typeof(RssFeedDetailPage));
+                        break;
+                    case "FinancesWidget":
+                        OpenDetailWindow(typeof(FinancesDetailPage));
+                        break;
+                    case "HabitsWidget":
+                        OpenDetailWindow(typeof(HabitsDetailPage));
+                        break;
+                    case "HealthWidget":
+                        OpenDetailWindow(typeof(HealthDetailPage));
+                        break;
+                    case "CalendarWidget":
+                        OpenDetailWindow(typeof(CalendarDetailPage));
+                        break;
+                    case "NotesWidget":
+                    case "TagdosWidget":
+                        OpenDetailWindow(typeof(TagdosNotesDetailPage));
+                        break;
+                }
             }
         }
     }
 
     private void RssFeedWidget_ArticleTapped(object sender, Daily.Models.RssItem e)
     {
-        OpenDetailWindow(typeof(RssFeedDetailPage), e);
+        if (App.Current.MainWindow is MainWindow mw)
+        {
+            mw.NavigateToTab(7, e);
+        }
+        else
+        {
+            OpenDetailWindow(typeof(RssFeedDetailPage), e);
+        }
     }
     public void OpenDetailWindow(System.Type pageType, object parameter = null)
     {

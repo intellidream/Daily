@@ -164,21 +164,27 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Button x:Name="BackButton" Click="BackButton_Click" Width="38" Height="38" CornerRadius="19" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Back to Dashboard">
+                    <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
                 <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}">
                     <FontIcon Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Habits Detail" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
-                    <TextBlock Text="Desktop-friendly overview with responsive insight cards" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                    <TextBlock Text="Habits Hub" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock Text="Hydration &amp; smoking lifestyle tracking studio" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <ComboBox x:Name="HabitTypeSelector" Width="180" SelectionChanged="HabitTypeSelector_SelectionChanged">
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <ComboBox x:Name="HabitTypeSelector" Width="140" SelectionChanged="HabitTypeSelector_SelectionChanged">
                     <ComboBoxItem Content="Water" Tag="water" IsSelected="True" />
                     <ComboBoxItem Content="Smokes" Tag="smokes" />
                 </ComboBox>
-                <CalendarDatePicker Date="{x:Bind ViewDate, Mode=OneWay}" DateChanged="CalendarDatePicker_DateChanged" Width="200" />
+                <CalendarDatePicker Date="{x:Bind ViewDate, Mode=OneWay}" DateChanged="CalendarDatePicker_DateChanged" Width="180" />
+                <Button x:Name="PopOutButton" Click="PopOutButton_Click" Width="38" Height="38" CornerRadius="19" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Pop out to separate window">
+                    <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
             </StackPanel>
         </Grid>
 

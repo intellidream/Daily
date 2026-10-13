@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Daily_WinUI"
+    xmlns:controls="using:Daily_WinUI.Controls"
     xmlns:tb="using:H.NotifyIcon"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="DayOne"
@@ -154,22 +155,33 @@
         <!-- Custom TitleBar Grid bypassing the buggy TitleBar control entirely -->
         <Grid x:Name="AppTitleBar" Background="Transparent" VerticalAlignment="Top" SizeChanged="AppTitleBar_SizeChanged" Opacity="0.0" IsHitTestVisible="False">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" /> <!-- 0: Icon -->
-                <ColumnDefinition Width="Auto" /> <!-- 1: Title -->
+                <ColumnDefinition Width="Auto" /> <!-- 0: Sidebar Toggle -->
+                <ColumnDefinition Width="Auto" /> <!-- 1: Refresh Button (DayOne) -->
                 <ColumnDefinition Width="Auto" /> <!-- 2: Date -->
                 <ColumnDefinition Width="*" />    <!-- 3: Spacer -->
                 <ColumnDefinition Width="Auto" /> <!-- 4: Right Buttons -->
                 <ColumnDefinition x:Name="RightPaddingColumn" Width="140" /> <!-- 5: System Caption Buttons Area -->
             </Grid.ColumnDefinitions>
 
+            <!-- Sidebar Toggle button -->
+            <Button x:Name="TitleBarSidebarToggle"
+                    Grid.Column="0"
+                    Background="Transparent" BorderThickness="0"
+                    CornerRadius="0" Padding="10,0"
+                    VerticalAlignment="Stretch"
+                    Click="TitleBarSidebarToggle_Click"
+                    ToolTipService.ToolTip="Toggle Sidebar (Ctrl+S)">
+                <FontIcon Glyph="&#xE700;" FontFamily="Segoe Fluent Icons" FontSize="13"/>
+            </Button>
+
             <!-- DayOne refresh button (replaces static icon + title) -->
             <Button x:Name="TitleBarRefreshButton"
-                    Grid.Column="0" Grid.ColumnSpan="2"
+                    Grid.Column="1"
                     Background="Transparent" BorderThickness="0"
-                    CornerRadius="0" Padding="12,0"
+                    CornerRadius="0" Padding="10,0"
                     VerticalAlignment="Stretch"
                     Click="TitleBarRefresh_Click"
-                    ToolTipService.ToolTip="Refresh dashboard">
+                    ToolTipService.ToolTip="Refresh dashboard (Ctrl+R)">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Image Width="16" Height="16" VerticalAlignment="Center" IsHitTestVisible="False">
                         <Image.Source>
@@ -280,11 +292,47 @@
         </Grid>
 
         <!--
-            The Frame hosts pages for your application content. Add your UI to
-            MainPage.xaml rather than here so you can use Page features such as
-            navigation events and the Loaded lifecycle.
+            Main Application Layout: Collapsible Desktop Sidebar + Navigation Frame + Floating Glass Capsule
         -->
-        <Frame x:Name="RootFrame" Grid.Row="1" Opacity="0.0" />
+        <Grid Grid.Row="1" x:Name="MainContentGrid">
+            <Grid.KeyboardAccelerators>
+                <KeyboardAccelerator Modifiers="Control" Key="Number1" Invoked="OnAcceleratorCtrl1" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number2" Invoked="OnAcceleratorCtrl2" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number3" Invoked="OnAcceleratorCtrl3" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number4" Invoked="OnAcceleratorCtrl4" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number5" Invoked="OnAcceleratorCtrl5" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number6" Invoked="OnAcceleratorCtrl6" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number7" Invoked="OnAcceleratorCtrl7" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number8" Invoked="OnAcceleratorCtrl8" />
+                <KeyboardAccelerator Modifiers="Control" Key="S" Invoked="OnAcceleratorCtrlS" />
+                <KeyboardAccelerator Modifiers="Control" Key="R" Invoked="OnAcceleratorCtrlR" />
+                <KeyboardAccelerator Modifiers="Control" Key="N" Invoked="OnAcceleratorCtrlN" />
+            </Grid.KeyboardAccelerators>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Collapsible Modern Desktop Sidebar (Ctrl+S) -->
+            <controls:DesktopSidebarView x:Name="AppSidebar" Grid.Column="0" Visibility="Collapsed"
+                                         TabSelected="OnSidebarTabSelected"
+                                         CollapseRequested="OnSidebarCollapseRequested"
+                                         SyncRequested="OnSidebarSyncRequested"
+                                         SettingsRequested="OnSidebarSettingsRequested" />
+
+            <!-- Central Content Area -->
+            <Grid Grid.Column="1">
+                <Frame x:Name="RootFrame" Opacity="0.0" />
+
+                <!-- Floating Liquid Glass Navigation Capsule (Docked at bottom) -->
+                <controls:FloatingGlassCapsule x:Name="NavCapsule"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Bottom"
+                                               Margin="0,0,0,24"
+                                               TabSelected="OnCapsuleTabSelected" />
+            </Grid>
+        </Grid>
 
         <!-- Full-screen Loading Overlay -->
         <Grid x:Name="LoadingOverlay" Background="{ThemeResource LoadingOverlayBgBrush}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Grid.RowSpan="2" Canvas.ZIndex="9999" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
@@ -336,22 +384,20 @@
             </StackPanel>
         </Grid>
 
-        <!-- System Tray Icon -->
+        <!-- System Tray Companion Popover matching macOS MenuBarExtra -->
         <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="DayOne">
             <tb:TaskbarIcon.ContextFlyout>
-                <MenuFlyout>
-                    <MenuFlyoutItem Text="Show" Click="TrayShow_Click">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE737;" FontFamily="Segoe Fluent Icons" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Text="Exit" Click="TrayExit_Click">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                </MenuFlyout>
+                <Flyout x:Name="TrayCompanionFlyout" Placement="Top">
+                    <Flyout.FlyoutPresenterStyle>
+                        <Style TargetType="FlyoutPresenter">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="CornerRadius" Value="16" />
+                        </Style>
+                    </Flyout.FlyoutPresenterStyle>
+                    <controls:TaskbarGlanceFlyoutControl x:Name="TaskbarGlanceControl" RequestCloseFlyout="TaskbarGlanceControl_RequestCloseFlyout" />
+                </Flyout>
             </tb:TaskbarIcon.ContextFlyout>
         </tb:TaskbarIcon>
     </Grid>

@@ -614,6 +614,34 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
+    private void ListViewBackButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (this.Frame?.CanGoBack == true)
+        {
+            this.Frame.GoBack();
+        }
+        else
+        {
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.NavigateToTab(1);
+            }
+            else
+            {
+                this.Frame?.Navigate(typeof(MainPage));
+            }
+        }
+    }
+
+    private void PopOutButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.Current?.MainWindow is MainWindow mw)
+        {
+            mw.OpenDetailWindow(typeof(RssFeedDetailPage), _selectedItem);
+            mw.NavigateToTab(1);
+        }
+    }
+
     private bool _virtualHostMapped = false;
 
     private void SetupWebViewVirtualHost()

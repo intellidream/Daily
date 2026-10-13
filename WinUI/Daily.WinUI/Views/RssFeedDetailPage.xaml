@@ -248,6 +248,11 @@
                 <Pivot.Resources>
                     <Thickness x:Key="PivotItemMargin">0</Thickness>
                 </Pivot.Resources>
+                <Pivot.LeftHeader>
+                    <Button x:Name="ListViewBackButton" Click="ListViewBackButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Width="36" Height="36" Padding="0" Margin="0,0,12,0" VerticalAlignment="Center" ToolTipService.ToolTip="Back to Dashboard">
+                        <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    </Button>
+                </Pivot.LeftHeader>
                 <Pivot.RightHeader>
                     <!-- Spin-Wheel Selection Control -->
                     <StackPanel x:Name="FeedSelectorContainer" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,12,20,12">
@@ -305,6 +310,11 @@
                                 Width="32" Height="36" Padding="0"
                                 ToolTipService.ToolTip="Next Feed">
                             <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        </Button>
+
+                        <!-- Pop-out Window Button -->
+                        <Button x:Name="ListViewPopOutButton" Click="PopOutButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Width="36" Height="36" Padding="0" Margin="6,0,0,0" ToolTipService.ToolTip="Pop out to separate window">
+                            <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}"/>
                         </Button>
                     </StackPanel>
                 </Pivot.RightHeader>
@@ -479,6 +489,11 @@
                     <!-- Reader Read Later Button -->
                     <Button x:Name="ReaderReadLaterButton" Click="ReaderReadLaterButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Read Later">
                         <FontIcon x:Name="ReaderReadLaterIcon" Glyph="&#xE8A4;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    </Button>
+
+                    <!-- Pop-out Window Button -->
+                    <Button x:Name="ReaderPopOutButton" Click="PopOutButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Pop out to separate window">
+                        <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
                     </Button>
                 </StackPanel>
             </Grid>

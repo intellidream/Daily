@@ -47,7 +47,7 @@ public sealed partial class MainWindow : Window
         if (hasSession)
         {
             LoadingOverlay.Visibility = Visibility.Visible;
-            _minBootTimeTask = System.Threading.Tasks.Task.Delay(1200);
+            _minBootTimeTask = System.Threading.Tasks.Task.CompletedTask;
             LoadingStoryboard.Begin();
             App.LogDiagnostic("MainWindow ctor: calling NavigateAfterHydrationAsync");
             _ = NavigateAfterHydrationAsync();
@@ -308,15 +308,20 @@ public sealed partial class MainWindow : Window
         LoadingOverlay.Visibility = Visibility.Collapsed;
         LoadingOverlay.Opacity = 0.0;
 
-        if (RootFrame.Content is MainPage)
+        bool isLoginPage = (RootFrame.Content is Views.LoginPage);
+
+        if (!isLoginPage)
         {
             AppTitleBar.Opacity = 1.0;
             AppTitleBar.IsHitTestVisible = true;
+            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {
             AppTitleBar.Opacity = 0.0;
             AppTitleBar.IsHitTestVisible = false;
+            NavCapsule.Visibility = Visibility.Collapsed;
+            AppSidebar.Visibility = Visibility.Collapsed;
         }
         App.LogDiagnostic($"DismissLoadingOverlay completed. Visibility now={LoadingOverlay.Visibility}");
     }
@@ -324,7 +329,7 @@ public sealed partial class MainWindow : Window
     public async System.Threading.Tasks.Task FadeOutLoadingOverlayAsync()
     {
         App.LogDiagnostic("FadeOutLoadingOverlayAsync entered");
-        bool shouldShowTitleBar = RootFrame.Content is MainPage;
+        bool shouldShowTitleBar = !(RootFrame.Content is Views.LoginPage);
 
         try
         {
@@ -420,23 +425,175 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private int _currentTabIndex = 1;
+    private readonly Dictionary<Type, DetailWindow> _openWindows = new();
+
+    public int CurrentTabIndex => _currentTabIndex;
+
     private void RootFrame_Navigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         RootFrame.Opacity = 1.0;
-        if (e.SourcePageType == typeof(MainPage))
+        bool isLoginPage = (e.SourcePageType == typeof(Views.LoginPage));
+        
+        if (isLoginPage)
+        {
+            AppTitleBar.Opacity = 0.0;
+            AppTitleBar.IsHitTestVisible = false;
+            NavCapsule.Visibility = Visibility.Collapsed;
+            AppSidebar.Visibility = Visibility.Collapsed;
+        }
+        else
         {
             if (LoadingOverlay.Visibility != Visibility.Visible)
             {
                 AppTitleBar.Opacity = 1.0;
                 AppTitleBar.IsHitTestVisible = true;
             }
-        }
-        else if (e.SourcePageType == typeof(Views.LoginPage))
-        {
-            AppTitleBar.Opacity = 0.0;
-            AppTitleBar.IsHitTestVisible = false;
+
+            int tab = e.SourcePageType switch
+            {
+                var t when t == typeof(MainPage) => 1,
+                var t when t == typeof(Views.FinancesDetailPage) => 2,
+                var t when t == typeof(Views.TagdosNotesDetailPage) => 3,
+                var t when t == typeof(Views.HealthDetailPage) => 4,
+                var t when t == typeof(Views.HabitsDetailPage) => 5,
+                var t when t == typeof(Views.WeatherDetailPage) => 6,
+                var t when t == typeof(Views.RssFeedDetailPage) => 7,
+                var t when t == typeof(Views.CalendarDetailPage) => 8,
+                _ => 1
+            };
+
+            _currentTabIndex = tab;
+            NavCapsule.SetSelectedTab(tab);
+            AppSidebar.SetSelectedTab(tab);
+
+            // Capsule is visible when sidebar is collapsed
+            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
         }
     }
+
+    // ── Navigation & In-Place Windowing ──────────────────────────────────────────
+
+    public void NavigateToTab(int tabIndex, object? parameter = null)
+    {
+        if (tabIndex < 1 || tabIndex > 8) return;
+        _currentTabIndex = tabIndex;
+        NavCapsule.SetSelectedTab(tabIndex);
+        AppSidebar.SetSelectedTab(tabIndex);
+
+        Type targetPageType = tabIndex switch
+        {
+            1 => typeof(MainPage),
+            2 => typeof(Views.FinancesDetailPage),
+            3 => typeof(Views.TagdosNotesDetailPage),
+            4 => typeof(Views.HealthDetailPage),
+            5 => typeof(Views.HabitsDetailPage),
+            6 => typeof(Views.WeatherDetailPage),
+            7 => typeof(Views.RssFeedDetailPage),
+            8 => typeof(Views.CalendarDetailPage),
+            _ => typeof(MainPage)
+        };
+
+        if (RootFrame.Content?.GetType() == targetPageType && parameter == null)
+        {
+            return;
+        }
+
+        RootFrame.Navigate(targetPageType, parameter);
+    }
+
+    public void ToggleSidebar()
+    {
+        if (AppSidebar.Visibility == Visibility.Visible)
+        {
+            AppSidebar.Visibility = Visibility.Collapsed;
+            NavCapsule.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            AppSidebar.Visibility = Visibility.Visible;
+            NavCapsule.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    public void TriggerGlobalSync()
+    {
+        if (RootFrame.Content is MainPage mp)
+        {
+            mp.TriggerRefresh();
+        }
+        else
+        {
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    var sync = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+                    if (sync != null) await sync.SyncAllAsync();
+                }
+                catch { }
+            });
+        }
+    }
+
+    public void OpenSettings()
+    {
+        if (RootFrame.Content is MainPage mp)
+        {
+            mp.OpenSettings();
+        }
+        else
+        {
+            var settingsWindow = new SettingsWindow();
+            settingsWindow.Activate();
+        }
+    }
+
+    public void OpenDetailWindow(Type pageType, object? parameter = null)
+    {
+        if (_openWindows.TryGetValue(pageType, out var existingWindow))
+        {
+            if (parameter != null) existingWindow.NavigateTo(pageType, parameter);
+            existingWindow.Activate();
+            return;
+        }
+
+        var window = new DetailWindow();
+        window.RestorePosition(pageType.Name);
+        window.Closed += (s, ev) => { _openWindows.Remove(pageType); };
+        _openWindows[pageType] = window;
+        window.NavigateTo(pageType, parameter);
+
+        var root = this.Content as FrameworkElement;
+        var activeTheme = root?.RequestedTheme ?? ElementTheme.Default;
+        if (activeTheme == ElementTheme.Default)
+        {
+            activeTheme = root?.ActualTheme ?? ElementTheme.Light;
+        }
+        window.ApplyTheme(activeTheme);
+        window.Activate();
+    }
+
+    private void TitleBarSidebarToggle_Click(object sender, RoutedEventArgs e) => ToggleSidebar();
+    private void OnSidebarTabSelected(object sender, int tabIndex) => NavigateToTab(tabIndex);
+    private void OnSidebarCollapseRequested(object sender, EventArgs e) => ToggleSidebar();
+    private void OnSidebarSyncRequested(object sender, EventArgs e) => TriggerGlobalSync();
+    private void OnSidebarSettingsRequested(object sender, EventArgs e) => OpenSettings();
+    private void OnCapsuleTabSelected(object sender, int tabIndex) => NavigateToTab(tabIndex);
+    private void TaskbarGlanceControl_RequestCloseFlyout(object sender, EventArgs e) => TrayCompanionFlyout?.Hide();
+
+    // ── Keyboard Accelerators ──────────────────────────────────────────────────
+    private void OnAcceleratorCtrl1(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(1); }
+    private void OnAcceleratorCtrl2(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(2); }
+    private void OnAcceleratorCtrl3(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(3); }
+    private void OnAcceleratorCtrl4(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(4); }
+    private void OnAcceleratorCtrl5(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(5); }
+    private void OnAcceleratorCtrl6(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(6); }
+    private void OnAcceleratorCtrl7(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(7); }
+    private void OnAcceleratorCtrl8(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(8); }
+    private void OnAcceleratorCtrlS(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; ToggleSidebar(); }
+    private void OnAcceleratorCtrlR(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; TriggerGlobalSync(); }
+    private void OnAcceleratorCtrlN(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(3); }
 
     // ── Window management ─────────────────────────────────────────────────────
 

@@ -1567,6 +1567,34 @@ namespace Daily_WinUI.Views
             OnPropertyChanged(string.Empty);
         }
 
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (this.Frame?.CanGoBack == true)
+            {
+                this.Frame.GoBack();
+            }
+            else
+            {
+                if (App.Current?.MainWindow is MainWindow mw)
+                {
+                    mw.NavigateToTab(1);
+                }
+                else
+                {
+                    this.Frame?.Navigate(typeof(MainPage));
+                }
+            }
+        }
+
+        private void PopOutButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.OpenDetailWindow(typeof(HealthDetailPage));
+                mw.NavigateToTab(1);
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
