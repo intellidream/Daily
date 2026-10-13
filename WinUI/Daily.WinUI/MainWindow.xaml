@@ -330,7 +330,6 @@
                                                VerticalAlignment="Bottom"
                                                Margin="0,0,0,24"
                                                Canvas.ZIndex="1000"
-                                               Translation="0,0,64"
                                                IsHitTestVisible="True"
                                                TabSelected="OnCapsuleTabSelected" />
             </Grid>
