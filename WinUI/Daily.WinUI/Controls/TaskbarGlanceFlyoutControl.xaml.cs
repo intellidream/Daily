@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Daily.Models;
 using Daily.Services;
 using Daily.Services.Health;
+using Daily_WinUI.Services;
 
 namespace Daily_WinUI.Controls
 {
@@ -14,8 +15,9 @@ namespace Daily_WinUI.Controls
     {
         private IHabitsService? _habitsService;
         private ITagdosService? _tagdosService;
-        private IWeatherService? _weatherService;
         private IHealthService? _healthService;
+        private readonly WeatherClient _weatherClient = new();
+        private readonly LocationService _locationService = new();
 
         public event EventHandler? RequestCloseFlyout;
 
@@ -40,7 +42,6 @@ namespace Daily_WinUI.Controls
                 {
                     _habitsService = sp.GetService<IHabitsService>();
                     _tagdosService = sp.GetService<ITagdosService>();
-                    _weatherService = sp.GetService<IWeatherService>();
                     _healthService = sp.GetService<IHealthService>();
                 }
             }
@@ -54,12 +55,14 @@ namespace Daily_WinUI.Controls
         {
             try
             {
-                if (_weatherService != null)
+                var coords = await _locationService.GetCurrentCoordinatesAsync();
+                if (coords.HasValue)
                 {
-                    var location = _weatherService.CurrentLocationName;
-                    if (!string.IsNullOrEmpty(location))
+                    var snapshot = await _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, "metric");
+                    if (snapshot != null)
                     {
-                        WeatherLocationText.Text = location;
+                        WeatherTempText.Text = $"{Math.Round(snapshot.Temperature):F0}°C";
+                        WeatherLocationText.Text = snapshot.LocationName;
                     }
                 }
 
