@@ -62,12 +62,22 @@ This document details the comprehensive modernization of the **Daily WearOS** ap
 ---
 
 ## 3. Physical Device Verification
-- **Target Device**: Google Pixel Watch 5 (`serial: 67301WRDTW62DP`).
+
+### A. Google Pixel Watch 5
+- **Target Device**: Google Pixel Watch 5 (`serial: 67301WRDTW62DP`, 480x480 AMOLED).
 - **Connection**: Wireless ADB via TLS pairing on local subnet (`192.168.3.65`).
 - **Verification Results**:
   - App installed via streamed install (`Success`).
   - Native launch of `com.intellidream.daily.wearos/.presentation.MainActivity`.
   - Visual verification confirmed 122dp unclipped hero ring, curved `TimeText`, rounded 48dp quick chips, 7-day stacked bar chart, and fluid rotary crown response.
+
+### B. OnePlus Watch 3
+- **Target Device**: OnePlus Watch 3 (`OPWWE251`, 466x466 AMOLED, circular display).
+- **Connection**: Wireless ADB pairing via TLS on local subnet (`192.168.3.39`, Bonjour mDNS resolution to connect port `34173`).
+- **Verification Results**:
+  - Streamed install successful (`Success`).
+  - App launched into foreground `MainActivity`.
+  - UI hierarchy dump confirmed exact layout adaptation to 466x466 display, responsive 0ms horizontal paging between Bubbles and 7-day analytics, and zero visual clipping.
 
 ---
 
