@@ -110,7 +110,7 @@ struct DailyMacOSApp: App {
                 }
             })
             .preferredColorScheme(colorScheme)
-            .frame(width: 360, height: 500)
+            .frame(width: 360, height: 560)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -125,22 +125,48 @@ struct DailyMacOSApp: App {
                 }
             })
             .preferredColorScheme(colorScheme)
-            .frame(width: 360, height: 500)
+            .frame(width: 360, height: 560)
         } label: {
-            HStack(spacing: 4) {
+            menuBarLabel
+        }
+        .menuBarExtraStyle(.window)
+    }
+    
+    @ViewBuilder
+    private var menuBarLabel: some View {
+        switch menuBarDisplayModeRaw {
+        case MenuBarDisplayMode.monochrome.rawValue, MenuBarDisplayMode.iconOnly.rawValue:
+            Image(systemName: "sparkles")
+        case MenuBarDisplayMode.weather.rawValue:
+            let iconName = WeatherConditionHelper.sfSymbol(for: weatherService.currentWeather?.weather.first?.icon ?? "01d")
+            HStack(spacing: 3) {
+                Image(systemName: iconName)
+                if let temp = weatherService.currentWeather?.main.temp {
+                    Text("\(Int(round(temp)))°")
+                }
+            }
+        case MenuBarDisplayMode.heartRate.rawValue:
+            HStack(spacing: 3) {
+                Image(systemName: "heart.fill")
+                if let bpm = healthService.latestBpm ?? (healthService.restingBpm > 0 ? healthService.restingBpm : nil) {
+                    Text("\(Int(round(bpm)))")
+                }
+            }
+        case MenuBarDisplayMode.iconAndVitals.rawValue:
+            HStack(spacing: 3) {
                 Image(systemName: "sparkles")
-                if menuBarDisplayModeRaw == MenuBarDisplayMode.iconAndWeather.rawValue {
-                    if let temp = weatherService.currentWeather?.main.temp {
-                        Text("\(Int(round(temp)))°")
-                    }
-                } else if menuBarDisplayModeRaw == MenuBarDisplayMode.iconAndVitals.rawValue {
-                    if let bpm = healthService.latestBpm ?? (healthService.restingBpm > 0 ? healthService.restingBpm : nil) {
-                        Text("♥\(Int(round(bpm)))")
-                    }
+                if let bpm = healthService.latestBpm ?? (healthService.restingBpm > 0 ? healthService.restingBpm : nil) {
+                    Text("♥\(Int(round(bpm)))")
+                }
+            }
+        case MenuBarDisplayMode.iconAndWeather.rawValue, _:
+            HStack(spacing: 3) {
+                Image(systemName: "sparkles")
+                if let temp = weatherService.currentWeather?.main.temp {
+                    Text("\(Int(round(temp)))°")
                 }
             }
         }
-        .menuBarExtraStyle(.window)
     }
     
     private var colorScheme: ColorScheme? {

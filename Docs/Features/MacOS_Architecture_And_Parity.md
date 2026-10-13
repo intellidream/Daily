@@ -343,22 +343,40 @@ To guarantee persistent, instant access to companion telemetry regardless of men
 ```
 
 1. **`MenuBarExtra` Window Sizing Hardening**:
-   - In `DailyMacOSApp.swift`, `MenuBarCompanionView` inside `.menuBarExtraStyle(.window)` is explicitly framed with `.frame(width: 360, height: 500)` to ensure it never collapses to 0x0 or miscalculates intrinsic content size.
+   - In `DailyMacOSApp.swift`, `MenuBarCompanionView` inside `.menuBarExtraStyle(.window)` is explicitly framed with `.frame(width: 360, height: 560)` inside a scrollable glass canvas to guarantee complete readability and zero content clipping.
 
 2. **Dedicated On-Demand HUD Window (`DayOne Glance`)**:
-   - Defined `Window("DayOne Glance", id: "glance")` in `DailyMacOSApp.swift` with `.windowStyle(.hiddenTitleBar)`.
-   - Styled with macOS frosted vibrancy (`.background(.ultraThinMaterial)`), rounded corners (20pt), and a subtle 1pt border.
-   - Hosts the full `MenuBarCompanionView`, providing instant access to:
-     - Live Weather condition & forecast
-     - Vitals summary (Heart Rate, Resting Heart Rate, Steps, Sleep score)
-     - Quick Water logging controls (`-250ml`, `+250ml`, `+500ml`)
-     - Quick Scratchpad for rapid thought capture
-     - Instant deep-navigation buttons to all primary Daily hubs.
+   - Defined `Window("DayOne Glance", id: "glance")` in `DailyMacOSApp.swift` with `.windowStyle(.hiddenTitleBar)` and `.frame(width: 360, height: 560)`.
+   - Styled with macOS frosted vibrancy (`.background(.ultraThinMaterial)`), rounded corners (20pt), and specular highlight borders.
+   - Hosts the complete redesigned `MenuBarCompanionView`, providing:
+     - **Live Weather & Vitals Glance**: Weather card with outdoor temperature, location name, and condition icon + Health Vitals card with live heart rate (BPM) and step count.
+     - **Water & Hydration Tile (Bubbles)**: Full parity with iOS widgets:
+       - `100 ml` Water (Cyan)
+       - `150 ml` Coffee (Warm Amber `#F59E0B`, `cup.and.saucer.fill`)
+       - `300 ml` Water (Cyan, `drop.fill`)
+       - Live progress bar against `habitsService.waterGoal`.
+     - **Dedicated Smokes & Tobacco Tile (Smokes)**: Completely separated from hydration:
+       - Displays today total against daily baseline (`todayTotal / baseline`).
+       - Gradient progress indicator.
+       - Quick action buttons with iOS widget parity: **`Cig`** (`#EF4444`, combustible cigarette) and **`Heat`** (`#3B82F6`, heated tobacco stick).
+     - **TagDoS Quick Entry Tile (Dual-Mode Note vs TagDo)**:
+       - **`Quick Note` mode**: Creates a note via `tagdosStore.createQuickNote`, saving directly to the **TagDoS Notes Tab (⌘3 -> Notes)** and syncing across devices via Supabase.
+       - **`TagDo` mode**: Adds an active mental task pill into **TagDoS Stream 1 (⌘3)** via `tagdosStore.addPill`.
+       - Transparent destination helper subtitles and direct `Hub (⌘3) ↗` jump link.
+     - **Quick Jump Navigation Grid**: Instant one-click routing to Money (`⌘2`), Health (`⌘4`), Habits (`⌘5`), TagDoS (`⌘3`), and News (`⌘7`).
 
-3. **Global Shortcuts & Deep Link Activation**:
+3. **Configurable Menu Bar Icon & Telemetry Modes**:
+   - Supported options under **Settings -> macOS Desktop Integration**:
+     - **Monochrome App Icon (`monochrome`)**: Dynamic template rendering (`sparkles`) adapting automatically to dark and light macOS system appearance.
+     - **Weather & Temperature (`weather`)**: Dynamic weather condition SF symbol (sun/rain/cloud) + current outdoor temperature (e.g. `⛅ 17°`).
+     - **Heart Rate (`heartRate`)**: Biometric pulse icon + live heart rate (e.g. `♥ 68`).
+     - **Icon + Weather (`iconAndWeather`)**: DayOne sparkles icon + outdoor temperature.
+     - **Icon + Heart Rate (`iconAndVitals`)**: DayOne sparkles icon + live heart rate.
+
+4. **Global Shortcuts & Multi-Surface Activation**:
    - **Keyboard Shortcut**: `⌘0` registered globally in `RootView.swift` and in the macOS application menu (`CommandGroup(replacing: .appInfo)`).
-   - **Deep Link Handling**: Support for `daily://glance` scheme to summon the companion HUD from widgets, Raycast, Alfred, or external scripts.
-   - **Hero Greeting Card Action**: Added a dedicated `[ ✨ Glance ]` circular Liquid Glass button in `HeaderGreetingView.swift` directly next to `[ 🔄 Sync ]`.
+   - **Deep Link Handling**: Support for `daily://glance` scheme to summon the companion HUD from external utilities or scripts.
+   - **Hero Greeting Card Action**: Dedicated `[ ✨ Glance ]` circular Liquid Glass button in `HeaderGreetingView.swift` directly next to `[ 🔄 Sync ]`.
    - **Settings Integration**: `MacOSSettingsSection` includes a direct preview button (`"Open Glance Companion (⌘0)"`) and user guidance on managing macOS menu bar icon crowding.
 
 

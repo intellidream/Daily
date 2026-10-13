@@ -2,17 +2,51 @@ import SwiftUI
 import DailyCore
 
 public enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
-    case iconOnly = "icon_only"
+    case monochrome = "monochrome"
+    case weather = "weather"
+    case heartRate = "heart_rate"
     case iconAndWeather = "icon_and_weather"
     case iconAndVitals = "icon_and_vitals"
+    case iconOnly = "icon_only" // Legacy fallback alias
     
     public var id: String { rawValue }
     
+    public static var allCases: [MenuBarDisplayMode] {
+        [.monochrome, .weather, .heartRate, .iconAndWeather, .iconAndVitals]
+    }
+    
     public var displayName: String {
         switch self {
-        case .iconOnly: return "Icon Only"
-        case .iconAndWeather: return "Icon & Weather"
-        case .iconAndVitals: return "Icon & Heart Rate"
+        case .monochrome, .iconOnly: return "Monochrome App Icon"
+        case .weather: return "Weather & Temp"
+        case .heartRate: return "Heart Rate"
+        case .iconAndWeather: return "Icon + Weather"
+        case .iconAndVitals: return "Icon + Heart Rate"
+        }
+    }
+    
+    public var iconName: String {
+        switch self {
+        case .monochrome, .iconOnly: return "sparkles"
+        case .weather: return "cloud.sun.fill"
+        case .heartRate: return "heart.fill"
+        case .iconAndWeather: return "sun.max.fill"
+        case .iconAndVitals: return "heart.text.square.fill"
+        }
+    }
+    
+    public var description: String {
+        switch self {
+        case .monochrome, .iconOnly:
+            return "Minimalist DayOne template icon adapting dynamically to dark/light menu bars."
+        case .weather:
+            return "Current outdoor condition symbol and temperature (e.g. ⛅ 17°)."
+        case .heartRate:
+            return "Live heart symbol and biometric pulse telemetry (e.g. ♥ 68)."
+        case .iconAndWeather:
+            return "DayOne sparkles icon accompanied by live outdoor temperature."
+        case .iconAndVitals:
+            return "DayOne sparkles icon accompanied by live biometric heart rate."
         }
     }
 }
@@ -120,14 +154,21 @@ public struct MacOSSettingsSection: View {
                     
                     Picker("Menu Bar Display", selection: $menuBarDisplayMode) {
                         ForEach(MenuBarDisplayMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode.rawValue)
+                            Label(mode.displayName, systemImage: mode.iconName)
+                                .tag(mode.rawValue)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     
-                    Text("Select what telemetry to display in the macOS status bar next to the icon")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    if let mode = MenuBarDisplayMode(rawValue: menuBarDisplayMode) {
+                        Text(mode.description)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(ThemeColors.accentCyan)
+                    } else {
+                        Text("Select what telemetry to display in the macOS status bar next to the icon")
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
                     
                     HStack {
                         Button {
