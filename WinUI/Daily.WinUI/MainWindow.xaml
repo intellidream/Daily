@@ -16,9 +16,9 @@
     <Grid Background="Transparent">
         <Grid.Resources>
             <!-- Smooth cosmic breathing and floating animation for Orbit Icon -->
-            <Storyboard x:Name=LoadingStoryboard RepeatBehavior=Forever>
+            <Storyboard x:Name="LoadingStoryboard" RepeatBehavior="Forever">
                 <!-- Icon Translation Y (gentle float) -->
-                <DoubleAnimation Storyboard.TargetName=IconTranslate Storyboard.TargetProperty=Y
+                <DoubleAnimation Storyboard.TargetName="IconTranslate" Storyboard.TargetProperty="Y"
                                  From="0" To="-8" Duration="0:0:1.8" AutoReverse="True">
                     <DoubleAnimation.EasingFunction>
                         <SineEase EasingMode="EaseInOut" />

@@ -167,7 +167,7 @@
                             <TextBox Grid.Row="1" x:Name="StreamMemosTextBox" PlaceholderText="Write daily focus notes, bullet checklists, or key details..." TextWrapping="Wrap" AcceptsReturn="True" MinHeight="100" CornerRadius="8" Padding="12" Margin="0,0,0,12" LostFocus="StreamMemosTextBox_LostFocus" />
 
                             <!-- Drag & Drop File Zone -->
-                            <Border Grid.Row="2" x:Name="DropFileZone" AllowDrop="True" DragOver="DropFileZone_DragOver" Drop="DropFileZone_Drop" Background="#0AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" BorderDashArray="2,2" CornerRadius="10" Padding="16">
+                            <Border Grid.Row="2" x:Name="DropFileZone" AllowDrop="True" DragOver="DropFileZone_DragOver" Drop="DropFileZone_Drop" Background="#0AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="10" Padding="16">
                                 <StackPanel Spacing="6" HorizontalAlignment="Center">
                                     <FontIcon Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
                                     <TextBlock Text="Drag and drop files here (PDF, images, documents) or click to attach" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
