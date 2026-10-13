@@ -53,8 +53,7 @@ public struct DashboardView: View {
                 HeaderGreetingView(
                     onAvatarTapped: onNavigateToSettings,
                     onCustomizeTapped: { showingCustomizeSheet = true },
-                    onBriefingTapped: { showingBriefingSheet = true },
-                    onGlanceTapped: { openWindow(id: "glance") }
+                    onBriefingTapped: { showingBriefingSheet = true }
                 )
                 
                 // Native Coalesced Row-Grid Architecture (100% 120 FPS ProMotion stability)

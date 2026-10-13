@@ -373,11 +373,46 @@ To guarantee persistent, instant access to companion telemetry regardless of men
      - **Icon + Weather (`iconAndWeather`)**: DayOne sparkles icon + outdoor temperature.
      - **Icon + Heart Rate (`iconAndVitals`)**: DayOne sparkles icon + live heart rate.
 
-4. **Global Shortcuts & Multi-Surface Activation**:
-   - **Keyboard Shortcut**: `⌘0` registered globally in `RootView.swift` and in the macOS application menu (`CommandGroup(replacing: .appInfo)`).
-   - **Deep Link Handling**: Support for `daily://glance` scheme to summon the companion HUD from external utilities or scripts.
-   - **Hero Greeting Card Action**: Dedicated `[ ✨ Glance ]` circular Liquid Glass button in `HeaderGreetingView.swift` directly next to `[ 🔄 Sync ]`.
-   - **Settings Integration**: `MacOSSettingsSection` includes a direct preview button (`"Open Glance Companion (⌘0)"`) and user guidance on managing macOS menu bar icon crowding.
+4. **Global Shortcuts & Dedicated Activation**:
+   - **Keyboard Shortcut**: `⌘0` registered globally in `RootView.swift` and in the macOS application menu (`CommandMenu("Navigate")`).
+   - **Menu Bar Resident**: Resident in macOS status bar via `MenuBarExtra` with customizable telemetry (sparkles icon, weather, heart rate).
+   - **Hero Greeting Card Polish**: Removed the redundant Glance button from the Hero card cluster to preserve clean dashboard hierarchy (`[ 🔄 Sync ] [ 🎛️ Customize ] [ ⚙️ Settings ]`), keeping Glance solely in the menu bar and accessible via `⌘0`.
+   - **Settings Integration**: `MacOSSettingsSection` includes a direct preview button (`"Open Glance Companion (⌘0)"`) and telemetry display picker.
+
+---
+
+## 11. Single-Instance Window Architecture & Menu Bar Persistence
+
+### 11.1 The Multi-Window Spawning Problem & Diagnosis
+Under macOS SwiftUI:
+1. `WindowGroup(id: "main")` defines a scene that allows multiple window instances. When external deep link URLs (`daily://...`) were dispatched via `NSWorkspace.shared.open`, macOS LaunchServices routed the event back into SwiftUI as a request to create a new window instance.
+2. If the user minimized `DayOne` into the Dock, invoking `openWindow(id: "main")` failed to de-miniaturize the window; instead, SwiftUI opened an additional, separate window instance.
+3. Repeated navigation actions inside Glance spawned further duplicate windows.
+
+### 11.2 Centralized `MacOSWindowManager`
+To guarantee single-instance desktop semantics and reliable de-miniaturization, `MacOSWindowManager.swift` was introduced:
+- **`activateMainWindow(selectingTab:)`**:
+  - Scans `NSApp.windows` for the primary DayOne window.
+  - If `window.isMiniaturized`, invokes `window.deminiaturize(nil)` to immediately restore it from the Dock.
+  - Calls `window.makeKeyAndOrderFront(nil)` and `window.orderFrontRegardless()` to focus it.
+  - If the window was closed via the red close button, summons it via `openWindowAction?(id: "main")`.
+  - Dispatches an in-process `NotificationCenter.default.post(name: .dailySelectTab, object: tab)` rather than external URL handlers.
+- **SwiftUI Scene Transition**:
+  - Replaced `WindowGroup(id: "main")` with `Window("DayOne", id: "main")`, strictly enforcing single-window instantiation at the SwiftUI engine level.
+- **`AppDelegate` Lifecycle**:
+  - Added `@NSApplicationDelegateAdaptor(AppDelegate.self)` implementing `applicationShouldHandleReopen(_:hasVisibleWindows:)` to automatically restore/un-minimize the main window whenever the user clicks the Dock icon.
+
+### 11.3 Menu Bar Persistence & Process Lifecycle ("App Oprită")
+On macOS, process lifecycle is strictly governed by the OS WindowServer:
+1. **Closing the Window (Red X / ⌘W)**:
+   - Does **not** terminate the DayOne process.
+   - The app remains active in the background, and `MenuBarExtra` remains 100% resident and interactive in the macOS menu bar.
+   - The user can log water, log smokes, record TagDoS notes, check weather, and jump into hubs directly from the menu bar even when no main window is visible.
+2. **Quitting the App (⌘Q / "Quit Daily")**:
+   - Explicitly terminates the process (`SIGTERM`). By macOS security architecture, when a process terminates, macOS unregisters and removes all its status items from the menu bar. No application can show an interactive menu bar item while completely dead.
+3. **Continuous Background Presence via Launch at Login**:
+   - To make the companion effectively always-present on the Mac, `LaunchAtLoginManager` (`SMAppService.mainApp`) automatically starts DayOne upon system boot/login into the background with the menu bar companion ready to use.
+
 
 
 

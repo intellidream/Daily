@@ -261,6 +261,16 @@ public struct RootView: View {
                 }
             }
         }
+        .onAppear {
+            MacOSWindowManager.shared.openWindowAction = openWindow
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dailySelectTab)) { notification in
+            if let tab = notification.object as? NavigationTab {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    selectedTab = tab
+                }
+            }
+        }
         .onChange(of: isReadingArticleInNews) { _, isReading in
             if !isReading {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {

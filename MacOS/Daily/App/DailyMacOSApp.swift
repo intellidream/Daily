@@ -2,8 +2,16 @@ import SwiftUI
 import DailyCore
 import AppKit
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MacOSWindowManager.shared.activateMainWindow()
+        return true
+    }
+}
+
 @main
 struct DailyMacOSApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var weatherService = WeatherService.shared
     @ObservedObject private var healthService = HealthDataService.shared
@@ -28,8 +36,8 @@ struct DailyMacOSApp: App {
     }
     
     var body: some Scene {
-        // Primary Liquid Glass Window
-        WindowGroup(id: "main") {
+        // Primary Liquid Glass Window (Single-instance window)
+        Window("DayOne", id: "main") {
             RootView()
                 .preferredColorScheme(colorScheme)
                 .frame(minWidth: 440, minHeight: 650)
@@ -40,52 +48,50 @@ struct DailyMacOSApp: App {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("Quick Note in TagDoS") {
-                    if let url = URL(string: "daily://tagdos") {
-                        NSWorkspace.shared.open(url)
-                    }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .tagdos)
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
             CommandMenu("Navigate") {
                 Button("Dashboard") {
-                    if let url = URL(string: "daily://dashboard") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .dashboard)
                 }
                 .keyboardShortcut("1", modifiers: .command)
                 
                 Button("Finances & Markets") {
-                    if let url = URL(string: "daily://finances") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .finances)
                 }
                 .keyboardShortcut("2", modifiers: .command)
                 
                 Button("TagDoS Notes & Tasks") {
-                    if let url = URL(string: "daily://tagdos") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .tagdos)
                 }
                 .keyboardShortcut("3", modifiers: .command)
                 
                 Button("Health & Vitals") {
-                    if let url = URL(string: "daily://health") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .health)
                 }
                 .keyboardShortcut("4", modifiers: .command)
                 
                 Button("Habits & Cravings") {
-                    if let url = URL(string: "daily://habits") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .habits)
                 }
                 .keyboardShortcut("5", modifiers: .command)
                 
                 Button("Weather & Forecast") {
-                    if let url = URL(string: "daily://weather") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .weather)
                 }
                 .keyboardShortcut("6", modifiers: .command)
                 
                 Button("News & Articles") {
-                    if let url = URL(string: "daily://news") { NSWorkspace.shared.open(url) }
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .news)
                 }
                 .keyboardShortcut("7", modifiers: .command)
                 
                 Divider()
                 
                 Button("DayOne Glance Companion") {
-                    openWindow(id: "glance")
+                    MacOSWindowManager.shared.activateGlanceWindow()
                 }
                 .keyboardShortcut("0", modifiers: .command)
                 
@@ -100,14 +106,10 @@ struct DailyMacOSApp: App {
             }
         }
         
-        // On-demand Glance Floating Window (Accessible via ⌘0, Dashboard, or Navigate menu)
+        // On-demand Glance Floating Window (Accessible via ⌘0, Menu Bar, or Navigate menu)
         Window("DayOne Glance", id: "glance") {
             MenuBarCompanionView(onOpenFullApp: { requestedTab in
-                NSApp.activate(ignoringOtherApps: true)
-                openWindow(id: "main")
-                if let tab = requestedTab, let url = URL(string: "daily://\(tab.rawValue)") {
-                    NSWorkspace.shared.open(url)
-                }
+                MacOSWindowManager.shared.activateMainWindow(selectingTab: requestedTab)
             })
             .preferredColorScheme(colorScheme)
             .frame(width: 360, height: 560)
@@ -118,11 +120,7 @@ struct DailyMacOSApp: App {
         // Persistent MenuBarExtra Companion (Quick Drop-down)
         MenuBarExtra {
             MenuBarCompanionView(onOpenFullApp: { requestedTab in
-                NSApp.activate(ignoringOtherApps: true)
-                openWindow(id: "main")
-                if let tab = requestedTab, let url = URL(string: "daily://\(tab.rawValue)") {
-                    NSWorkspace.shared.open(url)
-                }
+                MacOSWindowManager.shared.activateMainWindow(selectingTab: requestedTab)
             })
             .preferredColorScheme(colorScheme)
             .frame(width: 360, height: 560)
