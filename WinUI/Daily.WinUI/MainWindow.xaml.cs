@@ -579,6 +579,7 @@ public sealed partial class MainWindow : Window
     private void OnSidebarCollapseRequested(object sender, EventArgs e) => ToggleSidebar();
     private void OnSidebarSyncRequested(object sender, EventArgs e) => TriggerGlobalSync();
     private void OnSidebarSettingsRequested(object sender, EventArgs e) => OpenSettings();
+    private void OnCapsuleTabSelected(object sender, int tabIndex) => NavigateToTab(tabIndex);
     private void TaskbarGlanceControl_RequestCloseFlyout(object sender, EventArgs e) { }
     public Frame MainFrame => RootFrame;
 
