@@ -119,95 +119,21 @@ fun Smokes7DaysScreen(
         }
     }
 
-    LaunchedEffect(weekOffset) {
-        val cached = sessionManager.getSmokesWeek(weekOffset)
+    fun loadCachedWeek(offset: Int) {
+        val cached = sessionManager.getSmokesWeek(offset)
         if (cached != null) {
             buckets = cached
             isLoading = false
-        }
-    }
-
-    val fetchWeekData: () -> Unit = {
-        if (isPageActive) {
-            scope.launch(Dispatchers.IO) {
-                if (sessionManager.getSmokesWeek(weekOffset) == null) {
-                    withContext(Dispatchers.Main) { isLoading = true }
-                }
-                val (monCal, nextMonCal) = getWeekWindow(weekOffset)
-                val startStr = Instant.ofEpochMilli(monCal.timeInMillis).toString()
-                val endStr = Instant.ofEpochMilli(nextMonCal.timeInMillis).toString()
-                val todayStr = localDateFmt.format(Date())
-
-                val tempBuckets = mutableListOf<SmokeDayBucket>()
-                for (i in 0 until 7) {
-                    val dCal = monCal.clone() as Calendar
-                    dCal.add(Calendar.DAY_OF_YEAR, i)
-                    val dStr = localDateFmt.format(dCal.time)
-                    val lbl = dayLabelFmt.format(dCal.time).take(1)
-                    tempBuckets.add(SmokeDayBucket(dStr, lbl, dStr == todayStr))
-                }
-
-                try {
-                    // Query both 'smokes' (canonical) and 'smoke' (legacy)
-                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                        .select {
-                            filter {
-                                or {
-                                    eq("habit_type", "smokes")
-                                    eq("habit_type", "smoke")
-                                }
-                                eq("is_deleted", false)
-                                and {
-                                    gte("logged_at", startStr)
-                                    lt("logged_at", endStr)
-                                }
-                            }
-                        }.decodeList<HabitLog>()
-
-                    for (log in logs) {
-                        try {
-                            val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
-                            if (localDate != null) {
-                                val logDateStr = localDate.toString()
-                                val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                                if (bucket != null) {
-                                    val count = if (log.value > 0) log.value else 1.0
-                                    val isHeat = log.metadata?.contains("Heated", ignoreCase = true) == true
-                                    if (isHeat) {
-                                        bucket.heat += count
-                                    } else {
-                                        bucket.cig += count
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.w("Smokes7Days", "Failed to process log: ${e.message}")
-                        }
-                    }
-
-                    sessionManager.setSmokesWeek(weekOffset, tempBuckets)
-                    withContext(Dispatchers.Main) {
-                        buckets = tempBuckets
-                        isLoading = false
-                    }
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    android.util.Log.e("Smokes7Days", "Failed to fetch week logs: ${e.message}", e)
-                    withContext(Dispatchers.Main) {
-                        if (buckets.isEmpty()) {
-                            buckets = tempBuckets
-                        }
-                        isLoading = false
-                    }
-                }
+        } else {
+            isLoading = true
+            if (isPageActive) {
+                sessionManager.triggerHabitsSync()
             }
         }
     }
 
-    LaunchedEffect(isPageActive, weekOffset, refreshTrigger) {
-        if (isPageActive) {
-            fetchWeekData()
-        }
+    LaunchedEffect(weekOffset, refreshTrigger) {
+        loadCachedWeek(weekOffset)
     }
 
     val weeklyAverage = remember(buckets, weekOffset) {

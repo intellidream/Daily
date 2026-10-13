@@ -143,9 +143,8 @@ fun SmokesScreen(
         }
     }
 
-    // 0ms instant UI update on date changes from memory cache
-    LaunchedEffect(dayOffset) {
-        val cached = sessionManager.getSmokesLogs(targetDateStr)
+    fun loadCachedDate(targetDate: String) {
+        val cached = sessionManager.getSmokesLogs(targetDate)
         if (cached != null) {
             dayLogs = cached
             var tCig = 0
@@ -158,91 +157,19 @@ fun SmokesScreen(
             todayCig = tCig
             todayHeat = tHeat
             todayTotal = tCig + tHeat
-        }
-    }
-
-    // High-performance batched 14-day pre-fetch on Dispatchers.IO supporting both "smokes" and "smoke"
-    val fetchLogs = {
-        if (isPageActive) {
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val cal = Calendar.getInstance()
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-
-                    // 14-day history window for instant navigation across dates
-                    val startCal = cal.clone() as Calendar
-                    startCal.add(Calendar.DAY_OF_YEAR, -14)
-                    val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
-
-                    val endCal = cal.clone() as Calendar
-                    endCal.add(Calendar.DAY_OF_YEAR, 2)
-                    val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
-
-                    // Query both 'smokes' (canonical) and 'smoke' (legacy)
-                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                        .select {
-                            filter {
-                                or {
-                                    eq("habit_type", "smokes")
-                                    eq("habit_type", "smoke")
-                                }
-                                eq("is_deleted", false)
-                                and {
-                                    gte("logged_at", startStr)
-                                    lt("logged_at", endStr)
-                                }
-                            }
-                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                    // Group logs by local date string
-                    val grouped = mutableMapOf<String, MutableList<HabitLog>>()
-                    for (log in logs) {
-                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
-                        if (dStr != null) {
-                            grouped.getOrPut(dStr) { mutableListOf() }.add(log)
-                        }
-                    }
-
-                    // Store in multi-day memory cache
-                    for ((dStr, list) in grouped) {
-                        sessionManager.setSmokesLogs(dStr, list)
-                    }
-
-                    // Update current date's view
-                    val currentLogs = grouped[targetDateStr] ?: emptyList()
-                    var tCig = 0
-                    var tHeat = 0
-                    for (log in currentLogs) {
-                        val count = maxOf(1, log.value.toInt())
-                        val isHeat = log.metadata?.contains("Heated") == true
-                        if (isHeat) tHeat += count else tCig += count
-                    }
-                    val total = tCig + tHeat
-
-                    withContext(Dispatchers.Main) {
-                        dayLogs = currentLogs
-                        todayCig = tCig
-                        todayHeat = tHeat
-                        todayTotal = total
-                        if (dayOffset == 0) {
-                            sessionManager.persistSmokesTotal(total)
-                        }
-                    }
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    android.util.Log.w("SmokesScreen", "Failed to fetch logs: ${e.localizedMessage}")
-                }
+        } else {
+            dayLogs = emptyList()
+            todayCig = 0
+            todayHeat = 0
+            todayTotal = 0
+            if (isPageActive) {
+                sessionManager.triggerHabitsSync()
             }
         }
     }
 
-    LaunchedEffect(isPageActive, dayOffset, refreshTrigger) {
-        if (isPageActive) {
-            fetchLogs()
-        }
+    LaunchedEffect(dayOffset, refreshTrigger) {
+        loadCachedDate(targetDateStr)
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
@@ -584,12 +511,14 @@ fun SmokesScreen(
                             )
                         }
 
-                        val timeStr = try {
-                            val inst = Instant.parse(log.logged_at)
-                            val z = inst.atZone(java.time.ZoneId.systemDefault())
-                            String.format(Locale.getDefault(), "%02d:%02d", z.hour, z.minute)
-                        } catch (_: Exception) {
-                            if (log.logged_at.length >= 16) log.logged_at.substring(11, 16) else ""
+                        val timeStr = remember(log.logged_at) {
+                            try {
+                                val inst = Instant.parse(log.logged_at)
+                                val z = inst.atZone(java.time.ZoneId.systemDefault())
+                                String.format(Locale.getDefault(), "%02d:%02d", z.hour, z.minute)
+                            } catch (_: Exception) {
+                                if (log.logged_at.length >= 16) log.logged_at.substring(11, 16) else ""
+                            }
                         }
 
                         Text(

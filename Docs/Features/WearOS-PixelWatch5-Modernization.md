@@ -127,3 +127,39 @@ This document details the comprehensive modernization of the **Daily WearOS** ap
 ### E. Compose Recomposition & List Diffing Optimization
 - Added stable item keys to all `ScalingLazyColumn` lists: `items(count = dayLogs.size, key = { dayLogs[it].id })`.
 - Hoisted arc progress animations (`animateFloatAsState`) out of individual list items into parent composables to avoid recreation on scroll.
+
+---
+
+## 6. Local-First Disk Caching & Single-Flight Background Sync Architecture
+
+### A. Root-Cause Analysis of WearOS Latency & Radio Contention
+Prior to this architecture, the WearOS app suffered from severe stuttering and latency because:
+1. **Network-Choked Swipes**: Every horizontal swipe between pages triggered separate PostgREST network calls (`LaunchedEffect(isPageActive)` in 4 screens), bombarding the Bluetooth proxy / WiFi link with up to 4 concurrent HTTPS requests and stalling the wearable CPU.
+2. **Pure RAM Ephemeral Caches**: `ConcurrentHashMap` caches were lost on process termination or system sleep, forcing full network re-fetches whenever the watch woke up.
+3. **Main-Thread Supabase Client Creation**: `createSupabaseClient` was evaluated synchronously on the main UI thread during `MainActivity.onCreate()`, freezing Compose for multiple seconds while Ktor CIO and crypto libraries initialized.
+4. **Scroll-Time Date Formatting**: `Instant.parse(log.logged_at)` was evaluated repeatedly within `ScalingLazyColumn` item render blocks during scrolling, dropping frames on low-power wearable cores.
+
+### B. Single-Flight Centralized Background Sync (`syncAllHabits`)
+- **Centralized Orchestrator**: Replaced all fragmented screen-level network fetches with a single unified background sync method in `WatchSessionManager`: `syncAllHabits(force: Boolean = false)`.
+- **60-Second Debounce**: Guarded by `KEY_LAST_HABITS_SYNC` cooldown timer (60 seconds) to prevent redundant radio traffic.
+- **15-Day Parallel Ingestion**: Fetches water and smoke logs for the past 15 days in parallel over `Dispatchers.IO`, aggregates records into daily buckets, and pre-computes weekly buckets for both "This Week" (offset 0) and "Last Week" (offset -1).
+- **Persistent Disk Serialization**: Daily and weekly buckets (`WaterDayBucket`, `SmokeDayBucket` annotated with `@Serializable`) are serialized to JSON and persisted to `SharedPreferences` (`bubbles_day_cache`, `smokes_day_cache`, `bubbles_week_cache`, `smokes_week_cache`).
+
+### C. 0ms Cold-Start Cache Hydration
+- `initCachesFromDisk()` executes synchronously at process startup inside `getInstance()`, pre-populating in-memory structures from disk before the first frame is rendered.
+- `_isAuthenticated` and `_currentUserId` are initialized directly from disk credentials, allowing `DailyWearApp` to immediately mount the `HorizontalPager` without UI thrashing or momentary pairing screens.
+
+### D. Screens Decoupled from the Network
+- `BubblesScreen`, `Bubbles7DaysScreen`, `SmokesScreen`, and `Smokes7DaysScreen` now operate in a **purely reactive, local-first mode**:
+  - Date changes (`‹ Today ‹ Yesterday`) and week switches (`‹ This Week ‹ Last Week`) read directly from `sessionManager` in 0ms.
+  - Zero PostgREST queries or socket allocations occur during horizontal paging or crown navigation.
+  - UI re-reads cached state instantly when background sync updates `_dataRefreshTrigger`.
+
+### E. Asynchronous Supabase & Auth Initialization
+- `supabaseClient` is declared `by lazy`, deferring Ktor CIO and plugin initialization to background coroutines on `Dispatchers.IO`.
+- `initBackgroundServices()` launches `startSessionListener()` and `checkExistingSession()` asynchronously in `scope.launch`, freeing the main thread to immediately render the UI at 60 fps.
+- `fetchGoalsAndPreferences()` is debounced with a 60-second cooldown, preventing duplicate queries.
+
+### F. Scroll-Time Memory Optimization
+- Replaced unmemoized `Instant.parse()` calls in list items with `remember(log.logged_at)`, completely eliminating garbage collection pressure and layout hitches during crown scrolling.
+

@@ -1,5 +1,8 @@
 package com.intellidream.daily.wearos.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class WaterDayBucket(
     val dateStr: String,
     val dayLabel: String,
@@ -10,6 +13,7 @@ data class WaterDayBucket(
     val total: Double get() = water + coffee
 }
 
+@Serializable
 data class SmokeDayBucket(
     val dateStr: String,
     val dayLabel: String,

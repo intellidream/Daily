@@ -37,6 +37,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.util.Calendar
+import kotlinx.coroutines.async
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -55,6 +62,11 @@ class WatchSessionManager private constructor(private val context: Context) {
         const val KEY_SMOKES_GOAL = "smokes_goal"
         const val KEY_LAST_HEALTH_SYNC = "last_health_sync_time"
         const val KEY_LAST_HEALTH_SYNC_STATUS = "last_health_sync_status"
+        const val KEY_BUBBLES_DAY_CACHE = "bubbles_day_cache"
+        const val KEY_SMOKES_DAY_CACHE = "smokes_day_cache"
+        const val KEY_BUBBLES_WEEK_CACHE = "bubbles_week_cache"
+        const val KEY_SMOKES_WEEK_CACHE = "smokes_week_cache"
+        const val KEY_LAST_HABITS_SYNC = "last_habits_sync_time"
 
         @Volatile
         private var instance: WatchSessionManager? = null
@@ -63,8 +75,8 @@ class WatchSessionManager private constructor(private val context: Context) {
             return instance ?: synchronized(this) {
                 instance ?: WatchSessionManager(context.applicationContext).also {
                     instance = it
-                    it.startSessionListener()
-                    it.checkExistingSession()
+                    it.initCachesFromDisk()
+                    it.initBackgroundServices()
                 }
             }
         }
@@ -77,14 +89,19 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val supabaseUrl = "https://akkfouifxztnfwwiclwg.supabase.co"
     private val supabaseAnonKey = "sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG"
 
-    val supabaseClient: SupabaseClient = createSupabaseClient(supabaseUrl, supabaseAnonKey) {
-        install(Auth) {
-            alwaysAutoRefresh = false
+    val supabaseClient: SupabaseClient by lazy {
+        createSupabaseClient(supabaseUrl, supabaseAnonKey) {
+            install(Auth) {
+                alwaysAutoRefresh = false
+            }
+            install(Postgrest)
         }
-        install(Postgrest)
     }
 
-    private val _isAuthenticated = MutableStateFlow(false)
+    private val _isAuthenticated = MutableStateFlow(
+        !prefs.getString(KEY_ACCESS_TOKEN, null).isNullOrEmpty() &&
+        !prefs.getString(KEY_USER_ID, null).isNullOrEmpty()
+    )
     val isAuthenticated: StateFlow<Boolean> = _isAuthenticated
 
     private val _pairingCode = MutableStateFlow("")
@@ -96,7 +113,9 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val _errorMessage = MutableStateFlow("")
     val errorMessage: StateFlow<String> = _errorMessage
     
-    private val _currentUserId = MutableStateFlow<String?>(null)
+    private val _currentUserId = MutableStateFlow<String?>(
+        prefs.getString(KEY_USER_ID, null)
+    )
     val currentUserId: StateFlow<String?> = _currentUserId
 
     // Reactive persistent goals (backed by SharedPreferences with immediate 0ms availability)
@@ -143,6 +162,80 @@ class WatchSessionManager private constructor(private val context: Context) {
     val bubblesWeekCache = ConcurrentHashMap<Int, List<WaterDayBucket>>()
     val smokesWeekCache = ConcurrentHashMap<Int, List<SmokeDayBucket>>()
 
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun initCachesFromDisk() {
+        try {
+            val bDayJson = prefs.getString(KEY_BUBBLES_DAY_CACHE, null)
+            if (!bDayJson.isNullOrEmpty()) {
+                val map = json.decodeFromString<Map<String, List<HabitLog>>>(bDayJson)
+                bubblesDayCache.putAll(map)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("WatchSessionManager", "Failed to load bubblesDayCache from disk: ${e.message}")
+        }
+
+        try {
+            val sDayJson = prefs.getString(KEY_SMOKES_DAY_CACHE, null)
+            if (!sDayJson.isNullOrEmpty()) {
+                val map = json.decodeFromString<Map<String, List<HabitLog>>>(sDayJson)
+                smokesDayCache.putAll(map)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("WatchSessionManager", "Failed to load smokesDayCache from disk: ${e.message}")
+        }
+
+        try {
+            val bWeekJson = prefs.getString(KEY_BUBBLES_WEEK_CACHE, null)
+            if (!bWeekJson.isNullOrEmpty()) {
+                val map = json.decodeFromString<Map<String, List<WaterDayBucket>>>(bWeekJson)
+                for ((k, v) in map) {
+                    k.toIntOrNull()?.let { bubblesWeekCache[it] = v }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("WatchSessionManager", "Failed to load bubblesWeekCache from disk: ${e.message}")
+        }
+
+        try {
+            val sWeekJson = prefs.getString(KEY_SMOKES_WEEK_CACHE, null)
+            if (!sWeekJson.isNullOrEmpty()) {
+                val map = json.decodeFromString<Map<String, List<SmokeDayBucket>>>(sWeekJson)
+                for ((k, v) in map) {
+                    k.toIntOrNull()?.let { smokesWeekCache[it] = v }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("WatchSessionManager", "Failed to load smokesWeekCache from disk: ${e.message}")
+        }
+
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        cachedBubblesLogs = bubblesDayCache[todayStr]
+        cachedSmokesLogs = smokesDayCache[todayStr]
+    }
+
+    fun saveCachesToDisk() {
+        scope.launch {
+            try {
+                val bDayJson = json.encodeToString(bubblesDayCache.toMap())
+                val sDayJson = json.encodeToString(smokesDayCache.toMap())
+                val bWeekMap = bubblesWeekCache.mapKeys { it.key.toString() }
+                val sWeekMap = smokesWeekCache.mapKeys { it.key.toString() }
+                val bWeekJson = json.encodeToString(bWeekMap)
+                val sWeekJson = json.encodeToString(sWeekMap)
+
+                prefs.edit()
+                    .putString(KEY_BUBBLES_DAY_CACHE, bDayJson)
+                    .putString(KEY_SMOKES_DAY_CACHE, sDayJson)
+                    .putString(KEY_BUBBLES_WEEK_CACHE, bWeekJson)
+                    .putString(KEY_SMOKES_WEEK_CACHE, sWeekJson)
+                    .apply()
+            } catch (e: Exception) {
+                android.util.Log.w("WatchSessionManager", "Failed to save caches to disk: ${e.message}")
+            }
+        }
+    }
+
     fun getBubblesLogs(dateStr: String): List<HabitLog>? = bubblesDayCache[dateStr]
 
     fun setBubblesLogs(dateStr: String, logs: List<HabitLog>) {
@@ -151,6 +244,7 @@ class WatchSessionManager private constructor(private val context: Context) {
         if (dateStr == todayStr) {
             cachedBubblesLogs = logs
         }
+        saveCachesToDisk()
     }
 
     fun getSmokesLogs(dateStr: String): List<HabitLog>? = smokesDayCache[dateStr]
@@ -161,18 +255,21 @@ class WatchSessionManager private constructor(private val context: Context) {
         if (dateStr == todayStr) {
             cachedSmokesLogs = logs
         }
+        saveCachesToDisk()
     }
 
     fun getBubblesWeek(weekOffset: Int): List<WaterDayBucket>? = bubblesWeekCache[weekOffset]
 
     fun setBubblesWeek(weekOffset: Int, buckets: List<WaterDayBucket>) {
         bubblesWeekCache[weekOffset] = buckets
+        saveCachesToDisk()
     }
 
     fun getSmokesWeek(weekOffset: Int): List<SmokeDayBucket>? = smokesWeekCache[weekOffset]
 
     fun setSmokesWeek(weekOffset: Int, buckets: List<SmokeDayBucket>) {
         smokesWeekCache[weekOffset] = buckets
+        saveCachesToDisk()
     }
 
     fun updateBubblesWeekToday(isCoffee: Boolean, delta: Double) {
@@ -180,12 +277,210 @@ class WatchSessionManager private constructor(private val context: Context) {
             if (isCoffee) bucket.coffee = maxOf(0.0, bucket.coffee + delta)
             else bucket.water = maxOf(0.0, bucket.water + delta)
         }
+        saveCachesToDisk()
     }
 
     fun updateSmokesWeekToday(isHeated: Boolean, delta: Double) {
         smokesWeekCache[0]?.find { it.isToday }?.let { bucket ->
             if (isHeated) bucket.heat = maxOf(0.0, bucket.heat + delta)
             else bucket.cig = maxOf(0.0, bucket.cig + delta)
+        }
+        saveCachesToDisk()
+    }
+
+    fun getWeekWindow(offset: Int): Pair<Calendar, Calendar> {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+
+        val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+        val daysFromMonday = if (dayOfWeek == Calendar.SUNDAY) 6 else dayOfWeek - Calendar.MONDAY
+        cal.add(Calendar.DAY_OF_YEAR, -daysFromMonday + offset * 7)
+
+        val monday = cal.clone() as Calendar
+        val nextMonday = cal.clone() as Calendar
+        nextMonday.add(Calendar.DAY_OF_YEAR, 7)
+        return Pair(monday, nextMonday)
+    }
+
+    @Volatile private var isSyncingHabits = false
+
+    fun triggerHabitsSync(force: Boolean = false) {
+        scope.launch {
+            syncAllHabits(force)
+        }
+    }
+
+    suspend fun syncAllHabits(force: Boolean = false) {
+        val uid = _currentUserId.value ?: return
+        val lastSync = prefs.getLong(KEY_LAST_HABITS_SYNC, 0L)
+        val now = System.currentTimeMillis()
+        if (!force && now - lastSync < 60_000L) {
+            return
+        }
+        if (isSyncingHabits) return
+        isSyncingHabits = true
+
+        withContext(Dispatchers.IO) {
+            try {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+
+                val startCal = cal.clone() as Calendar
+                startCal.add(Calendar.DAY_OF_YEAR, -15)
+                val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
+
+                val endCal = cal.clone() as Calendar
+                endCal.add(Calendar.DAY_OF_YEAR, 2)
+                val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
+
+                val waterDeferred = async {
+                    try {
+                        supabaseClient.postgrest["habits_logs"]
+                            .select {
+                                filter {
+                                    eq("habit_type", "water")
+                                    eq("is_deleted", false)
+                                    and {
+                                        gte("logged_at", startStr)
+                                        lt("logged_at", endStr)
+                                    }
+                                }
+                            }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        android.util.Log.w("WatchSessionManager", "Water sync fetch failed: ${e.message}")
+                        null
+                    }
+                }
+
+                val smokesDeferred = async {
+                    try {
+                        supabaseClient.postgrest["habits_logs"]
+                            .select {
+                                filter {
+                                    or {
+                                        eq("habit_type", "smokes")
+                                        eq("habit_type", "smoke")
+                                    }
+                                    eq("is_deleted", false)
+                                    and {
+                                        gte("logged_at", startStr)
+                                        lt("logged_at", endStr)
+                                    }
+                                }
+                            }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        android.util.Log.w("WatchSessionManager", "Smokes sync fetch failed: ${e.message}")
+                        null
+                    }
+                }
+
+                val waterLogs = waterDeferred.await()
+                val smokesLogs = smokesDeferred.await()
+
+                val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val dayLabelFmt = SimpleDateFormat("EEE", Locale.getDefault())
+                val todayDateStr = localDateFmt.format(Date())
+
+                if (waterLogs != null) {
+                    val waterGrouped = mutableMapOf<String, MutableList<HabitLog>>()
+                    for (log in waterLogs) {
+                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                        if (dStr != null) {
+                            waterGrouped.getOrPut(dStr) { mutableListOf() }.add(log)
+                        }
+                    }
+                    for ((dStr, list) in waterGrouped) {
+                        bubblesDayCache[dStr] = list
+                    }
+                    val todayWaterLogs = waterGrouped[todayDateStr] ?: emptyList()
+                    cachedBubblesLogs = todayWaterLogs
+                    var tW = 0
+                    var tC = 0
+                    for (log in todayWaterLogs) {
+                        if (log.metadata?.contains("Coffee") == true) tC += log.value.toInt() else tW += log.value.toInt()
+                    }
+                    persistWaterTotal(tW + tC)
+
+                    for (offset in listOf(0, -1)) {
+                        val (monCal, _) = getWeekWindow(offset)
+                        val buckets = mutableListOf<WaterDayBucket>()
+                        for (i in 0 until 7) {
+                            val dCal = monCal.clone() as Calendar
+                            dCal.add(Calendar.DAY_OF_YEAR, i)
+                            val dStr = localDateFmt.format(dCal.time)
+                            val lbl = dayLabelFmt.format(dCal.time).take(1)
+                            val bucket = WaterDayBucket(dStr, lbl, dStr == todayDateStr)
+                            val dayLogsForDate = waterGrouped[dStr] ?: emptyList()
+                            for (log in dayLogsForDate) {
+                                val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
+                                if (isCoffee) bucket.coffee += log.value else bucket.water += log.value
+                            }
+                            buckets.add(bucket)
+                        }
+                        bubblesWeekCache[offset] = buckets
+                    }
+                }
+
+                if (smokesLogs != null) {
+                    val smokesGrouped = mutableMapOf<String, MutableList<HabitLog>>()
+                    for (log in smokesLogs) {
+                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                        if (dStr != null) {
+                            smokesGrouped.getOrPut(dStr) { mutableListOf() }.add(log)
+                        }
+                    }
+                    for ((dStr, list) in smokesGrouped) {
+                        smokesDayCache[dStr] = list
+                    }
+                    val todaySmokesLogs = smokesGrouped[todayDateStr] ?: emptyList()
+                    cachedSmokesLogs = todaySmokesLogs
+                    var tCig = 0
+                    var tHeat = 0
+                    for (log in todaySmokesLogs) {
+                        val count = maxOf(1, log.value.toInt())
+                        if (log.metadata?.contains("Heated") == true) tHeat += count else tCig += count
+                    }
+                    persistSmokesTotal(tCig + tHeat)
+
+                    for (offset in listOf(0, -1)) {
+                        val (monCal, _) = getWeekWindow(offset)
+                        val buckets = mutableListOf<SmokeDayBucket>()
+                        for (i in 0 until 7) {
+                            val dCal = monCal.clone() as Calendar
+                            dCal.add(Calendar.DAY_OF_YEAR, i)
+                            val dStr = localDateFmt.format(dCal.time)
+                            val lbl = dayLabelFmt.format(dCal.time).take(1)
+                            val bucket = SmokeDayBucket(dStr, lbl, dStr == todayDateStr)
+                            val dayLogsForDate = smokesGrouped[dStr] ?: emptyList()
+                            for (log in dayLogsForDate) {
+                                val isHeated = log.metadata?.contains("Heated", ignoreCase = true) == true
+                                val count = maxOf(1.0, log.value)
+                                if (isHeated) bucket.heat += count else bucket.cig += count
+                            }
+                            buckets.add(bucket)
+                        }
+                        smokesWeekCache[offset] = buckets
+                    }
+                }
+
+                saveCachesToDisk()
+                prefs.edit().putLong(KEY_LAST_HABITS_SYNC, System.currentTimeMillis()).apply()
+
+                _dataRefreshTrigger.value++
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("WatchSessionManager", "syncAllHabits error: ${e.message}", e)
+            } finally {
+                isSyncingHabits = false
+            }
         }
     }
 
@@ -239,6 +534,11 @@ class WatchSessionManager private constructor(private val context: Context) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             android.util.Log.w("WatchSessionManager", "importOrbitSession non-fatal: ${e.localizedMessage}")
         }
+    }
+
+    fun initBackgroundServices() {
+        startSessionListener()
+        checkExistingSession()
     }
 
     /**
@@ -299,7 +599,15 @@ class WatchSessionManager private constructor(private val context: Context) {
         }
     }
 
-    fun fetchGoalsAndPreferences(userId: String) {
+    private var lastGoalsSyncTime = 0L
+    private val GOALS_SYNC_COOLDOWN_MS = 60_000L
+
+    fun fetchGoalsAndPreferences(userId: String, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastGoalsSyncTime < GOALS_SYNC_COOLDOWN_MS) {
+            return
+        }
+        lastGoalsSyncTime = now
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
@@ -345,7 +653,7 @@ class WatchSessionManager private constructor(private val context: Context) {
 
     fun checkExistingSession() {
         android.util.Log.d("WatchSessionManager", "checkExistingSession called: isChecking=$isCheckingSession, auth=${_isAuthenticated.value}")
-        if (isCheckingSession || _isAuthenticated.value) return
+        if (isCheckingSession) return
         isCheckingSession = true
         scope.launch {
             try {
@@ -365,6 +673,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                             .putString(KEY_USER_ID, uid)
                             .apply()
                         fetchGoalsAndPreferences(uid)
+                        syncAllHabits(force = false)
                         return@launch
                     }
                 }
@@ -389,8 +698,11 @@ class WatchSessionManager private constructor(private val context: Context) {
                     _isAuthenticated.value = true
                     _isPairing.value = false
                     fetchGoalsAndPreferences(savedUserId)
+                    syncAllHabits(force = false)
                     android.util.Log.d("WatchSessionManager", "checkExistingSession: restored session for user $savedUserId")
                 } else {
+                    _isAuthenticated.value = false
+                    _currentUserId.value = null
                     android.util.Log.d("WatchSessionManager", "checkExistingSession: no valid session found, isPairing=${_isPairing.value}, pin=${_pairingCode.value}")
                     if (!_isPairing.value || _pairingCode.value.isEmpty()) {
                         generatePairingCode()
@@ -570,6 +882,7 @@ class WatchSessionManager private constructor(private val context: Context) {
             if (_isAuthenticated.value) {
                 OfflineSyncManager.shared.syncPendingLogs(supabaseClient)
                 recordHealthSync()
+                syncAllHabits(force = false)
             }
         }
     }

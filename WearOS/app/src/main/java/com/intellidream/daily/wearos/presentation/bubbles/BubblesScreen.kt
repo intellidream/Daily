@@ -135,9 +135,8 @@ fun BubblesScreen(
         }
     }
 
-    // 0ms instant UI update on date changes from memory cache
-    LaunchedEffect(dayOffset) {
-        val cached = sessionManager.getBubblesLogs(targetDateStr)
+    fun loadCachedDate(targetDate: String) {
+        val cached = sessionManager.getBubblesLogs(targetDate)
         if (cached != null) {
             dayLogs = cached
             var tWater = 0
@@ -148,86 +147,19 @@ fun BubblesScreen(
             todayWater = tWater
             todayCoffee = tCoffee
             todayTotal = tWater + tCoffee
-        }
-    }
-
-    // High-performance batched 14-day pre-fetch on background IO dispatcher
-    val fetchLogs = {
-        if (isPageActive) {
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val cal = Calendar.getInstance()
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-
-                    // 14-day history window for instant navigation across dates
-                    val startCal = cal.clone() as Calendar
-                    startCal.add(Calendar.DAY_OF_YEAR, -14)
-                    val startStr = Instant.ofEpochMilli(startCal.timeInMillis).toString()
-
-                    val endCal = cal.clone() as Calendar
-                    endCal.add(Calendar.DAY_OF_YEAR, 2)
-                    val endStr = Instant.ofEpochMilli(endCal.timeInMillis).toString()
-
-                    val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                        .select {
-                            filter {
-                                eq("habit_type", "water")
-                                eq("is_deleted", false)
-                                and {
-                                    gte("logged_at", startStr)
-                                    lt("logged_at", endStr)
-                                }
-                            }
-                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
-
-                    // Group logs by date string
-                    val grouped = mutableMapOf<String, MutableList<HabitLog>>()
-                    for (log in logs) {
-                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
-                        if (dStr != null) {
-                            grouped.getOrPut(dStr) { mutableListOf() }.add(log)
-                        }
-                    }
-
-                    // Store in multi-day memory cache
-                    for ((dStr, list) in grouped) {
-                        sessionManager.setBubblesLogs(dStr, list)
-                    }
-
-                    // Update current date's view
-                    val currentLogs = grouped[targetDateStr] ?: emptyList()
-                    var tWater = 0
-                    var tCoffee = 0
-                    for (log in currentLogs) {
-                        if (log.metadata?.contains("Coffee") == true) tCoffee += log.value.toInt() else tWater += log.value.toInt()
-                    }
-                    val tTotal = tWater + tCoffee
-
-                    withContext(Dispatchers.Main) {
-                        dayLogs = currentLogs
-                        todayWater = tWater
-                        todayCoffee = tCoffee
-                        todayTotal = tTotal
-                    }
-
-                    if (dayOffset == 0) {
-                        sessionManager.persistWaterTotal(tTotal)
-                    }
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    android.util.Log.w("BubblesScreen", "Failed to fetch logs: ${e.localizedMessage}")
-                }
+        } else {
+            dayLogs = emptyList()
+            todayWater = 0
+            todayCoffee = 0
+            todayTotal = 0
+            if (isPageActive) {
+                sessionManager.triggerHabitsSync()
             }
         }
     }
 
-    LaunchedEffect(isPageActive, dayOffset, refreshTrigger) {
-        if (isPageActive) {
-            fetchLogs()
-        }
+    LaunchedEffect(dayOffset, refreshTrigger) {
+        loadCachedDate(targetDateStr)
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
@@ -593,12 +525,14 @@ fun BubblesScreen(
                             )
                         }
 
-                        val timeStr = try {
-                            val inst = Instant.parse(log.logged_at)
-                            val z = inst.atZone(java.time.ZoneId.systemDefault())
-                            String.format(Locale.getDefault(), "%02d:%02d", z.hour, z.minute)
-                        } catch (_: Exception) {
-                            if (log.logged_at.length >= 16) log.logged_at.substring(11, 16) else ""
+                        val timeStr = remember(log.logged_at) {
+                            try {
+                                val inst = Instant.parse(log.logged_at)
+                                val z = inst.atZone(java.time.ZoneId.systemDefault())
+                                String.format(Locale.getDefault(), "%02d:%02d", z.hour, z.minute)
+                            } catch (_: Exception) {
+                                if (log.logged_at.length >= 16) log.logged_at.substring(11, 16) else ""
+                            }
                         }
 
                         Text(

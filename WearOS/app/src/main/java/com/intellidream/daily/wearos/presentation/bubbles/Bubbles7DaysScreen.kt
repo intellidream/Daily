@@ -119,90 +119,21 @@ fun Bubbles7DaysScreen(
         }
     }
 
-    LaunchedEffect(weekOffset) {
-        val cached = sessionManager.getBubblesWeek(weekOffset)
+    fun loadCachedWeek(offset: Int) {
+        val cached = sessionManager.getBubblesWeek(offset)
         if (cached != null) {
             buckets = cached
             isLoading = false
-        }
-    }
-
-    val fetchWeekData: () -> Unit = {
-        if (isPageActive) {
-            scope.launch(Dispatchers.IO) {
-                if (sessionManager.getBubblesWeek(weekOffset) == null) {
-                    withContext(Dispatchers.Main) { isLoading = true }
-                }
-                val (monCal, nextMonCal) = getWeekWindow(weekOffset)
-            val startStr = Instant.ofEpochMilli(monCal.timeInMillis).toString()
-            val endStr = Instant.ofEpochMilli(nextMonCal.timeInMillis).toString()
-            val todayStr = localDateFmt.format(Date())
-
-            val tempBuckets = mutableListOf<WaterDayBucket>()
-            for (i in 0 until 7) {
-                val dCal = monCal.clone() as Calendar
-                dCal.add(Calendar.DAY_OF_YEAR, i)
-                val dStr = localDateFmt.format(dCal.time)
-                val lbl = dayLabelFmt.format(dCal.time).take(1)
-                tempBuckets.add(WaterDayBucket(dStr, lbl, dStr == todayStr))
-            }
-
-            try {
-                val logs = sessionManager.supabaseClient.postgrest["habits_logs"]
-                    .select {
-                        filter {
-                            eq("habit_type", "water")
-                            eq("is_deleted", false)
-                            and {
-                                gte("logged_at", startStr)
-                                lt("logged_at", endStr)
-                            }
-                        }
-                    }.decodeList<HabitLog>()
-
-                for (log in logs) {
-                    try {
-                        val localDate = HabitDateParser.parseToLocalDate(log.logged_at)
-                        if (localDate != null) {
-                            val logDateStr = localDate.toString()
-                            val bucket = tempBuckets.find { it.dateStr == logDateStr }
-                            if (bucket != null) {
-                                val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
-                                if (isCoffee) {
-                                    bucket.coffee += log.value
-                                } else {
-                                    bucket.water += log.value
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("Bubbles7Days", "Failed to process log: ${e.message}")
-                    }
-                }
-
-                sessionManager.setBubblesWeek(weekOffset, tempBuckets)
-                withContext(Dispatchers.Main) {
-                    buckets = tempBuckets
-                    isLoading = false
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                android.util.Log.e("Bubbles7Days", "Failed to fetch week logs: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    if (buckets.isEmpty()) {
-                        buckets = tempBuckets
-                    }
-                    isLoading = false
-                }
+        } else {
+            isLoading = true
+            if (isPageActive) {
+                sessionManager.triggerHabitsSync()
             }
         }
     }
-}
 
-    LaunchedEffect(isPageActive, weekOffset, refreshTrigger) {
-        if (isPageActive) {
-            fetchWeekData()
-        }
+    LaunchedEffect(weekOffset, refreshTrigger) {
+        loadCachedWeek(weekOffset)
     }
 
     val weeklyAverage = remember(buckets, weekOffset) {
