@@ -9,6 +9,7 @@ public struct HeaderGreetingView: View {
     private let onAvatarTapped: () -> Void
     private let onCustomizeTapped: (() -> Void)?
     private let onBriefingTapped: (() -> Void)?
+    private let onGlanceTapped: (() -> Void)?
     
     @State private var isPulsingAura: Bool = false
     @State private var isBriefingPulsing: Bool = false
@@ -17,11 +18,13 @@ public struct HeaderGreetingView: View {
     public init(
         onAvatarTapped: @escaping () -> Void = {},
         onCustomizeTapped: (() -> Void)? = nil,
-        onBriefingTapped: (() -> Void)? = nil
+        onBriefingTapped: (() -> Void)? = nil,
+        onGlanceTapped: (() -> Void)? = nil
     ) {
         self.onAvatarTapped = onAvatarTapped
         self.onCustomizeTapped = onCustomizeTapped
         self.onBriefingTapped = onBriefingTapped
+        self.onGlanceTapped = onGlanceTapped
     }
     
     private static let dateFormatter: DateFormatter = {
@@ -204,6 +207,38 @@ public struct HeaderGreetingView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Sync All Data with Supabase (⌘R)")
+
+                // DayOne Glance Companion Popover/Window Button
+                if let onGlance = onGlanceTapped {
+                    Button {
+                        triggerHaptic()
+                        onGlance()
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(Color(hex: "080F1E").opacity(0.72))
+                                    .overlay(Circle().fill(Color.white.opacity(0.08)))
+                            )
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [ThemeColors.accentCyan.opacity(0.6), Color.white.opacity(0.15)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .shadow(color: ThemeColors.accentCyan.opacity(0.25), radius: 4, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open DayOne Glance Companion (⌘0)")
+                }
 
                 // Customize Dashboard Action Button
                 if let onCustomize = onCustomizeTapped {

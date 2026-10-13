@@ -299,6 +299,7 @@ public struct MenuBarCompanionView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
     }

@@ -84,6 +84,11 @@ struct DailyMacOSApp: App {
                 
                 Divider()
                 
+                Button("DayOne Glance Companion") {
+                    openWindow(id: "glance")
+                }
+                .keyboardShortcut("0", modifiers: .command)
+                
                 Button("Sync with Cloud") {
                     Task { @MainActor in
                         await HabitsService.shared.flushOfflineQueue()
@@ -95,6 +100,21 @@ struct DailyMacOSApp: App {
             }
         }
         
+        // On-demand Glance Floating Window (Accessible via ⌘0, Dashboard, or Navigate menu)
+        Window("DayOne Glance", id: "glance") {
+            MenuBarCompanionView(onOpenFullApp: { requestedTab in
+                NSApp.activate(ignoringOtherApps: true)
+                openWindow(id: "main")
+                if let tab = requestedTab, let url = URL(string: "daily://\(tab.rawValue)") {
+                    NSWorkspace.shared.open(url)
+                }
+            })
+            .preferredColorScheme(colorScheme)
+            .frame(width: 360, height: 500)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+
         // Persistent MenuBarExtra Companion (Quick Drop-down)
         MenuBarExtra {
             MenuBarCompanionView(onOpenFullApp: { requestedTab in
@@ -105,6 +125,7 @@ struct DailyMacOSApp: App {
                 }
             })
             .preferredColorScheme(colorScheme)
+            .frame(width: 360, height: 500)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "sparkles")

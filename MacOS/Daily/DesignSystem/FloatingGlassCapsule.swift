@@ -110,6 +110,7 @@ public struct FloatingGlassCapsule: View {
                                 .fill(Color.white.opacity(0.08))
                         }
                     }
+                    .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .onHover { isHovering in

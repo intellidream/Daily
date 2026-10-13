@@ -335,6 +335,7 @@ public struct NewsFeedView: View {
                         Capsule()
                             .fill(isSelected ? Color.white.opacity(0.15) : Color.clear)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

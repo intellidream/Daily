@@ -193,6 +193,7 @@ public struct FinancesMainView: View {
                                 .shadow(color: ThemeColors.accentGreen.opacity(0.35), radius: 6, x: 0, y: 2)
                         }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -509,6 +510,7 @@ public struct FinancesMainView: View {
                         Capsule().strokeBorder(ThemeColors.accentGreen.opacity(0.55), lineWidth: 1)
                     }
                 }
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }

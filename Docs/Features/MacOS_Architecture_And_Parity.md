@@ -286,6 +286,82 @@ In earlier builds, `RootView` contained an artificial 38px top chrome strip acro
    - With the artificial chrome removed, top padding across `DashboardView`, `NewsFeedView`, and `MacOSSidebarView` was standardized to `.padding(.top, 28)`.
    - This provides perfect Apple HIG breathing room under the native traffic light line without any vertical crowding or overlapping.
 
+---
+
+## 9. Universal Tab Hit-Testing & Segment Switcher Architecture
+
+### Problem & Platform Hit-Testing Root Cause
+In SwiftUI on macOS, using `.buttonStyle(.plain)` on buttons within custom segmented controls (e.g. "Bubbles" vs. "Smokes" in Habits, the 5 sub-tabs in Health, the 3 sub-tabs in Finances, News feed filters, and TagDoS pill filters) caused an ergonomic usability issue:
+- In macOS AppKit, plain button styles on elements with `.frame(maxWidth: .infinity)` and clear/glass backgrounds hit-test **only the non-transparent glyph/character pixels** by default unless an explicit bounding shape is declared.
+- Consequently, clicking in the ample padding area around the tab text failed to trigger tab switches; users were forced to click with surgical precision directly on the character glyphs.
+- Furthermore, small drag gestures on trackpads or magic mice could inadvertently be caught as drag/scroll gestures if threshold minimum distances were too low (e.g. 5-10pt).
+
+### Architectural Solution: Explicit Content Shapes & Gesture Guards
+1. **Explicit `.contentShape()` declarations across all Sub-Tabs**:
+   - `HabitsMainView`: Bound both the "Bubbles" and "Smokes" tab buttons with `.contentShape(Rectangle())` extending across the entire calculated tab width (`(geometry.size.width - 4) / 2`).
+   - `HealthMainView`: Enclosed `subTabSwitcher` (Overview, Sleep, Stress, Vitals, Trends) with `.contentShape(Rectangle())` over each tab's `.frame(maxWidth: .infinity, minHeight: 32)`.
+   - `FinancesMainView`: Added `.contentShape(Rectangle())` to `subTabSwitcher` (World, Stocks, Money) and `.contentShape(Capsule())` to the transaction `filterChip` controls.
+   - `NewsFeedView`: Added `.contentShape(Rectangle())` to `subTabSwitcher` (Live Feed, Read Later, Favorites).
+   - `TagdosNotesHubView`: Added `.contentShape(Capsule())` and `.buttonStyle(.plain)` across all stream navigation pills and the Notes tab button.
+   - `FloatingGlassCapsule`: Added `.contentShape(Capsule(style: .continuous))` to all 5 navigation tabs.
+   - `MenuBarCompanionView`: Added `.contentShape(RoundedRectangle(cornerRadius: 10))` across all quick jump destination buttons.
+
+2. **Trackpad Drag Gesture Threshold Guard**:
+   - In `HabitsMainView` and `HealthMainView`, horizontal swipe-between-tabs gestures (`DragGesture`) were calibrated from a tight `minimumDistance: 10` to `minimumDistance: 30`.
+   - This prevents micro-movements on macOS trackpads during a click from canceling the button action.
+
+---
+
+## 10. Menu Bar Companion & Glance HUD Architecture
+
+### Menu Bar Truncation Diagnosis on Crowded macOS Displays
+During investigation into why `MenuBarExtra` appeared missing from the system menu bar:
+- macOS System Events inspection revealed that the `Daily` menu bar status item was actually successfully registered and running:
+  - `status item: Sparkle, position: {-4838, 3}, size: {33, 24}`
+- However, on macOS systems with crowded status bars (e.g. Microsoft Outlook displaying full calendar meeting titles occupying hundreds of horizontal points, Control Center with 30+ items, and MacBook displays with hardware camera notches), AppKit **pushes overflowing status items off-screen into negative X coordinates**.
+- Other background apps (e.g. Microsoft Teams at `-3239`, Antigravity at `-3350`) were also pushed off-screen due to the same native macOS menu bar space starvation.
+
+### Multi-Surface Companion Architecture
+To guarantee persistent, instant access to companion telemetry regardless of menu bar crowding:
+
+```
++---------------------------------------------------------------------------------+
+|  Hero Greeting Card              [ 🔄 Sync ] [ ✨ Glance ] [ 🎛️ ] [ ⚙️ ]       |
++---------------------------------------------------------------------------------+
+                                         |
+                                         v
+                         +-----------------------------------+
+                         |         DayOne Glance HUD         |  <- Window("glance")
+                         |        (Floating 360 x 540)       |     or ⌘0 Shortcut
+                         +-----------------------------------+
+                         |  🌤️ 17°C Partly Cloudy            |
+                         |  ❤️ 68 bpm   👣 8,420 steps       |
+                         |  💧 Water: 1,750 / 2,500 mL       |
+                         |  📝 Quick Scratchpad              |
+                         |  🚀 Jump: News | Habits | Health  |
+                         +-----------------------------------+
+```
+
+1. **`MenuBarExtra` Window Sizing Hardening**:
+   - In `DailyMacOSApp.swift`, `MenuBarCompanionView` inside `.menuBarExtraStyle(.window)` is explicitly framed with `.frame(width: 360, height: 500)` to ensure it never collapses to 0x0 or miscalculates intrinsic content size.
+
+2. **Dedicated On-Demand HUD Window (`DayOne Glance`)**:
+   - Defined `Window("DayOne Glance", id: "glance")` in `DailyMacOSApp.swift` with `.windowStyle(.hiddenTitleBar)`.
+   - Styled with macOS frosted vibrancy (`.background(.ultraThinMaterial)`), rounded corners (20pt), and a subtle 1pt border.
+   - Hosts the full `MenuBarCompanionView`, providing instant access to:
+     - Live Weather condition & forecast
+     - Vitals summary (Heart Rate, Resting Heart Rate, Steps, Sleep score)
+     - Quick Water logging controls (`-250ml`, `+250ml`, `+500ml`)
+     - Quick Scratchpad for rapid thought capture
+     - Instant deep-navigation buttons to all primary Daily hubs.
+
+3. **Global Shortcuts & Deep Link Activation**:
+   - **Keyboard Shortcut**: `⌘0` registered globally in `RootView.swift` and in the macOS application menu (`CommandGroup(replacing: .appInfo)`).
+   - **Deep Link Handling**: Support for `daily://glance` scheme to summon the companion HUD from widgets, Raycast, Alfred, or external scripts.
+   - **Hero Greeting Card Action**: Added a dedicated `[ ✨ Glance ]` circular Liquid Glass button in `HeaderGreetingView.swift` directly next to `[ 🔄 Sync ]`.
+   - **Settings Integration**: `MacOSSettingsSection` includes a direct preview button (`"Open Glance Companion (⌘0)"`) and user guidance on managing macOS menu bar icon crowding.
+
+
 
 
 

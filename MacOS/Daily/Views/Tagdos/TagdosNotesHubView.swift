@@ -293,7 +293,9 @@ public struct TagdosNotesHubView: View {
                                         .strokeBorder(isSelected ? ThemeColors.accentPurple : Color.white.opacity(0.12), lineWidth: 1)
                                 )
                         )
+                        .contentShape(Capsule())
                     }
+                    .buttonStyle(.plain)
                 }
 
                 // 6th Tab: Dedicated Quick Notes stream
@@ -330,7 +332,9 @@ public struct TagdosNotesHubView: View {
                                     .strokeBorder(isNotesSelected ? ThemeColors.accentCyan : Color.white.opacity(0.12), lineWidth: 1)
                             )
                     )
+                    .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
         }

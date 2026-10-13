@@ -9,6 +9,7 @@ public struct RootView: View {
     @State private var isReadingArticleInNews: Bool = false
     @State private var isNavCapsuleExpandedWhileReading: Bool = false
     @State private var isHoveringNavBubble: Bool = false
+    @Environment(\.openWindow) private var openWindow
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
@@ -187,6 +188,7 @@ public struct RootView: View {
                 Button("") { switchTab(.habits) }.keyboardShortcut("5", modifiers: .command)
                 Button("") { switchTab(.weather) }.keyboardShortcut("6", modifiers: .command)
                 Button("") { switchTab(.news) }.keyboardShortcut("7", modifiers: .command)
+                Button("") { openWindow(id: "glance") }.keyboardShortcut("0", modifiers: .command)
                 Button("") { switchTab(.settings) }.keyboardShortcut(",", modifiers: .command)
                 Button("") {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -213,7 +215,9 @@ public struct RootView: View {
         .onOpenURL { url in
             let fullPath = "\(url.host ?? "")/\(url.path)".trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                if fullPath.contains("bubble") || fullPath.contains("water") {
+                if fullPath.contains("glance") {
+                    openWindow(id: "glance")
+                } else if fullPath.contains("bubble") || fullPath.contains("water") {
                     selectedTab = .habits
                     HabitsService.shared.activeHabit = .water
                 } else if fullPath.contains("smoke") {

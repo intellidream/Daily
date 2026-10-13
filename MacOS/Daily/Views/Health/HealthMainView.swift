@@ -410,6 +410,7 @@ public struct HealthMainView: View {
                             Capsule()
                                 .fill(isSelected ? Color.white.opacity(0.12) : Color.clear)
                         )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -421,7 +422,7 @@ public struct HealthMainView: View {
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         )
         .simultaneousGesture(
-            DragGesture(minimumDistance: 12)
+            DragGesture(minimumDistance: 30)
                 .onChanged { value in
                     if dragStartSubTab == nil {
                         dragStartSubTab = healthService.activeSubTab

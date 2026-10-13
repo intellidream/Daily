@@ -10,6 +10,7 @@ public struct DashboardView: View {
     
     @State private var showingCustomizeSheet = false
     @State private var showingBriefingSheet = false
+    @Environment(\.openWindow) private var openWindow
     
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
@@ -52,7 +53,8 @@ public struct DashboardView: View {
                 HeaderGreetingView(
                     onAvatarTapped: onNavigateToSettings,
                     onCustomizeTapped: { showingCustomizeSheet = true },
-                    onBriefingTapped: { showingBriefingSheet = true }
+                    onBriefingTapped: { showingBriefingSheet = true },
+                    onGlanceTapped: { openWindow(id: "glance") }
                 )
                 
                 // Native Coalesced Row-Grid Architecture (100% 120 FPS ProMotion stability)

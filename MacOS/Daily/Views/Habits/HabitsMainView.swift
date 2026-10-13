@@ -318,6 +318,7 @@ public struct HabitsMainView: View {
                             .shadow(color: ThemeColors.accentCyan.opacity(0.4), radius: 8)
                     }
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             
@@ -351,6 +352,7 @@ public struct HabitsMainView: View {
                             .shadow(color: Color(hex: "#00FFB2").opacity(0.4), radius: 8)
                     }
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -361,7 +363,7 @@ public struct HabitsMainView: View {
             Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
         }
         .simultaneousGesture(
-            DragGesture(minimumDistance: 12)
+            DragGesture(minimumDistance: 30)
                 .onChanged { value in
                     if dragStartHabit == nil {
                         dragStartHabit = habitsService.activeHabit

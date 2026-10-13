@@ -21,6 +21,7 @@ public struct MacOSSettingsSection: View {
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @AppStorage("useDesktopSidebar") private var useDesktopSidebar: Bool = false
     @AppStorage("menuBarDisplayMode") private var menuBarDisplayMode: String = MenuBarDisplayMode.iconAndWeather.rawValue
+    @Environment(\.openWindow) private var openWindow
     
     public init() {}
     
@@ -127,6 +128,33 @@ public struct MacOSSettingsSection: View {
                     Text("Select what telemetry to display in the macOS status bar next to the icon")
                         .font(.system(size: 11, weight: .regular))
                         .foregroundColor(ThemeColors.fgMutedDark)
+                    
+                    HStack {
+                        Button {
+                            openWindow(id: "glance")
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                Text("Open Glance Companion (⌘0)")
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(ThemeColors.accentCyan.opacity(0.12), in: Capsule())
+                            .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.3), lineWidth: 1))
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 2)
+                    
+                    Text("💡 If your menu bar is crowded (e.g. active meeting titles or many utilities), macOS may push status icons off-screen. Use ⌘0 anytime to summon Glance, or hold ⌘ and drag menu bar icons to prioritize them.")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                        .padding(.top, 2)
                 }
                 
                 Divider()
@@ -140,6 +168,7 @@ public struct MacOSSettingsSection: View {
                     
                     VStack(spacing: 6) {
                         shortcutRow(keys: "⌘ 1 – 7", description: "Switch Hubs (Dashboard to News)")
+                        shortcutRow(keys: "⌘ 0", description: "Open DayOne Glance Companion")
                         shortcutRow(keys: "⌘ S", description: "Toggle Desktop Sidebar")
                         shortcutRow(keys: "⌘ R", description: "Trigger Supabase Sync")
                         shortcutRow(keys: "⌘ ,", description: "Open Settings")
