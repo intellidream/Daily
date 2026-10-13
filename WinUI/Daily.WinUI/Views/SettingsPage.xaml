@@ -67,7 +67,7 @@
 
             <NavigationViewItem x:Name="NavAbout" Tag="DayOne" Content="DayOne">
                 <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE783;" FontFamily="Segoe Fluent Icons"/>
+                    <BitmapIcon UriSource="ms-appx:///Assets/OrbitIcon-Unplated-32.png" ShowAsMonochrome="False"/>
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 

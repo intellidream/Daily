@@ -7,8 +7,8 @@
     mc:Ignorable="d">
 
     <Border Width="340" MaxHeight="520"
-            Background="#E610141D"
-            BorderBrush="#33FFFFFF"
+            Background="{ThemeResource CapsuleBackgroundBrush}"
+            BorderBrush="{ThemeResource CapsuleBorderBrush}"
             BorderThickness="1"
             CornerRadius="16"
             Padding="16"
@@ -30,7 +30,7 @@
 
                 <Image Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,8,0">
                     <Image.Source>
-                        <BitmapImage UriSource="ms-appx:///Assets/OrbitIcon-256.png" DecodePixelWidth="40" DecodePixelHeight="40"/>
+                        <BitmapImage UriSource="ms-appx:///Assets/OrbitIcon-Unplated-32.png" DecodePixelWidth="32" DecodePixelHeight="32"/>
                     </Image.Source>
                 </Image>
 

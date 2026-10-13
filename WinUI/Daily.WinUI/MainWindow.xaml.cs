@@ -820,7 +820,30 @@ public sealed partial class MainWindow : Window
         SettingsService.Save(_settings);
         TrayIcon?.Dispose();
 
+        _companionWindow?.Close();
         App.Current.CloseAllSecondaryWindows();
+    }
+
+    private TaskbarCompanionWindow? _companionWindow;
+
+    public void ToggleTaskbarCompanion()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_companionWindow == null)
+            {
+                _companionWindow = new TaskbarCompanionWindow();
+            }
+
+            if (_companionWindow.IsVisible)
+            {
+                _companionWindow.Hide();
+            }
+            else
+            {
+                _companionWindow.ShowNearTray();
+            }
+        });
     }
 
     private void LogTray(string message)
@@ -847,12 +870,12 @@ public sealed partial class MainWindow : Window
                 TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.RightClick;
                 TrayIcon.LeftClickCommand = new RelayCommand(() =>
                 {
-                    LogTray("[TrayIcon] LeftClickCommand invoked.");
-                    ShowAndActivate();
+                    LogTray("[TrayIcon] LeftClickCommand invoked: toggling taskbar companion.");
+                    ToggleTaskbarCompanion();
                 });
                 TrayIcon.DoubleClickCommand = new RelayCommand(() =>
                 {
-                    LogTray("[TrayIcon] DoubleClickCommand invoked.");
+                    LogTray("[TrayIcon] DoubleClickCommand invoked: restoring main window.");
                     ShowAndActivate();
                 });
                 UpdateTrayIcon();
@@ -1108,6 +1131,7 @@ public sealed partial class MainWindow : Window
     public void ExitApp()
     {
         _isExiting = true;
+        _companionWindow?.Close();
         this.Close();
     }
 
