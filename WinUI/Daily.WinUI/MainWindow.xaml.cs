@@ -529,7 +529,7 @@ public sealed partial class MainWindow : Window
                 try
                 {
                     var sync = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
-                    if (sync != null) await sync.SyncAllAsync();
+                    if (sync != null) await sync.SyncAsync();
                 }
                 catch { }
             });
@@ -1082,7 +1082,7 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private void ExitApp()
+    public void ExitApp()
     {
         _isExiting = true;
         this.Close();

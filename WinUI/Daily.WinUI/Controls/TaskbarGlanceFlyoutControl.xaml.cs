@@ -68,12 +68,15 @@ namespace Daily_WinUI.Controls
 
                 if (_healthService != null)
                 {
-                    var today = DateTime.Today;
-                    var summary = await _healthService.GetDailySummaryAsync(today);
-                    if (summary != null && summary.Steps > 0)
+                    var stepsMetric = await _healthService.GetLatestMetricAsync(Daily.Models.Health.VitalType.Steps);
+                    var activeCalMetric = await _healthService.GetLatestMetricAsync(Daily.Models.Health.VitalType.ActiveEnergy);
+                    if (stepsMetric != null && stepsMetric.Value > 0)
                     {
-                        VitalsStepsText.Text = $"{summary.Steps:N0} steps";
-                        VitalsSubText.Text = $"{summary.ActiveCalories:N0} kcal active";
+                        VitalsStepsText.Text = $"{stepsMetric.Value:N0} steps";
+                    }
+                    if (activeCalMetric != null && activeCalMetric.Value > 0)
+                    {
+                        VitalsSubText.Text = $"{activeCalMetric.Value:N0} kcal active";
                     }
                 }
             }
@@ -161,14 +164,8 @@ namespace Daily_WinUI.Controls
             {
                 try
                 {
-                    var note = new TagDoQuickNote
-                    {
-                        Title = text.Length > 24 ? text.Substring(0, 24) + "..." : text,
-                        Content = text,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    await _tagdosService.SaveQuickNoteAsync(note);
+                    var title = text.Length > 24 ? text.Substring(0, 24) + "..." : text;
+                    await _tagdosService.CreateQuickNoteAsync(title, text);
                     QuickNoteInputBox.Text = "";
                     NoteSavedFeedbackText.Text = "Saved to TagDoS!";
                     await Task.Delay(2500);
