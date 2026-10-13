@@ -6,6 +6,9 @@ public struct RootView: View {
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
     @AppStorage("useDesktopSidebar") private var isSidebarVisible: Bool = false
+    @State private var isReadingArticleInNews: Bool = false
+    @State private var isNavCapsuleExpandedWhileReading: Bool = false
+    @State private var isHoveringNavBubble: Bool = false
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
@@ -130,7 +133,10 @@ public struct RootView: View {
                                     case .weather:
                                         WeatherDetailView(onNavigateBack: navigateToDashboard)
                                     case .news:
-                                        NewsFeedView(onNavigateBack: navigateToDashboard)
+                                        NewsFeedView(
+                                            onNavigateBack: navigateToDashboard,
+                                            isReadingArticle: $isReadingArticleInNews
+                                        )
                                     case .health:
                                         HealthMainView(onNavigateBack: navigateToDashboard)
                                     case .habits:
@@ -148,9 +154,57 @@ public struct RootView: View {
                             
                             // Floating Liquid Glass Navigation Capsule (Shown when sidebar is collapsed or preferred)
                             if !isSidebarVisible {
-                                FloatingGlassCapsule(selectedTab: $selectedTab)
-                                    .padding(.bottom, 20)
-                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                                if selectedTab == .news && isReadingArticleInNews {
+                                    if isNavCapsuleExpandedWhileReading {
+                                        HStack(spacing: 8) {
+                                            FloatingGlassCapsule(selectedTab: $selectedTab)
+                                            
+                                            // Collapse / Retract Button while reading
+                                            Button {
+                                                withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                                                    isNavCapsuleExpandedWhileReading = false
+                                                }
+                                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                                            } label: {
+                                                HStack(spacing: 4) {
+                                                    Text("Retract")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                    Image(systemName: "chevron.right.circle.fill")
+                                                        .font(.system(size: 13, weight: .semibold))
+                                                }
+                                                .foregroundColor(ThemeColors.fgMutedDark)
+                                                .padding(.horizontal, 9)
+                                                .padding(.vertical, 7)
+                                                .background(
+                                                    Capsule()
+                                                        .fill(Color.black.opacity(0.55))
+                                                        .background(.ultraThinMaterial, in: Capsule())
+                                                        .overlay(Capsule().strokeBorder(ThemeColors.glassDarkBorder, lineWidth: 1))
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                            .help("Retract Navigation Capsule")
+                                        }
+                                        .padding(.bottom, 20)
+                                        .transition(.asymmetric(
+                                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                                            removal: .move(edge: .bottom).combined(with: .opacity)
+                                        ))
+                                    } else {
+                                        navigationBubble
+                                            .transition(.asymmetric(
+                                                insertion: .scale(scale: 0.85).combined(with: .opacity),
+                                                removal: .scale(scale: 0.85).combined(with: .opacity)
+                                            ))
+                                    }
+                                } else {
+                                    FloatingGlassCapsule(selectedTab: $selectedTab)
+                                        .padding(.bottom, 20)
+                                        .transition(.asymmetric(
+                                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                                            removal: .move(edge: .bottom).combined(with: .opacity)
+                                        ))
+                                }
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -239,6 +293,64 @@ public struct RootView: View {
                 }
             }
         }
+        .onChange(of: isReadingArticleInNews) { _, isReading in
+            if !isReading {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    isNavCapsuleExpandedWhileReading = false
+                }
+            }
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab != .news {
+                isNavCapsuleExpandedWhileReading = false
+            }
+        }
+    }
+    
+    // MARK: - Retracted Navigation Bubble (shown when reading news)
+    
+    private var navigationBubble: some View {
+        Button {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                isNavCapsuleExpandedWhileReading = true
+            }
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: selectedTab.iconName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(ThemeColors.accentBlue)
+                
+                if isHoveringNavBubble {
+                    Text(selectedTab.rawValue)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
+            }
+            .padding(.horizontal, isHoveringNavBubble ? 14 : 11)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.60))
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(ThemeColors.accentBlue.opacity(0.4), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.45), radius: 10, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHoveringNavBubble = isHovering
+            }
+        }
+        .help("Show Navigation Capsule (⌘1-7)")
+        .frame(maxWidth: .infinity, alignment: .bottomTrailing)
+        .padding(.trailing, 20)
+        .padding(.bottom, 24)
     }
     
     private func switchTab(_ tab: NavigationTab) {

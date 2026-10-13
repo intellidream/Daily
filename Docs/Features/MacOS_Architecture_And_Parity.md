@@ -206,4 +206,37 @@ To match the ergonomics of premier macOS desktop reading applications (Apple New
    - Resolved vertical crowding under macOS window chrome / traffic light buttons by expanding top clearance to `.padding(.top, 28)`.
    - Pinned `subTabSwitcher` (Live Feed, Read Later, Favorites) and `feedPickerRow` (Source selector) directly in the top header hierarchy above `ScrollView`, guaranteeing persistent access without scrolling away.
 
+---
+
+## 7. Retractable Right-Docked Action Bubbles (Distraction-Free Reading)
+
+### Problem & Ergonomic Requirement
+When reading an article in `NewsReaderView` (both within the main window and in a detached window), persistent navigation and recommendation chrome across the bottom—such as the `bottomRecommendationsBar` carousel and the global `FloatingGlassCapsule`—can visually clutter the reading canvas and obstruct text flow.
+
+### Architectural Solution: Dual Docked Liquid Glass Bubbles
+To preserve focus while retaining quick access to navigation and related content:
+
+1. **Automatic Initial Retraction**:
+   - Opening an article in `NewsFeedView` immediately updates `$isReadingArticleInNews = true`.
+   - Both the **Related Stories Carousel** and the **Dashboard Navigation Capsule** automatically start in a compact, retracted "bubble" state docked at the bottom-right of the viewport.
+
+2. **Visual Hierarchy & Dock Stacking**:
+   - **Suggestions Bubble (`recommendationsBubble`)**:
+     - Docked at `alignment: .bottomTrailing`, `padding(.trailing, 20)`.
+     - In detached windows: positioned at `padding(.bottom, 24)`.
+     - In main window: positioned at `padding(.bottom, 76)` to sit stacked cleanly above the navigation bubble.
+     - Displays `Image(systemName: "sparkles")` with a cyan count badge (`Text("\(recommendations.count)")`).
+     - Expands on hover with `.spring()` animation to reveal the "Related" label.
+     - Tapping with trackpad haptic feedback expands into the full horizontal `expandedRecommendationsBar`, complete with a dedicated "Retract" button (`chevron.down.circle.fill`) to collapse back.
+   - **Navigation Capsule Bubble (`navigationBubble`)**:
+     - Docked at `alignment: .bottomTrailing`, `padding(.trailing, 20)`, `padding(.bottom, 24)`.
+     - Styled in Liquid Glass with `ThemeColors.accentBlue`, displaying the active tab's icon (`selectedTab.iconName`).
+     - Expands on hover to show the active tab's title (e.g. "News").
+     - Tapping smoothly springs open the full `FloatingGlassCapsule` with an adjacent "Retract" pill (`chevron.right.circle.fill`) allowing on-demand collapse back into the bubble.
+
+3. **Seamless Automatic Restoration**:
+   - Closing the reader (via "Stories" back button, `Esc` keyboard shortcut, or detaching to a separate window via `⌘O`) sets `isReadingArticleInNews = false`.
+   - `RootView`'s `.onChange(of: isReadingArticleInNews)` automatically resets `isNavCapsuleExpandedWhileReading = false` and smoothly animates `FloatingGlassCapsule` back to its normal bottom-center position in the news feed.
+
+
 

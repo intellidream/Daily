@@ -69,43 +69,51 @@ public struct NewsArticleCard: View {
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
                     
-                    // Body: Title, Description & Thumbnail
-                    HStack(alignment: .top, spacing: 14) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(article.title)
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .lineLimit(3)
-                                .multilineTextAlignment(.leading)
-                            
-                            if let desc = article.description, !desc.isEmpty {
-                                Text(desc)
-                                    .font(.system(size: 13, weight: .regular))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
-                                    .lineLimit(2)
+                    // Body: Title, Description & Thumbnail (Clickable Button)
+                    Button {
+                        onTap()
+                    } label: {
+                        HStack(alignment: .top, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(article.title)
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .lineLimit(3)
                                     .multilineTextAlignment(.leading)
+                                
+                                if let desc = article.description, !desc.isEmpty {
+                                    Text(desc)
+                                        .font(.system(size: 13, weight: .regular))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                }
                             }
-                        }
-                        
-                        if let imgStr = article.imageUrl, let url = URL(string: imgStr) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable()
-                                        .scaledToFill()
-                                        .frame(width: 88, height: 88)
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-                                        )
-                                        .shadow(color: Color.black.opacity(0.3), radius: 6, x: 0, y: 3)
-                                default:
-                                    EmptyView()
+                            
+                            Spacer(minLength: 0)
+                            
+                            if let imgStr = article.imageUrl, let url = URL(string: imgStr) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable()
+                                            .scaledToFill()
+                                            .frame(width: 88, height: 88)
+                                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 14)
+                                                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                                            )
+                                            .shadow(color: Color.black.opacity(0.3), radius: 6, x: 0, y: 3)
+                                    default:
+                                        EmptyView()
+                                    }
                                 }
                             }
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     
                     // Actions Footer: Read Later, Favorite, Share
                     HStack(spacing: 16) {

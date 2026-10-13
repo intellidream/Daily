@@ -13,7 +13,8 @@ public struct NewsReaderView: View {
     @State private var isLoadingFullArticle = true
     @State private var fontSizeMultiplier: Double = 1.0
     @State private var recommendations: [NewsArticle] = []
-    @State private var showRecommendations = true
+    @State private var isRecommendationsExpanded: Bool = false
+    @State private var isHoveringBubble: Bool = false
     
     @ObservedObject private var savedService = SavedArticlesService.shared
     @ObservedObject private var settingsService = SettingsService.shared
@@ -81,9 +82,21 @@ public struct NewsReaderView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     
-                    // Floating Bottom Recommendations Bar
+                    // Floating Bottom Recommendations Bar / Sleek Docked Bubble
                     if !recommendations.isEmpty {
-                        bottomRecommendationsBar
+                        if isRecommendationsExpanded {
+                            expandedRecommendationsBar
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                                    removal: .move(edge: .bottom).combined(with: .opacity)
+                                ))
+                        } else {
+                            recommendationsBubble
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.85).combined(with: .opacity),
+                                    removal: .scale(scale: 0.85).combined(with: .opacity)
+                                ))
+                        }
                     }
                 }
             }
@@ -323,80 +336,146 @@ public struct NewsReaderView: View {
         .buttonStyle(.plain)
     }
     
-    private var bottomRecommendationsBar: some View {
+    // MARK: - Retracted Suggestions Bubble
+    
+    private var recommendationsBubble: some View {
+        Button {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                isRecommendationsExpanded = true
+            }
+            triggerHaptic()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                
+                Text("\(recommendations.count)")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                if isHoveringBubble {
+                    Text("Related")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
+            }
+            .padding(.horizontal, isHoveringBubble ? 14 : 11)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.60))
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(ThemeColors.accentCyan.opacity(0.4), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.45), radius: 10, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHoveringBubble = isHovering
+            }
+        }
+        .help("Show Related Stories (\(recommendations.count))")
+        .frame(maxWidth: .infinity, alignment: .bottomTrailing)
+        .padding(.trailing, 20)
+        .padding(.bottom, isInSeparateWindow ? 24 : 76)
+    }
+    
+    // MARK: - Expanded Suggestions Carousel Bar
+    
+    private var expandedRecommendationsBar: some View {
         VStack(spacing: 8) {
             HStack {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 11))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundColor(ThemeColors.accentCyan)
                     Text("Related Stories")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                    Text("\(recommendations.count)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(ThemeColors.accentCyan.opacity(0.18)))
                 }
                 
                 Spacer()
                 
+                // Retract Button
                 Button {
-                    withAnimation {
-                        showRecommendations.toggle()
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                        isRecommendationsExpanded = false
                     }
+                    triggerHaptic()
                 } label: {
-                    Image(systemName: showRecommendations ? "chevron.down" : "chevron.up")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(ThemeColors.fgMutedDark)
+                    HStack(spacing: 4) {
+                        Text("Retract")
+                            .font(.system(size: 11, weight: .semibold))
+                        Image(systemName: "chevron.down.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(ThemeColors.fgMutedDark)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
+                .help("Retract to Bubble")
             }
             .padding(.horizontal, 16)
             
-            if showRecommendations {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(recommendations) { item in
-                            Button {
-                                loadArticle(item)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    if let icon = item.publicationIconUrl, let url = URL(string: icon) {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                            case .success(let img):
-                                                img.resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 14, height: 14)
-                                                    .clipShape(Circle())
-                                            default:
-                                                EmptyView()
-                                            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(recommendations) { item in
+                        Button {
+                            loadArticle(item)
+                        } label: {
+                            HStack(spacing: 8) {
+                                if let icon = item.publicationIconUrl, let url = URL(string: icon) {
+                                    AsyncImage(url: url) { phase in
+                                        switch phase {
+                                        case .success(let img):
+                                            img.resizable()
+                                                .scaledToFill()
+                                                .frame(width: 14, height: 14)
+                                                .clipShape(Circle())
+                                        default:
+                                            EmptyView()
                                         }
                                     }
-                                    
-                                    Text(item.title)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .lineLimit(1)
-                                        .frame(maxWidth: 220, alignment: .leading)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.1))
-                                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
-                                )
+                                
+                                Text(item.title)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: 220, alignment: .leading)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule()
+                                    .fill(Color.white.opacity(0.1))
+                                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 16)
                 }
+                .padding(.horizontal, 16)
             }
         }
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 22)
-                .fill(Color.black.opacity(0.55))
+                .fill(Color.black.opacity(0.60))
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
                 .overlay(
                     RoundedRectangle(cornerRadius: 22)
@@ -455,6 +534,8 @@ public struct NewsReaderView: View {
         if settingsService.settings.hapticsEnabled {
             #if canImport(UIKit)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            #else
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             #endif
         }
     }

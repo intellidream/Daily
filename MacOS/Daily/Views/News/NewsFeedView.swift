@@ -21,9 +21,11 @@ public struct NewsFeedView: View {
     @State private var selectedArticleForReader: NewsArticle?
     @State private var showManageFeedsSheet = false
     public var onNavigateBack: (() -> Void)? = nil
+    @Binding public var isReadingArticle: Bool
     
-    public init(onNavigateBack: (() -> Void)? = nil) {
+    public init(onNavigateBack: (() -> Void)? = nil, isReadingArticle: Binding<Bool> = .constant(false)) {
         self.onNavigateBack = onNavigateBack
+        self._isReadingArticle = isReadingArticle
         if ProcessInfo.processInfo.arguments.contains("-testOpenRepublicaReader") {
             let republicaArticle = NewsArticle(
                 id: "https://republica.ro/se-pare-ca-am-murit",
@@ -91,6 +93,7 @@ public struct NewsFeedView: View {
                                         NewsArticleCard(article: article) {
                                             withAnimation(.easeInOut(duration: 0.25)) {
                                                 selectedArticleForReader = article
+                                                isReadingArticle = true
                                             }
                                         }
                                     }
@@ -131,12 +134,14 @@ public struct NewsFeedView: View {
                         let pool = displayedArticles
                         withAnimation(.easeInOut(duration: 0.2)) {
                             selectedArticleForReader = nil
+                            isReadingArticle = false
                         }
                         ArticleWindowManager.shared.open(article: articleToOpen, candidatePool: pool)
                     },
                     onDismiss: {
                         withAnimation(.easeInOut(duration: 0.25)) {
                             selectedArticleForReader = nil
+                            isReadingArticle = false
                         }
                     }
                 )
@@ -146,6 +151,14 @@ public struct NewsFeedView: View {
                     removal: .move(edge: .trailing).combined(with: .opacity)
                 ))
                 .zIndex(10)
+            }
+        }
+        .onChange(of: selectedArticleForReader) { _, newArticle in
+            isReadingArticle = (newArticle != nil)
+        }
+        .onAppear {
+            if selectedArticleForReader != nil {
+                isReadingArticle = true
             }
         }
         .sheet(isPresented: $showManageFeedsSheet) {
