@@ -553,9 +553,12 @@ public sealed partial class MainPage : Page
                 case "HealthWidget":
                     OpenDetailWindow(typeof(HealthDetailPage));
                     break;
-                    break;
                 case "CalendarWidget":
                     OpenDetailWindow(typeof(CalendarDetailPage));
+                    break;
+                case "NotesWidget":
+                case "TagdosWidget":
+                    OpenDetailWindow(typeof(TagdosNotesDetailPage));
                     break;
             }
         }

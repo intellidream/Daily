@@ -99,6 +99,8 @@
     <Content Include="Assets\glass_smudges_light_large_4.svg" />
     <Content Include="Assets\glass_noise_dark.svg" />
     <Content Include="Assets\glass_noise_light.svg" />
+    <Content Include="Assets\OrbitIcon-256.png" />
+    <Content Include="Assets\OrbitIcon-512.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -170,6 +172,10 @@
     <Compile Include="..\..\Services\RefreshService.cs" Link="Services\RefreshService.cs" />
     <Compile Include="..\..\Services\ISettingsService.cs" Link="Services\ISettingsService.cs" />
     <Compile Include="..\..\Services\SettingsService.cs" Link="Services\SettingsService.cs" />
+    <!-- TagDoS Services -->
+    <Compile Include="..\..\Services\TagdosParser.cs" Link="Services\TagdosParser.cs" />
+    <Compile Include="..\..\Services\ITagdosService.cs" Link="Services\ITagdosService.cs" />
+    <Compile Include="..\..\Services\TagdosService.cs" Link="Services\TagdosService.cs" />
   </ItemGroup>
 
   <!--

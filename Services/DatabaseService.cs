@@ -72,6 +72,10 @@ namespace Daily.Services
                 await _connection.CreateTableAsync<LocalVitalMetric>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<Daily.Models.Health.HealthDailySummaryEntity>().ConfigureAwait(false);
 
+                // TagDoS Streams & Quick Notes
+                await _connection.CreateTableAsync<Daily.Models.LocalTagdoStream>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<Daily.Models.LocalTagdoQuickNote>().ConfigureAwait(false);
+
                 // Calendar Integration
                 await _connection.CreateTableAsync<LocalCalendarAccount>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<LocalCalendarEvent>().ConfigureAwait(false);

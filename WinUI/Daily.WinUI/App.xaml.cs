@@ -315,6 +315,9 @@ public partial class App : Application
         services.AddSingleton<Daily.Services.IHabitsService, Daily.Services.HabitsService>();
         services.AddSingleton<Daily.Services.IRefreshService, Daily.Services.RefreshService>();
         
+        // TagDoS Service
+        services.AddSingleton<Daily.Services.ITagdosService, Daily.Services.TagdosService>();
+        
         // Calendar Service
         services.AddHttpClient<Daily_WinUI.Services.ICalendarService, Daily_WinUI.Services.CalendarService>();
         

@@ -1,0 +1,209 @@
+<Page
+    x:Class="Daily_WinUI.Views.TagdosNotesDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:Daily_WinUI.Controls"
+    xmlns:models="using:Daily.Models"
+    mc:Ignorable="d"
+    Background="Transparent"
+    Loaded="Page_Loaded">
+
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <!-- 0: Standard 110px TopBar -->
+            <RowDefinition Height="110" />
+            <!-- 1: Stream Selector Bar -->
+            <RowDefinition Height="Auto" />
+            <!-- 2: Main Scrollable Content -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ROW 0: Standard 110px TopBar -->
+        <Grid Grid.Row="0" Padding="24,0" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Back Button & Icon & Title -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                <Button x:Name="BackButton" Click="BackButton_Click" Width="38" Height="38" CornerRadius="19" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Back to Dashboard">
+                    <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+
+                <Border Width="40" Height="40" CornerRadius="20" Background="#1FAF52DE" BorderBrush="#33AF52DE" BorderThickness="1">
+                    <FontIcon Glyph="&#xE73A;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FFAF52DE" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="TagDoS &amp; Notes" FontSize="26" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock Text="Mnemonic executive tag streams, active memos &amp; quick capture" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Right Actions: Quick Note, Sync, Pop-Out -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <!-- Add Quick Note Button -->
+                <Button x:Name="TopBarAddNoteButton" Click="TopBarAddNote_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FFAF52DE" />
+                        <TextBlock Text="New Note" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Sync Button -->
+                <Button x:Name="SyncButton" Click="SyncButton_Click" Width="36" Height="36" CornerRadius="18" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Sync with Cloud">
+                    <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+
+                <!-- Pop-out Window Button -->
+                <Button x:Name="PopOutButton" Click="PopOutButton_Click" Width="36" Height="36" CornerRadius="18" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Open in Separate Window">
+                    <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ROW 1: Stream Selector Segmented Tabs -->
+        <Border Grid.Row="1" Margin="24,0,24,12" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="6">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="StreamTabsPanel" Orientation="Horizontal" Spacing="6">
+                    <!-- Segmented tab buttons populated dynamically -->
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- ROW 2: Main Content Area -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,0,24,32">
+            <StackPanel x:Name="MainContentContainer" MaxWidth="960" HorizontalAlignment="Center" Spacing="16">
+                <!-- STREAM VIEW (Visible for Streams 1-5) -->
+                <StackPanel x:Name="StreamViewPanel" Spacing="16">
+                    <!-- Stream Controls & Title Card -->
+                    <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="18">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <TextBlock x:Name="StreamHeaderTitle" Text="Morning Prime" FontSize="20" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                                    <Button x:Name="RenameStreamButton" Click="RenameStream_Click" Width="28" Height="28" CornerRadius="14" Background="Transparent" BorderThickness="0" Padding="0" ToolTipService.ToolTip="Rename stream">
+                                        <FontIcon Glyph="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                                    </Button>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <!-- Reminder Time -->
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                                        <TextBlock x:Name="StreamReminderText" Text="Reminder: 08:30" FontSize="12" Foreground="#FF00E5FF" />
+                                        <Button Click="ChangeReminder_Click" Background="Transparent" BorderThickness="0" Padding="4,0" ToolTipService.ToolTip="Set reminder time">
+                                            <TextBlock Text="Change" FontSize="11" Foreground="#FF00E5FF" TextDecorations="Underline" />
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Pill count badge -->
+                                    <TextBlock x:Name="StreamStatsText" Text="• 7 active pills" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Actions: Raw Edit Toggle & Add Tag -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="AddTagButton" Click="AddTagButton_Click" Background="#26AF52DE" BorderBrush="#66AF52DE" BorderThickness="1" CornerRadius="14" Padding="12,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFAF52DE" />
+                                        <TextBlock Text="Add Tag" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="ToggleRawEditButton" Click="ToggleRawEdit_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="10,6" ToolTipService.ToolTip="Toggle raw shorthand syntax editor">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE756;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                                        <TextBlock x:Name="ToggleRawEditText" Text="Syntax Mode" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- VISUAL CANVAS: Clusters & Glowing Pills -->
+                    <Border x:Name="VisualCanvasBorder" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
+                        <StackPanel x:Name="ClustersContainer" Spacing="16">
+                            <!-- Populated dynamically with clusters separated by '&' and glowing pills -->
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RAW TEXT EDITOR (Hidden by default) -->
+                    <Border x:Name="RawEditorBorder" Visibility="Collapsed" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="18">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Raw Stream Shorthand (Cluster &amp; Cluster / Pill/Pill)" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            <TextBox x:Name="RawSyntaxTextBox" FontFamily="Consolas, Cascadia Code, Courier New" FontSize="13" TextWrapping="Wrap" AcceptsReturn="False" CornerRadius="8" Padding="12" Height="60" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                                <Button Content="Cancel" Click="CancelRawEdit_Click" CornerRadius="8" Padding="14,6" />
+                                <Button Content="Apply Changes" Click="ApplyRawEdit_Click" Style="{ThemeResource AccentButtonStyle}" CornerRadius="8" Padding="14,6" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ACTIVE MEMOS & DRAG & DROP ATTACHMENTS (Matching macOS TagdosActiveMemoView) -->
+                    <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="18">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                                <FontIcon Glyph="&#xE70B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                                <TextBlock Text="Active Memos &amp; Checklists" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+
+                            <!-- Memo text box -->
+                            <TextBox Grid.Row="1" x:Name="StreamMemosTextBox" PlaceholderText="Write daily focus notes, bullet checklists, or key details..." TextWrapping="Wrap" AcceptsReturn="True" MinHeight="100" CornerRadius="8" Padding="12" Margin="0,0,0,12" LostFocus="StreamMemosTextBox_LostFocus" />
+
+                            <!-- Drag & Drop File Zone -->
+                            <Border Grid.Row="2" x:Name="DropFileZone" AllowDrop="True" DragOver="DropFileZone_DragOver" Drop="DropFileZone_Drop" Background="#0AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" BorderDashArray="2,2" CornerRadius="10" Padding="16">
+                                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                    <FontIcon Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Drag and drop files here (PDF, images, documents) or click to attach" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" HorizontalAlignment="Center" />
+                                    <StackPanel x:Name="AttachmentsListPanel" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" HorizontalAlignment="Center">
+                                        <!-- Attachment badges -->
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- QUICK NOTES VIEW (Visible when Notes tab is selected) -->
+                <StackPanel x:Name="QuickNotesViewPanel" Visibility="Collapsed" Spacing="16">
+                    <!-- Search & Filter Bar -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox x:Name="NoteSearchBox" Grid.Column="0" PlaceholderText="Search notes or #tags (e.g. #focus, #executive)..." TextChanged="NoteSearchBox_TextChanged" CornerRadius="12" Padding="12,8" Margin="0,0,12,0" />
+                        <Button Grid.Column="1" Click="TopBarAddNote_Click" Style="{ThemeResource AccentButtonStyle}" CornerRadius="12" Padding="16,8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="12" />
+                                <TextBlock Text="Create Note" FontSize="13" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Notes Grid / Flow -->
+                    <VariableSizedWrapGrid x:Name="NotesGridPanel" Orientation="Horizontal" MaximumRowsOrColumns="3" ItemWidth="300" HorizontalAlignment="Stretch">
+                        <!-- Populated dynamically with note cards -->
+                    </VariableSizedWrapGrid>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>
