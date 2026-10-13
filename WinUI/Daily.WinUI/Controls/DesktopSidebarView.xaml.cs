@@ -21,6 +21,7 @@ namespace Daily_WinUI.Controls
         public DesktopSidebarView()
         {
             this.InitializeComponent();
+            this.ActualThemeChanged += (_, _) => UpdateVisualState();
             UpdateVisualState();
         }
 
@@ -57,11 +58,18 @@ namespace Daily_WinUI.Controls
 
         private void UpdateVisualState()
         {
+            var isLight = (this.ActualTheme == ElementTheme.Light);
             var activeBg = Resources["SidebarActiveTabBrush"] as Brush ?? new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x78, 0xD4));
             var transparentBrush = new SolidColorBrush(Colors.Transparent);
             var activeIconBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF));
-            var fgBrush = Application.Current.Resources["AppFgColorBrush"] as Brush ?? new SolidColorBrush(Colors.White);
-            var mutedBrush = Application.Current.Resources["AppFgMutedColorBrush"] as Brush ?? new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF));
+            
+            var fgBrush = isLight
+                ? new SolidColorBrush(Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A))
+                : new SolidColorBrush(Colors.White);
+
+            var mutedBrush = isLight
+                ? new SolidColorBrush(Color.FromArgb(0xBB, 0x1A, 0x1A, 0x1A))
+                : new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF));
 
             for (int i = 1; i <= 8; i++)
             {

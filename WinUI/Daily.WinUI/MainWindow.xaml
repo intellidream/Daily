@@ -149,8 +149,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- SVG Background - spans titlebar + content -->
-        <Image Source="{ThemeResource AppBackgroundSource}" Stretch="UniformToFill" IsHitTestVisible="False" Grid.RowSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
+        <!-- High-performance hardware-accelerated Mica system backdrop -->
 
         <!-- Custom TitleBar Grid bypassing the buggy TitleBar control entirely -->
         <Grid x:Name="AppTitleBar" Background="Transparent" VerticalAlignment="Top" SizeChanged="AppTitleBar_SizeChanged" Opacity="0.0" IsHitTestVisible="False">
@@ -185,7 +184,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Image Width="16" Height="16" VerticalAlignment="Center" IsHitTestVisible="False">
                         <Image.Source>
-                            <BitmapImage UriSource="ms-appx:///Assets/OrbitIcon-256.png" DecodePixelWidth="32" DecodePixelHeight="32"/>
+                            <BitmapImage UriSource="ms-appx:///Assets/OrbitIcon-Unplated-32.png" DecodePixelWidth="32" DecodePixelHeight="32"/>
                         </Image.Source>
                     </Image>
                     <TextBlock Text="DayOne" FontSize="12" VerticalAlignment="Center"/>
@@ -330,6 +329,9 @@
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Bottom"
                                                Margin="0,0,0,24"
+                                               Canvas.ZIndex="1000"
+                                               Translation="0,0,64"
+                                               IsHitTestVisible="True"
                                                TabSelected="OnCapsuleTabSelected" />
             </Grid>
         </Grid>
@@ -384,20 +386,27 @@
             </StackPanel>
         </Grid>
 
-        <!-- System Tray Companion Popover matching macOS MenuBarExtra -->
+        <!-- System Tray Icon -->
         <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="DayOne">
             <tb:TaskbarIcon.ContextFlyout>
-                <Flyout x:Name="TrayCompanionFlyout" Placement="Top">
-                    <Flyout.FlyoutPresenterStyle>
-                        <Style TargetType="FlyoutPresenter">
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="BorderThickness" Value="0" />
-                            <Setter Property="CornerRadius" Value="16" />
-                        </Style>
-                    </Flyout.FlyoutPresenterStyle>
-                    <controls:TaskbarGlanceFlyoutControl x:Name="TaskbarGlanceControl" RequestCloseFlyout="TaskbarGlanceControl_RequestCloseFlyout" />
-                </Flyout>
+                <MenuFlyout>
+                    <MenuFlyoutItem Text="Show DayOne" Click="TrayShow_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE737;" FontFamily="Segoe Fluent Icons" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Text="Force Sync" Click="TitleBarRefresh_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="Exit" Click="TrayExit_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout>
             </tb:TaskbarIcon.ContextFlyout>
         </tb:TaskbarIcon>
     </Grid>

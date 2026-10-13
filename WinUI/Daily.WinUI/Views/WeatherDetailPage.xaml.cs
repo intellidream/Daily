@@ -54,6 +54,12 @@ public sealed partial class WeatherDetailPage : Page
 
     private async void WeatherDetailPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
+        if (this.Frame != App.Current?.MainWindow?.RootFrame)
+        {
+            if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+            if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
+        }
+
         LoadSavedLocations();
         ApplyGlassIntensity(_settings.GlassIntensity);
         GlassIntensityComboBox.SelectedItem = _settings.GlassIntensity;

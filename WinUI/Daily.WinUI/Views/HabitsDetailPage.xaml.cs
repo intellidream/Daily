@@ -368,6 +368,12 @@ public sealed partial class HabitsDetailPage : Page, INotifyPropertyChanged
 
     private async void HabitsDetailPage_Loaded(object sender, RoutedEventArgs e)
     {
+        if (this.Frame != App.Current?.MainWindow?.RootFrame)
+        {
+            if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+            if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
+        }
+
         _habitsService.OnHabitsUpdated += HabitsService_OnHabitsUpdated;
         await LoadDataAsync();
     }

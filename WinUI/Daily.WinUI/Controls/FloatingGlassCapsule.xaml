@@ -15,12 +15,12 @@
     </UserControl.Resources>
 
     <Border x:Name="CapsuleBorder"
-            Background="#660C1017"
-            BorderBrush="#33FFFFFF"
+            Background="{ThemeResource CapsuleBackgroundBrush}"
+            BorderBrush="{ThemeResource CapsuleBorderBrush}"
             BorderThickness="1"
             CornerRadius="25"
             Padding="5,4"
-            Translation="0,0,16"
+            Translation="0,0,64"
             HorizontalAlignment="Center"
             VerticalAlignment="Bottom">
         

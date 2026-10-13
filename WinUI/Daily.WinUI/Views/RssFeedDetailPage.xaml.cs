@@ -74,6 +74,14 @@ public sealed partial class RssFeedDetailPage : Page
 
     private async void RssFeedDetailPage_Loaded(object sender, RoutedEventArgs e)
     {
+        if (this.Frame != App.Current?.MainWindow?.RootFrame)
+        {
+            if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+            if (ListViewBackButton != null) ListViewBackButton.Visibility = Visibility.Collapsed;
+            if (ListViewPopOutButton != null) ListViewPopOutButton.Visibility = Visibility.Collapsed;
+            if (ReaderPopOutButton != null) ReaderPopOutButton.Visibility = Visibility.Collapsed;
+        }
+
         _rssService.OnFeedChanged += RssService_OnFeedChanged;
         _rssService.OnItemsUpdated += RssService_OnItemsUpdated;
         _articleService.OnItemsChanged += ArticleService_OnItemsChanged;

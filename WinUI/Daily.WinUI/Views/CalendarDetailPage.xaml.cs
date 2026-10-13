@@ -385,6 +385,13 @@ namespace Daily_WinUI.Views
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+
+            if (this.Frame != App.Current?.MainWindow?.RootFrame)
+            {
+                if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+                if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
+            }
+
             _calendarService.OnCalendarDataChanged += OnCalendarDataChanged;
 
             var isOpened = LoadSidebarState();

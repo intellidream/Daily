@@ -18,6 +18,7 @@ namespace Daily_WinUI.Controls
         public FloatingGlassCapsule()
         {
             this.InitializeComponent();
+            this.ActualThemeChanged += (_, _) => UpdateVisualState();
             UpdateVisualState();
         }
 
@@ -39,11 +40,15 @@ namespace Daily_WinUI.Controls
 
         private void UpdateVisualState()
         {
+            var isLight = (this.ActualTheme == ElementTheme.Light);
             var activeGradient = Resources["ActiveTabGradientBrush"] as Brush ?? new SolidColorBrush(Color.FromArgb(0xCC, 0x00, 0x78, 0xD4));
             var activeBorder = new SolidColorBrush(Color.FromArgb(0x99, 0x00, 0xE5, 0xFF));
             var transparentBrush = new SolidColorBrush(Colors.Transparent);
-            var whiteBrush = new SolidColorBrush(Colors.White);
-            var mutedWhiteBrush = new SolidColorBrush(Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF));
+            var activeTextBrush = new SolidColorBrush(Colors.White);
+
+            var inactiveBrush = isLight
+                ? new SolidColorBrush(Color.FromArgb(0x99, 0x1A, 0x1A, 0x1A))
+                : new SolidColorBrush(Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF));
 
             for (int i = 1; i <= 8; i++)
             {
@@ -60,16 +65,16 @@ namespace Daily_WinUI.Controls
                     button.Background = activeGradient;
                     button.BorderBrush = activeBorder;
                     text.Visibility = Visibility.Visible;
-                    text.Foreground = whiteBrush;
-                    icon.Foreground = whiteBrush;
+                    text.Foreground = activeTextBrush;
+                    icon.Foreground = activeTextBrush;
                 }
                 else
                 {
                     button.Background = transparentBrush;
                     button.BorderBrush = transparentBrush;
                     text.Visibility = Visibility.Collapsed;
-                    text.Foreground = mutedWhiteBrush;
-                    icon.Foreground = mutedWhiteBrush;
+                    text.Foreground = inactiveBrush;
+                    icon.Foreground = inactiveBrush;
                 }
             }
         }

@@ -15,8 +15,8 @@
     </UserControl.Resources>
 
     <Border Width="230"
-            Background="#E60E121B"
-            BorderBrush="#22FFFFFF"
+            Background="{ThemeResource SidebarBackgroundBrush}"
+            BorderBrush="{ThemeResource SidebarBorderBrush}"
             BorderThickness="0,0,1,0"
             Padding="12,16">
         <Grid>
@@ -36,9 +36,9 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Image Grid.Column="0" Width="24" Height="24" VerticalAlignment="Center" Margin="0,0,10,0">
+                <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,10,0">
                     <Image.Source>
-                        <BitmapImage UriSource="ms-appx:///Assets/OrbitIcon-256.png" DecodePixelWidth="48" DecodePixelHeight="48"/>
+                        <BitmapImage UriSource="ms-appx:///Assets/OrbitIcon-Unplated-32.png" DecodePixelWidth="44" DecodePixelHeight="44"/>
                     </Image.Source>
                 </Image>
 
@@ -52,7 +52,7 @@
             </Grid>
 
             <!-- Divider -->
-            <Rectangle Grid.Row="1" Height="1" Fill="#1AFFFFFF" Margin="0,0,0,12" />
+            <Rectangle Grid.Row="1" Height="1" Fill="{ThemeResource SidebarBorderBrush}" Margin="0,0,0,12" />
 
             <!-- Navigation Items List -->
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -188,7 +188,7 @@
             </ScrollViewer>
 
             <!-- Divider -->
-            <Rectangle Grid.Row="3" Height="1" Fill="#1AFFFFFF" Margin="0,12,0,12" />
+            <Rectangle Grid.Row="3" Height="1" Fill="{ThemeResource SidebarBorderBrush}" Margin="0,12,0,12" />
 
             <!-- Footer: Sync & Settings -->
             <StackPanel Grid.Row="4" Spacing="4">

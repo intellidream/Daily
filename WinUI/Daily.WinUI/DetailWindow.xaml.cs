@@ -124,6 +124,8 @@ public sealed partial class DetailWindow : Window
     {
         try
         {
+            RootFrame.Navigated -= DetailWindow_Navigated;
+            RootFrame.Navigated += DetailWindow_Navigated;
             RootFrame.Navigate(pageType, parameter);
             UpdateSectionTitleBar(MapSectionNameFromPageType(pageType));
         }
@@ -132,6 +134,29 @@ public sealed partial class DetailWindow : Window
             System.IO.File.WriteAllText("crash_log.txt", ex.ToString());
             throw;
         }
+    }
+
+    private void DetailWindow_Navigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        if (e.Content is Page page)
+        {
+            HideSecondaryWindowChrome(page);
+            page.Loaded += (s, ev) => HideSecondaryWindowChrome(page);
+        }
+    }
+
+    private void HideSecondaryWindowChrome(Page page)
+    {
+        if (page.FindName("BackButton") is UIElement backBtn)
+            backBtn.Visibility = Visibility.Collapsed;
+        if (page.FindName("PopOutButton") is UIElement popBtn)
+            popBtn.Visibility = Visibility.Collapsed;
+        if (page.FindName("ListViewBackButton") is UIElement lvBack)
+            lvBack.Visibility = Visibility.Collapsed;
+        if (page.FindName("ListViewPopOutButton") is UIElement lvPop)
+            lvPop.Visibility = Visibility.Collapsed;
+        if (page.FindName("ReaderPopOutButton") is UIElement rdrPop)
+            rdrPop.Visibility = Visibility.Collapsed;
     }
 
     private void AppTitleBar_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -144,6 +169,7 @@ public sealed partial class DetailWindow : Window
     {
         if (string.IsNullOrWhiteSpace(pageKey)) return "Detail";
         var key = pageKey.ToLowerInvariant();
+        if (key.Contains("tagdos")) return "TagDoS";
         if (key.Contains("weather")) return "Weather";
         if (key.Contains("habits")) return "Habits";
         if (key.Contains("health")) return "Health";
@@ -155,6 +181,7 @@ public sealed partial class DetailWindow : Window
 
     private static string MapSectionNameFromPageType(Type pageType)
     {
+        if (pageType == typeof(TagdosNotesDetailPage)) return "TagDoS";
         if (pageType == typeof(WeatherDetailPage)) return "Weather";
         if (pageType == typeof(HabitsDetailPage)) return "Habits";
         if (pageType == typeof(HealthDetailPage)) return "Health";
@@ -169,6 +196,7 @@ public sealed partial class DetailWindow : Window
         // Match each page's top-bar icon exactly
         return section switch
         {
+            "TagDoS" => "\uE70B",   // TagDoS hub icon
             "Weather" => "\uE753",  // WeatherDetailPage top icon
             "Habits" => "\uED23",   // HabitsDetailPage top icon (Tabler)
             "Health" => "\uE95E",   // HealthDetailPage top icon

@@ -29,6 +29,12 @@ namespace Daily_WinUI.Views
 
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
+            if (this.Frame != App.Current?.MainWindow?.RootFrame)
+            {
+                if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+                if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
+            }
+
             _tagdosService = App.Current.Services.GetService<ITagdosService>();
             if (_tagdosService != null)
             {
@@ -816,7 +822,11 @@ namespace Daily_WinUI.Views
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
-            if (Frame.CanGoBack)
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.NavigateToTab(1);
+            }
+            else if (Frame.CanGoBack)
             {
                 Frame.GoBack();
             }
@@ -837,9 +847,10 @@ namespace Daily_WinUI.Views
 
         private void PopOutButton_Click(object sender, RoutedEventArgs e)
         {
-            if (App.Current.MainWindow is MainWindow mw && mw.Content is Frame rootFrame && rootFrame.Content is MainPage mp)
+            if (App.Current?.MainWindow is MainWindow mw)
             {
-                mp.OpenDetailWindow(typeof(TagdosNotesDetailPage));
+                mw.OpenDetailWindow(typeof(TagdosNotesDetailPage));
+                mw.NavigateToTab(1);
             }
         }
     }

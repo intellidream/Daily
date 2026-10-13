@@ -980,10 +980,32 @@ public sealed partial class MainWindow : Window
                 TrayIcon.Icon = new System.Drawing.Icon(absolutePath);
                 oldIcon?.Dispose();
                 LogTray("[TrayIcon] Successfully loaded and set system tray Icon using System.Drawing.Icon.");
+                return;
             }
-            else
+            
+            // Fallback 1: AppIcon.ico
+            string appIconPath = System.IO.Path.Combine(System.AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            if (System.IO.File.Exists(appIconPath))
             {
-                LogTray($"[TrayIcon] WARNING: File does not exist at {absolutePath}.");
+                var oldIcon = TrayIcon.Icon;
+                TrayIcon.Icon = new System.Drawing.Icon(appIconPath);
+                oldIcon?.Dispose();
+                LogTray("[TrayIcon] Loaded fallback AppIcon.ico.");
+                return;
+            }
+
+            // Fallback 2: Extract from executable process
+            var exePath = System.Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exePath))
+            {
+                var exeIcon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+                if (exeIcon != null)
+                {
+                    var oldIcon = TrayIcon.Icon;
+                    TrayIcon.Icon = exeIcon;
+                    oldIcon?.Dispose();
+                    LogTray("[TrayIcon] Loaded fallback from process executable.");
+                }
             }
         }
         catch (Exception ex)

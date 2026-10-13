@@ -11,16 +11,10 @@ let scriptURL = URL(fileURLWithPath: #file)
 let projectRoot = scriptURL.deletingLastPathComponent().deletingLastPathComponent()
 
 let masterSquircleURL = projectRoot.appendingPathComponent("MacOS/Daily/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png")
-let transparentArtworkURL = projectRoot.appendingPathComponent("iOS/Daily/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png")
 let targetAssetsDir = projectRoot.appendingPathComponent("WinUI/Daily.WinUI/Assets")
 
 guard let masterSquircle = NSImage(contentsOf: masterSquircleURL) else {
     print("❌ Failed to load master squircle at \(masterSquircleURL.path)")
-    exit(1)
-}
-
-guard let transparentArtwork = NSImage(contentsOf: transparentArtworkURL) else {
-    print("❌ Failed to load transparent artwork at \(transparentArtworkURL.path)")
     exit(1)
 }
 
@@ -114,17 +108,25 @@ func createIco(images: [(size: Int, image: NSImage)], url: URL) {
     }
 }
 
+// Load transparent artwork for unplated and tray icons
+let transparentArtworkURL = targetAssetsDir.appendingPathComponent("OrbitIcon-Transparent.png")
+guard let transparentArtwork = NSImage(contentsOf: transparentArtworkURL) else {
+    print("❌ Failed to load transparent artwork at \(transparentArtworkURL.path)")
+    exit(1)
+}
+
 print("🚀 Generating WinUI Windows 11 App Icons & Assets from Orbit Master...")
 
-// 1. Multi-resolution AppIcon.ico
+// 1. Multi-resolution AppIcon.ico (for Explorer, desktop shortcuts, taskbar pinned app)
 let icoSizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 let icoImages = icoSizes.map { (size: $0, image: masterSquircle) }
 createIco(images: icoImages, url: targetAssetsDir.appendingPathComponent("AppIcon.ico"))
 
-// 2. Tray icons (using transparent artwork and squircle)
-createIco(images: [16, 20, 24, 32, 48].map { (size: $0, image: masterSquircle) },
+// 2. Tray icons (using transparent unplated artwork for crisp rendering on Windows 11 taskbar)
+let traySizes = [16, 20, 24, 32, 48]
+createIco(images: traySizes.map { (size: $0, image: transparentArtwork) },
           url: targetAssetsDir.appendingPathComponent("TrayIconDarkTheme.ico"))
-createIco(images: [16, 20, 24, 32, 48].map { (size: $0, image: masterSquircle) },
+createIco(images: traySizes.map { (size: $0, image: transparentArtwork) },
           url: targetAssetsDir.appendingPathComponent("TrayIconLightTheme.ico"))
 
 // 3. Square150x150
@@ -133,7 +135,7 @@ savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 150,
 savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 300, height: 300)),
         url: targetAssetsDir.appendingPathComponent("Square150x150Logo.scale-200.png"))
 
-// 4. Square44x44
+// 4. Square44x44 (platted for start menu tiles)
 savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 44, height: 44)),
         url: targetAssetsDir.appendingPathComponent("Square44x44Logo.png"))
 savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 44, height: 44)),
@@ -141,14 +143,20 @@ savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 44, 
 savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 88, height: 88)),
         url: targetAssetsDir.appendingPathComponent("Square44x44Logo.scale-200.png"))
 
-// Unplated Taskbar target sizes (use transparent artwork for clean taskbar integration)
+// Unplated Taskbar & In-App target sizes (use transparent artwork for clean unplated integration)
 let unplatedSizes = [16, 20, 24, 32, 48, 256]
 for s in unplatedSizes {
-    savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: s, height: s)),
+    savePng(image: resizeImage(image: transparentArtwork, targetSize: NSSize(width: s, height: s)),
             url: targetAssetsDir.appendingPathComponent("Square44x44Logo.targetsize-\(s)_altform-unplated.png"))
 }
-savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 48, height: 48)),
+savePng(image: resizeImage(image: transparentArtwork, targetSize: NSSize(width: 48, height: 48)),
         url: targetAssetsDir.appendingPathComponent("Square44x44Logo.targetsize-48_altform-lightunplated.png"))
+
+// Unplated Orbit Icon standalone for titlebars & buttons
+savePng(image: resizeImage(image: transparentArtwork, targetSize: NSSize(width: 32, height: 32)),
+        url: targetAssetsDir.appendingPathComponent("OrbitIcon-Unplated-32.png"))
+savePng(image: resizeImage(image: transparentArtwork, targetSize: NSSize(width: 64, height: 64)),
+        url: targetAssetsDir.appendingPathComponent("OrbitIcon-Unplated-64.png"))
 
 // 5. StoreLogo (50x50)
 savePng(image: resizeImage(image: masterSquircle, targetSize: NSSize(width: 50, height: 50)),

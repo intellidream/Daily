@@ -21,6 +21,12 @@
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FFFFFFFF"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BBFFFFFF"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#20FFFFFF"/>
+                    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#D90E1422"/>
+                    <SolidColorBrush x:Key="SidebarBorderBrush" Color="#28FFFFFF"/>
+                    <SolidColorBrush x:Key="CapsuleBackgroundBrush" Color="#B30C1017"/>
+                    <SolidColorBrush x:Key="CapsuleBorderBrush" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="CapsuleFgBrush" Color="#FFFFFFFF"/>
+                    <SolidColorBrush x:Key="CapsuleFgMutedBrush" Color="#B3FFFFFF"/>
                     <ImageBrush x:Key="WidgetDirtBrush" Stretch="Fill">
                         <ImageBrush.ImageSource>
                             <SvgImageSource UriSource="ms-appx:///Assets/glass_smudges_dark.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />
@@ -113,6 +119,12 @@
                     <SolidColorBrush x:Key="AppFgColorBrush" Color="#FF1A1A1A"/>
                     <SolidColorBrush x:Key="AppFgMutedColorBrush" Color="#BB1A1A1A"/>
                     <SolidColorBrush x:Key="AppGlassColorBrush" Color="#25000000"/>
+                    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#D9F8F6F0"/>
+                    <SolidColorBrush x:Key="SidebarBorderBrush" Color="#22000000"/>
+                    <SolidColorBrush x:Key="CapsuleBackgroundBrush" Color="#E6FFFFFF"/>
+                    <SolidColorBrush x:Key="CapsuleBorderBrush" Color="#26000000"/>
+                    <SolidColorBrush x:Key="CapsuleFgBrush" Color="#FF1A1A1A"/>
+                    <SolidColorBrush x:Key="CapsuleFgMutedBrush" Color="#8A1A1A1A"/>
                     <ImageBrush x:Key="WidgetDirtBrush" Stretch="Fill">
                         <ImageBrush.ImageSource>
                             <SvgImageSource UriSource="ms-appx:///Assets/glass_smudges_light.svg" RasterizePixelWidth="500" RasterizePixelHeight="400" />

@@ -121,6 +121,12 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        if (this.Frame != App.Current?.MainWindow?.RootFrame)
+        {
+            if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+            if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
+        }
+
         if (_financesService != null)
         {
             _financesService.OnQuotesUpdated += OnQuotesUpdated;
