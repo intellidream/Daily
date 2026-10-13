@@ -129,3 +129,42 @@ All features have been compiled and verified live on the Parallels Windows 11 VM
 - **Syncfusion Scheduler**: Verified monthly calendar rendering with connected Google, Outlook, Hotmail, and Live accounts.
 - **Windows Taskbar Companion**: Built and verified with live telemetry, hydration buttons, and scratchpad.
 
+---
+
+## 6. UX Polish, Theming Parity & Windowing Refinement (✅ COMPLETED & VERIFIED)
+
+Following exhaustive testing on the Parallels Windows 11 ARM64 VM, 6 critical UX and architectural refinements were implemented to deliver complete design harmony matching iOS, macOS, and Android:
+
+1. **System Tray Taskbar Reliability**:
+   - Resolved `H.NotifyIcon` initialization crash caused by embedding an unsupported XAML `<Flyout>` inside `ContextMenuMode="SecondWindow"`.
+   - Restored native `MenuFlyout` hosting `Show DayOne`, `Force Sync`, and `Exit` items.
+   - Updated `Daily.WinUI.csproj` with `<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>` for `AppIcon.ico`, `TrayIconDarkTheme.ico`, and `TrayIconLightTheme.ico` to guarantee runtime availability in unpackaged builds.
+   - Verified via `tray_icon_debug.log` on Windows 11 VM: taskbar icon loads transparent unplated ICO seamlessly and initializes successfully.
+
+2. **Floating Glass Capsule Hit-Testing & In-Place Navigation**:
+   - Elevated `NavCapsule` in `MainWindow.xaml` with `Canvas.ZIndex="1000"` and `IsHitTestVisible="True"` to prevent dashboard scroll containers from capturing pointer events.
+   - Wired `OnCapsuleTabSelected` event handler to `MainWindow.NavigateToTab(tabIndex)`.
+   - Verified via UI Automation and live VM capture: 1-click navigation between Dashboard (Tab 1), TagDoS (Tab 3), and Calendar (Tab 8) functions instantly without window spawning.
+
+3. **120Hz Hardware Mica & Sluggishness Elimination**:
+   - Identified root cause of UI lag: full-window stretched SVG rendering (`1600x800`) directly over the Mica composition layer forced costly software rasterization on every layout and scroll tick.
+   - Removed the SVG overlay across `MainWindow.xaml`, `DetailWindow.xaml`, and `SettingsWindow.xaml`.
+   - Enabled hardware-accelerated Windows 11 `MicaBackdrop Kind="Base"` at native 120fps display refresh rate.
+
+4. **Dynamic Dark & Light Mode Liquid Glass Calibration**:
+   - Defined semantic theme resources in `App.xaml`: `SidebarBackgroundBrush`, `SidebarBorderBrush`, `CapsuleBackgroundBrush`, `CapsuleBorderBrush`, `CapsuleFgBrush`, and `CapsuleFgMutedBrush`.
+   - Updated `DesktopSidebarView` and `FloatingGlassCapsule` to bind to dynamic theme resources and subscribe to `ActualThemeChanged`.
+   - Fixed the desktop sidebar appearing hardcoded pitch-black: in Dark mode it adopts deep translucent glass (`#200E121B`), while in Light mode it renders crisp frosted acrylic glass (`#F0F8FAF9`) with high-contrast text and icons.
+   - Verified live switching via title bar `TitleBarThemeButton` on the VM.
+
+5. **Luminous Unplated Title Bar Orbit Atom**:
+   - Replaced solid squircle raster `OrbitIcon-256.png` in `TitleBarRefreshButton` with unplated alpha-keyed glowing Orbit icon (`OrbitIcon-Unplated-32.png`).
+   - Ensures crisp, bezel-less cosmic atom branding across both light and dark header backdrops.
+
+6. **Secondary Pop-Out Window Chrome Scrubbing**:
+   - When a hub is detached into an independent secondary window (`DetailWindow`), back navigation and pop-out actions are redundant.
+   - Enhanced `DetailWindow.xaml.cs` to automatically traverse and collapse `BackButton`, `PopOutButton`, `ListViewBackButton`, `ListViewPopOutButton`, and `ReaderPopOutButton` upon page navigation.
+   - Updated all detail views (`TagdosNotesDetailPage`, `CalendarDetailPage`, `FinancesDetailPage`, `HabitsDetailPage`, `HealthDetailPage`, `WeatherDetailPage`, `RssFeedDetailPage`) to detect if hosted inside `DetailWindow` and hide these controls.
+   - Verified live on the VM: popped-out TagDoS window presents clean hub content without redundant back or pop-out buttons.
+
+
