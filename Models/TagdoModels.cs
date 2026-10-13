@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using SQLite;
-using Postgrest.Attributes;
-using Postgrest.Models;
 
 namespace Daily.Models
 {
@@ -121,58 +119,58 @@ namespace Daily.Models
 
     // ── Supabase Postgrest Entities ─────────────────────────────────────────
 
-    [Table("tagdos_streams")]
-    public class RemoteTagdoStream : BaseModel
+    [Supabase.Postgrest.Attributes.Table("tagdos_streams")]
+    public class RemoteTagdoStream : Supabase.Postgrest.Models.BaseModel
     {
-        [PrimaryKey("id")]
-        [Column("id")]
+        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        [Supabase.Postgrest.Attributes.Column("id")]
         public string Id { get; set; } = string.Empty;
 
-        [Column("user_id")]
+        [Supabase.Postgrest.Attributes.Column("user_id")]
         public string? UserId { get; set; }
 
-        [Column("order_index")]
+        [Supabase.Postgrest.Attributes.Column("order_index")]
         public int OrderIndex { get; set; }
 
-        [Column("title")]
+        [Supabase.Postgrest.Attributes.Column("title")]
         public string Title { get; set; } = string.Empty;
 
-        [Column("raw_text")]
+        [Supabase.Postgrest.Attributes.Column("raw_text")]
         public string RawText { get; set; } = string.Empty;
 
-        [Column("stream_reminder")]
+        [Supabase.Postgrest.Attributes.Column("stream_reminder")]
         public DateTime? StreamReminder { get; set; }
 
-        [Column("active_memos")]
+        [Supabase.Postgrest.Attributes.Column("active_memos")]
         public string? ActiveMemos { get; set; }
 
-        [Column("updated_at")]
+        [Supabase.Postgrest.Attributes.Column("updated_at")]
         public DateTime UpdatedAt { get; set; }
     }
 
-    [Table("tagdos_quick_notes")]
-    public class RemoteTagdoQuickNote : BaseModel
+    [Supabase.Postgrest.Attributes.Table("tagdos_quick_notes")]
+    public class RemoteTagdoQuickNote : Supabase.Postgrest.Models.BaseModel
     {
-        [PrimaryKey("id")]
-        [Column("id")]
+        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        [Supabase.Postgrest.Attributes.Column("id")]
         public string Id { get; set; } = string.Empty;
 
-        [Column("user_id")]
+        [Supabase.Postgrest.Attributes.Column("user_id")]
         public string? UserId { get; set; }
 
-        [Column("title")]
+        [Supabase.Postgrest.Attributes.Column("title")]
         public string Title { get; set; } = string.Empty;
 
-        [Column("content")]
+        [Supabase.Postgrest.Attributes.Column("content")]
         public string Content { get; set; } = string.Empty;
 
-        [Column("is_pinned")]
+        [Supabase.Postgrest.Attributes.Column("is_pinned")]
         public bool IsPinned { get; set; }
 
-        [Column("created_at")]
+        [Supabase.Postgrest.Attributes.Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        [Column("updated_at")]
+        [Supabase.Postgrest.Attributes.Column("updated_at")]
         public DateTime UpdatedAt { get; set; }
     }
 }
