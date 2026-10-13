@@ -168,3 +168,33 @@ Following exhaustive testing on the Parallels Windows 11 ARM64 VM, 6 critical UX
    - Verified live on the VM: popped-out TagDoS window presents clean hub content without redundant back or pop-out buttons.
 
 
+
+---
+
+## 7. Floating Taskbar Companion Window, Icon Quality & Dependency Modernization (✅ COMPLETED & VERIFIED)
+
+In this phase, 4 dedicated enhancements were implemented to provide the complete macOS MenuBarExtra companion experience on Windows 11:
+
+1. **Floating Taskbar Companion ("Quick Drop") Window**:
+   - Implemented `TaskbarCompanionWindow.cs`: a dedicated, borderless WinUI 3 Window utilizing `DesktopAcrylicBackdrop()`.
+   - Styled with `WS_EX_TOOLWINDOW` and excluded from `WS_EX_APPWINDOW` to keep it clean and out of the Alt+Tab switcher and taskbar.
+   - Anchored right above the Windows Taskbar in the bottom-right corner of `DisplayArea.Primary.WorkArea` (360×540 logical px, automatically scaled by DPI).
+   - Auto-dismisses seamlessly when deactivated (`WindowActivationState.Deactivated`).
+   - Hosts `Controls/TaskbarGlanceFlyoutControl.xaml` providing live weather telemetry, intraday vitals glance, one-click hydration logging (`+250 ml`, `+500 ml`), one-click smoke logging, TagDoS instant scratchpad, fast hub jump navigation, and a "Full App" button to restore the main window.
+   - Configured `H.NotifyIcon` with `NoLeftClickDelay="True"`: single left-click instantly toggles the floating companion window without waiting for double-click timeouts; double-click restores the primary window; right-click opens the context menu (`Show DayOne`, `Force Sync`, `Exit`).
+   - Extended `DailyWinUI_ProtocolPipe` named pipe IPC to handle `companion`, `quickdrop`, and `flyout` commands, alongside CLI flags (`--companion`, `--quickdrop`, `-c`).
+
+2. **Taskbar Icon Enlargement & Multi-Resolution Crispness**:
+   - Diagnosed the root cause of the previous undersized tray icon: `OrbitIcon-Transparent.png` had 133px margins around the atom on a 1024×1024 canvas (wasting ~27% padding), resulting in downscaled 16×16 and 24×24 mipmaps containing only ~11×11px of artwork.
+   - Tightly cropped the atom with a 3% margin to an 815×815 bounding box.
+   - Regenerated `TrayIconDarkTheme.ico`, `TrayIconLightTheme.ico`, `AppIcon.ico`, and all unplated target sizes (`targetsize-16` to `256`, `OrbitIcon-Unplated-32/64.png`). The atom now fills ~94% of the icon frame, making it crisp, prominent, and distinct on the taskbar.
+
+3. **About Page Orbit Branding**:
+   - Replaced the obsolete `GemIcon.svg` with high-resolution `OrbitIcon-256.png` in `Views/AboutPage.xaml`.
+   - Updated `NavAbout` in `Views/SettingsPage.xaml` to display `ms-appx:///Assets/OrbitIcon-Unplated-32.png`.
+   - Verified live rendering at 52×52 in the About page card container on the Windows 11 VM.
+
+4. **AngleSharp NU1902 Resolution & NuGet Updates**:
+   - Added explicit `<PackageReference Include="AngleSharp" Version="1.5.2" />` in both `WinUI/Daily.WinUI/Daily.WinUI.csproj` and `Daily.csproj`, satisfying `SmartReader 0.11.1` requirement and eliminating `NU1902` vulnerability warning.
+   - Upgraded all dependencies to latest stable versions (`Microsoft.Extensions.DependencyInjection 10.0.13`, `Microsoft.Extensions.Http 10.0.13`, `System.Management 10.0.13`, `SmartReader 0.11.1`, `SQLitePCLRaw.bundle_e_sqlite3 3.0.5`, `Microsoft.Windows.SDK.BuildTools 10.0.28000.2705`, `Microsoft.WindowsAppSDK.ML 2.1.94`).
+   - Verified clean compilation with **0 errors and 0 warnings**.

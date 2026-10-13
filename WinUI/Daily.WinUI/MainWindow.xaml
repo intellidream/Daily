@@ -386,7 +386,7 @@
         </Grid>
 
         <!-- System Tray Icon -->
-        <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="DayOne">
+        <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="DayOne" NoLeftClickDelay="True">
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
                     <MenuFlyoutItem Text="Show DayOne" Click="TrayShow_Click">

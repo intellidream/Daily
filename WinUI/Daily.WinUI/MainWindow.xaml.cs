@@ -866,6 +866,7 @@ public sealed partial class MainWindow : Window
             if (TrayIcon != null)
             {
                 TrayIcon.ToolTipText = "DayOne";
+                TrayIcon.NoLeftClickDelay = true;
                 TrayIcon.ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow;
                 TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.RightClick;
                 TrayIcon.LeftClickCommand = new RelayCommand(() =>

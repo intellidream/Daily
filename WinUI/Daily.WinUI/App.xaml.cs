@@ -77,13 +77,29 @@ public partial class App : Application
                 uriToForward = proto?.Uri?.ToString();
             }
 
-            // Unpackaged apps launched via HKCU registry open-commands might activate as Launch instead of Protocol.
-            // Check command-line args as fallback to retrieve the protocol URL.
-            if (string.IsNullOrEmpty(uriToForward) && args != null)
+            string message = "show";
+            if (args != null)
             {
                 foreach (var arg in args)
                 {
-                    if (arg.StartsWith("----ms-protocol:", StringComparison.OrdinalIgnoreCase))
+                    if (arg.Equals("--companion", StringComparison.OrdinalIgnoreCase) ||
+                        arg.Equals("--quickdrop", StringComparison.OrdinalIgnoreCase) ||
+                        arg.Equals("-c", StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "companion";
+                        break;
+                    }
+                    else if (arg.Equals("--sidebar", StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "sidebar";
+                        break;
+                    }
+                    else if (arg.StartsWith("--nav:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "nav:" + arg.Substring("--nav:".Length);
+                        break;
+                    }
+                    else if (arg.StartsWith("----ms-protocol:", StringComparison.OrdinalIgnoreCase))
                     {
                         uriToForward = arg.Substring("----ms-protocol:".Length);
                         break;
@@ -91,8 +107,10 @@ public partial class App : Application
                 }
             }
 
-            LogDebug($"Resolved uriToForward: '{uriToForward}'");
-            string message = !string.IsNullOrEmpty(uriToForward) ? uriToForward : "show";
+            if (message == "show" && !string.IsNullOrEmpty(uriToForward))
+            {
+                message = uriToForward;
+            }
             try
             {
                 LogDebug($"Connecting to pipe '{PipeName}'...");
@@ -187,6 +205,20 @@ public partial class App : Application
                                 {
                                     app.MainWindow.ShowAndActivate();
                                     app.MainWindow.ToggleSidebar();
+                                });
+                            }
+                        }
+                        else if (line.Equals("companion", StringComparison.OrdinalIgnoreCase) ||
+                                 line.Equals("quickdrop", StringComparison.OrdinalIgnoreCase) ||
+                                 line.Equals("flyout", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received companion/quickdrop command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.ToggleTaskbarCompanion();
                                 });
                             }
                         }

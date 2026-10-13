@@ -72,7 +72,7 @@ namespace Daily_WinUI
             int targetWidth = (int)(360 * scale);
             int targetHeight = (int)(540 * scale);
 
-            var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+            var displayArea = DisplayArea.Primary ?? DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
             var workArea = displayArea.WorkArea;
 
             // Horizontally aligned to bottom-right corner of work area, vertically right above taskbar
@@ -87,6 +87,7 @@ namespace Daily_WinUI
                 myRoot.RequestedTheme = mainRoot.ActualTheme;
             }
 
+            AppWindow.Show();
             this.Activate();
             SetForegroundWindow(hwnd);
         }
