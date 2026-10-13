@@ -12,6 +12,7 @@ public struct HeaderGreetingView: View {
     
     @State private var isPulsingAura: Bool = false
     @State private var isBriefingPulsing: Bool = false
+    @State private var isSyncing: Bool = false
     
     public init(
         onAvatarTapped: @escaping () -> Void = {},
@@ -153,6 +154,57 @@ public struct HeaderGreetingView: View {
                 }
 
             HStack(spacing: 8) {
+                // Quick Sync Action Button with spinning animation & haptic
+                Button {
+                    guard !isSyncing else { return }
+                    triggerHaptic()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isSyncing = true
+                    }
+                    Task { @MainActor in
+                        async let w: () = WeatherService.shared.refreshWeather(force: true)
+                        async let h: () = HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
+                        async let hab: () = HabitsService.shared.loadDataForSelectedDate(forceRefresh: true)
+                        async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
+                        async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
+                        async let s: () = SavedArticlesService.shared.syncWithSupabase()
+                        _ = await (w, h, hab, n, f, s)
+                        
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isSyncing = false
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isSyncing ? ThemeColors.accentCyan : .white.opacity(0.85))
+                        .rotationEffect(.degrees(isSyncing ? 360 : 0))
+                        .animation(isSyncing ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: isSyncing)
+                        .frame(width: 40, height: 40)
+                        .background(
+                            Circle()
+                                .fill(Color(hex: "080F1E").opacity(0.72))
+                                .overlay(Circle().fill(Color.white.opacity(0.08)))
+                        )
+                        .overlay(
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: isSyncing
+                                            ? [ThemeColors.accentCyan.opacity(0.8), ThemeColors.accentBlue.opacity(0.4)]
+                                            : [Color.white.opacity(0.4), Color.white.opacity(0.1)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: isSyncing ? ThemeColors.accentCyan.opacity(0.35) : Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .help("Sync All Data with Supabase (⌘R)")
+
                 // Customize Dashboard Action Button
                 if let onCustomize = onCustomizeTapped {
                     Button {

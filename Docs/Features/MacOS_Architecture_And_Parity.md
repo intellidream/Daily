@@ -238,5 +238,54 @@ To preserve focus while retaining quick access to navigation and related content
    - Closing the reader (via "Stories" back button, `Esc` keyboard shortcut, or detaching to a separate window via `⌘O`) sets `isReadingArticleInNews = false`.
    - `RootView`'s `.onChange(of: isReadingArticleInNews)` automatically resets `isNavCapsuleExpandedWhileReading = false` and smoothly animates `FloatingGlassCapsule` back to its normal bottom-center position in the news feed.
 
+---
+
+## 8. Desktop Titlebar Optimization & Sync Action Integration
+
+### Problem & Layout Critique
+In earlier builds, `RootView` contained an artificial 38px top chrome strip across the entire window. Its sole purpose was to host a custom sidebar toggle button on the left and a small text "Sync" button on the right. This design had two significant drawbacks on macOS:
+1. **Vertical Space Penalty**: It consumed 38px of prime vertical canvas across every single tab (`Dashboard`, `News`, `Weather`, `Health`, `Habits`, `Finances`, `TagDos`, `Settings`), pushing content downwards and creating an awkward two-tier top bar below the native macOS window frame.
+2. **Disconnected Sync Context**: Placing a raw text "Sync" button in the titlebar felt detached from the main dashboard data cards where the telemetry and widgets actually live.
+
+### Architectural Solution: Native Toolbar + Hero Card Cluster
+
+```
++---------------------------------------------------------------------------------+
+|  [● ● ●]  [sidebar.left]                                                       |  <- Native Titlebar (0px vertical penalty)
++---------------------------------------------------------------------------------+
+|                                                                                 |
+|   +-------------------------------------------------------------------------+   |
+|   |  [Avatar]  Hi, Mihai!                    [ 🔄 Sync ] [ 🎛️ ] [ ⚙️ ]      |   |  <- Hero Greeting Card
+|   +-------------------------------------------------------------------------+   |
+|                                                                                 |
+|   [ Weather Card ]                          [ News Spotlight Card ]             |
+|                                                                                 |
++---------------------------------------------------------------------------------+
+```
+
+1. **Native Titlebar Placement via `.toolbar`**:
+   - The artificial 38px top strip in `RootView` was entirely eliminated.
+   - The sidebar toggle was converted into a first-class macOS window titlebar action using SwiftUI's `.toolbar { ToolbarItem(placement: .navigation) { ... } }`.
+   - This aligns the sidebar toggle (`sidebar.left`) directly on the exact horizontal axis of the native macOS traffic lights (Close, Minimize, Zoom), reclaiming 38 vertical pixels for actual content.
+   - The button retains native hover states, tooltips (`"Hide Sidebar (⌘S)"` / `"Show Sidebar (⌘S)"`), and trackpad haptic feedback.
+
+2. **Hero Greeting Card Action Cluster (Sync Integration)**:
+   - Relocated the Sync action into `HeaderGreetingView`, placing it alongside the existing Customize (`slider.horizontal.2.square`) and Settings (`gearshape.fill`) buttons.
+   - Styled as a 40x40 Liquid Glass circular button with `arrow.triangle.2.circlepath`, featuring subtle depth borders, drop shadows, and active state cyan illumination.
+   - When triggered, it executes a continuous 360-degree rotation animation and triggers trackpad haptics.
+   - Coordinates a parallel `async let` refresh across all underlying services:
+     - `WeatherService.shared.refreshWeather(force: true)`
+     - `HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)`
+     - `HabitsService.shared.loadDataForSelectedDate(forceRefresh: true)`
+     - `NewsService.shared.loadFeed(..., forceRefresh: true)`
+     - `FinanceService.shared.loadFinanceData(forceRefresh: true)`
+     - `SavedArticlesService.shared.syncWithSupabase()`
+   - Global keyboard shortcut `⌘R` in `RootView` triggers this same parallel sync sequence with trackpad haptics.
+
+3. **Standardized Content Top Clearance**:
+   - With the artificial chrome removed, top padding across `DashboardView`, `NewsFeedView`, and `MacOSSidebarView` was standardized to `.padding(.top, 28)`.
+   - This provides perfect Apple HIG breathing room under the native traffic light line without any vertical crowding or overlapping.
+
+
 
 

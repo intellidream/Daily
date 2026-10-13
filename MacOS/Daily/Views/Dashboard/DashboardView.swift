@@ -67,7 +67,7 @@ public struct DashboardView: View {
             }
             .frame(maxWidth: 880)
             .frame(maxWidth: .infinity)
-            .padding(.top, 14) // Standard Apple HIG breathing room
+            .padding(.top, 28) // Standard macOS clearance under traffic light line
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }

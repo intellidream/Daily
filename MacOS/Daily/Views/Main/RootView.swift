@@ -63,94 +63,39 @@ public struct RootView: View {
                         
                         // Main Content View
                         ZStack(alignment: .bottom) {
-                            VStack(spacing: 0) {
-                                // macOS Custom Top Window Chrome
-                                HStack {
-                                    // Sidebar Toggle button when sidebar is collapsed
-                                    if !isSidebarVisible {
-                                        Button {
-                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                                isSidebarVisible.toggle()
-                                            }
-                                        } label: {
-                                            Image(systemName: "sidebar.left")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(Color.white.opacity(0.75))
-                                                .padding(7)
-                                                .background(Color.white.opacity(0.10), in: Circle())
-                                                .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help("Show Sidebar (⌘S)")
-                                        .padding(.leading, 78) // Clearance for macOS traffic light buttons
-                                    } else {
-                                        Spacer()
-                                            .frame(width: 8)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    // Quick Sync Indicator & Refresh button
-                                    Button {
-                                        Task { @MainActor in
-                                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                                            await HabitsService.shared.flushOfflineQueue()
-                                            await HabitsService.shared.loadDataForSelectedDate()
-                                            await HealthDataService.shared.refreshIfStale()
-                                        }
-                                    } label: {
-                                        HStack(spacing: 5) {
-                                            Image(systemName: "arrow.triangle.2.circlepath")
-                                                .font(.system(size: 11, weight: .semibold))
-                                            Text("Sync")
-                                                .font(.system(size: 11, weight: .medium))
-                                        }
-                                        .foregroundColor(Color.white.opacity(0.7))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.08), in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Sync with Supabase (⌘R)")
+                            // Active Tab View Canvas
+                            Group {
+                                switch selectedTab {
+                                case .dashboard:
+                                    DashboardView(
+                                        onNavigateToWeather: { switchTab(.weather) },
+                                        onNavigateToNews: { switchTab(.news) },
+                                        onNavigateToHealth: { switchTab(.health) },
+                                        onNavigateToHabits: { switchTab(.habits) },
+                                        onNavigateToFinances: { switchTab(.finances) },
+                                        onNavigateToSettings: { switchTab(.settings) },
+                                        onNavigateToTagdos: { switchTab(.tagdos) }
+                                    )
+                                case .weather:
+                                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                                case .news:
+                                    NewsFeedView(
+                                        onNavigateBack: navigateToDashboard,
+                                        isReadingArticle: $isReadingArticleInNews
+                                    )
+                                case .health:
+                                    HealthMainView(onNavigateBack: navigateToDashboard)
+                                case .habits:
+                                    HabitsMainView(onNavigateBack: navigateToDashboard)
+                                case .finances:
+                                    FinancesMainView(onNavigateBack: navigateToDashboard)
+                                case .tagdos:
+                                    TagdosNotesHubView(onNavigateBack: navigateToDashboard)
+                                case .settings:
+                                    SettingsView(onNavigateBack: navigateToDashboard)
                                 }
-                                .padding(.top, 14)
-                                .padding(.horizontal, 16)
-                                .frame(height: 38)
-                                
-                                // Active Tab View Canvas
-                                Group {
-                                    switch selectedTab {
-                                    case .dashboard:
-                                        DashboardView(
-                                            onNavigateToWeather: { switchTab(.weather) },
-                                            onNavigateToNews: { switchTab(.news) },
-                                            onNavigateToHealth: { switchTab(.health) },
-                                            onNavigateToHabits: { switchTab(.habits) },
-                                            onNavigateToFinances: { switchTab(.finances) },
-                                            onNavigateToSettings: { switchTab(.settings) },
-                                            onNavigateToTagdos: { switchTab(.tagdos) }
-                                        )
-                                    case .weather:
-                                        WeatherDetailView(onNavigateBack: navigateToDashboard)
-                                    case .news:
-                                        NewsFeedView(
-                                            onNavigateBack: navigateToDashboard,
-                                            isReadingArticle: $isReadingArticleInNews
-                                        )
-                                    case .health:
-                                        HealthMainView(onNavigateBack: navigateToDashboard)
-                                    case .habits:
-                                        HabitsMainView(onNavigateBack: navigateToDashboard)
-                                    case .finances:
-                                        FinancesMainView(onNavigateBack: navigateToDashboard)
-                                    case .tagdos:
-                                        TagdosNotesHubView(onNavigateBack: navigateToDashboard)
-                                    case .settings:
-                                        SettingsView(onNavigateBack: navigateToDashboard)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             
                             // Floating Liquid Glass Navigation Capsule (Shown when sidebar is collapsed or preferred)
                             if !isSidebarVisible {
@@ -216,6 +161,20 @@ public struct RootView: View {
                 ))
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isSidebarVisible.toggle()
+                    }
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .help(isSidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)")
+            }
+        }
         .configureMacOSWindow(minWidth: 440, minHeight: 650)
         .animation(.easeInOut(duration: 0.3), value: authService.sessionState.isAuthenticatedOrGuest)
         // Global Keyboard Navigation Shortcuts (⌘1 - ⌘7, ⌘,, ⌘S, ⌘R)
@@ -236,9 +195,14 @@ public struct RootView: View {
                 }.keyboardShortcut("s", modifiers: .command)
                 Button("") {
                     Task { @MainActor in
-                        await HabitsService.shared.flushOfflineQueue()
-                        await HabitsService.shared.loadDataForSelectedDate()
-                        await HealthDataService.shared.refreshIfStale()
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                        async let w: () = WeatherService.shared.refreshWeather(force: true)
+                        async let h: () = HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
+                        async let hab: () = HabitsService.shared.loadDataForSelectedDate(forceRefresh: true)
+                        async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
+                        async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
+                        async let s: () = SavedArticlesService.shared.syncWithSupabase()
+                        _ = await (w, h, hab, n, f, s)
                     }
                 }.keyboardShortcut("r", modifiers: .command)
             }
