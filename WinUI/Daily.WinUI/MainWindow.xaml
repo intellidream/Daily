@@ -322,7 +322,7 @@
 
             <!-- Central Content Area -->
             <Grid Grid.Column="1">
-                <Frame x:Name="RootFrame" Opacity="0.0" />
+                <Frame x:Name="RootFrame" x:FieldModifier="public" Opacity="0.0" />
 
                 <!-- Floating Liquid Glass Navigation Capsule (Docked at bottom) -->
                 <controls:FloatingGlassCapsule x:Name="NavCapsule"
