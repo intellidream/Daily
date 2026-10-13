@@ -164,7 +164,7 @@
             </Grid.RenderTransform>
             <!-- Scrollable content: widgets -->
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="20,16,20,20" Spacing="20">
+                <StackPanel Margin="20,16,20,76" Spacing="20">
                     <!-- Dynamic Widget Grid -->
                     <local:DashboardGridView x:Name="WidgetGridView"
                               SelectionMode="None"

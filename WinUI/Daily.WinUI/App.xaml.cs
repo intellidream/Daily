@@ -164,6 +164,32 @@ public partial class App : Application
                                 });
                             }
                         }
+                        else if (line.StartsWith("nav:", StringComparison.OrdinalIgnoreCase) && int.TryParse(line.Substring(4), out int tabIndex))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Pipe] Received nav:{tabIndex} command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.ShowAndActivate();
+                                    app.MainWindow.NavigateToTab(tabIndex);
+                                });
+                            }
+                        }
+                        else if (line.Equals("sidebar", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received sidebar command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.ShowAndActivate();
+                                    app.MainWindow.ToggleSidebar();
+                                });
+                            }
+                        }
                         else if (Uri.TryCreate(line, UriKind.Absolute, out var uri))
                         {
                             LogDebug($"Pipe server parsed URI: {uri}. Handling...");
@@ -171,7 +197,7 @@ public partial class App : Application
                         }
                         else
                         {
-                            LogDebug($"Pipe server failed to parse URI: line");
+                            LogDebug($"Pipe server failed to parse URI: {line}");
                         }
                     }
                 }
