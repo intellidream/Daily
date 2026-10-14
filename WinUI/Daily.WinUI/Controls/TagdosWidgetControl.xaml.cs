@@ -204,10 +204,13 @@ namespace Daily_WinUI.Controls
         {
             OpenHubRequested?.Invoke(this, EventArgs.Empty);
 
-            // Navigate via MainPage if hosted in MainWindow
-            if (App.Current.MainWindow is MainWindow mw && mw.Content is Frame rootFrame && rootFrame.Content is MainPage mp)
+            if (App.Current?.MainWindow is MainWindow mw)
             {
-                mp.OpenDetailWindow(typeof(Views.TagdosNotesDetailPage));
+                mw.NavigateToTab(3);
+            }
+            else if (MainPage.Current != null)
+            {
+                MainPage.Current.OpenDetailWindow(typeof(Views.TagdosNotesDetailPage));
             }
         }
     }
