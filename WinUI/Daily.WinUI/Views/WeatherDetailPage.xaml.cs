@@ -146,12 +146,21 @@ public sealed partial class WeatherDetailPage : Page
     private void HourlyForecastChart_SeriesBoundsChanged(object sender, Syncfusion.UI.Xaml.Charts.ChartSeriesBoundsEventArgs e)
     {
         _chartPlotBounds = e.NewBounds;
+        UpdateHourlyIconStripAlignment();
         PositionSunAnnotations();
     }
 
     private void HourlyForecastChart_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
     {
+        UpdateHourlyIconStripAlignment();
         PositionSunAnnotations();
+    }
+
+    private void UpdateHourlyIconStripAlignment()
+    {
+        if (_chartPlotBounds.Width <= 0 || HourlyForecastChart.ActualWidth <= 0) return;
+        var rightMargin = Math.Max(0, HourlyForecastChart.ActualWidth - (_chartPlotBounds.X + _chartPlotBounds.Width));
+        HourlyIconStrip.Margin = new Microsoft.UI.Xaml.Thickness(_chartPlotBounds.X, 20, rightMargin, 16);
     }
 
     /// <summary>Positions the sunrise/sunset badge overlays on the chart canvas.</summary>
@@ -163,61 +172,88 @@ public sealed partial class WeatherDetailPage : Page
         var plotBounds = _chartPlotBounds;
         if (plotBounds.Width <= 0 || plotBounds.Height <= 0) return;
 
-        // _chartPlotBounds is in HourlyForecastChart-local coordinates.
-        // SunAnnotationCanvas is a sibling element — transform the chart origin into
-        // canvas space so any layout offset between them is accounted for exactly.
-        var chartToCanvas = HourlyForecastChart.TransformToVisual(SunAnnotationCanvas);
-        var plotOrigin    = chartToCanvas.TransformPoint(new Windows.Foundation.Point(plotBounds.X, plotBounds.Y));
-
-        // CategoryAxis internal range is [-0.5 .. N-0.5].
-        // Center of slot i = plotLeft + (i + 0.5) * slotWidth.
-        // annotX is a fractional 0-based slot index from the ViewModel.
-        var slotWidth = plotBounds.Width / hourlyCount;
-        var plotLeft  = plotOrigin.X;
-        var plotBottom = plotOrigin.Y + plotBounds.Height;
-
-        const double bottomMargin = 4;
-
-        void PlaceBadge(Border badge, TextBlock timeText, double annotX, bool show, string time)
+        try
         {
-            if (!show || annotX < 0)
+            // _chartPlotBounds is in HourlyForecastChart-local coordinates.
+            // SunAnnotationCanvas is a sibling element — transform the chart origin into
+            // canvas space so any layout offset between them is accounted for exactly.
+            var chartToCanvas = HourlyForecastChart.TransformToVisual(SunAnnotationCanvas);
+            var plotOrigin    = chartToCanvas.TransformPoint(new Windows.Foundation.Point(plotBounds.X, plotBounds.Y));
+
+            // CategoryAxis internal range is [-0.5 .. N-0.5].
+            // Center of slot i = plotLeft + (i + 0.5) * slotWidth.
+            // annotX is a fractional 0-based slot index from the ViewModel.
+            var slotWidth = plotBounds.Width / hourlyCount;
+            var plotLeft  = plotOrigin.X;
+            var plotBottom = plotOrigin.Y + plotBounds.Height;
+
+            const double bottomMargin = 4;
+
+            void PlaceBadge(Border badge, TextBlock timeText, double annotX, bool show, string time)
             {
-                badge.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-                return;
+                if (!show || annotX < 0)
+                {
+                    badge.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    return;
+                }
+
+                timeText.Text = time;
+                badge.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+
+                badge.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+                var badgeWidth  = badge.DesiredSize.Width  > 0 ? badge.DesiredSize.Width  : 70;
+                var badgeHeight = badge.DesiredSize.Height > 0 ? badge.DesiredSize.Height : 24;
+
+                var xCenter = plotLeft + (annotX + 0.5) * slotWidth;
+                var xLeft   = xCenter - badgeWidth / 2;
+                var yTop    = plotBottom - badgeHeight - bottomMargin;
+
+                Canvas.SetLeft(badge, xLeft);
+                Canvas.SetTop(badge, yTop);
             }
 
-            timeText.Text = time;
-            badge.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            PlaceBadge(SunriseBadge, SunriseTimeText, ViewModel.SunriseAnnotationX, ViewModel.ShowSunriseAnnotation, ViewModel.Sunrise);
+            PlaceBadge(SunsetBadge,  SunsetTimeText,  ViewModel.SunsetAnnotationX,  ViewModel.ShowSunsetAnnotation,  ViewModel.Sunset);
 
-            badge.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-            var badgeWidth  = badge.DesiredSize.Width  > 0 ? badge.DesiredSize.Width  : 70;
-            var badgeHeight = badge.DesiredSize.Height > 0 ? badge.DesiredSize.Height : 24;
-
-            var xCenter = plotLeft + (annotX + 0.5) * slotWidth;
-            var xLeft   = xCenter - badgeWidth / 2;
-            var yTop    = plotBottom - badgeHeight - bottomMargin;
-
-            Canvas.SetLeft(badge, xLeft);
-            Canvas.SetTop(badge, yTop);
+            CurrentWeatherBadge.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
         }
+        catch
+        {
+            // Visual tree layout not ready yet
+        }
+    }
 
-        PlaceBadge(SunriseBadge, SunriseTimeText, ViewModel.SunriseAnnotationX, ViewModel.ShowSunriseAnnotation, ViewModel.Sunrise);
-        PlaceBadge(SunsetBadge,  SunsetTimeText,  ViewModel.SunsetAnnotationX,  ViewModel.ShowSunsetAnnotation,  ViewModel.Sunset);
-
-        CurrentWeatherBadge.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+    private async void AutoLocationButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _settings.AlwaysAutoLocation = true;
+        var coords = await _locationService.GetCurrentCoordinatesAsync();
+        if (coords.HasValue)
+        {
+            _selectedLocation = new LocationSuggestion
+            {
+                Name = "Auto Location",
+                Country = "",
+                State = null,
+                Latitude = coords.Value.Latitude,
+                Longitude = coords.Value.Longitude,
+                DisplayName = "Auto location"
+            };
+            SetLocationText(_selectedLocation.DisplayName);
+            await RefreshWeatherAsync(forceRefresh: true);
+        }
     }
 
     private async void RefreshButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        await RefreshWeatherAsync();
+        await RefreshWeatherAsync(forceRefresh: true);
     }
 
     public async Task RefreshFromTitleBarAsync()
     {
-        await RefreshWeatherAsync();
+        await RefreshWeatherAsync(forceRefresh: true);
     }
 
-    private async Task RefreshWeatherAsync()
+    private async Task RefreshWeatherAsync(bool forceRefresh = false)
     {
         RefreshButton.IsEnabled = false;
         try
@@ -247,6 +283,7 @@ public sealed partial class WeatherDetailPage : Page
                 return;
             }
 
+            var isAuto = _selectedLocation.Name == "Auto Location";
             await ViewModel.LoadWeatherAsync(
                 _selectedLocation.Latitude,
                 _selectedLocation.Longitude,
@@ -254,7 +291,10 @@ public sealed partial class WeatherDetailPage : Page
                 _settings.WindUnit,
                 _settings.PressureUnit,
                 _settings.ShowSunrise,
-                _settings.ShowHumidity);
+                _settings.ShowHumidity,
+                forceRefresh: forceRefresh,
+                locationSource: isAuto ? "GPS" : "CUSTOM",
+                isAutoLocation: isAuto);
             UpdateWeatherIcon();
 
             AddRecent(_selectedLocation);

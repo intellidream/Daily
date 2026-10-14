@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using Daily.Models;
 using Daily_WinUI.Models;
@@ -9,6 +10,15 @@ public sealed class WeatherClient
     private const string BaseUrl = "https://api.openweathermap.org/data/2.5";
     private const string GeoUrl = "https://api.openweathermap.org/geo/1.0";
     private readonly HttpClient _httpClient = new();
+
+    private sealed record CacheEntry<T>(T Data, DateTime TimestampUtc);
+
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+    private static readonly ConcurrentDictionary<string, CacheEntry<WeatherSnapshot>> _currentWeatherCache = new();
+    private static readonly ConcurrentDictionary<string, CacheEntry<ForecastResponse>> _forecastCache = new();
+
+    private static string GetCacheKey(double lat, double lon, string unitSystem) =>
+        $"{Math.Round(lat, 2):F2}_{Math.Round(lon, 2):F2}_{NormalizeUnitSystem(unitSystem)}";
 
     public async Task<IReadOnlyList<LocationSuggestion>> SearchLocationsAsync(string query, int limit = 8, CancellationToken cancellationToken = default)
     {
@@ -37,46 +47,103 @@ public sealed class WeatherClient
             .ToList();
     }
 
-    public async Task<WeatherSnapshot?> GetCurrentWeatherAsync(double latitude, double longitude, string unitSystem = "metric", CancellationToken cancellationToken = default)
+    public async Task<WeatherSnapshot?> GetCurrentWeatherAsync(
+        double latitude,
+        double longitude,
+        string unitSystem = "metric",
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
     {
-        var normalizedUnitSystem = NormalizeUnitSystem(unitSystem);
-        var url = $"{BaseUrl}/weather?lat={latitude}&lon={longitude}&appid={Daily.Configuration.Secrets.OpenWeatherMapApiKey}&units={normalizedUnitSystem}";
-        var response = await _httpClient.GetFromJsonAsync<WeatherResponse>(url, cancellationToken);
+        var cacheKey = GetCacheKey(latitude, longitude, unitSystem);
 
-        if (response?.Main is null || response.Weather is null || response.Weather.Count == 0)
+        if (!forceRefresh && _currentWeatherCache.TryGetValue(cacheKey, out var cached) &&
+            DateTime.UtcNow - cached.TimestampUtc < CacheDuration)
         {
-            return null;
+            return cached.Data;
         }
 
-        return new WeatherSnapshot
+        try
         {
-            LocationName = string.IsNullOrWhiteSpace(response.Name) ? "Unknown location" : response.Name,
-            Description = response.Weather[0].Description,
-            IconCode = string.IsNullOrWhiteSpace(response.Weather[0].Icon) ? "01d" : response.Weather[0].Icon,
-            Temperature = response.Main.Temp,
-            FeelsLike = response.Main.FeelsLike,
-            TempMin = response.Main.TempMin,
-            TempMax = response.Main.TempMax,
-            Humidity = response.Main.Humidity,
-            WindSpeed = response.Wind?.Speed ?? 0,
-            Visibility = response.Visibility,
-            Pressure = response.Main.Pressure,
-            Sunrise = response.Sys?.Sunrise ?? 0,
-            Sunset = response.Sys?.Sunset ?? 0,
-            RetrievedAtUtc = DateTime.UtcNow
-        };
+            var normalizedUnitSystem = NormalizeUnitSystem(unitSystem);
+            var url = $"{BaseUrl}/weather?lat={latitude}&lon={longitude}&appid={Daily.Configuration.Secrets.OpenWeatherMapApiKey}&units={normalizedUnitSystem}";
+            var response = await _httpClient.GetFromJsonAsync<WeatherResponse>(url, cancellationToken);
+
+            if (response?.Main is null || response.Weather is null || response.Weather.Count == 0)
+            {
+                return _currentWeatherCache.TryGetValue(cacheKey, out var fallback) ? fallback.Data : null;
+            }
+
+            var snapshot = new WeatherSnapshot
+            {
+                LocationName = string.IsNullOrWhiteSpace(response.Name) ? "Unknown location" : response.Name,
+                Description = response.Weather[0].Description,
+                IconCode = string.IsNullOrWhiteSpace(response.Weather[0].Icon) ? "01d" : response.Weather[0].Icon,
+                Temperature = response.Main.Temp,
+                FeelsLike = response.Main.FeelsLike,
+                TempMin = response.Main.TempMin,
+                TempMax = response.Main.TempMax,
+                Humidity = response.Main.Humidity,
+                WindSpeed = response.Wind?.Speed ?? 0,
+                WindDeg = response.Wind?.Deg ?? 0,
+                Clouds = response.Clouds?.All ?? 0,
+                Visibility = response.Visibility,
+                Pressure = response.Main.Pressure,
+                Sunrise = response.Sys?.Sunrise ?? 0,
+                Sunset = response.Sys?.Sunset ?? 0,
+                RetrievedAtUtc = DateTime.UtcNow
+            };
+
+            _currentWeatherCache[cacheKey] = new CacheEntry<WeatherSnapshot>(snapshot, DateTime.UtcNow);
+            return snapshot;
+        }
+        catch when (_currentWeatherCache.TryGetValue(cacheKey, out var fallback))
+        {
+            return fallback.Data;
+        }
     }
 
-    public async Task<ForecastResponse?> GetForecastResponseAsync(double latitude, double longitude, string unitSystem = "metric", CancellationToken cancellationToken = default)
+    public async Task<ForecastResponse?> GetForecastResponseAsync(
+        double latitude,
+        double longitude,
+        string unitSystem = "metric",
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
     {
-        var normalizedUnitSystem = NormalizeUnitSystem(unitSystem);
-        var url = $"{BaseUrl}/forecast?lat={latitude}&lon={longitude}&appid={Daily.Configuration.Secrets.OpenWeatherMapApiKey}&units={normalizedUnitSystem}";
-        return await _httpClient.GetFromJsonAsync<ForecastResponse>(url, cancellationToken);
+        var cacheKey = GetCacheKey(latitude, longitude, unitSystem);
+
+        if (!forceRefresh && _forecastCache.TryGetValue(cacheKey, out var cached) &&
+            DateTime.UtcNow - cached.TimestampUtc < CacheDuration)
+        {
+            return cached.Data;
+        }
+
+        try
+        {
+            var normalizedUnitSystem = NormalizeUnitSystem(unitSystem);
+            var url = $"{BaseUrl}/forecast?lat={latitude}&lon={longitude}&appid={Daily.Configuration.Secrets.OpenWeatherMapApiKey}&units={normalizedUnitSystem}";
+            var response = await _httpClient.GetFromJsonAsync<ForecastResponse>(url, cancellationToken);
+
+            if (response is not null)
+            {
+                _forecastCache[cacheKey] = new CacheEntry<ForecastResponse>(response, DateTime.UtcNow);
+            }
+
+            return response ?? (_forecastCache.TryGetValue(cacheKey, out var fallback) ? fallback.Data : null);
+        }
+        catch when (_forecastCache.TryGetValue(cacheKey, out var fallback))
+        {
+            return fallback.Data;
+        }
     }
 
-    public async Task<IReadOnlyList<ForecastDaySnapshot>> GetFiveDayForecastAsync(double latitude, double longitude, string unitSystem = "metric", CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ForecastDaySnapshot>> GetFiveDayForecastAsync(
+        double latitude,
+        double longitude,
+        string unitSystem = "metric",
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
     {
-        var response = await GetForecastResponseAsync(latitude, longitude, unitSystem, cancellationToken);
+        var response = await GetForecastResponseAsync(latitude, longitude, unitSystem, forceRefresh, cancellationToken);
 
         if (response?.List is null || response.List.Count == 0)
         {
@@ -116,9 +183,15 @@ public sealed class WeatherClient
         return items;
     }
 
-    public async Task<IReadOnlyList<HourlyForecastSnapshot>> GetHourlyForecastAsync(double latitude, double longitude, string unitSystem = "metric", int hours = 8, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<HourlyForecastSnapshot>> GetHourlyForecastAsync(
+        double latitude,
+        double longitude,
+        string unitSystem = "metric",
+        int hours = 8,
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
     {
-        var response = await GetForecastResponseAsync(latitude, longitude, unitSystem, cancellationToken);
+        var response = await GetForecastResponseAsync(latitude, longitude, unitSystem, forceRefresh, cancellationToken);
         if (response?.List is null || response.List.Count == 0)
         {
             return Array.Empty<HourlyForecastSnapshot>();

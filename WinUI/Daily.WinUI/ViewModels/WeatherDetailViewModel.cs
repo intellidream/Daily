@@ -24,10 +24,21 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
     private double _humidityValue;
     private double _windSpeedValue;
     private string _wind = "--";
+    private string _windDirection = "N";
+    private string _windSubtitle = "Direction: --";
+    private string _humiditySubtitle = "Comfortable";
     private string _visibility = "--";
+    private string _visibilitySubtitle = "--";
     private string _pressure = "--";
+    private string _pressureSubtitle = "--";
+    private string _clouds = "--";
+    private double _cloudsValue;
+    private string _cloudsSubtitle = "--";
     private string _sunrise = "--:--";
     private string _sunset = "--:--";
+    private string _sunSchedule = "--:-- ↑  --:-- ↓";
+    private string _locationSourceName = "GPS";
+    private bool _isAutoLocation = true;
     private string _sunLabel = "Sunrise";
     private string _sunValue = "--:--";
     private string _moistureLabel = "Humidity";
@@ -186,16 +197,64 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
         private set => SetProperty(ref _wind, value);
     }
 
+    public string WindDirection
+    {
+        get => _windDirection;
+        private set => SetProperty(ref _windDirection, value);
+    }
+
+    public string WindSubtitle
+    {
+        get => _windSubtitle;
+        private set => SetProperty(ref _windSubtitle, value);
+    }
+
+    public string HumiditySubtitle
+    {
+        get => _humiditySubtitle;
+        private set => SetProperty(ref _humiditySubtitle, value);
+    }
+
     public string Visibility
     {
         get => _visibility;
         private set => SetProperty(ref _visibility, value);
     }
 
+    public string VisibilitySubtitle
+    {
+        get => _visibilitySubtitle;
+        private set => SetProperty(ref _visibilitySubtitle, value);
+    }
+
     public string Pressure
     {
         get => _pressure;
         private set => SetProperty(ref _pressure, value);
+    }
+
+    public string PressureSubtitle
+    {
+        get => _pressureSubtitle;
+        private set => SetProperty(ref _pressureSubtitle, value);
+    }
+
+    public string Clouds
+    {
+        get => _clouds;
+        private set => SetProperty(ref _clouds, value);
+    }
+
+    public double CloudsValue
+    {
+        get => _cloudsValue;
+        private set => SetProperty(ref _cloudsValue, value);
+    }
+
+    public string CloudsSubtitle
+    {
+        get => _cloudsSubtitle;
+        private set => SetProperty(ref _cloudsSubtitle, value);
     }
 
     public string Sunrise
@@ -208,6 +267,24 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
     {
         get => _sunset;
         private set => SetProperty(ref _sunset, value);
+    }
+
+    public string SunSchedule
+    {
+        get => _sunSchedule;
+        private set => SetProperty(ref _sunSchedule, value);
+    }
+
+    public string LocationSourceName
+    {
+        get => _locationSourceName;
+        private set => SetProperty(ref _locationSourceName, value);
+    }
+
+    public bool IsAutoLocation
+    {
+        get => _isAutoLocation;
+        private set => SetProperty(ref _isAutoLocation, value);
     }
 
     public string SunLabel
@@ -266,6 +343,9 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
         string pressureUnit,
         bool showSunrise,
         bool showHumidity,
+        bool forceRefresh = false,
+        string locationSource = "GPS",
+        bool isAutoLocation = true,
         CancellationToken cancellationToken = default)
     {
         if (IsBusy)
@@ -284,9 +364,9 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
             _showSunrise = showSunrise;
             _showHumidity = showHumidity;
 
-            var currentTask = _weatherClient.GetCurrentWeatherAsync(latitude, longitude, unitSystem, cancellationToken);
-            var dailyTask = _weatherClient.GetFiveDayForecastAsync(latitude, longitude, unitSystem, cancellationToken);
-            var hourlyTask = _weatherClient.GetHourlyForecastAsync(latitude, longitude, unitSystem, 8, cancellationToken);
+            var currentTask = _weatherClient.GetCurrentWeatherAsync(latitude, longitude, unitSystem, forceRefresh, cancellationToken);
+            var dailyTask = _weatherClient.GetFiveDayForecastAsync(latitude, longitude, unitSystem, forceRefresh, cancellationToken);
+            var hourlyTask = _weatherClient.GetHourlyForecastAsync(latitude, longitude, unitSystem, 8, forceRefresh, cancellationToken);
             await Task.WhenAll(currentTask, dailyTask, hourlyTask);
 
             var snapshot = await currentTask;
@@ -304,19 +384,39 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
 
             LocationName = snapshot.LocationName;
             Description = ToTitleCase(snapshot.Description);
-            Temperature = $"{snapshot.Temperature:0.#}°{(_unitSystem == "imperial" ? "F" : "C")}";
-            FeelsLike = $"{snapshot.FeelsLike:0.#}°";
+            Temperature = $"{snapshot.Temperature:0.#}°";
+            FeelsLike = $"{snapshot.FeelsLike:0.#}°{(_unitSystem == "imperial" ? "F" : "C")}";
             HighLow = $"H {snapshot.TempMax:0.#}°  L {snapshot.TempMin:0.#}°";
+
             Humidity = $"{snapshot.Humidity}%";
             HumidityValue = snapshot.Humidity;
+            HumiditySubtitle = snapshot.Humidity > 65 ? "High moisture" : (snapshot.Humidity < 35 ? "Dry air" : "Comfortable");
+
             WindSpeedValue = snapshot.WindSpeed;
             Wind = FormatWind(snapshot.WindSpeed, _unitSystem, _windUnit);
-            Visibility = $"{Math.Round(snapshot.Visibility / 1000.0, 1):0.#} km";
+            WindDirection = snapshot.WindDirection;
+            WindSubtitle = $"Direction: {snapshot.WindDirection}";
+
+            var visKm = snapshot.Visibility / 1000.0;
+            Visibility = $"{Math.Round(visKm, 1):0.#} km";
+            VisibilitySubtitle = visKm >= 10 ? "Clear view" : "Reduced visibility";
+
             Pressure = FormatPressure(snapshot.Pressure, _pressureUnit);
+            PressureSubtitle = snapshot.Pressure >= 1013 ? "High pressure" : "Low pressure";
+
+            Clouds = $"{snapshot.Clouds}%";
+            CloudsValue = snapshot.Clouds;
+            CloudsSubtitle = snapshot.Clouds > 70 ? "Overcast skies" : (snapshot.Clouds > 30 ? "Partly cloudy" : "Clear skies");
+
             _sunriseUnix = snapshot.Sunrise;
             _sunsetUnix = snapshot.Sunset;
             Sunrise = snapshot.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(snapshot.Sunrise).ToLocalTime().ToString("HH:mm") : "--:--";
             Sunset = snapshot.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(snapshot.Sunset).ToLocalTime().ToString("HH:mm") : "--:--";
+            SunSchedule = $"Sunset: {Sunset} ↓";
+
+            LocationSourceName = locationSource.ToUpperInvariant();
+            IsAutoLocation = isAutoLocation;
+
             IconUrl = $"https://openweathermap.org/img/wn/{snapshot.IconCode}@4x.png";
             Details = $"Updated weather for {snapshot.LocationName}";
 

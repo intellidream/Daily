@@ -29,9 +29,9 @@ public sealed partial class WeatherWidgetControl : UserControl
     }
 
     /// <summary>Called by the dashboard refresh button to reload data in-place.</summary>
-    public Task RefreshAsync() => RefreshWeatherAsync(silent: true);
+    public Task RefreshAsync() => RefreshWeatherAsync(silent: true, forceRefresh: true);
 
-    public async Task RefreshWeatherAsync(bool silent = false)
+    public async Task RefreshWeatherAsync(bool silent = false, bool forceRefresh = false)
     {
         bool hasData = !string.IsNullOrEmpty(TempText.Text) && TempText.Text != "--";
         if (!silent && !hasData)
@@ -48,7 +48,8 @@ public sealed partial class WeatherWidgetControl : UserControl
                 var snapshot = await _weatherClient.GetCurrentWeatherAsync(
                     coords.Value.Latitude, 
                     coords.Value.Longitude, 
-                    _settings.UnitSystem);
+                    _settings.UnitSystem,
+                    forceRefresh: forceRefresh);
                 
                 if (snapshot != null)
                 {
