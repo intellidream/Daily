@@ -703,6 +703,39 @@
                             <ComboBoxItem Content="Imperial (°F, mph)" Tag="imperial" />
                         </ComboBox>
                     </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Weather: Wind speed unit" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Preferred measurement units for atmospheric wind velocity." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="WeatherWindUnitCombo" SelectionChanged="WeatherWindUnitCombo_SelectionChanged" Width="150" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <ComboBoxItem Content="m/s" Tag="m/s" />
+                            <ComboBoxItem Content="km/h" Tag="km/h" />
+                            <ComboBoxItem Content="mph" Tag="mph" />
+                            <ComboBoxItem Content="knots" Tag="knots" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Weather: Pressure unit" FontWeight="SemiBold" FontSize="13" />
+                            <TextBlock Text="Barometric atmospheric pressure measurement format." FontSize="11" Opacity="0.6" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="WeatherPressureUnitCombo" SelectionChanged="WeatherPressureUnitCombo_SelectionChanged" Width="150" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <ComboBoxItem Content="hPa" Tag="hpa" />
+                            <ComboBoxItem Content="mmHg" Tag="mmhg" />
+                            <ComboBoxItem Content="inHg" Tag="inhg" />
+                        </ComboBox>
+                    </Grid>
                     
                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 

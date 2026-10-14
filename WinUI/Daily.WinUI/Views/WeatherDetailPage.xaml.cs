@@ -45,7 +45,7 @@ public sealed partial class WeatherDetailPage : Page
 
     private readonly WeatherClient _weatherClient = new();
     private readonly LocationService _locationService = new();
-    private readonly AppSettings _settings = SettingsService.Load();
+    private AppSettings _settings = SettingsService.Load();
     private IReadOnlyList<LocationSuggestion> _lastSuggestions = Array.Empty<LocationSuggestion>();
     private LocationSuggestion? _selectedLocation;
     private CancellationTokenSource? _searchCts;
@@ -69,17 +69,9 @@ public sealed partial class WeatherDetailPage : Page
             if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
         }
 
-        if (TopBarDateText != null)
-        {
-            TopBarDateText.Text = DateTime.Now.ToString("dddd, MMMM d");
-        }
-
+        _settings = SettingsService.Load();
         LoadSavedLocations();
         ApplyGlassIntensity(_settings.GlassIntensity);
-        if (UnitSystemComboBox != null) UnitSystemComboBox.SelectedItem = _settings.UnitSystem == "imperial" ? "Imperial (F)" : "Metric (C)";
-        if (WindUnitComboBox != null) WindUnitComboBox.SelectedItem = _settings.WindUnit;
-        if (PressureUnitComboBox != null) PressureUnitComboBox.SelectedItem = _settings.PressureUnit;
-        if (AlwaysAutoLocationToggle != null) AlwaysAutoLocationToggle.IsOn = _settings.AlwaysAutoLocation;
 
         ViewModel.PropertyChanged += (_, args) =>
         {
@@ -256,11 +248,6 @@ public sealed partial class WeatherDetailPage : Page
         }
     }
 
-    private async void RefreshButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        await RefreshWeatherAsync(forceRefresh: true);
-    }
-
     public async Task RefreshFromTitleBarAsync()
     {
         await RefreshWeatherAsync(forceRefresh: true);
@@ -268,7 +255,6 @@ public sealed partial class WeatherDetailPage : Page
 
     private async Task RefreshWeatherAsync(bool forceRefresh = false)
     {
-        RefreshButton.IsEnabled = false;
         try
         {
             // When AlwaysAutoLocation is on, re-detect coordinates before every refresh.
@@ -332,10 +318,7 @@ public sealed partial class WeatherDetailPage : Page
             }
             catch { }
         }
-        finally
-        {
-            RefreshButton.IsEnabled = true;
-        }
+        catch { }
     }
 
     private async Task InitializeLocationAsync()
@@ -600,67 +583,6 @@ public sealed partial class WeatherDetailPage : Page
         SettingsService.Save(_settings);
     }
 
-    private async void UnitSystemComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (UnitSystemComboBox.SelectedItem is not string selected)
-        {
-            return;
-        }
-
-        _settings.UnitSystem = selected.Contains("Imperial", StringComparison.OrdinalIgnoreCase) ? "imperial" : "metric";
-        SettingsService.Save(_settings);
-        await RefreshWeatherAsync();
-    }
-
-    private async void WindUnitComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (WindUnitComboBox.SelectedItem is not string selected)
-        {
-            return;
-        }
-
-        _settings.WindUnit = selected;
-        SettingsService.Save(_settings);
-        await RefreshWeatherAsync();
-    }
-
-    private async void PressureUnitComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (PressureUnitComboBox.SelectedItem is not string selected)
-        {
-            return;
-        }
-
-        _settings.PressureUnit = selected;
-        SettingsService.Save(_settings);
-        await RefreshWeatherAsync();
-    }
-
-    private async void AlwaysAutoLocationToggle_Toggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        _settings.AlwaysAutoLocation = AlwaysAutoLocationToggle.IsOn;
-        SettingsService.Save(_settings);
-
-        // If just turned on, immediately try to detect the current location.
-        if (_settings.AlwaysAutoLocation)
-        {
-            var coords = await _locationService.GetCurrentCoordinatesAsync();
-            if (coords.HasValue)
-            {
-                _selectedLocation = new LocationSuggestion
-                {
-                    Name = "Auto Location",
-                    Country = "",
-                    State = null,
-                    Latitude = coords.Value.Latitude,
-                    Longitude = coords.Value.Longitude,
-                    DisplayName = "Auto location"
-                };
-                SetLocationText(_selectedLocation.DisplayName);
-                await RefreshWeatherAsync();
-            }
-        }
-    }
 
     private void GlassIntensityComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {

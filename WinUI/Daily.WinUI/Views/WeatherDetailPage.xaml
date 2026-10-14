@@ -40,16 +40,15 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top Navigation & Location Bar (macOS Parity) -->
-        <Grid Grid.Row="0" Padding="24,0" VerticalAlignment="Center">
+        <!-- Top Navigation & Location Bar (macOS Parity & Hub Alignment) -->
+        <Grid Grid.Row="0" Padding="24,0" VerticalAlignment="Center" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left: Circular Glass Back Button -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <!-- Left: Circular Glass Back Button + Icon + Large Location Title + GPS Badge -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <Button
                     x:Name="BackButton"
                     Click="BackButton_Click"
@@ -62,24 +61,23 @@
                     ToolTipService.ToolTip="Back to Dashboard">
                     <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
-            </StackPanel>
-
-            <!-- Center: Location Title + Status Pill + Date Subtitle -->
-            <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FF69B6FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                     <TextBlock
                         Text="{x:Bind ViewModel.LocationName, Mode=OneWay}"
                         FontFamily="Segoe UI Variable Display"
-                        FontSize="22"
-                        FontWeight="Bold"
+                        FontSize="32"
+                        FontWeight="SemiBold"
                         Foreground="{ThemeResource AppFgColorBrush}"
                         VerticalAlignment="Center" />
-                    <Border Background="#2569B6FF" BorderBrush="#5069B6FF" BorderThickness="1" CornerRadius="10" Padding="8,2" VerticalAlignment="Center">
+                    <Border Background="#2569B6FF" BorderBrush="#5069B6FF" BorderThickness="1" CornerRadius="10" Padding="8,3" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE707;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF69B6FF" VerticalAlignment="Center" />
+                            <FontIcon Glyph="&#xE707;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF69B6FF" VerticalAlignment="Center" />
                             <TextBlock
                                 Text="{x:Bind ViewModel.LocationSourceName, Mode=OneWay}"
-                                FontSize="10"
+                                FontSize="11"
                                 FontWeight="Bold"
                                 Foreground="#FF69B6FF"
                                 CharacterSpacing="60"
@@ -87,17 +85,10 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                <TextBlock
-                    x:Name="TopBarDateText"
-                    Text="Live atmospheric telemetry"
-                    FontSize="12"
-                    Opacity="0.6"
-                    Foreground="{ThemeResource AppFgColorBrush}"
-                    HorizontalAlignment="Center" />
             </StackPanel>
 
-            <!-- Right: Action Buttons (Auto-Location, Search, Refresh, Settings, PopOut) -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <!-- Right: Action Buttons (Auto-Location, Search, PopOut) -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <!-- 1-Click GPS Auto-Location Button -->
                 <Button
                     x:Name="AutoLocationButton"
@@ -171,65 +162,6 @@
                                         </DataTemplate>
                                     </ItemsRepeater.ItemTemplate>
                                 </ItemsRepeater>
-                            </StackPanel>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <!-- Refresh Button -->
-                <Button
-                    x:Name="RefreshButton"
-                    Click="RefreshButton_Click"
-                    Width="38" Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
-                    BorderThickness="1"
-                    Padding="0"
-                    ToolTipService.ToolTip="Refresh live telemetry">
-                    <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
-                </Button>
-
-                <!-- Settings & Preferences Button with Flyout -->
-                <Button
-                    x:Name="SettingsButton"
-                    Width="38" Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
-                    BorderThickness="1"
-                    Padding="0"
-                    ToolTipService.ToolTip="Weather Preferences">
-                    <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
-                    <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedRight">
-                            <StackPanel Width="280" Spacing="14">
-                                <TextBlock Text="Weather Preferences" FontWeight="SemiBold" FontSize="15" />
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Temperature Unit" FontSize="12" Opacity="0.7" />
-                                    <ComboBox x:Name="UnitSystemComboBox" SelectionChanged="UnitSystemComboBox_SelectionChanged" HorizontalAlignment="Stretch">
-                                        <x:String>Metric (C)</x:String>
-                                        <x:String>Imperial (F)</x:String>
-                                    </ComboBox>
-                                </StackPanel>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Wind Speed Unit" FontSize="12" Opacity="0.7" />
-                                    <ComboBox x:Name="WindUnitComboBox" SelectionChanged="WindUnitComboBox_SelectionChanged" HorizontalAlignment="Stretch">
-                                        <x:String>m/s</x:String>
-                                        <x:String>km/h</x:String>
-                                        <x:String>mph</x:String>
-                                        <x:String>knots</x:String>
-                                    </ComboBox>
-                                </StackPanel>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Pressure Unit" FontSize="12" Opacity="0.7" />
-                                    <ComboBox x:Name="PressureUnitComboBox" SelectionChanged="PressureUnitComboBox_SelectionChanged" HorizontalAlignment="Stretch">
-                                        <x:String>hpa</x:String>
-                                        <x:String>mmhg</x:String>
-                                        <x:String>inhg</x:String>
-                                    </ComboBox>
-                                </StackPanel>
-                                <ToggleSwitch x:Name="AlwaysAutoLocationToggle" Header="Always Auto-Location" Toggled="AlwaysAutoLocationToggle_Toggled" OnContent="On" OffContent="Off" />
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>

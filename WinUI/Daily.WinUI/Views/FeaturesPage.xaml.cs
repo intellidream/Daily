@@ -158,6 +158,30 @@ public sealed partial class FeaturesPage : Page
             }
             WeatherUnitSystemCombo.SelectedIndex = unitIdx;
 
+            string savedWind = _settings.WindUnit ?? "m/s";
+            int windIdx = 0;
+            for (int i = 0; i < WeatherWindUnitCombo.Items.Count; i++)
+            {
+                if (WeatherWindUnitCombo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == savedWind)
+                {
+                    windIdx = i;
+                    break;
+                }
+            }
+            WeatherWindUnitCombo.SelectedIndex = windIdx;
+
+            string savedPressure = _settings.PressureUnit ?? "hpa";
+            int pressureIdx = 0;
+            for (int i = 0; i < WeatherPressureUnitCombo.Items.Count; i++)
+            {
+                if (WeatherPressureUnitCombo.Items[i] is ComboBoxItem item && item.Tag?.ToString() == savedPressure)
+                {
+                    pressureIdx = i;
+                    break;
+                }
+            }
+            WeatherPressureUnitCombo.SelectedIndex = pressureIdx;
+
             // News
             NewsAutoRefreshSwitch.IsOn = _settings.AutoRefreshNewsOnStartup;
             NewsShowImagesSwitch.IsOn = _settings.ShowNewsImages;
@@ -1148,6 +1172,26 @@ public sealed partial class FeaturesPage : Page
         if (WeatherUnitSystemCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
         {
             _settings.UnitSystem = tag;
+            SettingsService.Save(_settings);
+        }
+    }
+
+    private void WeatherWindUnitCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing || _settings == null || WeatherWindUnitCombo == null) return;
+        if (WeatherWindUnitCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            _settings.WindUnit = tag;
+            SettingsService.Save(_settings);
+        }
+    }
+
+    private void WeatherPressureUnitCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing || _settings == null || WeatherPressureUnitCombo == null) return;
+        if (WeatherPressureUnitCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            _settings.PressureUnit = tag;
             SettingsService.Save(_settings);
         }
     }
