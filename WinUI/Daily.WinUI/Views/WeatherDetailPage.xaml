@@ -125,15 +125,6 @@
                     <FontIcon Glyph="&#xE721;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight">
-                            <Flyout.FlyoutPresenterStyle>
-                                <Style TargetType="FlyoutPresenter">
-                                    <Setter Property="Background" Value="{ThemeResource AppGlassBgBrush}" />
-                                    <Setter Property="BorderBrush" Value="{ThemeResource AppGlassBorderColorBrush}" />
-                                    <Setter Property="BorderThickness" Value="1" />
-                                    <Setter Property="CornerRadius" Value="18" />
-                                    <Setter Property="Padding" Value="16" />
-                                </Style>
-                            </Flyout.FlyoutPresenterStyle>
                             <StackPanel Width="320" Spacing="12">
                                 <TextBlock Text="Search City" FontWeight="SemiBold" FontSize="15" />
                                 <AutoSuggestBox
@@ -212,15 +203,6 @@
                     <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight">
-                            <Flyout.FlyoutPresenterStyle>
-                                <Style TargetType="FlyoutPresenter">
-                                    <Setter Property="Background" Value="{ThemeResource AppGlassBgBrush}" />
-                                    <Setter Property="BorderBrush" Value="{ThemeResource AppGlassBorderColorBrush}" />
-                                    <Setter Property="BorderThickness" Value="1" />
-                                    <Setter Property="CornerRadius" Value="18" />
-                                    <Setter Property="Padding" Value="16" />
-                                </Style>
-                            </Flyout.FlyoutPresenterStyle>
                             <StackPanel Width="280" Spacing="14">
                                 <TextBlock Text="Weather Preferences" FontWeight="SemiBold" FontSize="15" />
                                 <StackPanel Spacing="4">
