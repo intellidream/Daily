@@ -276,4 +276,37 @@ In this milestone, critical telemetry alignment and UI glyph rendering issues we
    - Verified live Dashboard: Habits widget card renders crisp `Segoe Fluent Icons` target icon, `<` and `>` navigation buttons, weekly history bars, and radial progress.
    - Verified in-place navigation: Floating Capsule smoothly toggles between `MainPage` (`nav:1`) and `HabitsDetailPage` (`nav:5`) with interactive liquid glass highlighting.
 
+---
+
+## 10. Habits Icon Parity: Elimination of Solid Dot and Migration to Water Droplet (U+EB42) (✅ COMPLETED & VERIFIED)
+
+In this milestone, the Habits icon was fully aligned with the macOS and iOS golden standard across all desktop UI surfaces:
+
+1. **Cross-Platform Golden Standard Alignment**:
+   - On macOS (`MacOS/Daily/DesignSystem/FloatingGlassCapsule.swift:23`) and iOS (`iOS/Daily/DesignSystem/FloatingGlassCapsule.swift:25`), Habits is represented by the SF Symbol `drop.fill` (water droplet) in `ThemeColors.accentCyan` (`#00E5FF`).
+   - In Segoe Fluent Icons, the exact 1:1 equivalent is `Drop` glyph **`U+EB42`** (`&#xEB42;`).
+   - The previously used `CircleShapeSolid` (`&#xEA3B;` / `●`) and broken private-use Tabler glyph (`&#xed23;`) have been completely replaced.
+
+2. **Unified Icon Replacement Across All Surfaces**:
+   - **Habits Hub Header (`Views/HabitsDetailPage.xaml`)**: Replaced `&#xed23;` with `<FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />` inside the circular glass badge.
+   - **Floating Glass Capsule (`Controls/FloatingGlassCapsule.xaml`)**: Updated `TabIcon5` to `Glyph="&#xEB42;"`.
+   - **Collapsible Desktop Sidebar (`Controls/DesktopSidebarView.xaml`)**: Updated `SidebarIcon5` to `Glyph="&#xEB42;"`.
+   - **Dashboard Habits Widget (`Controls/HabitsWidgetControl.xaml`)**: Updated header icon to `Glyph="&#xEB42;" Foreground="#FF00E5FF"`.
+   - **Taskbar Glance Companion Flyout (`Controls/TaskbarGlanceFlyoutControl.xaml`)**:
+     * Water & Hydration card header: `Glyph="&#xEB42;"` in `#FF00E5FF`.
+     * Quick-log `+100` and `+300` buttons: `Glyph="&#xEB42;"` in `#FF00E5FF`.
+     * Quick-jump navigation grid footer: Habits tab button updated to `Glyph="&#xEB42;"`.
+   - **Smart Briefing Card (`MainPage.xaml`)**: Habits summary card header updated to `Glyph="&#xEB42;" Foreground="#FF00E5FF"`.
+   - **Secondary Detail Window (`DetailWindow.xaml.cs`)**: Section glyph mapped to `"\uEB42"` with `Segoe Fluent Icons`.
+
+3. **Live Verification on Parallels Windows 11 VM**:
+   - Pulled and compiled cleanly on ARM64 (`dotnet build -c Debug -p:Platform=ARM64` - 0 errors).
+   - Deployed and launched live via `schtasks /run /tn "DailyLaunch"`.
+   - Verified via live screen captures:
+     * Dashboard widget shows the crisp, vivid cyan water droplet icon with functional navigation chevrons.
+     * Habits Hub shows the sleek glass circle badge with the cyan water drop icon next to the "Habits Hub" title.
+     * Floating Glass Capsule displays the water drop icon in the expanded active Habits pill.
+     * Glance Companion flyout displays the water drop icon across the Water section header, quick action buttons (`+100`, `+300`), and footer navigation.
+
+
 
