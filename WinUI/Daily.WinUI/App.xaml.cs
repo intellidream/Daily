@@ -533,6 +533,33 @@ public partial class App : Application
 
         LogDebug($"Parsing query/fragment: '{queryToParse}'");
 
+        // Check for deep-link tab navigation (e.g. com.intellidream.daily.desktop://navigate?tab=5)
+        if (uri.Host.Equals("navigate", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("navigate"))
+        {
+            var tabVal = "";
+            foreach (var part in queryToParse.Split('&'))
+            {
+                var kv = part.Split('=');
+                if (kv.Length == 2 && kv[0].Equals("tab", StringComparison.OrdinalIgnoreCase))
+                {
+                    tabVal = kv[1];
+                    break;
+                }
+            }
+            if (int.TryParse(tabVal, out int tabIndex))
+            {
+                if (App.Current?.MainWindow is MainWindow mw)
+                {
+                    mw.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        mw.ShowAndActivate();
+                        mw.NavigateToTab(tabIndex);
+                    });
+                    return;
+                }
+            }
+        }
+
         if (!string.IsNullOrEmpty(queryToParse))
         {
             foreach (var part in queryToParse.Split('&'))
