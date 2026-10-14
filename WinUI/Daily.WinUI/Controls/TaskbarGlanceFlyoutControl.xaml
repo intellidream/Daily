@@ -181,7 +181,7 @@
                                 <TextBlock Grid.Column="1" x:Name="SmokesStatusText" Text="" FontSize="10.5" FontWeight="Bold" Foreground="#FFEF4444" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                                     <TextBlock x:Name="SmokesTotalText" Text="0" FontSize="12" FontWeight="Bold" Foreground="#FFEF4444"/>
-                                    <TextBlock x:Name="SmokesBaselineText" Text="/ 12" FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                    <TextBlock x:Name="SmokesBaselineText" Text="/ 20" FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                                 </StackPanel>
                             </Grid>
 

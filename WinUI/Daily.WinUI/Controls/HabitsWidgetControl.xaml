@@ -467,19 +467,19 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <FontIcon Grid.Column="0" Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="20" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,8,0"/>
+                <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,8,0" VerticalAlignment="Center"/>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Habits" FontSize="14" FontWeight="SemiBold" Opacity="0.9" VerticalAlignment="Center" />
                     <TextBlock Text="{x:Bind CurrentViewLabel, Mode=OneWay}" FontSize="11" Opacity="0.55" />
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                <Button x:Name="PrevBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="24" Width="24" Click="Prev_Click">
-                    <FontIcon Glyph="&#xea60;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <Button x:Name="PrevBtn" Background="Transparent" BorderThickness="0" Padding="0" MinWidth="28" Width="28" MinHeight="28" Height="28" CornerRadius="14" Click="Prev_Click" ToolTipService.ToolTip="Previous habit view">
+                    <FontIcon Glyph="&#xE76B;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                 </Button>
-                <Button x:Name="NextBtn" Background="Transparent" BorderThickness="0" Padding="4" Height="24" Width="24" Click="Next_Click">
-                    <FontIcon Glyph="&#xea61;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" />
+                <Button x:Name="NextBtn" Background="Transparent" BorderThickness="0" Padding="0" MinWidth="28" Width="28" MinHeight="28" Height="28" CornerRadius="14" Click="Next_Click" ToolTipService.ToolTip="Next habit view">
+                    <FontIcon Glyph="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                 </Button>
             </StackPanel>
         </Grid>

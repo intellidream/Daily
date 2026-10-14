@@ -160,10 +160,13 @@ namespace Daily.Services
             if (goal == null)
             {
                 bool isSmokes = habitType.Equals("smokes", StringComparison.OrdinalIgnoreCase);
+                int defaultTarget = isSmokes 
+                    ? (_settingsService?.Settings?.SmokesBaselineDaily > 0 ? _settingsService.Settings.SmokesBaselineDaily : 20)
+                    : 2000;
                 return new HabitGoal 
                 { 
                     HabitType = habitType, 
-                    TargetValue = isSmokes ? 12 : 2000, 
+                    TargetValue = defaultTarget, 
                     Unit = isSmokes ? "unit" : "ml",
                     UserId = CurrentUserId // Even if empty
                 };

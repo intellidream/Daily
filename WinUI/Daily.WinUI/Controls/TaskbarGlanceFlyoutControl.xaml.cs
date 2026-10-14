@@ -133,19 +133,20 @@ namespace Daily_WinUI.Controls
                     _currentSmokesTotal = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Today);
                     try
                     {
-                        int fallbackBaseline = _settingsService?.Settings?.SmokesBaselineDaily > 0
-                            ? _settingsService.Settings.SmokesBaselineDaily
-                            : 12;
-
-                        var smokeGoal = await _habitsService.GetGoalAsync("smokes");
-                        if (smokeGoal != null && smokeGoal.TargetValue > 0 && smokeGoal.TargetValue <= 100)
+                        // Priority for smokes max/baseline:
+                        // 1. Explicit user baseline setting (Settings.SmokesBaselineDaily)
+                        // 2. Saved HabitGoal target if configured and reasonable (and not the legacy default of 12)
+                        // 3. Fallback of 20 (standard pack) matching HabitsWidgetControl and HabitsDetailPage
+                        int baseline = _settingsService?.Settings?.SmokesBaselineDaily ?? 0;
+                        if (baseline <= 0)
                         {
-                            _smokesBaseline = (int)smokeGoal.TargetValue;
+                            var smokeGoal = await _habitsService.GetGoalAsync("smokes");
+                            if (smokeGoal != null && smokeGoal.TargetValue > 0 && smokeGoal.TargetValue <= 100 && smokeGoal.TargetValue != 12)
+                            {
+                                baseline = (int)smokeGoal.TargetValue;
+                            }
                         }
-                        else
-                        {
-                            _smokesBaseline = fallbackBaseline;
-                        }
+                        _smokesBaseline = baseline > 0 ? baseline : 20;
                     }
                     catch { }
 

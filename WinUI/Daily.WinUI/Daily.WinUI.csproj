@@ -84,7 +84,9 @@
     </Content>
     <Content Include="Assets\apptopbar.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-    <Content Include="Assets\Fonts\tabler-icons.ttf" />
+    <Content Include="Assets\Fonts\tabler-icons.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Assets\glass_smudges_dark.svg" />
     <Content Include="Assets\glass_smudges_dark_1.svg" />
     <Content Include="Assets\glass_smudges_dark_2.svg" />
