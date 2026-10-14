@@ -118,9 +118,9 @@ namespace Daily_WinUI.Controls
                     try
                     {
                         var goal = await _habitsService.GetGoalAsync("water");
-                        if (goal != null && goal.Target > 0)
+                        if (goal != null && goal.TargetValue > 0)
                         {
-                            _waterGoal = goal.Target;
+                            _waterGoal = goal.TargetValue;
                         }
                     }
                     catch { }
@@ -132,9 +132,9 @@ namespace Daily_WinUI.Controls
                     try
                     {
                         var smokeGoal = await _habitsService.GetGoalAsync("smokes");
-                        if (smokeGoal != null && smokeGoal.Target > 0)
+                        if (smokeGoal != null && smokeGoal.TargetValue > 0)
                         {
-                            _smokesBaseline = (int)smokeGoal.Target;
+                            _smokesBaseline = (int)smokeGoal.TargetValue;
                         }
                     }
                     catch { }
