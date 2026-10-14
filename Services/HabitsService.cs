@@ -159,11 +159,12 @@ namespace Daily.Services
             var goal = await _repository.GetGoalAsync(habitType, CurrentUserIdString);
             if (goal == null)
             {
+                bool isSmokes = habitType.Equals("smokes", StringComparison.OrdinalIgnoreCase);
                 return new HabitGoal 
                 { 
                     HabitType = habitType, 
-                    TargetValue = 2000, 
-                    Unit = "ml",
+                    TargetValue = isSmokes ? 12 : 2000, 
+                    Unit = isSmokes ? "unit" : "ml",
                     UserId = CurrentUserId // Even if empty
                 };
             }

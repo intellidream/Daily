@@ -25,6 +25,7 @@ namespace Daily_WinUI.Controls
         private IHabitsService? _habitsService;
         private ITagdosService? _tagdosService;
         private IHealthService? _healthService;
+        private ISettingsService? _settingsService;
         private readonly WeatherClient _weatherClient = new();
         private readonly LocationService _locationService = new();
 
@@ -58,6 +59,7 @@ namespace Daily_WinUI.Controls
                     _habitsService = sp.GetService<IHabitsService>();
                     _tagdosService = sp.GetService<ITagdosService>();
                     _healthService = sp.GetService<IHealthService>();
+                    _settingsService = sp.GetService<ISettingsService>();
                 }
             }
             catch (Exception ex)
@@ -131,10 +133,18 @@ namespace Daily_WinUI.Controls
                     _currentSmokesTotal = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Today);
                     try
                     {
+                        int fallbackBaseline = _settingsService?.Settings?.SmokesBaselineDaily > 0
+                            ? _settingsService.Settings.SmokesBaselineDaily
+                            : 12;
+
                         var smokeGoal = await _habitsService.GetGoalAsync("smokes");
-                        if (smokeGoal != null && smokeGoal.TargetValue > 0)
+                        if (smokeGoal != null && smokeGoal.TargetValue > 0 && smokeGoal.TargetValue <= 100)
                         {
                             _smokesBaseline = (int)smokeGoal.TargetValue;
+                        }
+                        else
+                        {
+                            _smokesBaseline = fallbackBaseline;
                         }
                     }
                     catch { }
