@@ -198,3 +198,50 @@ In this phase, 4 dedicated enhancements were implemented to provide the complete
    - Added explicit `<PackageReference Include="AngleSharp" Version="1.5.2" />` in both `WinUI/Daily.WinUI/Daily.WinUI.csproj` and `Daily.csproj`, satisfying `SmartReader 0.11.1` requirement and eliminating `NU1902` vulnerability warning.
    - Upgraded all dependencies to latest stable versions (`Microsoft.Extensions.DependencyInjection 10.0.13`, `Microsoft.Extensions.Http 10.0.13`, `System.Management 10.0.13`, `SmartReader 0.11.1`, `SQLitePCLRaw.bundle_e_sqlite3 3.0.5`, `Microsoft.Windows.SDK.BuildTools 10.0.28000.2705`, `Microsoft.WindowsAppSDK.ML 2.1.94`).
    - Verified clean compilation with **0 errors and 0 warnings**.
+
+---
+
+## 8. Redundant Sync Removal & macOS Companion Glance Parity (✅ COMPLETED & VERIFIED)
+
+In this milestone, all redundant synchronization buttons were scrubbed across the application, and the Windows 11 Taskbar Companion ("DayOne Glance") was elevated to exact feature and visual parity with macOS `MenuBarCompanionView.swift`:
+
+1. **Scrubbing Redundant Sync / Force Sync UI**:
+   - Removed redundant "Force Sync" item from the tray icon context menu in `MainWindow.xaml`.
+   - Removed "Sync" button from `DesktopSidebarView.xaml/.cs`.
+   - Removed "Sync" button from `HealthDetailPage.xaml/.cs` and routed `_healthHubService.PullDeltasAsync()` directly into `RefreshFromTitleBarAsync()`.
+   - Removed "Sync" button from `TagdosNotesDetailPage.xaml/.cs` and routed remote synchronization through `RefreshFromTitleBarAsync()`.
+   - Extended `DetailWindow.xaml.cs` to invoke `RefreshFromTitleBarAsync()` when hosting `TagdosNotesDetailPage`.
+   - Unified all synchronization under the single, authoritative top-left **DayOne** button in the titlebar across both `MainWindow` and detached secondary `DetailWindow` frames.
+
+2. **Health Vitals Card with Heart Rate & Steps**:
+   - Added live Heart Rate display (`VitalsHeartRateText`, e.g. `76 bpm`) using `&#xEB52;` heart glyph alongside Steps count (`VitalsStepsText`, e.g. `602`) using `&#xE805;` walk glyph.
+   - Queries `VitalType.HeartRate` with fallback to `VitalType.RestingHeartRate` and `VitalType.Steps`.
+   - Clicking the card instantly activates the main window and navigates to the Health Hub (`Ctrl+4`).
+
+3. **Water & Hydration Quick Log (macOS / Widget Standard)**:
+   - Displayed current vs goal intake (`WaterProgressText`, e.g. `400 / 2000 ml`) and a dynamic progress bar.
+   - Standardized quick-log pill values to match the macOS and iOS widgets: `+100` (Water, cyan), `+150` (Coffee, amber with `&#xE706;` cup glyph), and `+300` (Water, cyan with `&#xEA3B;` drop glyph).
+   - Live in-place progress bar and counter updates upon logging with status feedback.
+
+4. **Dedicated Smokes & Tobacco Tracker**:
+   - Dedicated card with flame glyph (`&#xE7A0;`), live total count vs daily baseline (`SmokesTotalText`, e.g. `6 / 12`), and progress bar.
+   - Implemented 2 quick action buttons:
+     * `Cig`: Logs 1 combustible cigarette (`#EF4444`).
+     * `Heat`: Logs 1 heated tobacco stick (`#3B82F6` with `&#xE945;` bolt glyph).
+   - Refined baseline logic in `Services/HabitsService.cs` and `TaskbarGlanceFlyoutControl.xaml.cs` to accurately respect `ISettingsService.Settings.SmokesBaselineDaily` fallback.
+
+5. **Dual-Mode TagDoS Quick Entry**:
+   - Segmented toggle between **Quick Note** and **TagDo**:
+     * **Quick Note**: Saves notes directly into the TagDoS SQLite store (`CreateQuickNoteAsync`) with feedback `"✓ Saved to Notes!"`.
+     * **TagDo**: Appends active task pills directly into Stream 1 (`TagdosParser.AddPill`, `UpdateStreamRawTextAsync`) with feedback `"✓ Added to Stream 1!"`.
+   - Dynamic input placeholder, helper text, and green submit button.
+   - Direct shortcut link to open TagDoS Hub (`Ctrl+3`).
+
+6. **Preserved DayOne Exit Button**:
+   - Kept the bottom "Exit DayOne" action button with `&#xE711;` glyph per explicit user request.
+
+7. **Live Verification on Parallels Windows 11 VM**:
+   - Successfully compiled with `dotnet build -c Debug -p:Platform=ARM64` (0 errors).
+   - Launched interactively via `schtasks /run /tn "DailyLaunch"`.
+   - Verified screen captures: Companion flyout displays live weather (`14°C Bucharest`), live vitals (`76 bpm`, `602 steps`), hydration (`400 / 2000 ml`), smokes (`6 / 12`), crisp Segoe Fluent Icons, and clean action bars without redundant sync buttons across all views.
+
