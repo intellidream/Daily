@@ -530,7 +530,7 @@ public sealed partial class WeatherDetailPage : Page
         else
         {
             var clone = CloneLocation(_selectedLocation);
-            clone.FavoriteCategory = FavoriteCategoryComboBox.SelectedItem as string ?? "Travel";
+            clone.FavoriteCategory = "Travel";
             FavoriteLocations.Insert(0, clone);
             ViewModel.SetStatus($"Added {_selectedLocation.DisplayName} to favorites.");
         }
@@ -664,14 +664,12 @@ public sealed partial class WeatherDetailPage : Page
 
     private void GlassIntensityComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (GlassIntensityComboBox.SelectedItem is not string intensity)
+        if (sender is ComboBox cb && cb.SelectedItem is string intensity)
         {
-            return;
+            ApplyGlassIntensity(intensity);
+            _settings.GlassIntensity = intensity;
+            SettingsService.Save(_settings);
         }
-
-        ApplyGlassIntensity(intensity);
-        _settings.GlassIntensity = intensity;
-        SettingsService.Save(_settings);
     }
 
     private void ApplyGlassIntensity(string intensity)
@@ -763,31 +761,12 @@ public sealed partial class WeatherDetailPage : Page
 
     private void UpdateFavoriteButtonText()
     {
-        if (FavoriteToggleButton is null) return;
-
-        if (_selectedLocation is null)
-        {
-            FavoriteToggleButton.Content = "Add Favorite";
-            return;
-        }
-
-        FavoriteToggleButton.Content = FavoriteLocations.Any(IsSameLocationPredicate(_selectedLocation))
-            ? "Remove Favorite"
-            : "Add Favorite";
+        // No-op: streamlined top navigation bar
     }
 
     private void UpdatePinButtonText()
     {
-        if (FavoritePinButton is null) return;
-
-        if (_selectedLocation is null)
-        {
-            FavoritePinButton.Content = "Pin";
-            return;
-        }
-
-        var favorite = FavoriteLocations.FirstOrDefault(IsSameLocationPredicate(_selectedLocation));
-        FavoritePinButton.Content = favorite?.IsPinned == true ? "Unpin" : "Pin";
+        // No-op: streamlined top navigation bar
     }
 
     private void SortFavorites()
