@@ -131,7 +131,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon x:Name="SidebarIcon5" Grid.Column="0" Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,0,12,0"/>
+                            <FontIcon x:Name="SidebarIcon5" Grid.Column="0" Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,0,12,0"/>
                             <TextBlock x:Name="SidebarText5" Grid.Column="1" Text="Habits" FontSize="13" FontWeight="Normal" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
                             <TextBlock Grid.Column="2" Text="Ctrl+5" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" Opacity="0.7"/>
                         </Grid>

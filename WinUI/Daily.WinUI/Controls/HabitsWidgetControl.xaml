@@ -467,7 +467,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FF00E5FF" Margin="0,0,8,0" VerticalAlignment="Center"/>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Habits" FontSize="14" FontWeight="SemiBold" Opacity="0.9" VerticalAlignment="Center" />
                     <TextBlock Text="{x:Bind CurrentViewLabel, Mode=OneWay}" FontSize="11" Opacity="0.55" />

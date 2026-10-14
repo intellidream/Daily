@@ -80,7 +80,7 @@
                     CornerRadius="20" Height="38" Padding="10,0"
                     ToolTipService.ToolTip="Habits (Ctrl+5)">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <FontIcon x:Name="TabIcon5" Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#B3FFFFFF" />
+                    <FontIcon x:Name="TabIcon5" Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#B3FFFFFF" />
                     <TextBlock x:Name="TabText5" Text="Habits" FontSize="12" FontWeight="SemiBold" Foreground="#B3FFFFFF" VerticalAlignment="Center" Visibility="Collapsed" />
                 </StackPanel>
             </Button>

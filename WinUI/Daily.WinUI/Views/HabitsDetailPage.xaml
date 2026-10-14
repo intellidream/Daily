@@ -168,7 +168,7 @@
                     <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
                 <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}">
-                    <FontIcon Glyph="&#xed23;" FontFamily="{StaticResource TablerIconsFont}" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Habits Hub" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />

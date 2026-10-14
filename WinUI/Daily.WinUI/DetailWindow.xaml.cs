@@ -199,7 +199,7 @@ public sealed partial class DetailWindow : Window
         {
             "TagDoS" => "\uE70B",   // TagDoS hub icon
             "Weather" => "\uE753",  // WeatherDetailPage top icon
-            "Habits" => "\uED23",   // HabitsDetailPage top icon (Tabler)
+            "Habits" => "\uEB42",   // HabitsDetailPage top icon (Segoe Fluent Icons Drop)
             "Health" => "\uE95E",   // HealthDetailPage top icon
             "Finances" => "\uE825", // FinancesDetailPage top icon
             "News" => "\uE736",     // RssFeedDetailPage top icon
@@ -213,9 +213,7 @@ public sealed partial class DetailWindow : Window
         _currentSectionName = section;
         DetailTitleBarSectionText.Text = $"DayOne - {section}";
         DetailTitleBarSectionIcon.Glyph = GetSectionGlyph(section);
-        DetailTitleBarSectionIcon.FontFamily = section == "Habits"
-            ? (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["TablerIconsFont"]
-            : new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons");
+        DetailTitleBarSectionIcon.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons");
     }
 
     private async void DetailTitleBarRefreshButton_Click(object sender, RoutedEventArgs e)

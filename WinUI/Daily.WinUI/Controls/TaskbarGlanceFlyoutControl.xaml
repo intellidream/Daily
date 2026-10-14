@@ -110,7 +110,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                                    <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
                                     <TextBlock Text="Water &amp; Hydration" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" x:Name="WaterStatusText" Text="" FontSize="10.5" FontWeight="Bold" Foreground="#FF00E5FF" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
@@ -135,7 +135,7 @@
                                         Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1"
                                         ToolTipService.ToolTip="Log 100 ml Water">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
+                                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
                                         <TextBlock Text="100" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF"/>
                                     </StackPanel>
                                 </Button>
@@ -157,7 +157,7 @@
                                         Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1"
                                         ToolTipService.ToolTip="Log 300 ml Water">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
+                                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
                                         <TextBlock Text="300" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF"/>
                                     </StackPanel>
                                 </Button>
@@ -343,7 +343,7 @@
                         <Button Grid.Row="1" Grid.Column="1" Click="NavJump_Click" Tag="5"
                                 HorizontalAlignment="Stretch" Padding="4,8" CornerRadius="8" Background="#0FFFFFFF" BorderThickness="0" ToolTipService.ToolTip="Habits (Ctrl+5)">
                             <StackPanel Spacing="3" HorizontalAlignment="Center">
-                                <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                                 <TextBlock Text="Habits" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                             </StackPanel>
                         </Button>
