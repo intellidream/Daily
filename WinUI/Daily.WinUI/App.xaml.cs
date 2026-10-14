@@ -222,6 +222,19 @@ public partial class App : Application
                                 });
                             }
                         }
+                        else if (line.Equals("settings", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received settings command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.ShowAndActivate();
+                                    app.MainWindow.OpenSettings();
+                                });
+                            }
+                        }
                         else if (Uri.TryCreate(line, UriKind.Absolute, out var uri))
                         {
                             LogDebug($"Pipe server parsed URI: {uri}. Handling...");
