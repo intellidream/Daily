@@ -299,14 +299,26 @@ In this milestone, the Habits icon was fully aligned with the macOS and iOS gold
    - **Smart Briefing Card (`MainPage.xaml`)**: Habits summary card header updated to `Glyph="&#xEB42;" Foreground="#FF00E5FF"`.
    - **Secondary Detail Window (`DetailWindow.xaml.cs`)**: Section glyph mapped to `"\uEB42"` with `Segoe Fluent Icons`.
 
-3. **Live Verification on Parallels Windows 11 VM**:
+3. **Smokes & Cigarette Icon Parity (macOS Golden Standard)**:
+   - On macOS (`MacOS/Daily/Views/MenuBar/MenuBarCompanionView.swift:294-295`), the Smokes tile uses `Image(systemName: "flame.fill").foregroundColor(Color(hex: "#EF4444"))`.
+   - **Glance Flyout Smokes Card (`Controls/TaskbarGlanceFlyoutControl.xaml`)**:
+     * Replaced the obsolete hollow document box (`&#xE7A0;`) in the card header with the crisp Tabler Icons **Flame** (`&#xEC2C;`) in `#FFEF4444`.
+     * Replaced the "+1 Cig" quick-log button icon with the Tabler Icons **lit cigarette with smoke** (`&#xECC4;`) in `#FFEF4444`.
+     * Preserved the "+1 Heat" button with Segoe Fluent Icons lightning bolt (`&#xE945;`) in `#FF3B82F6`, matching macOS `bolt.fill`.
+   - **Habits Hub Smoking Card (`Views/HabitsDetailPage.xaml`)**:
+     * Replaced the misplaced history clock (`&#xebea;`) next to the "Smoking" title with Tabler Icons **Flame** (`&#xEC2C;`).
+
+4. **Live Verification on Parallels Windows 11 VM**:
    - Pulled and compiled cleanly on ARM64 (`dotnet build -c Debug -p:Platform=ARM64` - 0 errors).
    - Deployed and launched live via `schtasks /run /tn "DailyLaunch"`.
    - Verified via live screen captures:
      * Dashboard widget shows the crisp, vivid cyan water droplet icon with functional navigation chevrons.
-     * Habits Hub shows the sleek glass circle badge with the cyan water drop icon next to the "Habits Hub" title.
+     * Habits Hub shows the sleek glass circle badge with the cyan water drop icon next to the "Habits Hub" title, and the flame icon next to "Smoking".
      * Floating Glass Capsule displays the water drop icon in the expanded active Habits pill.
-     * Glance Companion flyout displays the water drop icon across the Water section header, quick action buttons (`+100`, `+300`), and footer navigation.
+     * Glance Companion flyout displays:
+       - The water drop icon across the Water section header, quick action buttons (`+100`, `+300`), and footer navigation.
+       - The coral-red Flame icon (`&#xEC2C;`) next to "Smokes" and the lit cigarette icon (`&#xECC4;`) inside the "+1 Cig" button.
+
 
 
 
