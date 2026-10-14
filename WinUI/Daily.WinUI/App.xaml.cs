@@ -323,6 +323,8 @@ public partial class App : Application
         HandleActivation(appActivatedArgs);
     }
 
+    private readonly TaskCompletionSource<bool> _sessionRestoredTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task SessionRestoredTask => _sessionRestoredTcs.Task;
     public Task InitializationTask { get; private set; } = Task.CompletedTask;
 
     private void ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
@@ -453,6 +455,8 @@ public partial class App : Application
         {
             LogDiagnostic($"InitializeAsync: CurrentSession already active: {SupabaseClient.Auth.CurrentSession?.User?.Email}");
         }
+
+        _sessionRestoredTcs.TrySetResult(true);
 
         try
         {

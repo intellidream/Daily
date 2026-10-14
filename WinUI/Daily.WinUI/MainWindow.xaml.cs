@@ -375,8 +375,8 @@ public sealed partial class MainWindow : Window
         App.LogDiagnostic("NavigateAfterHydrationAsync started");
         try
         {
-            // Bound waiting on InitializationTask to 2.5 seconds max so UI never freezes
-            await Task.WhenAny(App.Current.InitializationTask, Task.Delay(2500));
+            // Wait for session hydration to finish (bounded to 6 seconds) so saved session is respected
+            await Task.WhenAny(App.Current.SessionRestoredTask, Task.Delay(6000));
             App.LogDiagnostic("NavigateAfterHydrationAsync: task wait complete");
         }
         catch (Exception ex)
