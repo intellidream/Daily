@@ -373,6 +373,55 @@ In this milestone, three core user experience and cross-platform parity items we
 - Pulled and compiled cleanly on ARM64 (`dotnet build -c Debug -p:Platform=ARM64` - 0 errors, 2 warnings).
 - Launched live via `schtasks /run /tn "DailyLaunch"`.
 - Verified live screen captures:
-  * Weather Hub renders Hero card, custom Hourly spline chart, 2x3 Atmospheric Grid, and 5-Day forecast with zero clipping.
   * Health Hub and TagDoS Hub open cleanly in-place in `MainWindow` via in-app clicks and deep links.
   * Returning to Dashboard (`nav:1`) resumes instantaneously from cache with zero flickering or disappearing elements.
+
+---
+
+## 12. Weather Hub Liquid Glass Redesign & macOS Parity (✅ COMPLETED & VERIFIED)
+
+In this milestone, the WinUI Weather Hub (`Views/WeatherDetailPage.xaml` & `WeatherDetailPage.xaml.cs`) was completely redesigned from the ground up to achieve authentic Liquid Glass design harmony with macOS (`MacOS/Daily/Views/Weather/WeatherDetailView.swift`), while strictly preserving the custom hourly forecast spline chart:
+
+1. **Scrubbing Legacy Buttons & Asymmetrical Sidebar**:
+   - Eliminated the outdated, clunky legacy buttons: `FavoriteToggleButton`, `FavoritePinButton`, the raw text `RefreshButton` blue button, and `GlassIntensityComboBox`.
+   - Removed the clunky right-hand sidebar (`Saved Locations`, `Home`, `Work`, `Travel`, `Recent`, and raw `Settings Expander`) which cluttered the desktop layout.
+   - Replaced the wide editable ComboBox in the top bar with a clean, centralized presentation and modern flyouts.
+
+2. **Symmetrical macOS Parity Top Navigation Bar**:
+   - **Left**: Circular glass Back Button (`38x38`, `&#xE72B;`), styled with borderless hover states.
+   - **Center**: Prominent Location Title (`Bucharest`), glowing Cyan capsule badge with GPS icon (`&#xE707;` + `GPS`), and formatted subtitle date (`Wednesday, October 14`).
+   - **Right**: Sleek circular glass action cluster:
+     * `AutoLocationButton` (`&#xE707;` Cyan GPS icon) for instant 1-click GPS lock.
+     * `SearchButton` (`&#xE721;` Magnifying glass) opening a modern Liquid Glass flyout with WinUI `AutoSuggestBox` and 1-click quick cities (Bucharest, London, New York, Tokyo, Paris, San Francisco).
+     * `RefreshButton` (`&#xE72C;` Rotate icon) with spinning animation during telemetry refresh.
+     * `SettingsButton` (`&#xE713;` Gear icon) opening a sleek flyout for Temperature Unit (°C / °F), Wind Unit (m/s, km/h, mph), Pressure Unit (hPa, mmHg, inHg), and Always Auto-Location toggle.
+     * `PopOutButton` (`&#xE8A7;`) to detach the Weather Hub into a secondary floating window for multi-monitor setups.
+
+3. **Centered Single-Column Weather Stream (`MaxWidth="880"`)**:
+   - **Hero Weather Card**:
+     * Top row: Weather description capsule pill on left (e.g., `Clear Sky`), High/Low pill on right (`H 17.3° · L 15.4°`).
+     * Bottom row: Massive 68pt bold temperature (`16.4°`), `FEELS LIKE 15.2°C`, details/updated timestamp, and ambient glowing circular condition container.
+   - **Preserved Custom Hourly Spline Chart**:
+     * Strictly preserved per explicit user requirement: Syncfusion `SfCartesianChart` spline area series with day/night ambient gradients.
+     * Aligned 8-hour weather condition icons with temperature labels directly above the spline curve.
+     * Interactive Trackball with dynamic Sunrise (`☼↑ 07:28`) and Sunset (`☼↓ 18:34`) markers rendered on canvas.
+   - **2x3 Atmospheric Metric Grid** (Matching macOS `AtmosphericMetricTile.swift`):
+     1. *Wind*: Cyan wind glyph (`&#xE734;`), title `WIND`, large 26pt bold value (`4.5 m/s`), and compass direction subtitle.
+     2. *Humidity*: Blue droplet glyph (`&#xEB42;`), title `HUMIDITY`, large 26pt bold value (`44%`), and comfort rating subtitle.
+     3. *Pressure*: Mint gauge glyph (`&#xE9D9;`), title `PRESSURE`, large 26pt bold value (`1016 hPa`), and stability subtitle.
+     4. *Visibility*: Sky eye glyph (`&#xE890;`), title `VISIBILITY`, large 26pt bold value (`10 km`), and clarity subtitle.
+     5. *Clouds*: Grey/blue cloud glyph (`&#xE753;`), title `CLOUDS`, large 26pt bold value (`0%`), and sky description subtitle.
+     6. *Sun Schedule*: Gold sun glyph (`&#xE706;`), title `SUN SCHEDULE`, large 26pt bold value (`07:28 ↑`), and Sunset subtitle (`Sunset: 18:34 ↓`).
+   - **5-Day Forecast Card**:
+     * Header with calendar icon (`&#xE787;`).
+     * Day-by-day forecast list with condition glyph, description, precipitation probability %, and visual horizontal temperature range gradient bar.
+   - **Bottom Clearance**: `Padding="0,0,0,120"` ensuring full clearance above the floating `NavCapsule`.
+
+4. **Live Verification on Parallels Windows 11 VM**:
+   - Compiled cleanly on ARM64 with **0 errors**.
+   - Verified live via screen capture (`/tmp/win11_weather_perfect.png`):
+     * Clean, modern centered stream matching macOS `WeatherDetailView.swift`.
+     * Sleek top navigation bar with circular glass buttons and popover flyouts.
+     * Smooth custom spline chart perfectly rendered with ambient gradient and sun markers.
+     * 2x3 Atmospheric grid and 5-Day forecast seamlessly displayed.
+
