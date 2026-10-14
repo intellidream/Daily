@@ -322,3 +322,57 @@ In this milestone, the Habits icon was fully aligned with the macOS and iOS gold
 
 
 
+
+---
+
+## 11. Silent Widget Refresh, In-Place Navigation & Weather Parity (✅ COMPLETED & VERIFIED)
+
+In this milestone, three core user experience and cross-platform parity items were systematically implemented and verified on the Windows 11 VM:
+
+### 1. Silent Background Refresh & Resilient Cache Architecture (Zero Flicker)
+- **Root Cause Analysis**:
+  * Previously, when returning from a Hub to the Dashboard (`MainPage`), certain widgets appeared to flicker, disappear, or show loading skeletons, while others appeared unchanged:
+    - `FinancesWidgetControl.LoadDataAsync()` was calling `MacroIndicators.Clear()` and `TopStocks.Clear()` *prior* to network fetch, blanking the card until Yahoo Finance / Supabase quotes returned.
+    - `WeatherWidgetControl.RefreshWeatherAsync()` was showing `LoadingOverlay` and setting `LocationText = "Detecting location..."` even when cached weather data was already displayed.
+    - `CalendarWidgetControl` was toggling `IsLoading = true` on every container rebind.
+    - Local Room/SQLite-backed widgets (`Habits`, `Tagdos`) loaded in `< 1ms` from disk, giving the user the impression that some widgets refreshed (because they flickered) and others did not.
+- **Architectural Solution**:
+  * **Resilient Caching**: Every widget now renders instantaneously from memory or offline cache (`WeatherClient` 15-minute static cache, `Room`/SQLite local databases for Health, Habits, Calendar, News, Tagdos).
+  * **Silent Background Ingestion**: When returning from a Hub, `MainPage_Loaded` detects `_hasCompletedInitialLoad == true`, immediately presents the cached UI, and triggers `RefreshWidgetsSilentAsync()`.
+  * **Non-Destructive Delta Swapping**: Data collections and visual properties are updated in-place only after new network data is successfully received, eliminating blank cards and loading spinners.
+
+### 2. In-Place Navigation Parity Across All Widgets
+- **Health Widget (`Controls/HealthWidgetControl.xaml.cs`)**:
+  * Previously, clicking the header or metric cards (`Overview`, `Sleep`, `Stress`, `Vitals`) opened an unwanted secondary floating window (`MainPage.Current?.OpenDetailWindow(...)`).
+  * Updated to navigate in-place via `mw.NavigateToTab(4, parameter)` within the main Liquid Glass frame, keeping the experience seamless and consistent with other widgets.
+- **TagDoS Widget (`Controls/TagdosWidgetControl.xaml.cs`)**:
+  * Updated `Header_Tapped` to call `mw.NavigateToTab(3)` if hosted in `MainWindow`, ensuring 100% uniformity across all 7 dashboard widgets.
+
+### 3. Weather Hub Parity (macOS / iOS / Android) & Preserved Hourly Spline Chart
+- **15-Minute Resilient Cache (`WeatherClient.cs`)**:
+  * Implemented static `ConcurrentDictionary` with a 15-minute TTL keyed by coordinate hash (0.01° tolerance ~1.1km) and unit system.
+  * In offline or degraded network conditions, immediately serves stale cached snapshots to prevent blank states.
+  * Added `WindDeg` and `Clouds` mapping from OpenWeatherMap + 16-point compass helper (`WindDirection`).
+- **1-Click GPS Auto-Location**:
+  * Added an `AutoLocationButton` (`&#xE707;`) beside the location search box in the fixed TopBar, allowing instant 1-click reset to device GPS/Network coordinates.
+- **Streamlined Visual Hierarchy**:
+  * **Hero Weather Card**: Prominently displays location name, GPS badge, weather description, large temperature display, Feels Like, High/Low, and condition icon.
+  * **Preserved Custom Hourly Spline Chart**: Retained directly below the Hero card, showcasing the custom Syncfusion spline chart, 8-hour aligned weather condition icons, day/night ambient gradients, and Sunrise/Sunset marker badges (`☼↑` / `☼↓`).
+  * **2x3 Atmospheric Metrics Grid**:
+    - *Wind*: Radial Gauge with animated needle + compass direction subtitle (e.g., "ESE", "Gentle Breeze").
+    - *Humidity*: Radial Gauge with comfort rating subtitle (e.g., "Moderate Humidity").
+    - *Visibility*: Eye icon, distance in kilometers, and clarity description.
+    - *Pressure*: Barometer icon, pressure reading in user-selected unit (`hPa`, `mmHg`, `inHg`), and stability subtitle.
+    - *Cloud Cover*: Cloud icon, percentage cover, and sky description.
+    - *Sun Schedule*: Sunrise and Sunset times with directional arrows (`↑` and `↓`).
+  * **5-Day Forecast Card**: Vertical card with day name, weather description, precipitation probability %, and max/min temperature range.
+  * **Saved Locations & Settings Rail**: Draggable favorite locations (Home, Work, Travel, Recent) and unit preferences expander.
+  * **Bottom Capsule Clearance**: Adjusted shell padding to `22,22,22,120` (Desktop: `26,26,26,120`) to guarantee full clearance above the floating `NavCapsule`.
+
+### 4. Verification on Parallels Windows 11 VM
+- Pulled and compiled cleanly on ARM64 (`dotnet build -c Debug -p:Platform=ARM64` - 0 errors, 2 warnings).
+- Launched live via `schtasks /run /tn "DailyLaunch"`.
+- Verified live screen captures:
+  * Weather Hub renders Hero card, custom Hourly spline chart, 2x3 Atmospheric Grid, and 5-Day forecast with zero clipping.
+  * Health Hub and TagDoS Hub open cleanly in-place in `MainWindow` via in-app clicks and deep links.
+  * Returning to Dashboard (`nav:1`) resumes instantaneously from cache with zero flickering or disappearing elements.
