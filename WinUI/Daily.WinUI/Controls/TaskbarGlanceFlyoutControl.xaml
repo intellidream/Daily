@@ -175,7 +175,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE7A0;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFEF4444" VerticalAlignment="Center"/>
+                                    <FontIcon Glyph="&#xEC2C;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FFEF4444" VerticalAlignment="Center"/>
                                     <TextBlock Text="Smokes" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" x:Name="SmokesStatusText" Text="" FontSize="10.5" FontWeight="Bold" Foreground="#FFEF4444" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
@@ -202,7 +202,7 @@
                                         Background="#2AEF4444" BorderBrush="#52EF4444" BorderThickness="1"
                                         ToolTipService.ToolTip="Log 1 Cigarette">
                                     <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="&#xE7A0;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFEF4444" />
+                                        <FontIcon Glyph="&#xECC4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="#FFEF4444" />
                                         <TextBlock Text="Cig" FontSize="11" FontWeight="Bold" Foreground="#FFEF4444"/>
                                     </StackPanel>
                                 </Button>

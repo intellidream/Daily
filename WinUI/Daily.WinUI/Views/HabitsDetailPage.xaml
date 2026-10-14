@@ -618,7 +618,7 @@
                                     <Border CornerRadius="24" Background="{ThemeResource AppGlassSubColorBrush}" Padding="16">
                                         <Grid>
                                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                                                <FontIcon Glyph="&#xebea;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FFF44336" />
+                                                <FontIcon Glyph="&#xEC2C;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FFF44336" />
                                                 <TextBlock Text="Smoking" FontSize="16" FontWeight="SemiBold" />
                                             </StackPanel>
                                             <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
