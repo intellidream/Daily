@@ -160,7 +160,7 @@ public partial class App : Application
                 {
                     using var server = new System.IO.Pipes.NamedPipeServerStream(PipeName,
                         System.IO.Pipes.PipeDirection.In,
-                        1,
+                        System.IO.Pipes.NamedPipeServerStream.MaxAllowedServerInstances,
                         System.IO.Pipes.PipeTransmissionMode.Message,
                         System.IO.Pipes.PipeOptions.Asynchronous);
                     server.WaitForConnection();
@@ -236,6 +236,7 @@ public partial class App : Application
                 catch (Exception ex)
                 {
                     LogDebug($"Pipe server error: {ex.Message}");
+                    System.Threading.Thread.Sleep(500);
                 }
             }
         });
