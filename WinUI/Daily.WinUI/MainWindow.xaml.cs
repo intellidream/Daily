@@ -38,6 +38,7 @@ public sealed partial class MainWindow : Window
 
         StartDateClock();
 
+        RootFrame.CacheSize = 10;
         RootFrame.Navigated += RootFrame_Navigated;
 
         var persistence = new Daily_WinUI.Services.WinUISessionPersistence();
@@ -500,6 +501,10 @@ public sealed partial class MainWindow : Window
         }
 
         RootFrame.Navigate(targetPageType, parameter);
+        if (tabIndex == 1 && RootFrame.BackStack.Count > 0)
+        {
+            RootFrame.BackStack.Clear();
+        }
     }
 
     public void ToggleSidebar()

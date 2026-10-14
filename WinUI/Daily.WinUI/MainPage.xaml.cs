@@ -38,10 +38,12 @@ public sealed partial class MainPage : Page
     private System.Threading.Tasks.Task<SmartBriefingData>? _pregeneratedBriefingTask;
     private string? _pregeneratedAccelerator;
     private string? _pregeneratedModelId;
+    private bool _hasCompletedInitialLoad = false;
 
     public MainPage()
     {
         App.LogDiagnostic("MainPage constructor entered");
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         InitializeComponent();
         Current = this;
         _authService = App.Current.Services.GetRequiredService<WinUIAuthService>();
@@ -51,13 +53,16 @@ public sealed partial class MainPage : Page
         SizeChanged += MainPage_SizeChanged;
         Unloaded += (_, _) => 
         {
-            WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
-            if (_authStateChangedHandler != null)
+            if (NavigationCacheMode != Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required)
             {
-                _authService.RemoveStateChangedListener(_authStateChangedHandler);
-                _authStateChangedHandler = null;
+                WeatherBannerService.WeatherConditionChanged -= OnWeatherConditionChanged;
+                if (_authStateChangedHandler != null)
+                {
+                    _authService.RemoveStateChangedListener(_authStateChangedHandler);
+                    _authStateChangedHandler = null;
+                }
+                if (Current == this) Current = null;
             }
-            if (Current == this) Current = null;
         };
         WeatherBannerService.WeatherConditionChanged += OnWeatherConditionChanged;
         if (WeatherBannerService.LastIconCode is { } code)
@@ -73,9 +78,15 @@ public sealed partial class MainPage : Page
         App.LogDiagnostic("MainPage constructor completed");
     }
 
+    public void InvalidateCache()
+    {
+        _hasCompletedInitialLoad = false;
+    }
+
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        Current = this;
         App.LogDiagnostic("MainPage.OnNavigatedTo fired");
     }
 
@@ -98,13 +109,26 @@ public sealed partial class MainPage : Page
 
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
-        App.LogDiagnostic("MainPage_Loaded fired");
+        App.LogDiagnostic($"MainPage_Loaded fired. _hasCompletedInitialLoad={_hasCompletedInitialLoad}");
         try
         {
             UpdateUserUI();
-            App.LogDiagnostic("MainPage_Loaded: UpdateUserUI finished, calling RunLoadingSequenceAsync");
-            await RunLoadingSequenceAsync();
-            App.LogDiagnostic("MainPage_Loaded: RunLoadingSequenceAsync completed");
+            if (!_hasCompletedInitialLoad)
+            {
+                App.LogDiagnostic("MainPage_Loaded: UpdateUserUI finished, calling RunLoadingSequenceAsync");
+                await RunLoadingSequenceAsync();
+                _hasCompletedInitialLoad = true;
+                App.LogDiagnostic("MainPage_Loaded: RunLoadingSequenceAsync completed");
+            }
+            else
+            {
+                App.LogDiagnostic("MainPage_Loaded: Resuming from cache, instantaneous presentation");
+                ContentGrid.Opacity = 1.0;
+                ContentScale.ScaleX = 1.0;
+                ContentScale.ScaleY = 1.0;
+                (App.Current.MainWindow as MainWindow)?.DismissLoadingOverlay();
+                _ = RefreshWidgetsSilentAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -287,6 +311,48 @@ public sealed partial class MainPage : Page
                 else
                     glassContainer.RefreshWithAnimation(() => System.Threading.Tasks.Task.CompletedTask);
             }
+        }
+    }
+
+    /// <summary>
+    /// Silently refreshes live widget data in the background without UI animations or blocking.
+    /// Used when returning to the cached dashboard page from a Hub.
+    /// </summary>
+    private async System.Threading.Tasks.Task RefreshWidgetsSilentAsync()
+    {
+        try
+        {
+            var tasks = new List<System.Threading.Tasks.Task>();
+            foreach (var item in _widgets ?? Enumerable.Empty<Daily.Models.WidgetModel>())
+            {
+                var container = WidgetGridView.ContainerFromItem(item) as GridViewItem;
+                if (container == null) continue;
+
+                var border = container.ContentTemplateRoot as Border;
+                if (border?.Child is GlassWidgetContainer glassContainer)
+                {
+                    if (glassContainer.Content is WeatherWidgetControl weather)
+                        tasks.Add(weather.RefreshAsync());
+                    else if (glassContainer.Content is HabitsWidgetControl habits)
+                        tasks.Add(habits.RefreshAsync());
+                    else if (glassContainer.Content is RssFeedWidgetControl rss)
+                        tasks.Add(rss.RefreshAsync());
+                    else if (glassContainer.Content is HealthWidgetControl health)
+                        tasks.Add(health.RefreshAsync());
+                    else if (glassContainer.Content is FinancesWidgetControl finances)
+                        tasks.Add(finances.LoadDataAsync());
+                    else if (glassContainer.Content is CalendarWidgetControl calendar)
+                        tasks.Add(calendar.RefreshAsync());
+                }
+            }
+            if (tasks.Count > 0)
+            {
+                await System.Threading.Tasks.Task.WhenAll(tasks);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            App.LogDiagnostic($"RefreshWidgetsSilentAsync error: {ex.Message}");
         }
     }
 

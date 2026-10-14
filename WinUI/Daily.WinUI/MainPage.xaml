@@ -7,6 +7,7 @@
     xmlns:controls="using:Daily_WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    NavigationCacheMode="Required"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -100,7 +101,7 @@
             <DoubleAnimation Storyboard.TargetName="ContentGrid"
                              Storyboard.TargetProperty="Opacity"
                              From="0.0" To="1.0"
-                             Duration="0:0:0.7">
+                             Duration="0:0:0.35">
                 <DoubleAnimation.EasingFunction>
                     <CubicEase EasingMode="EaseOut" />
                 </DoubleAnimation.EasingFunction>
@@ -109,18 +110,18 @@
             <!-- Scale up the ContentGrid with spring overshoot -->
             <DoubleAnimation Storyboard.TargetName="ContentScale"
                              Storyboard.TargetProperty="ScaleX"
-                             From="0.94" To="1.0"
-                             Duration="0:0:0.7">
+                             From="0.96" To="1.0"
+                             Duration="0:0:0.35">
                 <DoubleAnimation.EasingFunction>
-                    <BackEase EasingMode="EaseOut" Amplitude="0.3" />
+                    <BackEase EasingMode="EaseOut" Amplitude="0.2" />
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetName="ContentScale"
                              Storyboard.TargetProperty="ScaleY"
-                             From="0.94" To="1.0"
-                             Duration="0:0:0.7">
+                             From="0.96" To="1.0"
+                             Duration="0:0:0.35">
                 <DoubleAnimation.EasingFunction>
-                    <BackEase EasingMode="EaseOut" Amplitude="0.3" />
+                    <BackEase EasingMode="EaseOut" Amplitude="0.2" />
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
