@@ -243,5 +243,37 @@ In this milestone, all redundant synchronization buttons were scrubbed across th
 7. **Live Verification on Parallels Windows 11 VM**:
    - Successfully compiled with `dotnet build -c Debug -p:Platform=ARM64` (0 errors).
    - Launched interactively via `schtasks /run /tn "DailyLaunch"`.
-   - Verified screen captures: Companion flyout displays live weather (`14°C Bucharest`), live vitals (`76 bpm`, `602 steps`), hydration (`400 / 2000 ml`), smokes (`6 / 12`), crisp Segoe Fluent Icons, and clean action bars without redundant sync buttons across all views.
+   - Verified screen captures: Companion flyout displays live weather (`14°C Bucharest`), live vitals (`76 bpm`, `602 steps`), hydration (`400 / 2000 ml`), crisp Segoe Fluent Icons, and clean action bars without redundant sync buttons across all views.
+
+---
+
+## 9. Smokes Baseline Synchronization, Habits Widget Glyphs & IPC Hardening (✅ COMPLETED & VERIFIED)
+
+In this milestone, critical telemetry alignment and UI glyph rendering issues were resolved across the Dashboard and Taskbar Companion:
+
+1. **Smokes Baseline Dynamic Resolution Across App & Glance**:
+   - **Root Cause**: In `Controls/TaskbarGlanceFlyoutControl.xaml.cs`, `LoadTelemetryAsync()` was falling back to `smokeGoal.TargetValue`, which was hardcoded to `12` in `HabitsService.cs:166` for newly initialized goals, completely overriding the user's actual daily baseline (`Settings.SmokesBaselineDaily = 40`) configured in their profile.
+   - **Unified Logic**: Updated `TaskbarGlanceFlyoutControl.xaml.cs` to prioritize explicit user setting `_settingsService?.Settings?.SmokesBaselineDaily`, fallback to `smokeGoal.TargetValue` (ignoring legacy 12 default), and default to 20 (standard pack) matching `HabitsDetailPage` and `HabitsWidgetControl`.
+   - **XAML & Core Alignment**: Updated XAML placeholder from `/ 12` to `/ 20` in `TaskbarGlanceFlyoutControl.xaml`. Updated `HabitsService.cs:166` to fallback to `(_settingsService?.Settings?.SmokesBaselineDaily > 0 ? _settingsService.Settings.SmokesBaselineDaily : 20)`.
+   - **Verified**: Glance Companion now renders `6 / 40` with high accuracy and matching progress bar.
+
+2. **Habits Dashboard Widget Icon & Navigation Chevron Glyphs**:
+   - **Root Cause**: In `Controls/HabitsWidgetControl.xaml`, the header icon and navigation buttons used `FontFamily="{StaticResource TablerIconsFont}"` with private use area characters `&#xed23;`, `&#xea60;`, and `&#xea61;`. In unpackaged desktop builds, `tabler-icons.ttf` was not marked to copy to output directory in `Daily.WinUI.csproj`, causing WinUI to fall back to Segoe UI Variable where private use glyphs render as missing boxes `[]`.
+   - **Standard Font Migration**:
+     * Replaced header icon with standard built-in `Segoe Fluent Icons` glyph `&#xEA3B;` (18px, `{ThemeResource SystemAccentColor}`).
+     * Replaced navigation buttons with standard `Segoe Fluent Icons` chevrons: `&#xE76B;` (ChevronLeft) and `&#xE76C;` (ChevronRight) with `MinWidth="28" Width="28" MinHeight="28" Height="28" CornerRadius="14" Padding="0"` and tooltips (`ToolTipService.ToolTip="Previous habit view"` / `"Next habit view"`).
+   - **Asset Deployment**: Added `<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>` to `<Content Include="Assets\Fonts\tabler-icons.ttf">` in `Daily.WinUI.csproj` so custom font glyphs in detail list items and action buttons copy reliably to build outputs.
+   - **Verified**: Live screen captures confirm crisp, clean rendering of header icon, navigation chevrons, and breakdown icons without missing glyph boxes.
+
+3. **Named Pipe IPC Server Resilience (`DailyWinUI_ProtocolPipe`)**:
+   - **Root Cause**: Second-instance forwardings and repeated pipe connects occasionally failed with `"All pipe instances are busy"` when multiple messages arrived simultaneously or during rapid testing.
+   - **Solution**: Updated `NamedPipeServerStream` creation in `App.xaml.cs` from `1` instance to `NamedPipeServerStream.MaxAllowedServerInstances`. Added `Thread.Sleep(500)` backoff in server catch block to prevent 100% CPU spinning on unexpected stream closures.
+   - **Verified**: Handled consecutive `show`, `companion`, and `nav:1`..`nav:8` commands smoothly with 100% success rate.
+
+4. **Live Verification on Parallels Windows 11 VM**:
+   - Pulled and compiled cleanly on ARM64 (`dotnet build -c Debug -p:Platform=ARM64`).
+   - Verified live Glance flyout: displays `6 / 40` for Smokes, `400 / 2000 ml` for Hydration, live vitals (`76 bpm`, `602 steps`).
+   - Verified live Dashboard: Habits widget card renders crisp `Segoe Fluent Icons` target icon, `<` and `>` navigation buttons, weekly history bars, and radial progress.
+   - Verified in-place navigation: Floating Capsule smoothly toggles between `MainPage` (`nav:1`) and `HabitsDetailPage` (`nav:5`) with interactive liquid glass highlighting.
+
 
