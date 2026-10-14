@@ -8,7 +8,6 @@
     xmlns:models="using:Daily_WinUI.Models"
     xmlns:chart="using:Syncfusion.UI.Xaml.Charts"
     xmlns:gauge="using:Syncfusion.UI.Xaml.Gauges"
-    xmlns:editors="using:Syncfusion.UI.Xaml.Editors"
     xmlns:notif="using:Syncfusion.UI.Xaml.Notifications"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -36,87 +35,71 @@
     </Page.Resources>
 
     <Grid Background="Transparent">
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup>
-                <VisualState x:Name="MobileState">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="0" />
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="GlassShell.Margin" Value="12,16,12,12" />
-                        <Setter Target="GlassShell.Padding" Value="14,14,14,110" />
-                        <Setter Target="DashboardGrid.ColumnSpacing" Value="0" />
-                        <Setter Target="PrimaryPanel.(Grid.ColumnSpan)" Value="2" />
-                        <Setter Target="SideRailPanel.(Grid.Row)" Value="1" />
-                        <Setter Target="SideRailPanel.(Grid.Column)" Value="0" />
-                        <Setter Target="SideRailPanel.(Grid.ColumnSpan)" Value="2" />
-                    </VisualState.Setters>
-                </VisualState>
-                <VisualState x:Name="DesktopState">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="1000" />
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="GlassShell.Margin" Value="28,16,28,28" />
-                        <Setter Target="GlassShell.Padding" Value="26,26,26,120" />
-                        <Setter Target="DashboardGrid.ColumnSpacing" Value="16" />
-                        <Setter Target="PrimaryPanel.(Grid.ColumnSpan)" Value="1" />
-                        <Setter Target="SideRailPanel.(Grid.Row)" Value="0" />
-                        <Setter Target="SideRailPanel.(Grid.Column)" Value="1" />
-                        <Setter Target="SideRailPanel.(Grid.ColumnSpan)" Value="1" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
-
         <Grid.RowDefinitions>
-            <RowDefinition Height="110" />
+            <RowDefinition Height="84" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Fixed TopBar Row: icon + title + location search + action buttons -->
-        <Grid Grid.Row="0" Padding="20,0" VerticalAlignment="Center" ColumnSpacing="12">
+        <!-- Top Navigation & Location Bar (macOS Parity) -->
+        <Grid Grid.Row="0" Padding="24,0" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Button x:Name="BackButton" Click="BackButton_Click" Width="38" Height="38" CornerRadius="19" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Back to Dashboard">
+            <!-- Left: Circular Glass Back Button -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Button
+                    x:Name="BackButton"
+                    Click="BackButton_Click"
+                    Width="38" Height="38"
+                    CornerRadius="19"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Padding="0"
+                    ToolTipService.ToolTip="Back to Dashboard">
                     <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
-                <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource AppGlassColorBrush}" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{ThemeResource AppFgColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-            </StackPanel>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,16,0">
-                <TextBlock Text="Weather" FontSize="32" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}"/>
-                <TextBlock Text="Live conditions and forecast" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
             </StackPanel>
 
-            <Grid Grid.Column="2" ColumnSpacing="6" VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <editors:SfComboBox
-                    Grid.Column="0"
-                    x:Name="LocationSearchBox"
-                    PlaceholderText="Search city, e.g. London, UK"
-                    IsEditable="True"
-                    IsFilteringEnabled="False"
-                    IsTextSearchEnabled="False"
-                    TextMemberPath="DisplayName"
-                    DisplayMemberPath="DisplayName"
-                    SelectionChanged="LocationSearchBox_SelectionChanged"
-                    InputSubmitted="LocationSearchBox_InputSubmitted"
-                    Loaded="LocationSearchBox_ComboBoxLoaded"
-                    FontSize="15"
-                    VerticalAlignment="Center" />
+            <!-- Center: Location Title + Status Pill + Date Subtitle -->
+            <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock
+                        Text="{x:Bind ViewModel.LocationName, Mode=OneWay}"
+                        FontFamily="Segoe UI Variable Display"
+                        FontSize="22"
+                        FontWeight="Bold"
+                        Foreground="{ThemeResource AppFgColorBrush}"
+                        VerticalAlignment="Center" />
+                    <Border Background="#2569B6FF" BorderBrush="#5069B6FF" BorderThickness="1" CornerRadius="10" Padding="8,2" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE707;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF69B6FF" VerticalAlignment="Center" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.LocationSourceName, Mode=OneWay}"
+                                FontSize="10"
+                                FontWeight="Bold"
+                                Foreground="#FF69B6FF"
+                                CharacterSpacing="60"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <TextBlock
+                    x:Name="TopBarDateText"
+                    Text="Live atmospheric telemetry"
+                    FontSize="12"
+                    Opacity="0.6"
+                    Foreground="{ThemeResource AppFgColorBrush}"
+                    HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- Right: Action Buttons (Auto-Location, Search, Refresh, Settings, PopOut) -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <!-- 1-Click GPS Auto-Location Button -->
                 <Button
-                    Grid.Column="1"
                     x:Name="AutoLocationButton"
                     Click="AutoLocationButton_Click"
                     Width="38" Height="38"
@@ -126,697 +109,735 @@
                     BorderThickness="1"
                     Padding="0"
                     ToolTipService.ToolTip="Use current location (GPS / Network)">
-                    <FontIcon Glyph="&#xE707;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <FontIcon Glyph="&#xE707;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF" />
                 </Button>
-            </Grid>
 
-            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Button x:Name="FavoriteToggleButton" Content="Add Favorite" Click="FavoriteToggleButton_Click" Background="{StaticResource ButtonPrimaryBrush}" Foreground="{ThemeResource AppFgColorBrush}" Padding="12,8" MinWidth="110" />
-                <Button x:Name="FavoritePinButton" Content="Pin" Click="FavoritePinButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="{ThemeResource AppFgColorBrush}" Padding="12,8" MinWidth="84" />
-                <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" Background="{StaticResource ButtonSecondaryBrush}" Foreground="{ThemeResource AppFgColorBrush}" Padding="12,8" MinWidth="92" />
-                <Button x:Name="PopOutButton" Click="PopOutButton_Click" Width="38" Height="38" CornerRadius="19" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Pop out to separate window">
+                <!-- City Search Button with Sleek Flyout -->
+                <Button
+                    x:Name="SearchButton"
+                    Width="38" Height="38"
+                    CornerRadius="19"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Padding="0"
+                    ToolTipService.ToolTip="Search city worldwide">
+                    <FontIcon Glyph="&#xE721;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <Flyout.FlyoutPresenterStyle>
+                                <Style TargetType="FlyoutPresenter">
+                                    <Setter Property="Background" Value="{ThemeResource AppGlassBgBrush}" />
+                                    <Setter Property="BorderBrush" Value="{ThemeResource AppGlassBorderColorBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="CornerRadius" Value="18" />
+                                    <Setter Property="Padding" Value="16" />
+                                </Style>
+                            </Flyout.FlyoutPresenterStyle>
+                            <StackPanel Width="320" Spacing="12">
+                                <TextBlock Text="Search City" FontWeight="SemiBold" FontSize="15" />
+                                <AutoSuggestBox
+                                    x:Name="LocationSearchBox"
+                                    PlaceholderText="Search city (e.g. London, Tokyo)..."
+                                    TextChanged="LocationSearchBox_TextChanged"
+                                    SuggestionChosen="LocationSearchBox_SuggestionChosen"
+                                    QuerySubmitted="LocationSearchBox_QuerySubmitted"
+                                    DisplayMemberPath="DisplayName"
+                                    TextMemberPath="DisplayName" />
+                                <Button
+                                    x:Name="FlyoutAutoLocationButton"
+                                    Click="AutoLocationButton_Click"
+                                    HorizontalAlignment="Stretch"
+                                    Padding="10,8"
+                                    Background="{ThemeResource AppGlassSubColorBrush}"
+                                    CornerRadius="10">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE707;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF" />
+                                        <TextBlock Text="Use Current Location (GPS)" FontSize="13" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Text="QUICK CITIES" FontSize="10" FontWeight="Bold" Opacity="0.5" CharacterSpacing="60" Margin="0,4,0,0" />
+                                <ItemsRepeater ItemsSource="{x:Bind QuickCities}">
+                                    <ItemsRepeater.Layout>
+                                        <StackLayout Orientation="Vertical" Spacing="4" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="models:LocationSuggestion">
+                                            <Button
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Padding="8,6"
+                                                CornerRadius="8"
+                                                Click="QuickCity_Click"
+                                                Tag="{x:Bind}">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon Glyph="&#xE81D;" FontFamily="Segoe Fluent Icons" FontSize="12" Opacity="0.6" />
+                                                    <TextBlock Text="{x:Bind DisplayName}" FontSize="13" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Refresh Button -->
+                <Button
+                    x:Name="RefreshButton"
+                    Click="RefreshButton_Click"
+                    Width="38" Height="38"
+                    CornerRadius="19"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Padding="0"
+                    ToolTipService.ToolTip="Refresh live telemetry">
+                    <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+
+                <!-- Settings & Preferences Button with Flyout -->
+                <Button
+                    x:Name="SettingsButton"
+                    Width="38" Height="38"
+                    CornerRadius="19"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Padding="0"
+                    ToolTipService.ToolTip="Weather Preferences">
+                    <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <Flyout.FlyoutPresenterStyle>
+                                <Style TargetType="FlyoutPresenter">
+                                    <Setter Property="Background" Value="{ThemeResource AppGlassBgBrush}" />
+                                    <Setter Property="BorderBrush" Value="{ThemeResource AppGlassBorderColorBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="CornerRadius" Value="18" />
+                                    <Setter Property="Padding" Value="16" />
+                                </Style>
+                            </Flyout.FlyoutPresenterStyle>
+                            <StackPanel Width="280" Spacing="14">
+                                <TextBlock Text="Weather Preferences" FontWeight="SemiBold" FontSize="15" />
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Temperature Unit" FontSize="12" Opacity="0.7" />
+                                    <ComboBox x:Name="UnitSystemComboBox" SelectionChanged="UnitSystemComboBox_SelectionChanged" HorizontalAlignment="Stretch">
+                                        <x:String>Metric (C)</x:String>
+                                        <x:String>Imperial (F)</x:String>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Wind Speed Unit" FontSize="12" Opacity="0.7" />
+                                    <ComboBox x:Name="WindUnitComboBox" SelectionChanged="WindUnitComboBox_SelectionChanged" HorizontalAlignment="Stretch">
+                                        <x:String>m/s</x:String>
+                                        <x:String>km/h</x:String>
+                                        <x:String>mph</x:String>
+                                        <x:String>knots</x:String>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Pressure Unit" FontSize="12" Opacity="0.7" />
+                                    <ComboBox x:Name="PressureUnitComboBox" SelectionChanged="PressureUnitComboBox_SelectionChanged" HorizontalAlignment="Stretch">
+                                        <x:String>hpa</x:String>
+                                        <x:String>mmhg</x:String>
+                                        <x:String>inhg</x:String>
+                                    </ComboBox>
+                                </StackPanel>
+                                <ToggleSwitch x:Name="AlwaysAutoLocationToggle" Header="Always Auto-Location" Toggled="AlwaysAutoLocationToggle_Toggled" OnContent="On" OffContent="Off" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Pop-out Button -->
+                <Button
+                    x:Name="PopOutButton"
+                    Click="PopOutButton_Click"
+                    Width="38" Height="38"
+                    CornerRadius="19"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Padding="0"
+                    ToolTipService.ToolTip="Pop out to separate window">
                     <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
-                    <TextBlock Text="Glass" VerticalAlignment="Center" Opacity="0.75" />
-                    <ComboBox x:Name="GlassIntensityComboBox" Width="120" SelectionChanged="GlassIntensityComboBox_SelectionChanged" SelectedIndex="1">
-                        <x:String>Low</x:String>
-                        <x:String>Medium</x:String>
-                        <x:String>High</x:String>
-                    </ComboBox>
-                </StackPanel>
             </StackPanel>
         </Grid>
 
-        <!-- Scrollable content: weather dashboard -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" VerticalScrollMode="Enabled" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled">
-            <Border x:Name="GlassShell" Margin="20,16,20,20" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Style="{StaticResource GlassPanelStyle}" Translation="0,0,18" CornerRadius="28" Padding="22,22,22,120">
-                <Grid x:Name="DashboardGrid" ColumnSpacing="14" RowSpacing="14">
+        <!-- Scrollable Centered Content Stream (macOS Parity, MaxWidth 880) -->
+        <ScrollViewer
+            Grid.Row="1"
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Enabled"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled">
+            <StackPanel
+                MaxWidth="880"
+                HorizontalAlignment="Center"
+                Margin="20,10,20,20"
+                Spacing="16"
+                Padding="0,0,0,120">
+
+                <!-- 1. Hero Weather Card (macOS Parity) -->
+                <Border
+                    Background="{ThemeResource AppGlassSubColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    CornerRadius="24"
+                    Padding="22">
+                    <Grid RowSpacing="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Top row: Condition description pill on left, High/Low on right -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                Grid.Column="0"
+                                Text="{x:Bind ViewModel.Description, Mode=OneWay}"
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource AppFgColorBrush}"
+                                VerticalAlignment="Center" />
+
+                            <Border
+                                Grid.Column="1"
+                                Background="{ThemeResource AppGlassSubColorBrush}"
+                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="12,5"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.HighLow, Mode=OneWay}"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Opacity="0.85"
+                                    Foreground="{ThemeResource AppFgColorBrush}" />
+                            </Border>
+                        </Grid>
+
+                        <!-- Bottom row: Huge temperature display + feels like on left, glowing condition icon on right -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.Temperature, Mode=OneWay}"
+                                    FontFamily="Segoe UI Variable Display"
+                                    FontSize="68"
+                                    FontWeight="Bold"
+                                    Foreground="{ThemeResource AppFgColorBrush}"
+                                    LineHeight="72" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                                    <TextBlock
+                                        Text="FEELS LIKE"
+                                        FontSize="10"
+                                        FontWeight="Bold"
+                                        Opacity="0.5"
+                                        CharacterSpacing="60"
+                                        VerticalAlignment="Center" />
+                                    <TextBlock
+                                        Text="{x:Bind ViewModel.FeelsLike, Mode=OneWay}"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Opacity="0.9"
+                                        Foreground="{ThemeResource AppFgColorBrush}"
+                                        VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.Details, Mode=OneWay}"
+                                    FontSize="11"
+                                    Opacity="0.5"
+                                    Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <!-- Ambient Glowing Weather Icon -->
+                            <Grid Grid.Column="1" Width="92" Height="92" VerticalAlignment="Center">
+                                <Border
+                                    Width="80" Height="80"
+                                    CornerRadius="40"
+                                    Background="#2569B6FF"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" />
+                                <Image
+                                    x:Name="ConditionIcon"
+                                    Source="{x:Bind ViewModel.IconUrl, Mode=OneWay}"
+                                    Width="72" Height="72"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- 2. Hourly Forecast Card (Custom Spline Chart — strictly preserved & enhanced) -->
+                <Border
+                    Background="{ThemeResource AppGlassSubColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    CornerRadius="22"
+                    Padding="18">
+                    <Grid RowSpacing="6" HorizontalAlignment="Stretch">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Header with subtle icon -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="2,0,0,4">
+                            <FontIcon Glyph="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                            <TextBlock
+                                Text="HOURLY FORECAST"
+                                FontSize="11"
+                                FontWeight="Bold"
+                                CharacterSpacing="70"
+                                Opacity="0.65"
+                                Foreground="{ThemeResource AppFgColorBrush}"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <Grid Grid.Row="1" RowSpacing="2" HorizontalAlignment="Stretch">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Icon + temperature row aligned with chart plot area -->
+                            <ItemsRepeater
+                                x:Name="HourlyIconStrip"
+                                Grid.Row="0"
+                                ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,12,0,8">
+                                <ItemsRepeater.Layout>
+                                    <UniformGridLayout MaximumRowsOrColumns="8" MinItemWidth="56" MinColumnSpacing="0" ItemsStretch="Fill" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="models:HourlyForecastSnapshot">
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Spacing="1" Padding="0,4,0,0">
+                                            <Image Source="{x:Bind IconImage}" Width="30" Height="30" HorizontalAlignment="Center" />
+                                            <TextBlock Text="{x:Bind TemperatureText}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FFF4FAFF" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+
+                            <!-- Spline chart -->
+                            <chart:SfCartesianChart
+                                x:Name="HourlyForecastChart"
+                                Grid.Row="1"
+                                Height="190"
+                                Margin="0,0,8,0"
+                                PlotAreaBorderThickness="0"
+                                SeriesBoundsChanged="HourlyForecastChart_SeriesBoundsChanged"
+                                SizeChanged="HourlyForecastChart_SizeChanged">
+
+                                <chart:SfCartesianChart.TrackballBehavior>
+                                    <chart:ChartTrackballBehavior
+                                        ShowLine="True"
+                                        DisplayMode="NearestPoint">
+                                        <chart:ChartTrackballBehavior.LineStyle>
+                                            <Style TargetType="Line">
+                                                <Setter Property="Stroke" Value="#80FFFFFF" />
+                                                <Setter Property="StrokeThickness" Value="1.5" />
+                                                <Setter Property="StrokeDashArray" Value="4,3" />
+                                            </Style>
+                                        </chart:ChartTrackballBehavior.LineStyle>
+                                    </chart:ChartTrackballBehavior>
+                                </chart:SfCartesianChart.TrackballBehavior>
+
+                                <chart:SfCartesianChart.XAxes>
+                                    <chart:CategoryAxis ShowMajorGridLines="False" TickLineSize="0">
+                                        <chart:CategoryAxis.LabelStyle>
+                                            <chart:LabelStyle Foreground="#CCE0EEFF" FontSize="11" />
+                                        </chart:CategoryAxis.LabelStyle>
+                                        <chart:CategoryAxis.AxisLineStyle>
+                                            <Style TargetType="Line">
+                                                <Setter Property="StrokeThickness" Value="0" />
+                                            </Style>
+                                        </chart:CategoryAxis.AxisLineStyle>
+                                    </chart:CategoryAxis>
+                                </chart:SfCartesianChart.XAxes>
+
+                                <chart:SfCartesianChart.YAxes>
+                                    <chart:NumericalAxis
+                                        x:Name="HourlyYAxis"
+                                        ShowMajorGridLines="True"
+                                        TickLineSize="0"
+                                        LabelCreated="HourlyYAxis_LabelCreated">
+                                        <chart:NumericalAxis.MajorGridLineStyle>
+                                            <Style TargetType="Line">
+                                                <Setter Property="Stroke" Value="#20FFFFFF" />
+                                                <Setter Property="StrokeDashArray" Value="3,3" />
+                                            </Style>
+                                        </chart:NumericalAxis.MajorGridLineStyle>
+                                        <chart:NumericalAxis.LabelStyle>
+                                            <chart:LabelStyle Foreground="#99E0EEFF" FontSize="11" />
+                                        </chart:NumericalAxis.LabelStyle>
+                                        <chart:NumericalAxis.AxisLineStyle>
+                                            <Style TargetType="Line">
+                                                <Setter Property="StrokeThickness" Value="0" />
+                                            </Style>
+                                        </chart:NumericalAxis.AxisLineStyle>
+                                    </chart:NumericalAxis>
+                                </chart:SfCartesianChart.YAxes>
+
+                                <chart:SplineAreaSeries
+                                    ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
+                                    XBindingPath="HourLabel"
+                                    YBindingPath="Temperature"
+                                    StrokeWidth="2"
+                                    Fill="{x:Bind ViewModel.HourlyChartFill, Mode=OneWay}"
+                                    Stroke="{x:Bind ViewModel.HourlyChartStroke, Mode=OneWay}">
+                                    <chart:SplineAreaSeries.TrackballLabelTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#E61A3A6C"
+                                                    BorderBrush="#60FFFFFF"
+                                                    BorderThickness="1"
+                                                    CornerRadius="16"
+                                                    Padding="14,12">
+                                                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                                    <TextBlock
+                                                        Text="{Binding Item.HourLabel}"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Opacity="0.80"
+                                                        HorizontalAlignment="Center"
+                                                        Foreground="#FFE0EEFF"
+                                                        CharacterSpacing="80" />
+                                                    <Image
+                                                        Source="{Binding Item.IconImage}"
+                                                        Width="44"
+                                                        Height="44"
+                                                        HorizontalAlignment="Center" />
+                                                    <TextBlock
+                                                        Text="{Binding Item.TemperatureText}"
+                                                        FontFamily="Segoe UI Variable Display"
+                                                        FontSize="26"
+                                                        FontWeight="Bold"
+                                                        HorizontalAlignment="Center"
+                                                        Foreground="{ThemeResource AppFgColorBrush}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                                        <TextBlock
+                                                            Text="Feels like"
+                                                            FontSize="11"
+                                                            Opacity="0.65"
+                                                            VerticalAlignment="Center"
+                                                            Foreground="#FFE0EEFF" />
+                                                        <TextBlock
+                                                            Text="{Binding Item.FeelsLikeText}"
+                                                            FontSize="12"
+                                                            FontWeight="SemiBold"
+                                                            VerticalAlignment="Center"
+                                                            Foreground="#FFE0EEFF" />
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                                                        <FontIcon
+                                                            Glyph="&#xEB42;"
+                                                            FontFamily="Segoe Fluent Icons"
+                                                            FontSize="13"
+                                                            Foreground="#FF69B6FF"
+                                                            VerticalAlignment="Center" />
+                                                        <TextBlock
+                                                            Text="{Binding Item.PrecipitationText}"
+                                                            FontSize="12"
+                                                            FontWeight="SemiBold"
+                                                            VerticalAlignment="Center"
+                                                            Foreground="#FF69B6FF" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </chart:SplineAreaSeries.TrackballLabelTemplate>
+                                </chart:SplineAreaSeries>
+                            </chart:SfCartesianChart>
+
+                            <!-- Sunrise / Sunset overlay badges (positioned from code-behind) -->
+                            <Canvas
+                                x:Name="SunAnnotationCanvas"
+                                Grid.Row="1"
+                                IsHitTestVisible="False"
+                                Margin="0,0,8,0">
+                                <!-- Sunrise badge -->
+                                <Border
+                                    x:Name="SunriseBadge"
+                                    Background="#E01A3A6C"
+                                    BorderBrush="#60FFD166"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="7,5"
+                                    Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock
+                                            Text="&#x2600;&#x2191;"
+                                            FontFamily="Segoe UI Symbol"
+                                            FontSize="12"
+                                            Foreground="#FFFFD166"
+                                            VerticalAlignment="Center" />
+                                        <TextBlock
+                                            x:Name="SunriseTimeText"
+                                            FontSize="10"
+                                            FontWeight="SemiBold"
+                                            Foreground="#FFFFD166"
+                                            VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                                <!-- Sunset badge -->
+                                <Border
+                                    x:Name="SunsetBadge"
+                                    Background="#E01A3A6C"
+                                    BorderBrush="#60FFB347"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="7,5"
+                                    Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock
+                                            Text="&#x2600;&#x2193;"
+                                            FontFamily="Segoe UI Symbol"
+                                            FontSize="12"
+                                            Foreground="#FFFFB347"
+                                            VerticalAlignment="Center" />
+                                        <TextBlock
+                                            x:Name="SunsetTimeText"
+                                            FontSize="10"
+                                            FontWeight="SemiBold"
+                                            Foreground="#FFFFB347"
+                                            VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                                <!-- Current weather bubble -->
+                                <Border
+                                    x:Name="CurrentWeatherBadge"
+                                    Background="#E0103050"
+                                    BorderBrush="#80FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="12"
+                                    Padding="8,6"
+                                    Visibility="Collapsed">
+                                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                        <Image
+                                            x:Name="CurrentWeatherIcon"
+                                            Width="28"
+                                            Height="28"
+                                            HorizontalAlignment="Center" />
+                                        <TextBlock
+                                            x:Name="CurrentWeatherTemp"
+                                            FontSize="12"
+                                            FontWeight="Bold"
+                                            Foreground="{ThemeResource AppFgColorBrush}"
+                                            HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </Canvas>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- 3. 2x3 Atmospheric Metrics Grid (macOS Parity: Wind, Humidity, Pressure, Visibility, Clouds, Sun) -->
+                <Grid ColumnSpacing="14" RowSpacing="14">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                        <StackPanel x:Name="PrimaryPanel" Grid.Row="0" Grid.Column="0" Spacing="14">
-                            <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="20" Padding="18">
-                                <Grid ColumnSpacing="16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0" Spacing="4">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <TextBlock Text="{x:Bind ViewModel.LocationName, Mode=OneWay}" FontFamily="Segoe UI Variable Display" FontSize="34" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                            <Border Background="#2069B6FF" BorderBrush="#4069B6FF" BorderThickness="1" CornerRadius="8" Padding="6,2" VerticalAlignment="Center">
-                                                <TextBlock Text="{x:Bind ViewModel.LocationSourceName, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="#FF69B6FF" CharacterSpacing="50" />
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{x:Bind ViewModel.Description, Mode=OneWay}" FontSize="16" Opacity="0.84" TextWrapping="Wrap" />
-                                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,8,0,0" VerticalAlignment="Bottom">
-                                            <TextBlock Text="{x:Bind ViewModel.Temperature, Mode=OneWay}" FontFamily="Segoe UI Variable Display" FontSize="70" FontWeight="Bold" />
-                                            <StackPanel VerticalAlignment="Center" Spacing="4">
-                                                <TextBlock Text="Feels Like" FontSize="12" Opacity="0.65" CharacterSpacing="100" />
-                                                <TextBlock Text="{x:Bind ViewModel.FeelsLike, Mode=OneWay}" FontSize="24" FontWeight="SemiBold" />
-                                                <TextBlock Text="{x:Bind ViewModel.HighLow, Mode=OneWay}" FontSize="14" Opacity="0.76" />
-                                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                                                    <ProgressRing Width="14" Height="14" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
-                                                    <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" FontSize="12" Opacity="0.75" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </StackPanel>
-
-                                    <notif:BadgeContainer Grid.Column="1" VerticalAlignment="Center">
-                                        <Border Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="18" Padding="10">
-                                            <Image x:Name="ConditionIcon" Width="116" Height="116" Stretch="UniformToFill" />
-                                        </Border>
-                                        <notif:BadgeContainer.Badge>
-                                            <notif:SfBadge
-                                                Content="{x:Bind ViewModel.WeatherAlertText, Mode=OneWay}"
-                                                Visibility="{x:Bind BoolToVisibility(ViewModel.HasWeatherAlert), Mode=OneWay}"
-                                                Shape="Oval"
-                                                Background="#FFFF6B00"
-                                                AnimationType="Scale"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Top" />
-                                        </notif:BadgeContainer.Badge>
-                                    </notif:BadgeContainer>
-                                </Grid>
-                            </Border>
-
-                            <!-- Hourly Forecast (Custom Spline Chart with Aligned Icons & Sun Annotations) -->
-                            <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="14">
-                                <Grid RowSpacing="4" HorizontalAlignment="Stretch">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0" Text="Hourly Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" Margin="4,0,0,4" />
-
-                                    <Grid Grid.Row="1" RowSpacing="2" HorizontalAlignment="Stretch" Margin="0,0,0,0">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-
-                                        <!-- Icon + temperature row aligned with chart plot area -->
-                                        <ItemsRepeater
-                                            x:Name="HourlyIconStrip"
-                                            Grid.Row="0"
-                                            ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
-                                            HorizontalAlignment="Stretch"
-                                            Margin="0,16,0,12">
-                                            <ItemsRepeater.Layout>
-                                                <UniformGridLayout MaximumRowsOrColumns="8" MinItemWidth="56" MinColumnSpacing="0" ItemsStretch="Fill" />
-                                            </ItemsRepeater.Layout>
-                                            <ItemsRepeater.ItemTemplate>
-                                                <DataTemplate x:DataType="models:HourlyForecastSnapshot">
-                                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Spacing="1" Padding="0,4,0,0">
-                                                        <Image Source="{x:Bind IconImage}" Width="30" Height="30" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="{x:Bind TemperatureText}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FFF4FAFF" />
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ItemsRepeater.ItemTemplate>
-                                        </ItemsRepeater>
-
-                                        <!-- Spline chart — same container width as top strip -->
-                                        <chart:SfCartesianChart
-                                            x:Name="HourlyForecastChart"
-                                            Grid.Row="1"
-                                            Height="190"
-                                            Margin="0,0,8,0"
-                                            PlotAreaBorderThickness="0"
-                                            SeriesBoundsChanged="HourlyForecastChart_SeriesBoundsChanged"
-                                            SizeChanged="HourlyForecastChart_SizeChanged">
-
-                                            <chart:SfCartesianChart.TrackballBehavior>
-                                                <chart:ChartTrackballBehavior
-                                                    ShowLine="True"
-                                                    DisplayMode="NearestPoint">
-                                                    <chart:ChartTrackballBehavior.LineStyle>
-                                                        <Style TargetType="Line">
-                                                            <Setter Property="Stroke" Value="#80FFFFFF" />
-                                                            <Setter Property="StrokeThickness" Value="1.5" />
-                                                            <Setter Property="StrokeDashArray" Value="4,3" />
-                                                        </Style>
-                                                    </chart:ChartTrackballBehavior.LineStyle>
-                                                </chart:ChartTrackballBehavior>
-                                            </chart:SfCartesianChart.TrackballBehavior>
-
-                                            <chart:SfCartesianChart.XAxes>
-                                                <chart:CategoryAxis ShowMajorGridLines="False" TickLineSize="0">
-                                                    <chart:CategoryAxis.LabelStyle>
-                                                        <chart:LabelStyle Foreground="#CCE0EEFF" FontSize="11" />
-                                                    </chart:CategoryAxis.LabelStyle>
-                                                    <chart:CategoryAxis.AxisLineStyle>
-                                                        <Style TargetType="Line">
-                                                            <Setter Property="StrokeThickness" Value="0" />
-                                                        </Style>
-                                                    </chart:CategoryAxis.AxisLineStyle>
-                                                </chart:CategoryAxis>
-                                            </chart:SfCartesianChart.XAxes>
-
-                                            <chart:SfCartesianChart.YAxes>
-                                                <chart:NumericalAxis
-                                                    x:Name="HourlyYAxis"
-                                                    ShowMajorGridLines="True"
-                                                    TickLineSize="0"
-                                                    LabelCreated="HourlyYAxis_LabelCreated">
-                                                    <chart:NumericalAxis.MajorGridLineStyle>
-                                                        <Style TargetType="Line">
-                                                            <Setter Property="Stroke" Value="#20FFFFFF" />
-                                                            <Setter Property="StrokeDashArray" Value="3,3" />
-                                                        </Style>
-                                                    </chart:NumericalAxis.MajorGridLineStyle>
-                                                    <chart:NumericalAxis.LabelStyle>
-                                                        <chart:LabelStyle Foreground="#99E0EEFF" FontSize="11" />
-                                                    </chart:NumericalAxis.LabelStyle>
-                                                    <chart:NumericalAxis.AxisLineStyle>
-                                                        <Style TargetType="Line">
-                                                            <Setter Property="StrokeThickness" Value="0" />
-                                                        </Style>
-                                                    </chart:NumericalAxis.AxisLineStyle>
-                                                </chart:NumericalAxis>
-                                            </chart:SfCartesianChart.YAxes>
-
-                                            <chart:SplineAreaSeries
-                                                ItemsSource="{x:Bind ViewModel.HourlyForecast, Mode=OneWay}"
-                                                XBindingPath="HourLabel"
-                                                YBindingPath="Temperature"
-                                                StrokeWidth="2"
-                                                Fill="{x:Bind ViewModel.HourlyChartFill, Mode=OneWay}"
-                                                Stroke="{x:Bind ViewModel.HourlyChartStroke, Mode=OneWay}">
-                                                <chart:SplineAreaSeries.TrackballLabelTemplate>
-                                                    <DataTemplate>
-                                                        <Border Background="#E61A3A6C"
-                                                                BorderBrush="#60FFFFFF"
-                                                                BorderThickness="1"
-                                                                CornerRadius="16"
-                                                                Padding="14,12">
-                                                            <StackPanel Spacing="6" HorizontalAlignment="Center">
-                                                                <TextBlock
-                                                                    Text="{Binding Item.HourLabel}"
-                                                                    FontSize="12"
-                                                                    FontWeight="SemiBold"
-                                                                    Opacity="0.80"
-                                                                    HorizontalAlignment="Center"
-                                                                    Foreground="#FFE0EEFF"
-                                                                    CharacterSpacing="80" />
-                                                                <Image
-                                                                    Source="{Binding Item.IconImage}"
-                                                                    Width="44"
-                                                                    Height="44"
-                                                                    HorizontalAlignment="Center" />
-                                                                <TextBlock
-                                                                    Text="{Binding Item.TemperatureText}"
-                                                                    FontFamily="Segoe UI Variable Display"
-                                                                    FontSize="26"
-                                                                    FontWeight="Bold"
-                                                                    HorizontalAlignment="Center"
-                                                                    Foreground="{ThemeResource AppFgColorBrush}" />
-                                                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                                                                    <TextBlock
-                                                                        Text="Feels like"
-                                                                        FontSize="11"
-                                                                        Opacity="0.65"
-                                                                        VerticalAlignment="Center"
-                                                                        Foreground="#FFE0EEFF" />
-                                                                    <TextBlock
-                                                                        Text="{Binding Item.FeelsLikeText}"
-                                                                        FontSize="12"
-                                                                        FontWeight="SemiBold"
-                                                                        VerticalAlignment="Center"
-                                                                        Foreground="#FFE0EEFF" />
-                                                                </StackPanel>
-                                                                <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
-                                                                    <FontIcon
-                                                                        Glyph="&#xEB42;"
-                                                                        FontFamily="Segoe Fluent Icons"
-                                                                        FontSize="13"
-                                                                        Foreground="#FF69B6FF"
-                                                                        VerticalAlignment="Center" />
-                                                                    <TextBlock
-                                                                        Text="{Binding Item.PrecipitationText}"
-                                                                        FontSize="12"
-                                                                        FontWeight="SemiBold"
-                                                                        VerticalAlignment="Center"
-                                                                        Foreground="#FF69B6FF" />
-                                                                </StackPanel>
-                                                            </StackPanel>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </chart:SplineAreaSeries.TrackballLabelTemplate>
-                                            </chart:SplineAreaSeries>
-                                        </chart:SfCartesianChart>
-
-                                        <!-- Sunrise / Sunset overlay badges (positioned from code-behind) -->
-                                        <Canvas
-                                            x:Name="SunAnnotationCanvas"
-                                            Grid.Row="1"
-                                            IsHitTestVisible="False"
-                                            Margin="0,0,8,0">
-                                            <!-- Sunrise badge -->
-                                            <Border
-                                                x:Name="SunriseBadge"
-                                                Background="#E01A3A6C"
-                                                BorderBrush="#60FFD166"
-                                                BorderThickness="1"
-                                                CornerRadius="10"
-                                                Padding="7,5"
-                                                Visibility="Collapsed">
-                                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock
-                                                        Text="&#x2600;&#x2191;"
-                                                        FontFamily="Segoe UI Symbol"
-                                                        FontSize="12"
-                                                        Foreground="#FFFFD166"
-                                                        VerticalAlignment="Center" />
-                                                    <TextBlock
-                                                        x:Name="SunriseTimeText"
-                                                        FontSize="10"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="#FFFFD166"
-                                                        VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Border>
-                                            <!-- Sunset badge -->
-                                            <Border
-                                                x:Name="SunsetBadge"
-                                                Background="#E01A3A6C"
-                                                BorderBrush="#60FFB347"
-                                                BorderThickness="1"
-                                                CornerRadius="10"
-                                                Padding="7,5"
-                                                Visibility="Collapsed">
-                                                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock
-                                                        Text="&#x2600;&#x2193;"
-                                                        FontFamily="Segoe UI Symbol"
-                                                        FontSize="12"
-                                                        Foreground="#FFFFB347"
-                                                        VerticalAlignment="Center" />
-                                                    <TextBlock
-                                                        x:Name="SunsetTimeText"
-                                                        FontSize="10"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="#FFFFB347"
-                                                        VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Border>
-                                            <!-- Current weather bubble -->
-                                            <Border
-                                                x:Name="CurrentWeatherBadge"
-                                                Background="#E0103050"
-                                                BorderBrush="#80FFFFFF"
-                                                BorderThickness="1"
-                                                CornerRadius="12"
-                                                Padding="8,6"
-                                                Visibility="Collapsed">
-                                                <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                                    <Image
-                                                        x:Name="CurrentWeatherIcon"
-                                                        Width="28"
-                                                        Height="28"
-                                                        HorizontalAlignment="Center" />
-                                                    <TextBlock
-                                                        x:Name="CurrentWeatherTemp"
-                                                        FontSize="12"
-                                                        FontWeight="Bold"
-                                                        Foreground="{ThemeResource AppFgColorBrush}"
-                                                        HorizontalAlignment="Center" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Canvas>
-                                    </Grid>
-                                </Grid>
-                            </Border>
-
-                            <!-- 2x3 Atmospheric Metrics Grid -->
-                            <Grid ColumnSpacing="10" RowSpacing="10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-
-                                <!-- Row 0, Col 0: Wind Gauge & Subtitle -->
-                                <Border Grid.Row="0" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="10">
-                                    <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                        <TextBlock Text="Wind" FontSize="12" Opacity="0.7" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                        <gauge:SfRadialGauge Height="90" Width="90">
-                                            <gauge:SfRadialGauge.Axes>
-                                                <gauge:RadialAxis Minimum="0" Maximum="30"
-                                                                  ShowLabels="False"
-                                                                  ShowTicks="False"
-                                                                  ShowAxisLine="False"
-                                                                  StartAngle="140"
-                                                                  EndAngle="40">
-                                                    <gauge:RadialAxis.Ranges>
-                                                        <gauge:GaugeRange StartValue="0" EndValue="30" Background="#1A69B6FF" />
-                                                    </gauge:RadialAxis.Ranges>
-                                                    <gauge:RadialAxis.Pointers>
-                                                        <gauge:RangePointer Value="{x:Bind ViewModel.WindSpeedValue, Mode=OneWay}">
-                                                            <gauge:RangePointer.GradientStops>
-                                                                <gauge:GaugeGradientStop Value="0" Color="#FF69B6FF" />
-                                                                <gauge:GaugeGradientStop Value="30" Color="#FF69B6FF" />
-                                                            </gauge:RangePointer.GradientStops>
-                                                        </gauge:RangePointer>
-                                                    </gauge:RadialAxis.Pointers>
-                                                    <gauge:RadialAxis.Annotations>
-                                                        <gauge:GaugeAnnotation DirectionUnit="Angle" DirectionValue="90" PositionFactor="0.5">
-                                                            <gauge:GaugeAnnotation.Content>
-                                                                <TextBlock Text="{x:Bind ViewModel.Wind, Mode=OneWay}"
-                                                                           FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
-                                                            </gauge:GaugeAnnotation.Content>
-                                                        </gauge:GaugeAnnotation>
-                                                    </gauge:RadialAxis.Annotations>
-                                                </gauge:RadialAxis>
-                                            </gauge:SfRadialGauge.Axes>
-                                        </gauge:SfRadialGauge>
-                                        <TextBlock Text="{x:Bind ViewModel.WindSubtitle, Mode=OneWay}" FontSize="11" Opacity="0.65" HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Row 0, Col 1: Humidity Gauge & Subtitle -->
-                                <Border Grid.Row="0" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="10">
-                                    <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                        <TextBlock Text="Humidity" FontSize="12" Opacity="0.7" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                        <gauge:SfRadialGauge Height="90" Width="90">
-                                            <gauge:SfRadialGauge.Axes>
-                                                <gauge:RadialAxis Minimum="0" Maximum="100"
-                                                                  ShowLabels="False"
-                                                                  ShowTicks="False"
-                                                                  ShowAxisLine="False"
-                                                                  StartAngle="140"
-                                                                  EndAngle="40">
-                                                    <gauge:RadialAxis.Ranges>
-                                                        <gauge:GaugeRange StartValue="0" EndValue="100" Background="#1A7FF0D5" />
-                                                    </gauge:RadialAxis.Ranges>
-                                                    <gauge:RadialAxis.Pointers>
-                                                        <gauge:RangePointer Value="{x:Bind ViewModel.HumidityValue, Mode=OneWay}">
-                                                            <gauge:RangePointer.GradientStops>
-                                                                <gauge:GaugeGradientStop Value="0" Color="#FF7FF0D5" />
-                                                                <gauge:GaugeGradientStop Value="100" Color="#FF7FF0D5" />
-                                                            </gauge:RangePointer.GradientStops>
-                                                        </gauge:RangePointer>
-                                                    </gauge:RadialAxis.Pointers>
-                                                    <gauge:RadialAxis.Annotations>
-                                                        <gauge:GaugeAnnotation DirectionUnit="Angle" DirectionValue="90" PositionFactor="0.5">
-                                                            <gauge:GaugeAnnotation.Content>
-                                                                <TextBlock Text="{x:Bind ViewModel.Humidity, Mode=OneWay}"
-                                                                           FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                                            </gauge:GaugeAnnotation.Content>
-                                                        </gauge:GaugeAnnotation>
-                                                    </gauge:RadialAxis.Annotations>
-                                                </gauge:RadialAxis>
-                                            </gauge:SfRadialGauge.Axes>
-                                        </gauge:SfRadialGauge>
-                                        <TextBlock Text="{x:Bind ViewModel.HumiditySubtitle, Mode=OneWay}" FontSize="11" Opacity="0.65" HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Row 1, Col 0: Visibility Card -->
-                                <Border Grid.Row="1" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                    <StackPanel Spacing="3">
-                                        <FontIcon Glyph="&#xE890;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentSunBrush}" />
-                                        <TextBlock Text="Visibility" FontSize="12" Opacity="0.65" />
-                                        <TextBlock Text="{x:Bind ViewModel.Visibility, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
-                                        <TextBlock Text="{x:Bind ViewModel.VisibilitySubtitle, Mode=OneWay}" FontSize="11" Opacity="0.6" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Row 1, Col 1: Pressure Card -->
-                                <Border Grid.Row="1" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                    <StackPanel Spacing="3">
-                                        <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentRoseBrush}" />
-                                        <TextBlock Text="Pressure" FontSize="12" Opacity="0.65" />
-                                        <TextBlock Text="{x:Bind ViewModel.Pressure, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
-                                        <TextBlock Text="{x:Bind ViewModel.PressureSubtitle, Mode=OneWay}" FontSize="11" Opacity="0.6" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Row 2, Col 0: Clouds Card -->
-                                <Border Grid.Row="2" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                    <StackPanel Spacing="3">
-                                        <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentMintBrush}" />
-                                        <TextBlock Text="Clouds" FontSize="12" Opacity="0.65" />
-                                        <TextBlock Text="{x:Bind ViewModel.Clouds, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
-                                        <TextBlock Text="{x:Bind ViewModel.CloudsSubtitle, Mode=OneWay}" FontSize="11" Opacity="0.6" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Row 2, Col 1: Sun Schedule Card -->
-                                <Border Grid.Row="2" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                    <StackPanel Spacing="3">
-                                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="18" Opacity="0.85" Foreground="{StaticResource AccentSunBrush}" />
-                                        <TextBlock Text="Sun Schedule" FontSize="12" Opacity="0.65" />
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <TextBlock Text="{x:Bind ViewModel.Sunrise, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" />
-                                            <TextBlock Text="↑" FontSize="14" Opacity="0.8" Foreground="{StaticResource AccentSunBrush}" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                        <TextBlock Text="{x:Bind ViewModel.SunSchedule, Mode=OneWay}" FontSize="11" Opacity="0.6" />
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-
-                            <!-- 5-Day Forecast Card -->
-                            <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
-                                <StackPanel Spacing="10">
-                                    <TextBlock Text="5-Day Forecast" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" Margin="4,0,0,2" />
-                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.ForecastDays, Mode=OneWay}">
-                                        <ItemsRepeater.Layout>
-                                            <StackLayout Orientation="Vertical" Spacing="8" />
-                                        </ItemsRepeater.Layout>
-                                        <ItemsRepeater.ItemTemplate>
-                                            <DataTemplate x:DataType="models:ForecastDaySnapshot">
-                                                <Border Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12,10">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0" Text="{x:Bind DayLabel}" FontSize="15" FontWeight="SemiBold" Margin="0,0,14,0" VerticalAlignment="Center" />
-                                                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                                                            <TextBlock Text="{x:Bind Description}" Opacity="0.84" TextWrapping="WrapWholeWords" MaxLines="1" />
-                                                            <TextBlock Text="{x:Bind PrecipitationText}" Opacity="0.72" FontSize="12" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="12,0,0,0">
-                                                            <TextBlock Text="{x:Bind MaxTempText}" FontWeight="SemiBold" FontSize="15" />
-                                                            <TextBlock Text="/" Opacity="0.7" FontSize="14" />
-                                                            <TextBlock Text="{x:Bind MinTempText}" Opacity="0.75" FontSize="14" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsRepeater.ItemTemplate>
-                                    </ItemsRepeater>
-                                </StackPanel>
-                            </Border>
+                    <!-- Wind Metric Tile -->
+                    <Border Grid.Row="0" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" />
+                                <TextBlock Text="WIND" FontSize="11" FontWeight="Bold" CharacterSpacing="80" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.Wind, Mode=OneWay}" FontSize="26" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.WindSubtitle, Mode=OneWay}" FontSize="12" Opacity="0.65" TextWrapping="Wrap" Foreground="{ThemeResource AppFgColorBrush}" />
                         </StackPanel>
+                    </Border>
 
-                        <StackPanel x:Name="SideRailPanel" Grid.Row="0" Grid.Column="1" Spacing="14">
-                            <Border Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                                <StackPanel x:Name="FavoritesPanel" Spacing="10">
-                                    <TextBlock Text="Saved Locations" FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="SemiBold" />
+                    <!-- Humidity Metric Tile -->
+                    <Border Grid.Row="0" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF69B6FF" />
+                                <TextBlock Text="HUMIDITY" FontSize="11" FontWeight="Bold" CharacterSpacing="80" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.Humidity, Mode=OneWay}" FontSize="26" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.HumiditySubtitle, Mode=OneWay}" FontSize="12" Opacity="0.65" TextWrapping="Wrap" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+                    </Border>
 
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Home" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
-                                        <ListView
-                                            x:Name="HomeFavoritesList"
-                                            ItemsSource="{x:Bind HomeFavorites, Mode=OneWay}"
-                                            SelectionMode="None"
-                                            IsItemClickEnabled="True"
-                                            ItemClick="FavoriteList_ItemClick"
-                                            CanDragItems="True"
-                                            CanReorderItems="True"
-                                            AllowDrop="True"
-                                            DragItemsCompleted="FavoriteList_DragItemsCompleted"
-                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                            ScrollViewer.HorizontalScrollMode="Enabled"
-                                            ScrollViewer.VerticalScrollMode="Disabled"
-                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                            MaxHeight="52">
-                                            <ListView.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <ItemsStackPanel Orientation="Horizontal" />
-                                                </ItemsPanelTemplate>
-                                            </ListView.ItemsPanel>
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="models:LocationSuggestion">
-                                                    <Border Padding="10,4" Margin="0,0,8,0" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="10">
-                                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <TextBlock Text="{x:Bind PinTag}" />
-                                                            <TextBlock Text="{x:Bind DisplayName}" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </StackPanel>
+                    <!-- Pressure Metric Tile -->
+                    <Border Grid.Row="1" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF7FF0D5" />
+                                <TextBlock Text="PRESSURE" FontSize="11" FontWeight="Bold" CharacterSpacing="80" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.Pressure, Mode=OneWay}" FontSize="26" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.PressureSubtitle, Mode=OneWay}" FontSize="12" Opacity="0.65" TextWrapping="Wrap" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+                    </Border>
 
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Work" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
-                                        <ListView
-                                            x:Name="WorkFavoritesList"
-                                            ItemsSource="{x:Bind WorkFavorites, Mode=OneWay}"
-                                            SelectionMode="None"
-                                            IsItemClickEnabled="True"
-                                            ItemClick="FavoriteList_ItemClick"
-                                            CanDragItems="True"
-                                            CanReorderItems="True"
-                                            AllowDrop="True"
-                                            DragItemsCompleted="FavoriteList_DragItemsCompleted"
-                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                            ScrollViewer.HorizontalScrollMode="Enabled"
-                                            ScrollViewer.VerticalScrollMode="Disabled"
-                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                            MaxHeight="52">
-                                            <ListView.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <ItemsStackPanel Orientation="Horizontal" />
-                                                </ItemsPanelTemplate>
-                                            </ListView.ItemsPanel>
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="models:LocationSuggestion">
-                                                    <Border Padding="10,4" Margin="0,0,8,0" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="10">
-                                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <TextBlock Text="{x:Bind PinTag}" />
-                                                            <TextBlock Text="{x:Bind DisplayName}" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </StackPanel>
+                    <!-- Visibility Metric Tile -->
+                    <Border Grid.Row="1" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE890;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFA0B2C6" />
+                                <TextBlock Text="VISIBILITY" FontSize="11" FontWeight="Bold" CharacterSpacing="80" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.Visibility, Mode=OneWay}" FontSize="26" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.VisibilitySubtitle, Mode=OneWay}" FontSize="12" Opacity="0.65" TextWrapping="Wrap" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+                    </Border>
 
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Travel" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
-                                        <ListView
-                                            x:Name="TravelFavoritesList"
-                                            ItemsSource="{x:Bind TravelFavorites, Mode=OneWay}"
-                                            SelectionMode="None"
-                                            IsItemClickEnabled="True"
-                                            ItemClick="FavoriteList_ItemClick"
-                                            CanDragItems="True"
-                                            CanReorderItems="True"
-                                            AllowDrop="True"
-                                            DragItemsCompleted="FavoriteList_DragItemsCompleted"
-                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                            ScrollViewer.HorizontalScrollMode="Enabled"
-                                            ScrollViewer.VerticalScrollMode="Disabled"
-                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                            MaxHeight="52">
-                                            <ListView.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <ItemsStackPanel Orientation="Horizontal" />
-                                                </ItemsPanelTemplate>
-                                            </ListView.ItemsPanel>
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="models:LocationSuggestion">
-                                                    <Border Padding="10,4" Margin="0,0,8,0" Background="{StaticResource ForecastCardBrush}" BorderBrush="{StaticResource ForecastCardBorderBrush}" BorderThickness="1" CornerRadius="10">
-                                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <TextBlock Text="{x:Bind PinTag}" />
-                                                            <TextBlock Text="{x:Bind DisplayName}" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </StackPanel>
+                    <!-- Clouds Metric Tile -->
+                    <Border Grid.Row="2" Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF90A4AE" />
+                                <TextBlock Text="CLOUDS" FontSize="11" FontWeight="Bold" CharacterSpacing="80" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.Clouds, Mode=OneWay}" FontSize="26" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.CloudsSubtitle, Mode=OneWay}" FontSize="12" Opacity="0.65" TextWrapping="Wrap" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+                    </Border>
 
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Recent" FontSize="12" Opacity="0.7" CharacterSpacing="80" />
-                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
-                                            <ItemsRepeater ItemsSource="{x:Bind RecentLocations, Mode=OneWay}">
-                                                <ItemsRepeater.Layout>
-                                                    <StackLayout Orientation="Horizontal" Spacing="8" />
-                                                </ItemsRepeater.Layout>
-                                                <ItemsRepeater.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Button Content="{Binding DisplayName}" Click="RecentChip_Click" Padding="10,4" FontSize="12" />
-                                                    </DataTemplate>
-                                                </ItemsRepeater.ItemTemplate>
-                                            </ItemsRepeater>
-                                        </ScrollViewer>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
+                    <!-- Sun Schedule Metric Tile -->
+                    <Border Grid.Row="2" Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFFFD166" />
+                                <TextBlock Text="SUN SCHEDULE" FontSize="11" FontWeight="Bold" CharacterSpacing="80" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{x:Bind ViewModel.Sunrise, Mode=OneWay}" FontSize="26" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" />
+                                <TextBlock Text="↑" FontSize="18" Foreground="#FFFFD166" FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.SunSchedule, Mode=OneWay}" FontSize="12" Opacity="0.65" TextWrapping="Wrap" Foreground="{ThemeResource AppFgColorBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
 
-                            <Border x:Name="SettingsPanelHost" Background="{StaticResource SubTileBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="8">
-                                <Expander IsExpanded="False">
-                                    <Expander.Header>
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <FontIcon Glyph="&#xE713;" FontFamily="Segoe Fluent Icons" Foreground="{StaticResource AccentMintBrush}" />
-                                            <TextBlock Text="Settings &amp; Preferences" FontWeight="SemiBold" />
-                                        </StackPanel>
-                                    </Expander.Header>
-                                    <Grid Padding="4,8,4,4" ColumnSpacing="10" RowSpacing="8">
+                <!-- 4. 5-Day Forecast Card (macOS Parity: Daily Forecast with Visual Range Gradient Bars) -->
+                <Border
+                    Background="{ThemeResource AppGlassSubColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    CornerRadius="22"
+                    Padding="20">
+                    <StackPanel Spacing="14">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                            <TextBlock
+                                Text="5-DAY FORECAST"
+                                FontSize="11"
+                                FontWeight="Bold"
+                                CharacterSpacing="80"
+                                Opacity="0.6"
+                                Foreground="{ThemeResource AppFgColorBrush}"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Rectangle Height="1" Fill="{ThemeResource AppGlassBorderColorBrush}" Opacity="0.3" Margin="0,-2,0,4" />
+
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.ForecastDays, Mode=OneWay}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Orientation="Vertical" Spacing="12" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:ForecastDaySnapshot">
+                                    <Grid VerticalAlignment="Center" ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="70" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
 
-                                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Weather &amp; Favorites" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" Opacity="0.85" Foreground="{StaticResource AccentBlueBrush}" />
+                                        <!-- Day Label -->
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Text="{x:Bind DayLabel}"
+                                            FontSize="15"
+                                            FontWeight="SemiBold"
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource AppFgColorBrush}" />
 
-                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Favorite Type" FontSize="12" Opacity="0.7" />
-                                        <ComboBox Grid.Row="1" Grid.Column="1" x:Name="FavoriteCategoryComboBox" SelectedIndex="2">
-                                            <x:String>Home</x:String>
-                                            <x:String>Work</x:String>
-                                            <x:String>Travel</x:String>
-                                        </ComboBox>
+                                        <!-- Description & Rain Probability -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" MinWidth="130">
+                                            <TextBlock
+                                                Text="{x:Bind Description}"
+                                                FontSize="13"
+                                                Opacity="0.8"
+                                                TextTrimming="CharacterEllipsis"
+                                                MaxLines="1"
+                                                VerticalAlignment="Center" />
+                                            <TextBlock
+                                                Text="{x:Bind PrecipitationText}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="#FF69B6FF"
+                                                VerticalAlignment="Center" />
+                                        </StackPanel>
 
-                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Temperature Units" FontSize="12" Opacity="0.7" />
-                                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="UnitSystemComboBox" SelectionChanged="UnitSystemComboBox_SelectionChanged">
-                                            <x:String>Metric (C)</x:String>
-                                            <x:String>Imperial (F)</x:String>
-                                        </ComboBox>
+                                        <!-- Visual Temperature Range Bar (macOS Parity) -->
+                                        <Grid Grid.Column="2" VerticalAlignment="Center" Margin="10,0">
+                                            <Border Height="5" CornerRadius="2.5" Background="#18FFFFFF" HorizontalAlignment="Stretch" />
+                                            <Border Height="5" CornerRadius="2.5" HorizontalAlignment="Stretch" Margin="20,0,20,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                        <GradientStop Color="#FF69B6FF" Offset="0" />
+                                                        <GradientStop Color="#FF00E5FF" Offset="0.5" />
+                                                        <GradientStop Color="#FFFFD166" Offset="1" />
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
 
-                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Wind Units" FontSize="12" Opacity="0.7" />
-                                        <ComboBox Grid.Row="3" Grid.Column="1" x:Name="WindUnitComboBox" SelectionChanged="WindUnitComboBox_SelectionChanged">
-                                            <x:String>m/s</x:String>
-                                            <x:String>km/h</x:String>
-                                            <x:String>mph</x:String>
-                                            <x:String>kn</x:String>
-                                        </ComboBox>
-
-                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Pressure Units" FontSize="12" Opacity="0.7" />
-                                         <ComboBox Grid.Row="4" Grid.Column="1" x:Name="PressureUnitComboBox" SelectionChanged="PressureUnitComboBox_SelectionChanged">
-                                             <x:String>hpa</x:String>
-                                             <x:String>mmhg</x:String>
-                                             <x:String>inhg</x:String>
-                                         </ComboBox>
-
-                                         <TextBlock Grid.Row="5" Grid.Column="0" Text="Always Auto-Location" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
-                                         <ToggleSwitch
-                                             x:Name="AlwaysAutoLocationToggle"
-                                             Grid.Row="5" Grid.Column="1"
-                                             OnContent="On" OffContent="Off"
-                                             Toggled="AlwaysAutoLocationToggle_Toggled" />
+                                        <!-- Min / Max Temp -->
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock
+                                                Text="{x:Bind MinTempText}"
+                                                FontSize="14"
+                                                Opacity="0.6"
+                                                Width="36"
+                                                TextAlignment="Right"
+                                                Foreground="{ThemeResource AppFgColorBrush}" />
+                                            <TextBlock
+                                                Text="{x:Bind MaxTempText}"
+                                                FontSize="14"
+                                                FontWeight="Bold"
+                                                Width="36"
+                                                TextAlignment="Right"
+                                                Foreground="{ThemeResource AppFgColorBrush}" />
+                                        </StackPanel>
                                     </Grid>
-                                </Expander>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
-            </Border>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </Page>

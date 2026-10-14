@@ -28,6 +28,15 @@ namespace Daily_WinUI.Views;
 public sealed partial class WeatherDetailPage : Page
 {
     public WeatherDetailViewModel ViewModel { get; } = new();
+    public ObservableCollection<LocationSuggestion> QuickCities { get; } = new()
+    {
+        new LocationSuggestion { Name = "Bucharest", Country = "RO", DisplayName = "Bucharest, Romania", Latitude = 44.4268, Longitude = 26.1025 },
+        new LocationSuggestion { Name = "London", Country = "GB", DisplayName = "London, United Kingdom", Latitude = 51.5074, Longitude = -0.1278 },
+        new LocationSuggestion { Name = "New York", Country = "US", DisplayName = "New York, United States", Latitude = 40.7128, Longitude = -74.0060 },
+        new LocationSuggestion { Name = "Tokyo", Country = "JP", DisplayName = "Tokyo, Japan", Latitude = 35.6762, Longitude = 139.6503 },
+        new LocationSuggestion { Name = "Paris", Country = "FR", DisplayName = "Paris, France", Latitude = 48.8566, Longitude = 2.3522 },
+        new LocationSuggestion { Name = "San Francisco", Country = "US", DisplayName = "San Francisco, United States", Latitude = 37.7749, Longitude = -122.4194 }
+    };
     public ObservableCollection<LocationSuggestion> FavoriteLocations { get; } = new();
     public ObservableCollection<LocationSuggestion> RecentLocations { get; } = new();
     public ObservableCollection<LocationSuggestion> HomeFavorites { get; } = new();
@@ -60,14 +69,17 @@ public sealed partial class WeatherDetailPage : Page
             if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
         }
 
+        if (TopBarDateText != null)
+        {
+            TopBarDateText.Text = DateTime.Now.ToString("dddd, MMMM d");
+        }
+
         LoadSavedLocations();
         ApplyGlassIntensity(_settings.GlassIntensity);
-        GlassIntensityComboBox.SelectedItem = _settings.GlassIntensity;
-        UnitSystemComboBox.SelectedItem = _settings.UnitSystem == "imperial" ? "Imperial (F)" : "Metric (C)";
-        WindUnitComboBox.SelectedItem = _settings.WindUnit;
-        PressureUnitComboBox.SelectedItem = _settings.PressureUnit;
-        FavoriteCategoryComboBox.SelectedItem = "Travel";
-        AlwaysAutoLocationToggle.IsOn = _settings.AlwaysAutoLocation;
+        if (UnitSystemComboBox != null) UnitSystemComboBox.SelectedItem = _settings.UnitSystem == "imperial" ? "Imperial (F)" : "Metric (C)";
+        if (WindUnitComboBox != null) WindUnitComboBox.SelectedItem = _settings.WindUnit;
+        if (PressureUnitComboBox != null) PressureUnitComboBox.SelectedItem = _settings.PressureUnit;
+        if (AlwaysAutoLocationToggle != null) AlwaysAutoLocationToggle.IsOn = _settings.AlwaysAutoLocation;
 
         ViewModel.PropertyChanged += (_, args) =>
         {
@@ -225,6 +237,7 @@ public sealed partial class WeatherDetailPage : Page
 
     private async void AutoLocationButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
+        SearchButton?.Flyout?.Hide();
         _settings.AlwaysAutoLocation = true;
         var coords = await _locationService.GetCurrentCoordinatesAsync();
         if (coords.HasValue)
@@ -384,7 +397,10 @@ public sealed partial class WeatherDetailPage : Page
     private void SetLocationText(string text)
     {
         _suppressTextCallback = true;
-        LocationSearchBox.Text = text;
+        if (LocationSearchBox != null)
+        {
+            LocationSearchBox.Text = text;
+        }
         _suppressTextCallback = false;
     }
 
@@ -400,71 +416,78 @@ public sealed partial class WeatherDetailPage : Page
         }
     }
 
-    private void LocationSearchBox_ComboBoxLoaded(object sender, RoutedEventArgs e)
+    private async void LocationSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        LocationSearchBox.RegisterPropertyChangedCallback(
-            DropDownListBase.TextProperty,
-            LocationSearchBox_TextPropertyChanged);
-    }
-
-    private async void LocationSearchBox_TextPropertyChanged(DependencyObject d, DependencyProperty dp)
-    {
-        if (_suppressTextCallback) return;
-
-        var text = LocationSearchBox.Text?.Trim();
-        if (string.IsNullOrWhiteSpace(text) || text.Length < 2)
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
         {
-            LocationSearchBox.ItemsSource = null;
-            _lastSuggestions = Array.Empty<LocationSuggestion>();
-            return;
-        }
+            var text = sender.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(text) || text.Length < 2)
+            {
+                sender.ItemsSource = null;
+                return;
+            }
 
-        _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();
+            _searchCts?.Cancel();
+            _searchCts = new CancellationTokenSource();
 
-        try
-        {
-            var suggestions = await _weatherClient.SearchLocationsAsync(text, cancellationToken: _searchCts.Token);
-            _lastSuggestions = suggestions;
-            if (!_suppressTextCallback)
-                LocationSearchBox.ItemsSource = suggestions;
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch
-        {
-            LocationSearchBox.ItemsSource = null;
+            try
+            {
+                var suggestions = await _weatherClient.SearchLocationsAsync(text, cancellationToken: _searchCts.Token);
+                sender.ItemsSource = suggestions;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+                sender.ItemsSource = null;
+            }
         }
     }
 
-    private async void LocationSearchBox_SelectionChanged(object sender, ComboBoxSelectionChangedEventArgs args)
+    private async void LocationSearchBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
     {
-        if (args.AddedItems?.Count > 0 && args.AddedItems[0] is LocationSuggestion suggestion)
+        if (args.SelectedItem is LocationSuggestion suggestion)
         {
-            _selectedLocation = suggestion;
-            _suppressTextCallback = true;
-            LocationSearchBox.Text = suggestion.DisplayName;
-            _suppressTextCallback = false;
-            UpdateFavoriteButtonText();
-            UpdatePinButtonText();
-            await RefreshWeatherAsync();
+            await SelectLocationAsync(suggestion);
+            SearchButton.Flyout?.Hide();
         }
     }
 
-    private async void LocationSearchBox_InputSubmitted(object sender, ComboBoxInputSubmittedEventArgs args)
+    private async void LocationSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
-        if (args.Item is LocationSuggestion selected)
+        if (args.ChosenSuggestion is LocationSuggestion suggestion)
         {
-            _selectedLocation = selected;
+            await SelectLocationAsync(suggestion);
+            SearchButton.Flyout?.Hide();
         }
-        else if (_lastSuggestions.Count > 0)
+        else if (!string.IsNullOrWhiteSpace(args.QueryText))
         {
-            _selectedLocation = _lastSuggestions[0];
-            SetLocationText(_selectedLocation.DisplayName);
+            var suggestions = await _weatherClient.SearchLocationsAsync(args.QueryText);
+            if (suggestions.Count > 0)
+            {
+                await SelectLocationAsync(suggestions[0]);
+                SearchButton.Flyout?.Hide();
+            }
         }
+    }
 
-        await RefreshWeatherAsync();
+    private async Task SelectLocationAsync(LocationSuggestion location)
+    {
+        _selectedLocation = location;
+        SetLocationText(location.DisplayName);
+        UpdateFavoriteButtonText();
+        UpdatePinButtonText();
+        await RefreshWeatherAsync(forceRefresh: true);
+    }
+
+    private async void QuickCity_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is LocationSuggestion loc)
+        {
+            await SelectLocationAsync(loc);
+            SearchButton.Flyout?.Hide();
+        }
     }
 
     private async void FavoriteChip_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -740,6 +763,8 @@ public sealed partial class WeatherDetailPage : Page
 
     private void UpdateFavoriteButtonText()
     {
+        if (FavoriteToggleButton is null) return;
+
         if (_selectedLocation is null)
         {
             FavoriteToggleButton.Content = "Add Favorite";
@@ -753,6 +778,8 @@ public sealed partial class WeatherDetailPage : Page
 
     private void UpdatePinButtonText()
     {
+        if (FavoritePinButton is null) return;
+
         if (_selectedLocation is null)
         {
             FavoritePinButton.Content = "Pin";
