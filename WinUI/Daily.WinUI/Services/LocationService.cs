@@ -15,45 +15,96 @@ public sealed class LocationService : IDisposable
     /// <summary>Raised when the device position changes significantly (≥500 m).</summary>
     public event EventHandler<(double Latitude, double Longitude)>? PositionChanged;
 
-    public async Task<(double Latitude, double Longitude)?> GetCurrentCoordinatesAsync(CancellationToken cancellationToken = default)
+    private static (double Latitude, double Longitude)? _cachedCoordinates;
+    private static DateTime? _cachedCoordinatesTimeUtc;
+    private static readonly TimeSpan CoordinatesCacheTtl = TimeSpan.FromMinutes(15);
+    private static readonly SemaphoreSlim _locationLock = new(1, 1);
+
+    /// <summary>
+    /// Seeds the coordinates cache (e.g. from persisted settings on startup) so location is available with 0ms delay.
+    /// </summary>
+    public static void SeedCache(double latitude, double longitude)
     {
-        // Try Windows location with a strict timeout of 1500 milliseconds
-        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        if (!_cachedCoordinates.HasValue)
         {
-            cts.CancelAfter(1500);
-            try
-            {
-                var windowsLocation = await TryWindowsLocationAsync(cts.Token);
-                if (windowsLocation.HasValue)
-                {
-                    return windowsLocation;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[LocationService] Windows location failed/timed out: {ex.Message}");
-            }
+            _cachedCoordinates = (latitude, longitude);
+            _cachedCoordinatesTimeUtc = DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// Returns the currently cached coordinates immediately if valid within the 15-minute TTL,
+    /// or fetches fresh coordinates via Windows Geolocator / IP geolocation.
+    /// </summary>
+    public async Task<(double Latitude, double Longitude)?> GetCurrentCoordinatesAsync(bool forceRefresh = false, CancellationToken cancellationToken = default)
+    {
+        if (!forceRefresh && _cachedCoordinates.HasValue && _cachedCoordinatesTimeUtc.HasValue &&
+            DateTime.UtcNow - _cachedCoordinatesTimeUtc.Value < CoordinatesCacheTtl)
+        {
+            return _cachedCoordinates.Value;
         }
 
-        // Fallback to IP location with a strict timeout of 1500 milliseconds
-        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        await _locationLock.WaitAsync(cancellationToken);
+        try
         {
-            cts.CancelAfter(1500);
-            try
+            if (!forceRefresh && _cachedCoordinates.HasValue && _cachedCoordinatesTimeUtc.HasValue &&
+                DateTime.UtcNow - _cachedCoordinatesTimeUtc.Value < CoordinatesCacheTtl)
             {
-                var ipLocation = await TryIpLocationAsync(cts.Token);
-                if (ipLocation.HasValue)
+                return _cachedCoordinates.Value;
+            }
+
+            // Try Windows location with a strict timeout of 1500 milliseconds
+            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                cts.CancelAfter(1500);
+                try
                 {
-                    return ipLocation;
+                    var windowsLocation = await TryWindowsLocationAsync(cts.Token);
+                    if (windowsLocation.HasValue)
+                    {
+                        _cachedCoordinates = windowsLocation;
+                        _cachedCoordinatesTimeUtc = DateTime.UtcNow;
+                        return windowsLocation;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LocationService] Windows location failed/timed out: {ex.Message}");
                 }
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[LocationService] IP location failed/timed out: {ex.Message}");
-            }
-        }
 
-        return null;
+            // Fallback to IP location with a strict timeout of 1500 milliseconds
+            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                cts.CancelAfter(1500);
+                try
+                {
+                    var ipLocation = await TryIpLocationAsync(cts.Token);
+                    if (ipLocation.HasValue)
+                    {
+                        _cachedCoordinates = ipLocation;
+                        _cachedCoordinatesTimeUtc = DateTime.UtcNow;
+                        return ipLocation;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LocationService] IP location failed/timed out: {ex.Message}");
+                }
+            }
+
+            // If refresh failed or timed out, but we have a prior coordinate, return it as graceful fallback
+            if (_cachedCoordinates.HasValue)
+            {
+                return _cachedCoordinates.Value;
+            }
+
+            return null;
+        }
+        finally
+        {
+            _locationLock.Release();
+        }
     }
 
     /// <summary>
@@ -90,6 +141,8 @@ public sealed class LocationService : IDisposable
     private void OnPositionChanged(Geolocator sender, PositionChangedEventArgs args)
     {
         var pos = args.Position.Coordinate.Point.Position;
+        _cachedCoordinates = (pos.Latitude, pos.Longitude);
+        _cachedCoordinatesTimeUtc = DateTime.UtcNow;
         PositionChanged?.Invoke(this, (pos.Latitude, pos.Longitude));
     }
 

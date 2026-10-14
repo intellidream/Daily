@@ -27,7 +27,7 @@ namespace Daily_WinUI.Views;
 /// </summary>
 public sealed partial class WeatherDetailPage : Page
 {
-    public WeatherDetailViewModel ViewModel { get; } = new();
+    public WeatherDetailViewModel ViewModel => WeatherDetailViewModel.Shared;
     public ObservableCollection<LocationSuggestion> QuickCities { get; } = new()
     {
         new LocationSuggestion { Name = "Bucharest", Country = "RO", DisplayName = "Bucharest, Romania", Latitude = 44.4268, Longitude = 26.1025 },
@@ -45,6 +45,7 @@ public sealed partial class WeatherDetailPage : Page
 
     private readonly WeatherClient _weatherClient = new();
     private readonly LocationService _locationService = new();
+    private readonly System.ComponentModel.PropertyChangedEventHandler _vmPropertyChangedHandler;
     private AppSettings _settings = SettingsService.Load();
     private IReadOnlyList<LocationSuggestion> _lastSuggestions = Array.Empty<LocationSuggestion>();
     private LocationSuggestion? _selectedLocation;
@@ -54,26 +55,7 @@ public sealed partial class WeatherDetailPage : Page
     public WeatherDetailPage()
     {
         InitializeComponent();
-        Loaded += WeatherDetailPage_Loaded;
-        Unloaded += WeatherDetailPage_Unloaded;
-    }
-
-    private Microsoft.UI.Xaml.Visibility BoolToVisibility(bool value) =>
-        value ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-
-    private async void WeatherDetailPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (this.Frame != App.Current?.MainWindow?.RootFrame)
-        {
-            if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
-            if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
-        }
-
-        _settings = SettingsService.Load();
-        LoadSavedLocations();
-        ApplyGlassIntensity(_settings.GlassIntensity);
-
-        ViewModel.PropertyChanged += (_, args) =>
+        _vmPropertyChangedHandler = (_, args) =>
         {
             if (args.PropertyName is nameof(ViewModel.ShowSunriseAnnotation) or
                 nameof(ViewModel.ShowSunsetAnnotation) or
@@ -85,17 +67,79 @@ public sealed partial class WeatherDetailPage : Page
                 PositionSunAnnotations();
             }
         };
+        Loaded += WeatherDetailPage_Loaded;
+        Unloaded += WeatherDetailPage_Unloaded;
+    }
 
-        await InitializeLocationAsync();
-        await RefreshWeatherAsync();
+    private Microsoft.UI.Xaml.Visibility BoolToVisibility(bool value) =>
+        value ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
-        // Start watching for location changes after the initial load.
+    private void WeatherDetailPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (this.Frame != App.Current?.MainWindow?.RootFrame)
+        {
+            if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
+            if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
+        }
+
+        _settings = SettingsService.Load();
+        LoadSavedLocations();
+        ApplyGlassIntensity(_settings.GlassIntensity);
+
+        ViewModel.PropertyChanged -= _vmPropertyChangedHandler;
+        ViewModel.PropertyChanged += _vmPropertyChangedHandler;
+
+        // 1. Immediately restore location synchronously from _settings or defaults
+        if (_selectedLocation is null)
+        {
+            if (_settings.LastLatitude.HasValue && _settings.LastLongitude.HasValue)
+            {
+                _selectedLocation = new LocationSuggestion
+                {
+                    Name = _settings.LastLocationName ?? (_settings.LastLocationWasAuto ? "Auto Location" : "Bucharest"),
+                    Country = "",
+                    Latitude = _settings.LastLatitude.Value,
+                    Longitude = _settings.LastLongitude.Value,
+                    DisplayName = _settings.LastLocationName ?? "Auto location"
+                };
+                LocationService.SeedCache(_settings.LastLatitude.Value, _settings.LastLongitude.Value);
+            }
+            else
+            {
+                _selectedLocation = new LocationSuggestion
+                {
+                    Name = "Bucharest",
+                    Country = "RO",
+                    Latitude = 44.4268,
+                    Longitude = 26.1025,
+                    DisplayName = "Bucharest, Romania"
+                };
+            }
+            SetLocationText(_selectedLocation.DisplayName);
+        }
+
+        // 2. If ViewModel already has loaded data, update icons and chart positions immediately (0ms delay!)
+        if (ViewModel.HasLoadedData)
+        {
+            UpdateWeatherIcon();
+            PositionSunAnnotations();
+        }
+
+        // 3. If data is missing or stale, trigger background refresh
+        if (!ViewModel.HasLoadedData || ViewModel.IsStale)
+        {
+            _ = RefreshWeatherAsync();
+        }
+
+        // 4. Start watching for location changes after the initial load.
+        _locationService.PositionChanged -= LocationService_PositionChanged;
         _locationService.PositionChanged += LocationService_PositionChanged;
-        await _locationService.StartWatchingAsync();
+        _ = _locationService.StartWatchingAsync();
     }
 
     private void WeatherDetailPage_Unloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
+        ViewModel.PropertyChanged -= _vmPropertyChangedHandler;
         _locationService.PositionChanged -= LocationService_PositionChanged;
         _locationService.StopWatching();
     }
@@ -257,10 +301,10 @@ public sealed partial class WeatherDetailPage : Page
     {
         try
         {
-            // When AlwaysAutoLocation is on, re-detect coordinates before every refresh.
+            // When AlwaysAutoLocation is on, re-detect coordinates before refresh.
             if (_settings.AlwaysAutoLocation)
             {
-                var coords = await _locationService.GetCurrentCoordinatesAsync();
+                var coords = await _locationService.GetCurrentCoordinatesAsync(forceRefresh: forceRefresh);
                 if (coords.HasValue)
                 {
                     _selectedLocation = new LocationSuggestion
@@ -319,62 +363,6 @@ public sealed partial class WeatherDetailPage : Page
             catch { }
         }
         catch { }
-    }
-
-    private async Task InitializeLocationAsync()
-    {
-        // If there is a saved *manual* location and AlwaysAutoLocation is off, restore it and skip auto-detection.
-        if (_settings.LastLatitude.HasValue && _settings.LastLongitude.HasValue
-            && !_settings.LastLocationWasAuto && !_settings.AlwaysAutoLocation)
-        {
-            _selectedLocation = new LocationSuggestion
-            {
-                Name = _settings.LastLocationName ?? "Saved Location",
-                Country = "",
-                State = null,
-                Latitude = _settings.LastLatitude.Value,
-                Longitude = _settings.LastLongitude.Value,
-                DisplayName = _settings.LastLocationName ?? "Saved Location"
-            };
-            SetLocationText(_selectedLocation.DisplayName);
-            ViewModel.SetStatus("Loaded last location.");
-            UpdateFavoriteButtonText();
-            UpdatePinButtonText();
-            return;
-        }
-
-        var location = await _locationService.GetCurrentCoordinatesAsync();
-        if (location.HasValue)
-        {
-            _selectedLocation = new LocationSuggestion
-            {
-                Name = "Auto Location",
-                Country = "",
-                State = null,
-                Latitude = location.Value.Latitude,
-                Longitude = location.Value.Longitude,
-                DisplayName = "Auto location"
-            };
-            SetLocationText(_selectedLocation.DisplayName);
-            ViewModel.SetStatus("Using auto location.");
-            UpdateFavoriteButtonText();
-            UpdatePinButtonText();
-            return;
-        }
-
-        ViewModel.SetStatus("Auto-location unavailable; using default coordinates.");
-        _selectedLocation = new LocationSuggestion
-        {
-            Name = "Bucharest",
-            Country = "RO",
-            State = null,
-            Latitude = 44.4268,
-            Longitude = 26.1025,
-            DisplayName = "Bucharest, RO"
-        };
-        SetLocationText(_selectedLocation.DisplayName);
-        UpdateFavoriteButtonText();
-        UpdatePinButtonText();
     }
 
     private void SetLocationText(string text)

@@ -11,7 +11,15 @@ namespace Daily_WinUI.ViewModels;
 
 public sealed class WeatherDetailViewModel : INotifyPropertyChanged
 {
+    public static WeatherDetailViewModel Shared { get; } = new();
+
     private readonly WeatherClient _weatherClient = new();
+
+    private double _lastLatitude = double.NaN;
+    private double _lastLongitude = double.NaN;
+    public DateTime? LastLoadedUtc { get; private set; }
+    public bool HasLoadedData => _lastSnapshot != null && HourlyForecast.Count > 0;
+    public bool IsStale => LastLoadedUtc == null || (DateTime.UtcNow - LastLoadedUtc.Value > TimeSpan.FromMinutes(15));
 
     private string _statusText = "Loading weather...";
     private string _locationName = "-";
@@ -353,10 +361,23 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
             return;
         }
 
+        bool isUnitOrSettingChanged = _unitSystem != unitSystem || _windUnit != windUnit || _pressureUnit != pressureUnit || _showSunrise != showSunrise || _showHumidity != showHumidity;
+        bool isLocationChanged = double.IsNaN(_lastLatitude) || Math.Abs(_lastLatitude - latitude) > 0.02 || Math.Abs(_lastLongitude - longitude) > 0.02;
+
+        // If we have valid, fresh data (< 15 mins) and settings/location haven't changed, return immediately without re-fetching!
+        if (!forceRefresh && HasLoadedData && !IsStale && !isUnitOrSettingChanged && !isLocationChanged)
+        {
+            return;
+        }
+
         try
         {
             IsBusy = true;
-            StatusText = "Fetching weather...";
+            // If data is already showing, don't flash "Fetching weather..." or clear anything - refresh smoothly in the background!
+            if (!HasLoadedData)
+            {
+                StatusText = "Fetching weather...";
+            }
 
             _unitSystem = unitSystem;
             _windUnit = windUnit;
@@ -372,15 +393,21 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
             var snapshot = await currentTask;
             if (snapshot is null)
             {
-                StatusText = "Could not load weather right now.";
-                ForecastDays.Clear();
-                HourlyForecast.Clear();
+                if (!HasLoadedData)
+                {
+                    StatusText = "Could not load weather right now.";
+                    ForecastDays.Clear();
+                    HourlyForecast.Clear();
+                }
                 return;
             }
 
             var forecast = await dailyTask;
             var hourly = await hourlyTask;
             _lastSnapshot = snapshot;
+            _lastLatitude = latitude;
+            _lastLongitude = longitude;
+            LastLoadedUtc = DateTime.UtcNow;
 
             LocationName = snapshot.LocationName;
             Description = ToTitleCase(snapshot.Description);
@@ -443,11 +470,11 @@ public sealed class WeatherDetailViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Request canceled.";
+            if (!HasLoadedData) StatusText = "Request canceled.";
         }
         catch (Exception)
         {
-            StatusText = "Unable to fetch weather. Check internet/API key.";
+            if (!HasLoadedData) StatusText = "Unable to fetch weather. Check internet/API key.";
         }
         finally
         {

@@ -11,14 +11,61 @@ public sealed class WeatherClient
     private const string GeoUrl = "https://api.openweathermap.org/geo/1.0";
     private readonly HttpClient _httpClient = new();
 
-    private sealed record CacheEntry<T>(T Data, DateTime TimestampUtc);
+    private sealed record CacheEntry<T>(T Data, DateTime TimestampUtc, double Latitude, double Longitude, string UnitSystem);
 
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+    private const double LocationTolerance = 0.02; // ~2 km tolerance for GPS / IP coordinate drift
+
     private static readonly ConcurrentDictionary<string, CacheEntry<WeatherSnapshot>> _currentWeatherCache = new();
     private static readonly ConcurrentDictionary<string, CacheEntry<ForecastResponse>> _forecastCache = new();
 
     private static string GetCacheKey(double lat, double lon, string unitSystem) =>
         $"{Math.Round(lat, 2):F2}_{Math.Round(lon, 2):F2}_{NormalizeUnitSystem(unitSystem)}";
+
+    private static bool IsCloseLocation(double lat1, double lon1, double lat2, double lon2) =>
+        Math.Abs(lat1 - lat2) <= LocationTolerance && Math.Abs(lon1 - lon2) <= LocationTolerance;
+
+    private static WeatherSnapshot? TryGetCachedSnapshot(double lat, double lon, string unitSystem)
+    {
+        var key = GetCacheKey(lat, lon, unitSystem);
+        if (_currentWeatherCache.TryGetValue(key, out var exact) && DateTime.UtcNow - exact.TimestampUtc < CacheDuration)
+        {
+            return exact.Data;
+        }
+
+        var normUnit = NormalizeUnitSystem(unitSystem);
+        foreach (var entry in _currentWeatherCache.Values)
+        {
+            if (DateTime.UtcNow - entry.TimestampUtc < CacheDuration &&
+                entry.UnitSystem == normUnit &&
+                IsCloseLocation(entry.Latitude, entry.Longitude, lat, lon))
+            {
+                return entry.Data;
+            }
+        }
+        return null;
+    }
+
+    private static ForecastResponse? TryGetCachedForecast(double lat, double lon, string unitSystem)
+    {
+        var key = GetCacheKey(lat, lon, unitSystem);
+        if (_forecastCache.TryGetValue(key, out var exact) && DateTime.UtcNow - exact.TimestampUtc < CacheDuration)
+        {
+            return exact.Data;
+        }
+
+        var normUnit = NormalizeUnitSystem(unitSystem);
+        foreach (var entry in _forecastCache.Values)
+        {
+            if (DateTime.UtcNow - entry.TimestampUtc < CacheDuration &&
+                entry.UnitSystem == normUnit &&
+                IsCloseLocation(entry.Latitude, entry.Longitude, lat, lon))
+            {
+                return entry.Data;
+            }
+        }
+        return null;
+    }
 
     public async Task<IReadOnlyList<LocationSuggestion>> SearchLocationsAsync(string query, int limit = 8, CancellationToken cancellationToken = default)
     {
@@ -56,10 +103,13 @@ public sealed class WeatherClient
     {
         var cacheKey = GetCacheKey(latitude, longitude, unitSystem);
 
-        if (!forceRefresh && _currentWeatherCache.TryGetValue(cacheKey, out var cached) &&
-            DateTime.UtcNow - cached.TimestampUtc < CacheDuration)
+        if (!forceRefresh)
         {
-            return cached.Data;
+            var cached = TryGetCachedSnapshot(latitude, longitude, unitSystem);
+            if (cached != null)
+            {
+                return cached;
+            }
         }
 
         try
@@ -93,7 +143,7 @@ public sealed class WeatherClient
                 RetrievedAtUtc = DateTime.UtcNow
             };
 
-            _currentWeatherCache[cacheKey] = new CacheEntry<WeatherSnapshot>(snapshot, DateTime.UtcNow);
+            _currentWeatherCache[cacheKey] = new CacheEntry<WeatherSnapshot>(snapshot, DateTime.UtcNow, latitude, longitude, normalizedUnitSystem);
             return snapshot;
         }
         catch when (_currentWeatherCache.TryGetValue(cacheKey, out var fallback))
@@ -111,10 +161,13 @@ public sealed class WeatherClient
     {
         var cacheKey = GetCacheKey(latitude, longitude, unitSystem);
 
-        if (!forceRefresh && _forecastCache.TryGetValue(cacheKey, out var cached) &&
-            DateTime.UtcNow - cached.TimestampUtc < CacheDuration)
+        if (!forceRefresh)
         {
-            return cached.Data;
+            var cached = TryGetCachedForecast(latitude, longitude, unitSystem);
+            if (cached != null)
+            {
+                return cached;
+            }
         }
 
         try
@@ -125,7 +178,7 @@ public sealed class WeatherClient
 
             if (response is not null)
             {
-                _forecastCache[cacheKey] = new CacheEntry<ForecastResponse>(response, DateTime.UtcNow);
+                _forecastCache[cacheKey] = new CacheEntry<ForecastResponse>(response, DateTime.UtcNow, latitude, longitude, normalizedUnitSystem);
             }
 
             return response ?? (_forecastCache.TryGetValue(cacheKey, out var fallback) ? fallback.Data : null);
