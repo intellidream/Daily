@@ -206,14 +206,9 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         await _loadLock.WaitAsync();
         try
         {
-            if (showLoadingSpinner)
+            if (showLoadingSpinner && !MacroIndicators.Any() && !TopStocks.Any())
             {
                 IsLoading = true;
-                MacroIndicators.Clear();
-                HeatmapData.Clear();
-                TopStocks.Clear();
-                ExtendedStocks.Clear();
-                Accounts.Clear();
             }
 
             // 1. World Data

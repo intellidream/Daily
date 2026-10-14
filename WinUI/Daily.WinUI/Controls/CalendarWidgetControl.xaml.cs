@@ -229,8 +229,10 @@ namespace Daily_WinUI.Controls
                     IsLoading = false;
                 }
             }
-            await LoadDataAsync();
+            await LoadDataAsync(showSpinner: false);
         }
+
+        public Task RefreshSilentAsync() => LoadDataAsync(showSpinner: false);
 
         private async Task LoadDataAsync(bool showSpinner = true)
         {

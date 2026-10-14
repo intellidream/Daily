@@ -423,25 +423,53 @@ namespace Daily_WinUI.Controls
         private void Header_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             e.Handled = true;
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Overview");
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.NavigateToTab(4, "Overview");
+            }
+            else
+            {
+                MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Overview");
+            }
         }
 
         private void Sleep_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             e.Handled = true;
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Sleep");
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.NavigateToTab(4, "Sleep");
+            }
+            else
+            {
+                MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Sleep");
+            }
         }
 
         private void Stress_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             e.Handled = true;
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Stress");
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.NavigateToTab(4, "Stress");
+            }
+            else
+            {
+                MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Stress");
+            }
         }
 
         private void Vitals_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             e.Handled = true;
-            MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Vitals");
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.NavigateToTab(4, "Vitals");
+            }
+            else
+            {
+                MainPage.Current?.OpenDetailWindow(typeof(Views.HealthDetailPage), "Vitals");
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

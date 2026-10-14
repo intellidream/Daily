@@ -305,9 +305,11 @@ public sealed partial class MainPage : Page
                 else if (glassContainer.Content is HealthWidgetControl health)
                     glassContainer.RefreshWithAnimation(() => health.RefreshAsync());
                 else if (glassContainer.Content is FinancesWidgetControl finances)
-                    glassContainer.RefreshWithAnimation(() => finances.LoadDataAsync());
+                    glassContainer.RefreshWithAnimation(() => finances.LoadDataAsync(showLoadingSpinner: false));
                 else if (glassContainer.Content is CalendarWidgetControl calendar)
                     glassContainer.RefreshWithAnimation(() => calendar.RefreshAsync());
+                else if (glassContainer.Content is TagdosWidgetControl tagdos)
+                    glassContainer.RefreshWithAnimation(() => tagdos.LoadDataAsync());
                 else
                     glassContainer.RefreshWithAnimation(() => System.Threading.Tasks.Task.CompletedTask);
             }
@@ -340,9 +342,11 @@ public sealed partial class MainPage : Page
                     else if (glassContainer.Content is HealthWidgetControl health)
                         tasks.Add(health.RefreshAsync());
                     else if (glassContainer.Content is FinancesWidgetControl finances)
-                        tasks.Add(finances.LoadDataAsync());
+                        tasks.Add(finances.LoadDataAsync(showLoadingSpinner: false));
                     else if (glassContainer.Content is CalendarWidgetControl calendar)
-                        tasks.Add(calendar.RefreshAsync());
+                        tasks.Add(calendar.RefreshSilentAsync());
+                    else if (glassContainer.Content is TagdosWidgetControl tagdos)
+                        tasks.Add(tagdos.LoadDataAsync());
                 }
             }
             if (tasks.Count > 0)

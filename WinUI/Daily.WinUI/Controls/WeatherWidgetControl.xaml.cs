@@ -29,15 +29,19 @@ public sealed partial class WeatherWidgetControl : UserControl
     }
 
     /// <summary>Called by the dashboard refresh button to reload data in-place.</summary>
-    public Task RefreshAsync() => RefreshWeatherAsync();
+    public Task RefreshAsync() => RefreshWeatherAsync(silent: true);
 
-    public async Task RefreshWeatherAsync()
+    public async Task RefreshWeatherAsync(bool silent = false)
     {
-
-        try
+        bool hasData = !string.IsNullOrEmpty(TempText.Text) && TempText.Text != "--";
+        if (!silent && !hasData)
         {
             LoadingOverlay.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
             LocationText.Text = "Detecting location...";
+        }
+
+        try
+        {
             var coords = await _locationService.GetCurrentCoordinatesAsync();
             if (coords.HasValue)
             {
@@ -65,19 +69,22 @@ public sealed partial class WeatherWidgetControl : UserControl
                     // Notify subscribers (e.g. MainPage top-bar art) of the current condition
                     WeatherBannerService.NotifyConditionChanged(snapshot.IconCode);
                 }
-                else
+                else if (!hasData)
                 {
                     LocationText.Text = "Weather unavailable";
                 }
             }
-            else
+            else if (!hasData)
             {
                 LocationText.Text = "Location unavailable";
             }
         }
         catch
         {
-            LocationText.Text = "Offline";
+            if (!hasData)
+            {
+                LocationText.Text = "Offline";
+            }
         }
         finally
         {
