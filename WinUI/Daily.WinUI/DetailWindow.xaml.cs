@@ -247,6 +247,10 @@ public sealed partial class DetailWindow : Window
             {
                 await calendarPage.RefreshFromTitleBarAsync();
             }
+            else if (RootFrame.Content is TagdosNotesDetailPage tagdosPage)
+            {
+                await tagdosPage.RefreshFromTitleBarAsync();
+            }
         }
         catch (Exception ex)
         {

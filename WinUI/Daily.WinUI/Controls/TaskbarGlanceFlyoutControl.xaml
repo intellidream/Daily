@@ -6,7 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Border Width="340" MaxHeight="520"
+    <Border Width="360" MaxHeight="600"
             Background="{ThemeResource CapsuleBackgroundBrush}"
             BorderBrush="{ThemeResource CapsuleBorderBrush}"
             BorderThickness="1"
@@ -50,107 +50,244 @@
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="12">
                     
-                    <!-- 1. Weather & Vitals Quick Row -->
+                    <!-- 1. Weather & Vitals Quick Row (MacOS Parity) -->
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Weather Quick Glance -->
-                        <Border Grid.Column="0" Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,0,4,0">
-                            <StackPanel Spacing="2">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xE9CA;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00D09C" />
-                                    <TextBlock x:Name="WeatherTempText" Text="--°C" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                        <!-- Weather Quick Glance (Clicks to Weather Hub) -->
+                        <Button Grid.Column="0" Click="WeatherCard_Click"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1"
+                                CornerRadius="12" Padding="12" Margin="0,0,4,0" ToolTipService.ToolTip="Open Weather (Ctrl+6)">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE9CA;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#FF00D09C" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock x:Name="WeatherTempText" Text="--°C" FontSize="17" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                                    <TextBlock x:Name="WeatherLocationText" Text="Weather" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <TextBlock x:Name="WeatherLocationText" Text="Local Weather" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </Border>
+                            </Grid>
+                        </Button>
 
-                        <!-- Health Steps Glance -->
-                        <Border Grid.Column="1" Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="10" Padding="10" Margin="4,0,0,0">
-                            <StackPanel Spacing="2">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FFFF2D55" />
-                                    <TextBlock x:Name="VitalsStepsText" Text="Vitals" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                        <!-- Health Vitals Glance: Heart Rate + Steps (Clicks to Health Hub) -->
+                        <Button Grid.Column="1" Click="HealthCard_Click"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1"
+                                CornerRadius="12" Padding="12" Margin="4,0,0,0" ToolTipService.ToolTip="Open Health (Ctrl+4)">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xEB52;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#FFFF2D55" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock x:Name="VitalsHeartRateText" Text="--" FontSize="17" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                                        <TextBlock Text="bpm" FontSize="10" FontWeight="Medium" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <FontIcon Glyph="&#xE805;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="VitalsStepsText" Text="--" FontSize="11" FontWeight="Medium" Foreground="#FF00E5FF" />
+                                    </StackPanel>
                                 </StackPanel>
-                                <TextBlock x:Name="VitalsSubText" Text="Synced Today" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </Border>
+                            </Grid>
+                        </Button>
                     </Grid>
 
-                    <!-- 2. One-Click Hydration Logging -->
-                    <Border Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="10" Padding="12">
-                        <StackPanel Spacing="8">
+                    <!-- 2. Water & Hydration Card (Mac Parity: +100 Water, +150 Coffee, +300 Water) -->
+                    <Border Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="12" Padding="12">
+                        <StackPanel Spacing="10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <FontIcon Grid.Column="0" Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00A4EF" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" Text="Quick Hydration" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="2" x:Name="WaterStatusText" Text="" FontSize="11" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Water &amp; Hydration" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" x:Name="WaterStatusText" Text="" FontSize="10.5" FontWeight="Bold" Foreground="#FF00E5FF" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
+                                <TextBlock Grid.Column="2" x:Name="WaterProgressText" Text="0 / 2000 ml" FontSize="12" FontWeight="Bold" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
                             </Grid>
 
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="LogWater250Btn" Click="LogWater250Btn_Click"
-                                        Background="#2600A4EF" BorderBrush="#4D00A4EF" BorderThickness="1"
-                                        CornerRadius="8" Padding="10,6" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00A4EF" />
-                                        <TextBlock Text="250 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FF00A4EF"/>
+                            <!-- Progress Bar -->
+                            <ProgressBar x:Name="WaterProgressBar" Value="0" Maximum="100" Height="6" CornerRadius="3"
+                                         Foreground="#FF00E5FF" Background="#1FFFFFFF" />
+
+                            <!-- Quick Action Buttons: +100 Water, +150 Coffee, +300 Water -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- +100 Water -->
+                                <Button Grid.Column="0" x:Name="LogWater100Btn" Click="LogWater100Btn_Click"
+                                        HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
+                                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 100 ml Water">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
+                                        <TextBlock Text="100" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF"/>
                                     </StackPanel>
                                 </Button>
 
-                                <Button x:Name="LogWater500Btn" Click="LogWater500Btn_Click"
-                                        Background="#2600A4EF" BorderBrush="#4D00A4EF" BorderThickness="1"
-                                        CornerRadius="8" Padding="10,6" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00A4EF" />
-                                        <TextBlock Text="500 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FF00A4EF"/>
+                                <!-- +150 Coffee -->
+                                <Button Grid.Column="1" x:Name="LogCoffee150Btn" Click="LogCoffee150Btn_Click"
+                                        HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
+                                        Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 150 ml Coffee">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="11" Foreground="#FFF59E0B" />
+                                        <TextBlock Text="150" FontSize="11" FontWeight="Bold" Foreground="#FFF59E0B"/>
                                     </StackPanel>
                                 </Button>
 
-                                <Button x:Name="LogSmokeBtn" Click="LogSmokeBtn_Click"
-                                        Background="#26FF9500" BorderBrush="#4DFF9500" BorderThickness="1"
-                                        CornerRadius="8" Padding="10,6" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FFFF9500" />
-                                        <TextBlock Text="1 Smoke" FontSize="11" FontWeight="SemiBold" Foreground="#FFFF9500"/>
+                                <!-- +300 Water -->
+                                <Button Grid.Column="2" x:Name="LogWater300Btn" Click="LogWater300Btn_Click"
+                                        HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
+                                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 300 ml Water">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <FontIcon Glyph="&#xEA3B;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
+                                        <TextBlock Text="300" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF"/>
                                     </StackPanel>
                                 </Button>
-                            </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
-                    <!-- 3. TagDoS Instant Scratchpad -->
-                    <Border Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="10" Padding="12">
-                        <StackPanel Spacing="8">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE70B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
-                                <TextBlock Text="Quick Note / TagDoS Scratchpad" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <TextBox x:Name="QuickNoteInputBox" PlaceholderText="Write note or task: Cluster &amp; Item1/Item2..."
-                                     FontSize="12" CornerRadius="6" AcceptsReturn="False" KeyDown="QuickNoteInputBox_KeyDown" />
-
+                    <!-- 3. Smokes & Tobacco Card (Mac Parity: Cig & Heat) -->
+                    <Border Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="12" Padding="12">
+                        <StackPanel Spacing="10">
                             <Grid>
-                                <TextBlock x:Name="NoteSavedFeedbackText" Text="" FontSize="11" Foreground="#FF00D09C" VerticalAlignment="Center" HorizontalAlignment="Left" />
-                                <Button x:Name="SaveQuickNoteBtn" Click="SaveQuickNoteBtn_Click"
-                                        Background="#3300E5FF" BorderBrush="#6600E5FF" BorderThickness="1"
-                                        CornerRadius="6" Padding="10,4" HorizontalAlignment="Right">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <FontIcon Glyph="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF00E5FF"/>
-                                        <TextBlock Text="Save" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF"/>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xebea;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="#FFEF4444" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Smokes" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" x:Name="SmokesStatusText" Text="" FontSize="10.5" FontWeight="Bold" Foreground="#FFEF4444" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SmokesTotalText" Text="0" FontSize="12" FontWeight="Bold" Foreground="#FFEF4444"/>
+                                    <TextBlock x:Name="SmokesBaselineText" Text="/ 12" FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Progress Bar -->
+                            <ProgressBar x:Name="SmokesProgressBar" Value="0" Maximum="100" Height="6" CornerRadius="3"
+                                         Foreground="#FFEF4444" Background="#1FFFFFFF" />
+
+                            <!-- Quick Action Buttons: Cig (combustible) & Heat (heated tobacco) -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- +1 Cig -->
+                                <Button Grid.Column="0" x:Name="LogCigBtn" Click="LogCigBtn_Click"
+                                        HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
+                                        Background="#2AEF4444" BorderBrush="#52EF4444" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 1 Cigarette">
+                                    <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                                        <FontIcon Glyph="&#xecc4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="#FFEF4444" />
+                                        <TextBlock Text="Cig" FontSize="11" FontWeight="Bold" Foreground="#FFEF4444"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- +1 Heat -->
+                                <Button Grid.Column="1" x:Name="LogHeatBtn" Click="LogHeatBtn_Click"
+                                        HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
+                                        Background="#2A3B82F6" BorderBrush="#523B82F6" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 1 Heated Tobacco Stick">
+                                    <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                                        <FontIcon Glyph="&#xec2c;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="#FF3B82F6" />
+                                        <TextBlock Text="Heat" FontSize="11" FontWeight="Bold" Foreground="#FF3B82F6"/>
                                     </StackPanel>
                                 </Button>
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <!-- 4. Quick Hub Navigation Jumps -->
+                    <!-- 4. TagDoS Quick Entry (Mac Parity: Dual Mode Note vs TagDo) -->
+                    <Border Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="12" Padding="12">
+                        <StackPanel Spacing="8">
+                            <!-- Header with Mode Selector and Hub Jump -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE762;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF10B981" VerticalAlignment="Center"/>
+                                    <TextBlock Text="TagDoS Quick Entry" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" x:Name="TagdosStatusText" Text="" FontSize="10.5" FontWeight="Bold" Foreground="#FF10B981" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
+                                <Button Grid.Column="2" Click="TagdosHubLink_Click" Background="Transparent" BorderThickness="0" Padding="4,2" CornerRadius="6" ToolTipService.ToolTip="Open TagDoS (Ctrl+3)">
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock Text="Hub (Ctrl+3)" FontSize="10" FontWeight="Medium" Foreground="#FF10B981"/>
+                                        <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="8" Foreground="#FF10B981"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <!-- Mode Toggle: Note vs TagDo -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button x:Name="TagdosModeNoteBtn" Click="TagdosModeNote_Click"
+                                        Padding="10,4" CornerRadius="12" Background="#4010B981" BorderBrush="#8010B981" BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <FontIcon Glyph="&#xE70B;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock Text="Quick Note" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="TagdosModeTagdoBtn" Click="TagdosModeTagdo_Click"
+                                        Padding="10,4" CornerRadius="12" Background="#14FFFFFF" BorderThickness="0">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <FontIcon Glyph="&#xE762;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                        <TextBlock Text="TagDo" FontSize="11" FontWeight="Medium" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- Input Box + Submit Button -->
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="QuickNoteInputBox"
+                                         PlaceholderText="Add note (saved to TagDoS Notes tab)..."
+                                         FontSize="12" CornerRadius="8" AcceptsReturn="False" KeyDown="QuickNoteInputBox_KeyDown" TextChanged="QuickNoteInputBox_TextChanged"/>
+                                <Button Grid.Column="1" x:Name="SaveQuickNoteBtn" Click="SaveQuickNoteBtn_Click"
+                                        Width="32" Height="32" Padding="0" CornerRadius="16"
+                                        Background="#2610B981" BorderBrush="#4D10B981" BorderThickness="1"
+                                        ToolTipService.ToolTip="Submit (Enter)">
+                                    <FontIcon Glyph="&#xE725;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF10B981"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- Helper Text -->
+                            <TextBlock x:Name="TagdosContextHelperText"
+                                       Text="Saves to TagDoS Notes tab (accessible in Ctrl+3 -> Notes)"
+                                       FontSize="9.5" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 5. Quick Hub Navigation Jumps (8 Hubs) -->
                     <Grid ColumnSpacing="6" RowSpacing="6">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -231,10 +368,11 @@
                     <!-- Divider -->
                     <Rectangle Height="1" Fill="#1AFFFFFF" Margin="0,4" />
 
-                    <!-- Exit App Button -->
+                    <!-- Exit App Button (Preserved per User Request) -->
                     <Button x:Name="ExitAppBtn" Click="ExitAppBtn_Click"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                            Background="Transparent" BorderThickness="0" CornerRadius="6" Padding="6">
+                            Background="Transparent" BorderThickness="0" CornerRadius="6" Padding="6"
+                            ToolTipService.ToolTip="Completely exit DayOne">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                             <TextBlock Text="Exit DayOne" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}"/>

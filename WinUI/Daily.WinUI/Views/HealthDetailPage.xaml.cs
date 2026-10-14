@@ -32,12 +32,6 @@ namespace Daily_WinUI.Views
         private SleepSession? _primarySleepSession;
         private List<SleepSession> _allSleepSessions = new();
 
-        private bool _isSyncing = false;
-        public bool IsSyncing => _isSyncing;
-        public bool IsNotSyncing => !_isSyncing;
-        public Visibility SyncRingVisibility => _isSyncing ? Visibility.Visible : Visibility.Collapsed;
-        public Visibility SyncIconVisibility => !_isSyncing ? Visibility.Visible : Visibility.Collapsed;
-
         // Multi-Device Filter State
         private string? _selectedDeviceFilter = null; // null = All Devices
         public ObservableCollection<DeviceFilterItem> AvailableDevices { get; } = new();
@@ -248,6 +242,10 @@ namespace Daily_WinUI.Views
 
         public async Task RefreshFromTitleBarAsync()
         {
+            if (_healthHubService != null)
+            {
+                await _healthHubService.PullDeltasAsync();
+            }
             await LoadDataAsync();
         }
 
@@ -614,33 +612,6 @@ namespace Daily_WinUI.Views
             if (_healthService != null) _healthService.SelectedDate = _selectedDate;
             UpdateDayNavigatorUi();
             await LoadDataAsync();
-        }
-
-        private async void SyncButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isSyncing) return;
-            _isSyncing = true;
-            OnPropertyChanged(nameof(IsSyncing));
-            OnPropertyChanged(nameof(IsNotSyncing));
-            OnPropertyChanged(nameof(SyncRingVisibility));
-            OnPropertyChanged(nameof(SyncIconVisibility));
-
-            try
-            {
-                if (_healthHubService != null)
-                {
-                    await _healthHubService.PullDeltasAsync();
-                }
-                await LoadDataAsync();
-            }
-            finally
-            {
-                _isSyncing = false;
-                OnPropertyChanged(nameof(IsSyncing));
-                OnPropertyChanged(nameof(IsNotSyncing));
-                OnPropertyChanged(nameof(SyncRingVisibility));
-                OnPropertyChanged(nameof(SyncIconVisibility));
-            }
         }
 
         // ==========================================

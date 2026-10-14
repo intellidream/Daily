@@ -54,11 +54,6 @@
                     </StackPanel>
                 </Button>
 
-                <!-- Sync Button -->
-                <Button x:Name="SyncButton" Click="SyncButton_Click" Width="36" Height="36" CornerRadius="18" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Sync with Cloud">
-                    <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
-                </Button>
-
                 <!-- Pop-out Window Button -->
                 <Button x:Name="PopOutButton" Click="PopOutButton_Click" Width="36" Height="36" CornerRadius="18" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="0" ToolTipService.ToolTip="Open in Separate Window">
                     <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />

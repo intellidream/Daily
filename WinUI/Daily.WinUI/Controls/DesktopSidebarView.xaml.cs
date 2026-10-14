@@ -13,7 +13,6 @@ namespace Daily_WinUI.Controls
 
         public event EventHandler<int>? TabSelected;
         public event EventHandler? CollapseRequested;
-        public event EventHandler? SyncRequested;
         public event EventHandler? SettingsRequested;
 
         public int SelectedTabIndex => _selectedTabIndex;
@@ -37,11 +36,6 @@ namespace Daily_WinUI.Controls
                 SetSelectedTab(index);
                 TabSelected?.Invoke(this, index);
             }
-        }
-
-        private void SidebarSyncButton_Click(object sender, RoutedEventArgs e)
-        {
-            SyncRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void SidebarSettingsButton_Click(object sender, RoutedEventArgs e)

@@ -836,7 +836,7 @@ namespace Daily_WinUI.Views
             }
         }
 
-        private async void SyncButton_Click(object sender, RoutedEventArgs e)
+        public async Task RefreshFromTitleBarAsync()
         {
             if (_tagdosService != null)
             {
