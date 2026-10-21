@@ -2,6 +2,7 @@ import SwiftUI
 import DailyCore
 
 public struct RootView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
     
@@ -144,87 +145,14 @@ public struct RootView: View {
                 
             case .authenticated, .guest:
                 LiquidGlassBackground {
-                    ZStack(alignment: .bottom) {
-                        // Active tab content
-                        Group {
-                            switch selectedTab {
-                            case .dashboard:
-                                DashboardView(
-                                    onNavigateToWeather: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .weather
-                                        }
-                                    },
-                                    onNavigateToNews: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .news
-                                        }
-                                    },
-                                    onNavigateToHealth: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .health
-                                        }
-                                    },
-                                    onNavigateToHabits: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .habits
-                                        }
-                                    },
-                                    onNavigateToFinances: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .finances
-                                        }
-                                    },
-                                    onNavigateToSettings: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .settings
-                                        }
-                                    },
-                                    onNavigateToTagdos: {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                            selectedTab = .tagdos
-                                        }
-                                    }
-                                )
-                            case .weather:
-                                WeatherDetailView(onNavigateBack: navigateToDashboard)
-                            case .news:
-                                NewsFeedView(onNavigateBack: navigateToDashboard)
-                            case .health:
-                                HealthMainView(onNavigateBack: navigateToDashboard)
-                            case .habits:
-                                HabitsMainView(onNavigateBack: navigateToDashboard)
-                            case .finances:
-                                FinancesMainView(onNavigateBack: navigateToDashboard)
-                            case .tagdos:
-                                TagdosNotesHubView(onNavigateBack: navigateToDashboard)
-                            case .settings:
-                                SettingsView(onNavigateBack: navigateToDashboard)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .applyIf(selectedTab != .dashboard) { view in
-                            view.simultaneousGesture(
-                                DragGesture(minimumDistance: 20, coordinateSpace: .global)
-                                    .onEnded { value in
-                                        let startX = value.startLocation.x
-                                        let translationX = value.translation.width
-                                        let translationY = value.translation.height
-                                        
-                                        // Edge swipe right: started within 50pt of left edge, dragged right > 60pt, horizontally dominant
-                                        if startX <= 50 && translationX > 60 && abs(translationX) > abs(translationY) * 1.3 {
-                                            #if canImport(UIKit)
-                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                            #endif
-                                            navigateToDashboard()
-                                        }
-                                    }
-                            )
-                        }
+                    GeometryReader { geometry in
+                        let isFoldable = horizontalSizeClass == .regular || geometry.size.width >= 600
                         
-                        // Floating Liquid Glass Navigation Capsule
-                        FloatingGlassCapsule(selectedTab: $selectedTab)
-                            .padding(.bottom, 24)
+                        if isFoldable {
+                            foldableDualPaneView
+                        } else {
+                            standardCompactPhoneView
+                        }
                     }
                 }
                 .transition(.asymmetric(
@@ -280,6 +208,216 @@ public struct RootView: View {
                     }
                 }
             }
+        }
+    }
+    
+    // MARK: - Standard Single-Screen Compact Layout (iPhone 16 Pro, standard phones, folded Duo)
+    @ViewBuilder
+    private var standardCompactPhoneView: some View {
+        ZStack(alignment: .bottom) {
+            // Active tab content
+            Group {
+                switch selectedTab {
+                case .dashboard:
+                    DashboardView(
+                        onNavigateToWeather: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .weather
+                            }
+                        },
+                        onNavigateToNews: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .news
+                            }
+                        },
+                        onNavigateToHealth: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .health
+                            }
+                        },
+                        onNavigateToHabits: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .habits
+                            }
+                        },
+                        onNavigateToFinances: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .finances
+                            }
+                        },
+                        onNavigateToSettings: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .settings
+                            }
+                        },
+                        onNavigateToTagdos: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .tagdos
+                            }
+                        }
+                    )
+                case .weather:
+                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                case .news:
+                    NewsFeedView(onNavigateBack: navigateToDashboard)
+                case .health:
+                    HealthMainView(onNavigateBack: navigateToDashboard)
+                case .habits:
+                    HabitsMainView(onNavigateBack: navigateToDashboard)
+                case .finances:
+                    FinancesMainView(onNavigateBack: navigateToDashboard)
+                case .tagdos:
+                    TagdosNotesHubView(onNavigateBack: navigateToDashboard)
+                case .settings:
+                    SettingsView(onNavigateBack: navigateToDashboard)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .applyIf(selectedTab != .dashboard) { view in
+                view.simultaneousGesture(
+                    DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                        .onEnded { value in
+                            let startX = value.startLocation.x
+                            let translationX = value.translation.width
+                            let translationY = value.translation.height
+                            
+                            // Edge swipe right: started within 50pt of left edge, dragged right > 60pt, horizontally dominant
+                            if startX <= 50 && translationX > 60 && abs(translationX) > abs(translationY) * 1.3 {
+                                #if canImport(UIKit)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                #endif
+                                navigateToDashboard()
+                            }
+                        }
+                )
+            }
+            
+            // Floating Liquid Glass Navigation Capsule
+            FloatingGlassCapsule(selectedTab: $selectedTab)
+                .padding(.bottom, 24)
+        }
+    }
+    
+    // MARK: - Adaptive Dual-Pane Foldable Layout (iPhone Duo unfolded & expanded displays)
+    @ViewBuilder
+    private var foldableDualPaneView: some View {
+        HStack(spacing: 0) {
+            // --- 1. Master Pane (Left): Dashboard in single column & Anchored Capsule ---
+            ZStack(alignment: .bottom) {
+                DashboardView(
+                    forceSingleColumn: true,
+                    onNavigateToWeather: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .weather
+                        }
+                    },
+                    onNavigateToNews: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .news
+                        }
+                    },
+                    onNavigateToHealth: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .health
+                        }
+                    },
+                    onNavigateToHabits: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .habits
+                        }
+                    },
+                    onNavigateToFinances: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .finances
+                        }
+                    },
+                    onNavigateToSettings: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .settings
+                        }
+                    },
+                    onNavigateToTagdos: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .tagdos
+                        }
+                    }
+                )
+                
+                // Option A: Floating Glass Capsule anchored at bottom of Master pane
+                FloatingGlassCapsule(selectedTab: $selectedTab)
+                    .padding(.bottom, 24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.leading, 16)
+            .padding(.trailing, 12)
+            
+            // --- 2. Subtle Crease / Hinge Divider ---
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 1)
+                .edgesIgnoringSafeArea(.vertical)
+            
+            // --- 3. Detail Pane (Right): Companion or Embedded Hub ---
+            VStack(spacing: 0) {
+                if selectedTab != .dashboard {
+                    FoldableDragHandle {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .dashboard
+                        }
+                    }
+                }
+                
+                Group {
+                    switch selectedTab {
+                    case .dashboard:
+                        DailyFoldableCompanionPane(
+                            onOpenHub: { tab in
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    selectedTab = tab
+                                }
+                            },
+                            onOpenBriefing: {
+                                SmartBriefingService.shared.isBriefingPresented = true
+                            }
+                        )
+                    case .weather:
+                        WeatherDetailView(onNavigateBack: navigateToDashboard)
+                    case .news:
+                        NewsFeedView(onNavigateBack: navigateToDashboard)
+                    case .health:
+                        HealthMainView(onNavigateBack: navigateToDashboard)
+                    case .habits:
+                        HabitsMainView(onNavigateBack: navigateToDashboard)
+                    case .finances:
+                        FinancesMainView(onNavigateBack: navigateToDashboard)
+                    case .tagdos:
+                        TagdosNotesHubView(onNavigateBack: navigateToDashboard)
+                    case .settings:
+                        SettingsView(onNavigateBack: navigateToDashboard)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .applyIf(selectedTab != .dashboard) { view in
+                    view.simultaneousGesture(
+                        DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                            .onEnded { value in
+                                let translationX = value.translation.width
+                                let translationY = value.translation.height
+                                
+                                // Edge swipe right on detail pane: returns to Companion
+                                if translationX > 60 && abs(translationX) > abs(translationY) * 1.3 {
+                                    #if canImport(UIKit)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    #endif
+                                    navigateToDashboard()
+                                }
+                            }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.leading, 12)
+            .padding(.trailing, 16)
         }
     }
     

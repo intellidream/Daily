@@ -11,6 +11,7 @@ public struct DashboardView: View {
     @State private var showingCustomizeSheet = false
     @State private var showingBriefingSheet = false
     
+    private let forceSingleColumn: Bool
     private let onNavigateToWeather: () -> Void
     private let onNavigateToNews: () -> Void
     private let onNavigateToHealth: () -> Void
@@ -20,6 +21,7 @@ public struct DashboardView: View {
     private let onNavigateToTagdos: () -> Void
     
     public init(
+        forceSingleColumn: Bool = false,
         onNavigateToWeather: @escaping () -> Void = {},
         onNavigateToNews: @escaping () -> Void = {},
         onNavigateToHealth: @escaping () -> Void = {},
@@ -28,6 +30,7 @@ public struct DashboardView: View {
         onNavigateToSettings: @escaping () -> Void = {},
         onNavigateToTagdos: @escaping () -> Void = {}
     ) {
+        self.forceSingleColumn = forceSingleColumn
         self.onNavigateToWeather = onNavigateToWeather
         self.onNavigateToNews = onNavigateToNews
         self.onNavigateToHealth = onNavigateToHealth
@@ -57,11 +60,19 @@ public struct DashboardView: View {
                 
                 // Native Coalesced Row-Grid Architecture (100% 120 FPS ProMotion stability)
                 let visibleWidgets = settingsService.settings.dashboardWidgets.filter(\.isVisible)
-                let rows = DashboardRowBuilder.buildRows(from: visibleWidgets)
                 
-                VStack(spacing: 14) {
-                    ForEach(rows) { row in
-                        dashboardRowView(row: row, allWidgets: visibleWidgets)
+                if forceSingleColumn {
+                    VStack(spacing: 14) {
+                        ForEach(visibleWidgets) { config in
+                            widgetItemView(config: config, allWidgets: visibleWidgets)
+                        }
+                    }
+                } else {
+                    let rows = DashboardRowBuilder.buildRows(from: visibleWidgets)
+                    VStack(spacing: 14) {
+                        ForEach(rows) { row in
+                            dashboardRowView(row: row, allWidgets: visibleWidgets)
+                        }
                     }
                 }
             }
