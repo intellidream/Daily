@@ -143,3 +143,21 @@ Replaces old redundant widget tiles with a single liquid glass container featuri
   - Verified live on `Pixel_9_Pro_Fold` emulator (`emulator-5554`, unfolded screen resolution `2076x2152`):
     - UI hierarchy inspection confirmed presence of Diurnal Header, Concentric Hero Rings, Mascot, Monkey Co-Pilot Studio with 5 prompt chips, and the 4 composite bands.
     - Verified tap interaction on `Sleep & Readiness` prompt chip triggering inline narrative expansion with direct portal button.
+
+---
+
+## 7. Real-Time Sleep Telemetry Synchronization & Zero-Stale Pulse Architecture
+
+### 7.1 The Stale Telemetry Problem
+When a device launches in the morning, cached briefing records (`SmartBriefingRecord`) often reflect a state where nocturnal sleep had not yet synced from Health Connect / Apple HealthKit (`metrics.sleepScore = null` or stale duration). While the live telemetry flow (`primarySleepSession`) updates immediately upon background sync, displaying a cached briefing string caused an inconsistency: the Concentric Rings and Legend displayed fresh sleep data (e.g. 7h 30m, 84%), while the narrative Studio text remained stuck on older or placeholder text ("Recovery vitals are syncing...").
+
+### 7.2 The Dynamic Dual-Engine Solution
+To ensure 100% data consistency across iOS and Android:
+1. **Dynamic Pulse Fallback:**
+   - `synthesizeCrossDomainPulse` compares `liveSleepScore` with `activeBriefing.metrics.sleepScore`.
+   - If inconsistent or if `activeBriefing` lacks recent sleep data, it bypasses the static string and dynamically synthesizes the live pulse with the latest sleep session, score, circadian hydration window, and Tagdos tasks.
+2. **Reactive Auto-Regeneration:**
+   - **Android (`LaunchedEffect`):** Observes `(primarySleep?.id, primarySleep?.sleepScore, primarySleep?.asleepSeconds, slot)` and triggers `smartBriefingRepository.getOrGenerateBriefing(forceRefresh = true)` whenever sleep data updates.
+   - **iOS (`.task(id:)`):** Observes `primarySleepSession?.id`, `sleepScore`, and `slot` and triggers `briefingService.getOrGenerateBriefing(forceRefresh = true)`.
+3. **Optimized Studio Bubble Measure:**
+   - Rather than dumping the full multi-paragraph briefing (which caused sleep to be truncated by `maxLines`), the Studio pulse specifically extracts the targeted health, autonomic stress, and task focus sentences, with `maxLines = 4` for clean readability.

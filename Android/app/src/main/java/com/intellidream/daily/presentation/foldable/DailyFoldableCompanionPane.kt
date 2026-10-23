@@ -53,6 +53,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +96,7 @@ import com.intellidream.daily.model.MonkeyMood
 import com.intellidream.daily.model.NewsArticle
 import com.intellidream.daily.model.ParsedSmartLedger
 import com.intellidream.daily.model.SleepSession
+import com.intellidream.daily.model.SmartBriefingRecord
 import com.intellidream.daily.model.StressLevel
 import com.intellidream.daily.model.TagDoQuickNote
 import com.intellidream.daily.model.TagDoStream
@@ -385,12 +387,13 @@ fun DailyFoldableCompanionPane(
             val pulse = synthesizeCrossDomainPulse(
                 slot = slot,
                 stressLevel = stressLevel,
+                primarySleep = primarySleep,
+                activeBriefing = activeBriefing,
                 hydroWindow = hydroWindow,
                 waterMl = waterTotal.roundToInt(),
                 waterGoalMl = waterGoal.roundToInt(),
                 totalSteps = totalSteps,
-                topUrgentPills = topUrgentPills,
-                activeBriefingText = activeBriefing?.narrative?.fullConcatenatedText
+                topUrgentPills = topUrgentPills
             )
             activeTurn = CoPilotInlineTurn(
                 question = trimmed,
@@ -403,6 +406,31 @@ fun DailyFoldableCompanionPane(
                 targetTab = NavigationTab.Health,
                 portalTitle = "Open Health & Vitals Hub",
                 accentColor = ThemeColors.accentCyan
+            )
+        }
+    }
+
+    // Automatically trigger Smart Briefing generation / refresh whenever primary sleep data or slot updates
+    LaunchedEffect(primarySleep?.id, primarySleep?.sleepScore, primarySleep?.asleepSeconds, slot) {
+        val currentBrief = activeBriefing
+        val needsRefresh = currentBrief == null ||
+                currentBrief.slot != slot ||
+                currentBrief.metrics.sleepScore != primarySleep?.sleepScore ||
+                currentBrief.metrics.sleepDurationFormatted != primarySleep?.totalAsleepFormatted
+
+        if (needsRefresh) {
+            smartBriefingRepository.getOrGenerateBriefing(
+                forceRefresh = true,
+                userName = userProfile?.firstName ?: "Friend",
+                userId = userProfile?.id ?: "local_user",
+                settings = settings,
+                weather = weather,
+                locationName = weather?.name ?: "",
+                healthRepository = healthRepository,
+                habitsRepository = habitsRepository,
+                smartLedgerRepository = smartLedgerRepository,
+                tagdosRepository = tagdosRepository,
+                newsRepository = newsRepository
             )
         }
     }
@@ -818,12 +846,13 @@ fun DailyFoldableCompanionPane(
                             val defaultPulse = synthesizeCrossDomainPulse(
                                 slot = slot,
                                 stressLevel = stressLevel,
+                                primarySleep = primarySleep,
+                                activeBriefing = activeBriefing,
                                 hydroWindow = hydroWindow,
                                 waterMl = waterTotal.roundToInt(),
                                 waterGoalMl = waterGoal.roundToInt(),
                                 totalSteps = totalSteps,
-                                topUrgentPills = topUrgentPills,
-                                activeBriefingText = activeBriefing?.narrative?.fullConcatenatedText
+                                topUrgentPills = topUrgentPills
                             )
                             Column(
                                 modifier = Modifier
@@ -844,7 +873,7 @@ fun DailyFoldableCompanionPane(
                                     color = Color.White.copy(alpha = 0.86f),
                                     fontSize = 12.5.sp,
                                     lineHeight = 18.sp,
-                                    maxLines = 3,
+                                    maxLines = 4,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -1481,19 +1510,44 @@ private fun SpotlightIconBadge(
 private fun synthesizeCrossDomainPulse(
     slot: BriefingTimeSlot,
     stressLevel: StressLevel?,
+    primarySleep: SleepSession?,
+    activeBriefing: SmartBriefingRecord?,
     hydroWindow: CircadianHydrationWindow,
     waterMl: Int,
     waterGoalMl: Int,
     totalSteps: Int,
-    topUrgentPills: List<String>,
-    activeBriefingText: String?
+    topUrgentPills: List<String>
 ): Pair<String, String> {
     val stressName = stressLevel?.displayName ?: "Balanced"
     val headline = "${slot.displayName} • $stressName Autonomic Tone"
 
-    if (!activeBriefingText.isNullOrBlank()) {
-        return headline to activeBriefingText
+    // Check if activeBriefing has up-to-date sleep telemetry matching primarySleep
+    val liveSleepScore = primarySleep?.sleepScore
+    val briefSleepScore = activeBriefing?.metrics?.sleepScore
+    val isSleepConsistent = (liveSleepScore == briefSleepScore)
+
+    if (isSleepConsistent && activeBriefing != null) {
+        val parts = listOf(
+            activeBriefing.narrative.healthText,
+            activeBriefing.narrative.stressText,
+            activeBriefing.narrative.tagdosText
+        ).filter { it.isNotBlank() }
+
+        if (parts.isNotEmpty()) {
+            return headline to parts.joinToString(" ")
+        }
     }
+
+    // Dynamic live synthesis incorporating real-time sleep, hydration, and tasks
+    val sleepPart = if (primarySleep != null) {
+        val sleepTime = primarySleep.totalAsleepFormatted
+        val score = primarySleep.sleepScore
+        if (score >= 80) {
+            "Great recovery with $sleepTime asleep (Score $score%). Ready for a focused, high-energy day."
+        } else {
+            "Logged $sleepTime asleep (Score $score%). Maintain steady energy and stay hydrated."
+        }
+    } else ""
 
     val focusPart = if (topUrgentPills.isEmpty()) {
         "Tagdos streams have no urgent blockers."
@@ -1501,7 +1555,11 @@ private fun synthesizeCrossDomainPulse(
         "Priority focus: ${topUrgentPills.take(3).joinToString(", ")}."
     }
 
-    val body = "You're in the ${hydroWindow.title} window ($waterMl/$waterGoalMl ml logged, $totalSteps steps). $focusPart Tap any prefabricated topic below for deep clinical or financial insights."
+    val hydroPart = "You're in the ${hydroWindow.title} window ($waterMl/$waterGoalMl ml logged, $totalSteps steps)."
+    val body = listOf(sleepPart, hydroPart, focusPart)
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+
     return headline to body
 }
 

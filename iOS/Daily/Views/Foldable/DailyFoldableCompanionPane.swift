@@ -220,9 +220,15 @@ public struct DailyFoldableCompanionPane: View {
             .padding(.bottom, 110)
         }
         .scrollBounceBehavior(.always, axes: .vertical)
-        .task {
-            if briefingService.activeBriefing == nil {
-                _ = await briefingService.getOrGenerateBriefing(forceRefresh: false)
+        .task(id: "\(healthService.primarySleepSession?.id ?? "")-\(healthService.primarySleepSession?.sleepScore ?? 0)-\(slot.rawValue)") {
+            let currentBrief = briefingService.activeBriefing
+            let currentSleep = healthService.primarySleepSession
+            let needsRefresh = currentBrief == nil ||
+                currentBrief?.slot != slot ||
+                currentBrief?.metrics.sleepScore != currentSleep?.sleepScore ||
+                currentBrief?.metrics.sleepDurationFormatted != currentSleep?.totalAsleepFormatted
+            if needsRefresh {
+                _ = await briefingService.getOrGenerateBriefing(forceRefresh: true)
             }
         }
     }
@@ -1058,7 +1064,11 @@ public struct DailyFoldableCompanionPane: View {
         
         let headline = "\(slot.displayName) • \(stressName) Autonomic Tone"
         
-        if let record = briefingService.activeBriefing {
+        let liveSleepScore = healthService.primarySleepSession?.sleepScore
+        let briefSleepScore = briefingService.activeBriefing?.metrics.sleepScore
+        let isSleepConsistent = (liveSleepScore == briefSleepScore)
+        
+        if isSleepConsistent, let record = briefingService.activeBriefing {
             let parts = [
                 record.narrative.healthText,
                 record.narrative.stressText,
@@ -1069,11 +1079,23 @@ public struct DailyFoldableCompanionPane: View {
             }
         }
         
+        var sleepPart = ""
+        if let session = healthService.primarySleepSession {
+            let sleepTime = session.totalAsleepFormatted
+            let score = session.sleepScore
+            if score >= 80 {
+                sleepPart = "Great recovery with \(sleepTime) asleep (Score \(score)%). Ready for a focused, high-energy day."
+            } else {
+                sleepPart = "Logged \(sleepTime) asleep (Score \(score)%). Maintain steady energy and stay hydrated."
+            }
+        }
+        
         let focusPart = topPills.isEmpty
             ? "Tagdos streams have no urgent blockers."
             : "Priority focus: \(topPills.prefix(3).joined(separator: ", "))."
         
-        let body = "You're in the \(hydroSlot.title) window (\(waterMl)/\(waterGoal) ml logged, \(steps) steps). \(focusPart) Tap any prefabricated topic below for deep clinical or financial insights."
+        let hydroPart = "You're in the \(hydroSlot.title) window (\(waterMl)/\(waterGoal) ml logged, \(steps) steps)."
+        let body = [sleepPart, hydroPart, focusPart].filter { !$0.isEmpty }.joined(separator: " ")
         return (headline, body)
     }
     
