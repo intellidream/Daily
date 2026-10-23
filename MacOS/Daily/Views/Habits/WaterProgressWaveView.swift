@@ -26,7 +26,7 @@ struct WaveShape: Shape {
         let width = rect.width
         let wavelength = width
         
-        for x in stride(from: 0, through: width, by: 2) {
+        for x in stride(from: 0, through: width, by: 4) {
             let relativeX = x / wavelength
             let sine = sin(relativeX * 2 * .pi + offset.radians)
             let y = baseHeight + CGFloat(sine) * amplitude
@@ -61,6 +61,7 @@ public struct WaterProgressWaveView: View {
     
     @State private var waveOffset1 = Angle(degrees: 0)
     @State private var waveOffset2 = Angle(degrees: 90)
+    @State private var isSurging: Bool = false
     
     public init(
         currentMl: Double,
@@ -208,7 +209,7 @@ public struct WaterProgressWaveView: View {
                     let phase = Angle(degrees: Double(idx * 40))
                     
                     // Back wave (deeper tone, softer opacity, out of phase)
-                    WaveShape(offset: waveOffset2 + phase, percent: stratum.cumProgress, amplitude: 8)
+                    WaveShape(offset: waveOffset2 + phase, percent: stratum.cumProgress, amplitude: isSurging ? 7.5 : 2.0)
                         .fill(
                             LinearGradient(
                                 colors: [
@@ -222,7 +223,7 @@ public struct WaterProgressWaveView: View {
                         .clipShape(Circle())
                     
                     // Front wave (vibrant primary tone with high opacity)
-                    WaveShape(offset: waveOffset1 + phase, percent: stratum.cumProgress, amplitude: 6.5)
+                    WaveShape(offset: waveOffset1 + phase, percent: stratum.cumProgress, amplitude: isSurging ? 6.0 : 1.8)
                         .fill(
                             LinearGradient(
                                 colors: [
@@ -333,12 +334,22 @@ public struct WaterProgressWaveView: View {
             }
         }
         .onAppear {
-            withAnimation(.linear(duration: 3.5).repeatForever(autoreverses: false)) {
-                waveOffset1 = Angle(degrees: 360)
-            }
-            withAnimation(.linear(duration: 4.8).repeatForever(autoreverses: false)) {
-                waveOffset2 = Angle(degrees: -270)
-            }
+            triggerFluidSurge()
+        }
+        .onChange(of: currentMl) { _, _ in
+            triggerFluidSurge()
+        }
+    }
+    
+    private func triggerFluidSurge() {
+        guard !isSurging else { return }
+        isSurging = true
+        withAnimation(.easeOut(duration: 2.5)) {
+            waveOffset1 = Angle(degrees: waveOffset1.degrees + 360)
+            waveOffset2 = Angle(degrees: waveOffset2.degrees - 270)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            isSurging = false
         }
     }
 }

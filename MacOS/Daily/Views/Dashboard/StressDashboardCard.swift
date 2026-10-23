@@ -121,7 +121,7 @@ public struct StressDashboardCard: View, Equatable {
         let para = analysis?.parasympatheticPercent ?? 65
         
         HStack(spacing: 16) {
-            MonkeyMascotView(mood: mood, size: .card, animated: hasData)
+            MonkeyMascotView(mood: mood, size: .card, animated: false)
                 .frame(width: 64, height: 64)
             
             VStack(alignment: .leading, spacing: 6) {
@@ -204,7 +204,7 @@ public struct StressDashboardCard: View, Equatable {
                     .foregroundColor(levelColor)
             }
             
-            MonkeyMascotView(mood: mood, size: .card, animated: hasData)
+            MonkeyMascotView(mood: mood, size: .card, animated: false)
                 .frame(width: 64, height: 64)
             
             VStack(spacing: 2) {
@@ -241,7 +241,7 @@ public struct StressDashboardCard: View, Equatable {
         
         VStack(spacing: 14) {
             HStack(spacing: 14) {
-                MonkeyMascotView(mood: mood, size: .card, animated: hasData)
+                MonkeyMascotView(mood: mood, size: .card, animated: false)
                     .frame(width: 72, height: 72)
                 
                 VStack(alignment: .leading, spacing: 4) {

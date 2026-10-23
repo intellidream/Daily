@@ -69,11 +69,11 @@ public struct MonkeyMascotView: View {
         .onAppear {
             if animated {
                 withAnimation(
-                    .easeInOut(duration: mood == .overheated ? 1.4 : 3.0)
-                    .repeatForever(autoreverses: true)
+                    .easeInOut(duration: mood == .overheated ? 1.4 : 2.8)
+                    .repeatCount(4, autoreverses: true)
                 ) {
-                    breatheScale = 1.12
-                    earWiggle = mood == .busy ? 4.0 : 1.5
+                    breatheScale = 1.10
+                    earWiggle = mood == .busy ? 3.0 : 1.2
                 }
             }
         }

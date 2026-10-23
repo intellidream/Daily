@@ -451,12 +451,24 @@ public struct SmokesLungsGaugeView: View {
             }
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
-                pulseScale = 1.04
-            }
+            triggerBreathPulse()
+        }
+        .onChange(of: countToday) { _, _ in
+            triggerBreathPulse()
         }
         .onReceive(refreshTimer) { newTime in
             currentTime = newTime
+        }
+    }
+    
+    private func triggerBreathPulse() {
+        withAnimation(.easeInOut(duration: 0.6)) {
+            pulseScale = 1.05
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeInOut(duration: 0.8)) {
+                pulseScale = 1.0
+            }
         }
     }
 }
