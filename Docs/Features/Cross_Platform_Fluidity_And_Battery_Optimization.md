@@ -80,3 +80,8 @@ By replacing continuous animation loops with the **Hydrodynamic Fluid Surge** mo
   - Wireless ADB deployment (`adb-R3GL70B1LGP-HLPtmw._adb-tls-connect._tcp`) successful.
   - Process `com.intellidream.daily.debug` verified live at **0.0% CPU** after initialization.
   - Visual verification captured in artifact `radar_fold8_dashboard.png`.
+- **Physical Device (Google Pixel 9 Pro, `caiman`)**:
+  - Paired wirelessly via TLS connect (`192.168.3.8:37139`).
+  - Deployed debug APK via `192.168.3.8:33513`.
+  - Process `com.intellidream.daily.debug` launched and settled to **0.0% CPU** at idle.
+  - Visual verification captured in artifact `pixel9pro_dashboard.png`.
