@@ -54,6 +54,7 @@ public enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
 public struct MacOSSettingsSection: View {
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @AppStorage("useDesktopSidebar") private var useDesktopSidebar: Bool = false
+    @AppStorage("useDualPaneWorkspace") private var useDualPaneWorkspace: Bool = true
     @AppStorage("menuBarDisplayMode") private var menuBarDisplayMode: String = MenuBarDisplayMode.iconAndWeather.rawValue
     @Environment(\.openWindow) private var openWindow
     
@@ -138,7 +139,39 @@ public struct MacOSSettingsSection: View {
                 Divider()
                     .background(Color.white.opacity(0.15))
                 
-                // 3. MenuBar Extra Display Mode
+                // 3. Workspace Layout Preference (Foldable Dual-Pane vs Compact Single-Column)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Workspace Layout")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text(useDualPaneWorkspace ? "Dual-Pane Co-Pilot" : "Single-Column")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                    }
+                    
+                    Picker("Workspace Layout", selection: Binding(
+                        get: { useDualPaneWorkspace },
+                        set: { newValue in
+                            useDualPaneWorkspace = newValue
+                            MacOSWindowManager.shared.setMainWindowDualPane(enabled: newValue)
+                        }
+                    )) {
+                        Text("Dual-Pane Co-Pilot (Wide)").tag(true)
+                        Text("Single-Column (Compact)").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    
+                    Text("Tip: Toggle anytime with ⌘D or the split toolbar button. Dual-Pane brings the foldable master-detail cockpit to your desktop.")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.15))
+                
+                // 4. MenuBar Extra Display Mode
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Menu Bar Companion Title")
@@ -201,7 +234,7 @@ public struct MacOSSettingsSection: View {
                 Divider()
                     .background(Color.white.opacity(0.15))
                 
-                // 4. Keyboard Shortcuts Cheatsheet
+                // 5. Keyboard Shortcuts Cheatsheet
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Native Keyboard Shortcuts")
                         .font(.system(size: 13, weight: .medium))
@@ -210,6 +243,8 @@ public struct MacOSSettingsSection: View {
                     VStack(spacing: 6) {
                         shortcutRow(keys: "⌘ 1 – 7", description: "Switch Hubs (Dashboard to News)")
                         shortcutRow(keys: "⌘ 0", description: "Open DayOne Glance Companion")
+                        shortcutRow(keys: "⌘ D", description: "Toggle Dual-Pane Workspace (Wide/Compact)")
+                        shortcutRow(keys: "Esc", description: "Return to Co-Pilot Overview in Detail Pane")
                         shortcutRow(keys: "⌘ S", description: "Toggle Desktop Sidebar")
                         shortcutRow(keys: "⌘ R", description: "Trigger Supabase Sync")
                         shortcutRow(keys: "⌘ ,", description: "Open Settings")

@@ -6,6 +6,7 @@ public struct RootView: View {
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
     @AppStorage("useDesktopSidebar") private var isSidebarVisible: Bool = false
+    @AppStorage("useDualPaneWorkspace") private var isDualPaneEnabled: Bool = true
     @State private var isReadingArticleInNews: Bool = false
     @State private var isNavCapsuleExpandedWhileReading: Bool = false
     @State private var isHoveringNavBubble: Bool = false
@@ -62,98 +63,12 @@ public struct RootView: View {
                                 .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                         
-                        // Main Content View
-                        ZStack(alignment: .bottom) {
-                            // Active Tab View Canvas
-                            Group {
-                                switch selectedTab {
-                                case .dashboard:
-                                    DashboardView(
-                                        onNavigateToWeather: { switchTab(.weather) },
-                                        onNavigateToNews: { switchTab(.news) },
-                                        onNavigateToHealth: { switchTab(.health) },
-                                        onNavigateToHabits: { switchTab(.habits) },
-                                        onNavigateToFinances: { switchTab(.finances) },
-                                        onNavigateToSettings: { switchTab(.settings) },
-                                        onNavigateToTagdos: { switchTab(.tagdos) }
-                                    )
-                                case .weather:
-                                    WeatherDetailView(onNavigateBack: navigateToDashboard)
-                                case .news:
-                                    NewsFeedView(
-                                        onNavigateBack: navigateToDashboard,
-                                        isReadingArticle: $isReadingArticleInNews
-                                    )
-                                case .health:
-                                    HealthMainView(onNavigateBack: navigateToDashboard)
-                                case .habits:
-                                    HabitsMainView(onNavigateBack: navigateToDashboard)
-                                case .finances:
-                                    FinancesMainView(onNavigateBack: navigateToDashboard)
-                                case .tagdos:
-                                    TagdosNotesHubView(onNavigateBack: navigateToDashboard)
-                                case .settings:
-                                    SettingsView(onNavigateBack: navigateToDashboard)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            
-                            // Floating Liquid Glass Navigation Capsule (Shown when sidebar is collapsed or preferred)
-                            if !isSidebarVisible {
-                                if selectedTab == .news && isReadingArticleInNews {
-                                    if isNavCapsuleExpandedWhileReading {
-                                        HStack(spacing: 8) {
-                                            FloatingGlassCapsule(selectedTab: $selectedTab)
-                                            
-                                            // Collapse / Retract Button while reading
-                                            Button {
-                                                withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
-                                                    isNavCapsuleExpandedWhileReading = false
-                                                }
-                                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                                            } label: {
-                                                HStack(spacing: 4) {
-                                                    Text("Retract")
-                                                        .font(.system(size: 11, weight: .semibold))
-                                                    Image(systemName: "chevron.right.circle.fill")
-                                                        .font(.system(size: 13, weight: .semibold))
-                                                }
-                                                .foregroundColor(ThemeColors.fgMutedDark)
-                                                .padding(.horizontal, 9)
-                                                .padding(.vertical, 7)
-                                                .background(
-                                                    Capsule()
-                                                        .fill(Color.black.opacity(0.55))
-                                                        .background(.ultraThinMaterial, in: Capsule())
-                                                        .overlay(Capsule().strokeBorder(ThemeColors.glassDarkBorder, lineWidth: 1))
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                            .help("Retract Navigation Capsule")
-                                        }
-                                        .padding(.bottom, 20)
-                                        .transition(.asymmetric(
-                                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                                            removal: .move(edge: .bottom).combined(with: .opacity)
-                                        ))
-                                    } else {
-                                        navigationBubble
-                                            .transition(.asymmetric(
-                                                insertion: .scale(scale: 0.85).combined(with: .opacity),
-                                                removal: .scale(scale: 0.85).combined(with: .opacity)
-                                            ))
-                                    }
-                                } else {
-                                    FloatingGlassCapsule(selectedTab: $selectedTab)
-                                        .padding(.bottom, 20)
-                                        .transition(.asymmetric(
-                                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                                            removal: .move(edge: .bottom).combined(with: .opacity)
-                                        ))
-                                }
-                            }
+                        // Main Workspace Area (Dual-Pane or Single-Column)
+                        if isDualPaneEnabled {
+                            dualPaneWorkspaceView
+                        } else {
+                            singleColumnView
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .transition(.asymmetric(
@@ -164,16 +79,28 @@ public struct RootView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        isSidebarVisible.toggle()
+                HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            isSidebarVisible.toggle()
+                        }
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                            .font(.system(size: 13, weight: .semibold))
                     }
-                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 13, weight: .semibold))
+                    .help(isSidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)")
+                    
+                    // Dual-Pane Workspace Toggle Button
+                    Button {
+                        toggleDualPane()
+                    } label: {
+                        Image(systemName: isDualPaneEnabled ? "rectangle.split.2x1.fill" : "rectangle.split.2x1")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(isDualPaneEnabled ? ThemeColors.accentCyan : .white.opacity(0.85))
+                    }
+                    .help(isDualPaneEnabled ? "Switch to Single-Column Mode (⌘D)" : "Expand to Dual-Pane Co-Pilot Workspace (⌘D)")
                 }
-                .help(isSidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)")
             }
         }
         .configureMacOSWindow(minWidth: 440, minHeight: 650)
@@ -195,6 +122,12 @@ public struct RootView: View {
                         isSidebarVisible.toggle()
                     }
                 }.keyboardShortcut("s", modifiers: .command)
+                Button("") { toggleDualPane() }.keyboardShortcut("d", modifiers: .command)
+                Button("") {
+                    if isDualPaneEnabled && selectedTab != .dashboard {
+                        switchTab(.dashboard)
+                    }
+                }.keyboardShortcut(.escape, modifiers: [])
                 Button("") {
                     Task { @MainActor in
                         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
@@ -341,5 +274,193 @@ public struct RootView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
             selectedTab = .dashboard
         }
+    }
+    
+    private func toggleDualPane() {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+            isDualPaneEnabled.toggle()
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        MacOSWindowManager.shared.setMainWindowDualPane(enabled: isDualPaneEnabled)
+    }
+    
+    // MARK: - Dual-Pane Co-Pilot Workspace Layout
+    
+    private var dualPaneWorkspaceView: some View {
+        HStack(spacing: 0) {
+            // 1. Master Cockpit (Left Column: 420-500pt)
+            ZStack(alignment: .bottom) {
+                DashboardView(
+                    onNavigateToWeather: { switchTab(.weather) },
+                    onNavigateToNews: { switchTab(.news) },
+                    onNavigateToHealth: { switchTab(.health) },
+                    onNavigateToHabits: { switchTab(.habits) },
+                    onNavigateToFinances: { switchTab(.finances) },
+                    onNavigateToSettings: { switchTab(.settings) },
+                    onNavigateToTagdos: { switchTab(.tagdos) }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                // Floating Navigation Capsule in Master Cockpit
+                if !isSidebarVisible {
+                    FloatingGlassCapsule(selectedTab: $selectedTab)
+                        .padding(.bottom, 20)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .move(edge: .bottom).combined(with: .opacity)
+                        ))
+                }
+            }
+            .frame(minWidth: 420, maxWidth: 500)
+            
+            // 2. Subtle Glass Crease / Vertical Divider
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 1)
+                .edgesIgnoringSafeArea(.vertical)
+            
+            // 3. Detail Pane (Right Column: The Hybrid Co-Pilot or Selected Hub)
+            VStack(spacing: 0) {
+                if selectedTab != .dashboard {
+                    FoldableDetailHeaderBar(
+                        title: selectedTab.rawValue,
+                        iconName: selectedTab.iconName,
+                        onReturnToCoPilot: {
+                            switchTab(.dashboard)
+                        }
+                    )
+                }
+                
+                Group {
+                    switch selectedTab {
+                    case .dashboard:
+                        DailyFoldableCompanionPane(
+                            onOpenHub: { tab in
+                                switchTab(tab)
+                            },
+                            onOpenBriefing: {
+                                SmartBriefingService.shared.isBriefingPresented = true
+                            }
+                        )
+                    case .weather:
+                        WeatherDetailView(onNavigateBack: navigateToDashboard)
+                    case .news:
+                        NewsFeedView(
+                            onNavigateBack: navigateToDashboard,
+                            isReadingArticle: $isReadingArticleInNews
+                        )
+                    case .health:
+                        HealthMainView(onNavigateBack: navigateToDashboard)
+                    case .habits:
+                        HabitsMainView(onNavigateBack: navigateToDashboard)
+                    case .finances:
+                        FinancesMainView(onNavigateBack: navigateToDashboard)
+                    case .tagdos:
+                        TagdosNotesHubView(onNavigateBack: navigateToDashboard)
+                    case .settings:
+                        SettingsView(onNavigateBack: navigateToDashboard)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(minWidth: 440, maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    // MARK: - Classic Single-Column Layout
+    
+    private var singleColumnView: some View {
+        ZStack(alignment: .bottom) {
+            // Active Tab View Canvas
+            Group {
+                switch selectedTab {
+                case .dashboard:
+                    DashboardView(
+                        onNavigateToWeather: { switchTab(.weather) },
+                        onNavigateToNews: { switchTab(.news) },
+                        onNavigateToHealth: { switchTab(.health) },
+                        onNavigateToHabits: { switchTab(.habits) },
+                        onNavigateToFinances: { switchTab(.finances) },
+                        onNavigateToSettings: { switchTab(.settings) },
+                        onNavigateToTagdos: { switchTab(.tagdos) }
+                    )
+                case .weather:
+                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                case .news:
+                    NewsFeedView(
+                        onNavigateBack: navigateToDashboard,
+                        isReadingArticle: $isReadingArticleInNews
+                    )
+                case .health:
+                    HealthMainView(onNavigateBack: navigateToDashboard)
+                case .habits:
+                    HabitsMainView(onNavigateBack: navigateToDashboard)
+                case .finances:
+                    FinancesMainView(onNavigateBack: navigateToDashboard)
+                case .tagdos:
+                    TagdosNotesHubView(onNavigateBack: navigateToDashboard)
+                case .settings:
+                    SettingsView(onNavigateBack: navigateToDashboard)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            // Floating Liquid Glass Navigation Capsule (Shown when sidebar is collapsed or preferred)
+            if !isSidebarVisible {
+                if selectedTab == .news && isReadingArticleInNews {
+                    if isNavCapsuleExpandedWhileReading {
+                        HStack(spacing: 8) {
+                            FloatingGlassCapsule(selectedTab: $selectedTab)
+                            
+                            // Collapse / Retract Button while reading
+                            Button {
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                                    isNavCapsuleExpandedWhileReading = false
+                                }
+                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text("Retract")
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Image(systemName: "chevron.right.circle.fill")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.black.opacity(0.55))
+                                        .background(.ultraThinMaterial, in: Capsule())
+                                        .overlay(Capsule().strokeBorder(ThemeColors.glassDarkBorder, lineWidth: 1))
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .help("Retract Navigation Capsule")
+                        }
+                        .padding(.bottom, 20)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .move(edge: .bottom).combined(with: .opacity)
+                        ))
+                    } else {
+                        navigationBubble
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.85).combined(with: .opacity),
+                                removal: .scale(scale: 0.85).combined(with: .opacity)
+                            ))
+                    }
+                } else {
+                    FloatingGlassCapsule(selectedTab: $selectedTab)
+                        .padding(.bottom, 20)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .move(edge: .bottom).combined(with: .opacity)
+                        ))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

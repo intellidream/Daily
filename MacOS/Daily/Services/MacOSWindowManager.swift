@@ -56,6 +56,31 @@ public final class MacOSWindowManager: ObservableObject {
             openWindowAction?(id: "glance")
         }
     }
+    
+    /// Smoothly animates the main window frame width between compact single-column (480pt)
+    /// and expanded dual-pane workspace (1040pt).
+    public func setMainWindowDualPane(enabled: Bool) {
+        guard let window = NSApp.windows.first(where: {
+            let title = $0.title
+            return (title == "DayOne" || title.isEmpty || $0.identifier?.rawValue == "main") && !title.contains("Glance")
+        }) else { return }
+        
+        var currentFrame = window.frame
+        let targetWidth: CGFloat = enabled ? 1040 : 480
+        
+        if enabled && currentFrame.width < 860 {
+            let delta = targetWidth - currentFrame.width
+            let newX = max(currentFrame.origin.x - delta / 2, 20)
+            currentFrame.origin.x = newX
+            currentFrame.size.width = targetWidth
+            window.setFrame(currentFrame, display: true, animate: true)
+        } else if !enabled && currentFrame.width > 650 {
+            let delta = currentFrame.width - targetWidth
+            currentFrame.origin.x += delta / 2
+            currentFrame.size.width = targetWidth
+            window.setFrame(currentFrame, display: true, animate: true)
+        }
+    }
 }
 
 extension Notification.Name {
