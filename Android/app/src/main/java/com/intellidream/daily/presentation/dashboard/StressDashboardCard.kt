@@ -220,7 +220,7 @@ private fun WideStressContent(
         MonkeyMascotView(
             mood = mood,
             size = MonkeySize.CARD,
-            animated = hasData,
+            animated = false,
             modifier = Modifier.size(64.dp)
         )
 
@@ -355,7 +355,7 @@ private fun TallStressContent(
         MonkeyMascotView(
             mood = mood,
             size = MonkeySize.CARD,
-            animated = hasData,
+            animated = false,
             modifier = Modifier.size(64.dp)
         )
 
@@ -419,7 +419,7 @@ private fun LargeStressContent(
             MonkeyMascotView(
                 mood = mood,
                 size = MonkeySize.CARD,
-                animated = hasData,
+                animated = false,
                 modifier = Modifier.size(72.dp)
             )
 

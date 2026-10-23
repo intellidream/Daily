@@ -1,10 +1,5 @@
 package com.intellidream.daily.presentation.dashboard
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,18 +58,6 @@ fun HeaderGreetingView(
     val formattedDate = remember {
         SimpleDateFormat("EEE, MMM d", Locale.US).format(Date()).uppercase()
     }
-
-    // Gentle pulse animation for the smart briefing sparkle badge
-    val infiniteTransition = rememberInfiniteTransition(label = "BriefingSparkleTransition")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "BriefingPulseScale"
-    )
 
     Row(
         modifier = modifier
@@ -203,9 +186,7 @@ fun HeaderGreetingView(
                     imageVector = Icons.Rounded.AutoAwesome,
                     contentDescription = "Smart Briefing",
                     tint = ThemeColors.accentCyan,
-                    modifier = Modifier
-                        .size(12.dp)
-                        .scale(pulseScale)
+                    modifier = Modifier.size(12.dp)
                 )
             }
 

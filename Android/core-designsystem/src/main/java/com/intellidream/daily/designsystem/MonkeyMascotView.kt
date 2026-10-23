@@ -1,10 +1,7 @@
 package com.intellidream.daily.designsystem
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -21,7 +18,11 @@ import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,36 +71,29 @@ fun MonkeyMascotView(
         MonkeyMood.OVERHEATED -> Color(0xFFFF5252) // Coral red
     }
 
-    val animDuration = if (mood == MonkeyMood.OVERHEATED) 1400 else 3000
-    val infiniteTransition = rememberInfiniteTransition(label = "monkeyMascotBreath")
+    val animDuration = if (mood == MonkeyMood.OVERHEATED) 1400 else 2800
+    val breatheScale = remember { Animatable(1.0f) }
+    val earWiggle = remember { Animatable(0.0f) }
 
-    val breatheScale by if (animated) {
-        infiniteTransition.animateFloat(
-            initialValue = 1.0f,
-            targetValue = 1.12f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = animDuration, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "breatheScale"
-        )
-    } else {
-        androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(1.0f) }
-    }
-
-    val earWiggle by if (animated) {
-        val targetDeg = if (mood == MonkeyMood.BUSY) 4.0f else 1.5f
-        infiniteTransition.animateFloat(
-            initialValue = -targetDeg,
-            targetValue = targetDeg,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = animDuration, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "earWiggle"
-        )
-    } else {
-        androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0.0f) }
+    LaunchedEffect(mood, animated) {
+        if (animated) {
+            val targetDeg = if (mood == MonkeyMood.BUSY) 3.0f else 1.2f
+            repeat(4) {
+                launch {
+                    breatheScale.animateTo(1.10f, tween(durationMillis = animDuration / 2, easing = FastOutSlowInEasing))
+                    breatheScale.animateTo(1.0f, tween(durationMillis = animDuration / 2, easing = FastOutSlowInEasing))
+                }
+                launch {
+                    earWiggle.animateTo(targetDeg, tween(durationMillis = animDuration / 4, easing = FastOutSlowInEasing))
+                    earWiggle.animateTo(-targetDeg, tween(durationMillis = animDuration / 2, easing = FastOutSlowInEasing))
+                    earWiggle.animateTo(0f, tween(durationMillis = animDuration / 4, easing = FastOutSlowInEasing))
+                }
+                delay(animDuration.toLong())
+            }
+        } else {
+            breatheScale.snapTo(1.0f)
+            earWiggle.snapTo(0.0f)
+        }
     }
 
     val dim = size.dimension
@@ -113,7 +107,7 @@ fun MonkeyMascotView(
         Canvas(
             modifier = Modifier
                 .size(dim)
-                .scale(breatheScale)
+                .scale(breatheScale.value)
         ) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -140,12 +134,12 @@ fun MonkeyMascotView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left Ear
-                EarView(scale = scale, isLeft = true, earWiggle = earWiggle)
+                EarView(scale = scale, isLeft = true, earWiggle = earWiggle.value)
 
                 Box(modifier = Modifier.size((40 * scale).dp))
 
                 // Right Ear
-                EarView(scale = scale, isLeft = false, earWiggle = earWiggle)
+                EarView(scale = scale, isLeft = false, earWiggle = earWiggle.value)
             }
 
             // Main Head (Warm Caramel Coat)

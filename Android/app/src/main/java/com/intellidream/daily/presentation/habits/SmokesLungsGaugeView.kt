@@ -1,10 +1,8 @@
 package com.intellidream.daily.presentation.habits
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -124,17 +122,12 @@ fun SmokesLungsGaugeView(
         label = "lungColor"
     )
 
-    // Gentle breathing pulsation for healthy lungs
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
+    // Breath pulse on intake / update
+    val pulseScale = remember { Animatable(1.0f) }
+    LaunchedEffect(countToday) {
+        pulseScale.animateTo(1.05f, tween(600, easing = FastOutSlowInEasing))
+        pulseScale.animateTo(1.0f, tween(800, easing = FastOutSlowInEasing))
+    }
 
     // Compute Craving Badge Information
     val badge = remember(isToday, countToday, progressRatio, lastSmokeDate, lastSmokeType, currentTime) {
@@ -350,7 +343,7 @@ fun SmokesLungsGaugeView(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
                 .padding(14.dp)
-                .scale(pulseScale)
+                .scale(pulseScale.value)
         ) {
             Icon(
                 imageVector = when {

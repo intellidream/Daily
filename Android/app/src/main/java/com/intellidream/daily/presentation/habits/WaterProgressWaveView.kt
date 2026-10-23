@@ -1,10 +1,7 @@
 package com.intellidream.daily.presentation.habits
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,7 +22,11 @@ import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.HabitDrinkBreakdown
 import com.intellidream.daily.model.HabitType
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -64,26 +67,28 @@ fun WaterProgressWaveView(
     val percentageDisplay = ((currentMl / safeGoal) * 100).toInt()
     val isGoalMet = currentMl >= safeGoal
 
-    // Dual infinite harmonic wave animation
-    val infiniteTransition = rememberInfiniteTransition(label = "WaveAnimation")
-    val phase1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * PI.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phase1"
-    )
-    val phase2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * PI.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(4500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phase2"
-    )
+    // Hydrodynamic Fluid Surge model: surges on hydration intake/appear, then settles calmly
+    val phase1 = remember { Animatable(0f) }
+    val phase2 = remember { Animatable(0.5f * PI.toFloat()) }
+    var isSurging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentMl) {
+        isSurging = true
+        launch {
+            phase1.animateTo(
+                targetValue = phase1.value + (2f * PI.toFloat()),
+                animationSpec = tween(durationMillis = 2500, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            phase2.animateTo(
+                targetValue = phase2.value - (1.5f * PI.toFloat()),
+                animationSpec = tween(durationMillis = 2500, easing = FastOutSlowInEasing)
+            )
+        }
+        delay(2500L)
+        isSurging = false
+    }
 
     // Stratified liquids calculation
     val strata: List<LiquidStratum> = if (currentMl <= 0 || drinkBreakdown.isEmpty()) {
@@ -195,7 +200,9 @@ fun WaterProgressWaveView(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
             val height = size.height
-            val amplitude = 10f
+            val amplitude = if (isSurging) 10f else 3f
+            val currentPhase1 = phase1.value
+            val currentPhase2 = phase2.value
 
             for (stratum in strata) {
                 // Secondary wave (background layer, slightly phase shifted)
@@ -207,7 +214,7 @@ fun WaterProgressWaveView(
                 var x = 0f
                 while (x <= width) {
                     val relativeX = x / width
-                    val sine = sin(relativeX * 2 * PI + phase2)
+                    val sine = sin(relativeX * 2 * PI + currentPhase2)
                     val y = baseHeightBack + sine.toFloat() * (amplitude * 0.7f)
                     pathBack.lineTo(x, y)
                     x += 4f
@@ -237,7 +244,7 @@ fun WaterProgressWaveView(
                 x = 0f
                 while (x <= width) {
                     val relativeX = x / width
-                    val sine = sin(relativeX * 2 * PI + phase1)
+                    val sine = sin(relativeX * 2 * PI + currentPhase1)
                     val y = baseHeightFront + sine.toFloat() * amplitude
                     pathFront.lineTo(x, y)
                     x += 4f
