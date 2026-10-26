@@ -255,6 +255,12 @@ public struct NewsFeedView: View {
                         .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.3), lineWidth: 1))
                 )
         }
+        #if os(macOS)
+        .menuStyle(.borderlessButton)
+        #endif
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .frame(width: 36, height: 36)
     }
     
     // MARK: - Sub-Tab Switcher
@@ -358,6 +364,11 @@ public struct NewsFeedView: View {
                         .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                 )
             }
+            #if os(macOS)
+            .menuStyle(.borderlessButton)
+            #endif
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
             
             Spacer()
             
