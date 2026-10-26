@@ -573,13 +573,21 @@ fun DailyFoldableCompanionPane(
                             val monkeyMood = stressLevel?.let { MonkeyMood.fromLevel(it) } ?: MonkeyMood.ZEN
                             MonkeyMascotView(
                                 mood = monkeyMood,
-                                size = MonkeySize.CARD
+                                size = MonkeySize.MINI
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = stressLevel?.displayName ?: "Balanced",
-                                color = Color.White.copy(alpha = 0.75f),
+                                color = Color.White.copy(alpha = 0.90f),
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                style = TextStyle(
+                                    shadow = androidx.compose.ui.graphics.Shadow(
+                                        color = Color.Black.copy(alpha = 0.85f),
+                                        offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+                                        blurRadius = 4f
+                                    )
+                                )
                             )
                         }
                     }

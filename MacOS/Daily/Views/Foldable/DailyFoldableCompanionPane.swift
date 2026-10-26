@@ -354,7 +354,8 @@ public struct DailyFoldableCompanionPane: View {
                         )
                         Text(healthService.currentStressLevel.displayName)
                             .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.85))
+                            .foregroundColor(.white.opacity(0.90))
+                            .shadow(color: Color.black.opacity(0.75), radius: 3, x: 0, y: 1.5)
                     }
                 }
                 .frame(width: 174, height: 174)

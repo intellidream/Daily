@@ -320,50 +320,37 @@ public struct RootView: View {
                 .edgesIgnoringSafeArea(.vertical)
             
             // 3. Detail Pane (Right Column: The Hybrid Co-Pilot or Selected Hub)
-            VStack(spacing: 0) {
-                if selectedTab != .dashboard {
-                    FoldableDetailHeaderBar(
-                        title: selectedTab.rawValue,
-                        iconName: selectedTab.iconName,
-                        onReturnToCoPilot: {
-                            switchTab(.dashboard)
+            Group {
+                switch selectedTab {
+                case .dashboard:
+                    DailyFoldableCompanionPane(
+                        onOpenHub: { tab in
+                            switchTab(tab)
+                        },
+                        onOpenBriefing: {
+                            SmartBriefingService.shared.isBriefingPresented = true
                         }
                     )
+                case .weather:
+                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                case .news:
+                    NewsFeedView(
+                        onNavigateBack: navigateToDashboard,
+                        isReadingArticle: $isReadingArticleInNews
+                    )
+                case .health:
+                    HealthMainView(onNavigateBack: navigateToDashboard)
+                case .habits:
+                    HabitsMainView(onNavigateBack: navigateToDashboard)
+                case .finances:
+                    FinancesMainView(onNavigateBack: navigateToDashboard)
+                case .tagdos:
+                    TagdosNotesHubView(onNavigateBack: navigateToDashboard)
+                case .settings:
+                    SettingsView(onNavigateBack: navigateToDashboard)
                 }
-                
-                Group {
-                    switch selectedTab {
-                    case .dashboard:
-                        DailyFoldableCompanionPane(
-                            onOpenHub: { tab in
-                                switchTab(tab)
-                            },
-                            onOpenBriefing: {
-                                SmartBriefingService.shared.isBriefingPresented = true
-                            }
-                        )
-                    case .weather:
-                        WeatherDetailView(onNavigateBack: navigateToDashboard)
-                    case .news:
-                        NewsFeedView(
-                            onNavigateBack: navigateToDashboard,
-                            isReadingArticle: $isReadingArticleInNews
-                        )
-                    case .health:
-                        HealthMainView(onNavigateBack: navigateToDashboard)
-                    case .habits:
-                        HabitsMainView(onNavigateBack: navigateToDashboard)
-                    case .finances:
-                        FinancesMainView(onNavigateBack: navigateToDashboard)
-                    case .tagdos:
-                        TagdosNotesHubView(onNavigateBack: navigateToDashboard)
-                    case .settings:
-                        SettingsView(onNavigateBack: navigateToDashboard)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(minWidth: 440, maxWidth: .infinity)
+            .frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

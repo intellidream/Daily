@@ -46,7 +46,7 @@ public struct SettingsView: View {
                             .frame(width: 36, height: 36)
                     }
                     .padding(.horizontal, 4)
-                    .padding(.top, 12)
+                    .padding(.top, 8)
                     
                     // Account Section
                     AccountSettingsSection()
@@ -76,7 +76,6 @@ public struct SettingsView: View {
                     AboutSettingsSection()
                         .id("about")
                 }
-                .frame(maxWidth: 740)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 140) // Leave space for FloatingGlassCapsule

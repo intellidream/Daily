@@ -65,61 +65,57 @@ public struct NewsFeedView: View {
     
     public var body: some View {
         ZStack {
-            LiquidGlassBackground {
-                VStack(spacing: 0) {
-                    // Pinned Header Section with generous clearance from top window chrome / macOS buttons
-                    VStack(spacing: 12) {
-                        headerBar
-                        subTabSwitcher
-                        if activeSubTab == .live {
-                            feedPickerRow
-                        }
+            VStack(spacing: 0) {
+                // Pinned Header Section aligned with companion & hub headers
+                VStack(spacing: 12) {
+                    headerBar
+                    subTabSwitcher
+                    if activeSubTab == .live {
+                        feedPickerRow
                     }
-                    .frame(maxWidth: 880)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 28) // Generous top clearance away from macOS buttons / window chrome
-                    .padding(.bottom, 12)
-                    
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 14) {
-                            // Articles Feed
-                            if newsService.isLoading && displayedArticles.isEmpty {
-                                loadingStateView
-                            } else if displayedArticles.isEmpty {
-                                emptyStateView
-                            } else {
-                                LazyVStack(spacing: 14) {
-                                    ForEach(displayedArticles) { article in
-                                        NewsArticleCard(article: article) {
-                                            withAnimation(.easeInOut(duration: 0.25)) {
-                                                selectedArticleForReader = article
-                                                isReadingArticle = true
-                                            }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 14) {
+                        // Articles Feed
+                        if newsService.isLoading && displayedArticles.isEmpty {
+                            loadingStateView
+                        } else if displayedArticles.isEmpty {
+                            emptyStateView
+                        } else {
+                            LazyVStack(spacing: 14) {
+                                ForEach(displayedArticles) { article in
+                                    NewsArticleCard(article: article) {
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            selectedArticleForReader = article
+                                            isReadingArticle = true
                                         }
                                     }
                                 }
                             }
                         }
-                        .frame(maxWidth: 880)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 6)
-                        .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
                     }
-                    .scrollBounceBehavior(.always, axes: .vertical)
-                    .refreshable {
-                        #if canImport(UIKit)
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        #endif
-                        if activeSubTab == .live {
-                            await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
-                        } else {
-                            await savedService.syncWithSupabase()
-                        }
-                        #if canImport(UIKit)
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        #endif
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+                    .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
+                }
+                .scrollBounceBehavior(.always, axes: .vertical)
+                .refreshable {
+                    #if canImport(UIKit)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    #endif
+                    if activeSubTab == .live {
+                        await newsService.loadFeed(newsService.selectedFeed, forceRefresh: true)
+                    } else {
+                        await savedService.syncWithSupabase()
                     }
+                    #if canImport(UIKit)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    #endif
                 }
             }
             

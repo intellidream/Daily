@@ -76,7 +76,7 @@ public struct DashboardView: View {
                     }
                 }
             }
-            .padding(.top, 14) // Standard Apple HIG breathing room below Dynamic Island / status bar
+            .padding(.top, 10) // Clean top alignment across master & foldable companion
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }

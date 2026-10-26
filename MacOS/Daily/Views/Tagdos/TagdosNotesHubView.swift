@@ -61,41 +61,41 @@ public struct TagdosNotesHubView: View {
     }
 
     public var body: some View {
-        LiquidGlassBackground {
-            VStack(spacing: 0) {
-                // Top Navigation Bar
-                navigationBar
-                    .frame(maxWidth: 880)
+        VStack(spacing: 0) {
+            // Top Navigation Bar
+            navigationBar
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 6)
 
-                // Stream Selector Tabs (1 to 5 + Notes)
-                streamSelectorBar
-                    .frame(maxWidth: 880)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
+            // Stream Selector Tabs (1 to 5 + Notes)
+            streamSelectorBar
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
 
-                // Main Content Body: Interactive Canvas or Raw Text Editor or Quick Notes
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        if isNotesTab {
-                            TagdosQuickNotesView()
+            // Main Content Body: Interactive Canvas or Raw Text Editor or Quick Notes
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 16) {
+                    if isNotesTab {
+                        TagdosQuickNotesView()
+                    } else {
+                        if isRawEditMode {
+                            rawEditorCard
                         } else {
-                            if isRawEditMode {
-                                rawEditorCard
-                            } else {
-                                interactiveCanvasCard
-                            }
+                            interactiveCanvasCard
+                        }
 
-                            // Per-Stream Active Memos & Attachments
-                            if let stream = currentStream {
-                                TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1)
-                            }
+                        // Per-Stream Active Memos & Attachments
+                        if let stream = currentStream {
+                            TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1)
                         }
                     }
-                    .frame(maxWidth: 880)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 40)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 40)
+            }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 25, coordinateSpace: .local)
                         .onEnded { value in
@@ -122,7 +122,6 @@ public struct TagdosNotesHubView: View {
                     await store.syncWithSupabase()
                 }
             }
-        }
         .simultaneousGesture(
             DragGesture(minimumDistance: 20, coordinateSpace: .global)
                 .onEnded { value in

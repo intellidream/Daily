@@ -66,9 +66,8 @@ public struct DashboardView: View {
                     }
                 }
             }
-            .frame(maxWidth: 880)
             .frame(maxWidth: .infinity)
-            .padding(.top, 28) // Standard macOS clearance under traffic light line
+            .padding(.top, 8) // Aligned with secondary companion & hub headers
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }

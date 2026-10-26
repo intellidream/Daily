@@ -37,40 +37,37 @@ public struct HealthMainView: View {
     }
     
     public var body: some View {
-        LiquidGlassBackground {
-            ZStack(alignment: .topTrailing) {
-                VStack(spacing: 0) {
-                    // Top Header Bar: Back Button, Centered Date Navigator & Device Selector Menu
-                    headerBar
-                        .frame(maxWidth: 880)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 14)
-                        .padding(.bottom, 12)
-                
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        // Sub-Tab Switcher (Overview, Sleep, Stress, Vitals, Trends)
-                        subTabSwitcher
-                        
-                        // Main Content Based on Active Sub-Tab
-                        switch healthService.activeSubTab {
-                        case .overview:
-                            overviewSection
-                        case .sleep:
-                            SleepStudioView()
-                        case .stress:
-                            StressStudioView()
-                        case .vitals:
-                            vitalsSection
-                        case .trends:
-                            HealthTrendsView()
-                        }
-                    }
-                    .frame(maxWidth: 880)
-                    .frame(maxWidth: .infinity)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                // Top Header Bar: Back Button, Centered Date Navigator & Device Selector Menu
+                headerBar
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 110) // Room for FloatingGlassCapsule
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+            
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 16) {
+                    // Sub-Tab Switcher (Overview, Sleep, Stress, Vitals, Trends)
+                    subTabSwitcher
+                    
+                    // Main Content Based on Active Sub-Tab
+                    switch healthService.activeSubTab {
+                    case .overview:
+                        overviewSection
+                    case .sleep:
+                        SleepStudioView()
+                    case .stress:
+                        StressStudioView()
+                    case .vitals:
+                        vitalsSection
+                    case .trends:
+                        HealthTrendsView()
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 110) // Room for FloatingGlassCapsule
+            }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 25, coordinateSpace: .local)
                         .onEnded { value in
@@ -147,7 +144,6 @@ public struct HealthMainView: View {
             deviceDropdownOverlay
         }
     }
-}
     
     // MARK: - Header Bar
     

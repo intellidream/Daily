@@ -48,34 +48,31 @@ public struct FinancesMainView: View {
     }
 
     public var body: some View {
-        LiquidGlassBackground {
-            VStack(spacing: 0) {
-                // Top Header Bar
-                headerBar
-                    .frame(maxWidth: 880)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                
-                ScrollViewReader { scrollProxy in
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 18) {
-                            // Active Tab Content
-                            switch activeSubTab {
-                            case .world:
-                                worldSection
-                            case .stocks:
-                                stocksSection
-                            case .money:
-                                moneySection
-                            }
+        VStack(spacing: 0) {
+            // Top Header Bar
+            headerBar
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+            
+            ScrollViewReader { scrollProxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 18) {
+                        // Active Tab Content
+                        switch activeSubTab {
+                        case .world:
+                            worldSection
+                        case .stocks:
+                            stocksSection
+                        case .money:
+                            moneySection
                         }
-                        .frame(maxWidth: 880)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 6)
-                        .padding(.bottom, 110) // Clearance for floating navigation capsule
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+                    .padding(.bottom, 110) // Clearance for floating navigation capsule
+                }
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 25, coordinateSpace: .local)
                             .onEnded { value in
@@ -106,7 +103,6 @@ public struct FinancesMainView: View {
                     }
                 }
             }
-        }
         .sheet(isPresented: $showingAddTransactionSheet) {
             AddTransactionSheet()
         }
