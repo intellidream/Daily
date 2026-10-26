@@ -67,6 +67,7 @@ In `SettingsView` -> `macOS Desktop Integration`:
 ### 5. Hub Navigation Bar & Ergonomic Unification
 - **Pinned Top Navigation Bar**:
   - Pinned top header navigation bars across all embedded hubs (`HabitsMainView`, `WeatherDetailView`, `SettingsView`, `FinancesMainView`, `TagdosNotesHubView`) with unified `padding(.top, 8)` and `padding(.horizontal, 20)`.
+  - Eliminated legacy internal padding in `HabitsMainView` header (removed redundant `.padding(.top, 12)`), ensuring 100% pixel-perfect vertical baseline alignment with the other secondary hubs and the primary cockpit.
   - Content scrolling is decoupled below the header using `ScrollViewReader`, ensuring back navigation and action triggers remain accessible at all times without jumping during vertical scroll bounces.
   - Aligns top horizontal baseline with the left Hero card and Co-Pilot Studio header for a harmonious dual-pane visual balance.
 - **Unified Action Control Language**:

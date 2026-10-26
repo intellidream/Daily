@@ -286,7 +286,6 @@ public struct HabitsMainView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.top, 12)
     }
     
     // MARK: - Habit Switcher: Bubbles vs Smokes
