@@ -265,37 +265,39 @@ public struct NewsFeedView: View {
     // MARK: - Category Selector Menu
     
     private var categorySelectorMenu: some View {
-        Menu {
-            ForEach(FeedCategory.allCases, id: \.self) { category in
-                Button {
-                    Task {
-                        await newsService.selectCategory(category)
-                    }
-                } label: {
-                    HStack {
-                        Label(category.displayName, systemImage: category.systemIcon)
-                        if newsService.selectedCategory == category {
-                            Image(systemName: "checkmark")
+        ZStack {
+            Circle()
+                .fill(ThemeColors.accentCyan.opacity(0.15))
+                .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.3), lineWidth: 1))
+            
+            Menu {
+                ForEach(FeedCategory.allCases, id: \.self) { category in
+                    Button {
+                        Task {
+                            await newsService.selectCategory(category)
+                        }
+                    } label: {
+                        HStack {
+                            Label(category.displayName, systemImage: category.systemIcon)
+                            if newsService.selectedCategory == category {
+                                Image(systemName: "checkmark")
+                            }
                         }
                     }
                 }
+            } label: {
+                Image(systemName: newsService.selectedCategory.systemIcon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        } label: {
-            Image(systemName: newsService.selectedCategory.systemIcon)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(ThemeColors.accentCyan)
-                .frame(width: 36, height: 36)
-                .background(
-                    Circle().fill(ThemeColors.accentCyan.opacity(0.15))
-                        .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.3), lineWidth: 1))
-                )
+            #if os(macOS)
+            .menuStyle(.borderlessButton)
+            #endif
+            .menuIndicator(.hidden)
         }
-        #if os(macOS)
-        .menuStyle(.borderlessButton)
-        #endif
-        .menuIndicator(.hidden)
-        .buttonStyle(.plain)
         .frame(width: 36, height: 36)
+        .contentShape(Circle())
     }
     
     // MARK: - Sub-Tab Switcher

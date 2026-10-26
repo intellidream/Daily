@@ -62,9 +62,8 @@ public struct NewsFeedView: View {
     }
     
     public var body: some View {
-        LiquidGlassBackground {
-            VStack(spacing: 0) {
-                // Pinned Top Glass Header Bar with Search & Category Action
+        VStack(spacing: 0) {
+            // Pinned Top Glass Header Bar with Search & Category Action
                 headerBar
                     .padding(.horizontal, 20)
                     .padding(.top, 14)
@@ -114,7 +113,6 @@ public struct NewsFeedView: View {
                     #endif
                 }
             }
-        }
         .sheet(item: $selectedArticleForReader) { article in
             NewsReaderView(
                 article: article,

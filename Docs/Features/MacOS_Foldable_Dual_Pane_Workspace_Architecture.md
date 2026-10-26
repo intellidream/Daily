@@ -73,10 +73,11 @@ In `SettingsView` -> `macOS Desktop Integration`:
 - **Unified Action Control Language**:
   - Replaced divergent pill capsules or raw text buttons (such as in `TagdosNotesHubView`) with standardized `36x36` circular frosted glass buttons (`Circle().fill(Color.white.opacity(0.08)).overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))`).
   - Standardized font typography (`14pt .bold`) across all secondary hub back buttons and quick-action icons.
-  - Eliminated native AppKit pop-up button / combo box bezel from `NewsFeedView` category selector menu by applying `.menuStyle(.borderlessButton)`, `.menuIndicator(.hidden)`, `.buttonStyle(.plain)`, and explicit `36x36` frame, ensuring clean borderless rendering and flush right-edge alignment matching all other hub headers.
+  - Eliminated native AppKit pop-up button / combo box bezel and preserved frosted glass circular styling on the macOS `NewsFeedView` category selector menu by architecting a `ZStack` containing a cyan frosted glass `Circle()` backdrop (`Circle().fill(ThemeColors.accentCyan.opacity(0.15))`) overlaid with a borderless AppKit `Menu` (`.menuStyle(.borderlessButton)`, `.menuIndicator(.hidden)`). This circumvents AppKit's flattening behavior (which stripped backgrounds inside `label:`) while maintaining right-margin alignment and clean circular geometry.
 - **Elimination of Redundant Containers & Constraints**:
   - Removed duplicate header bars from the secondary pane; views render seamlessly and leverage their own native back controls to transition back to Co-Pilot overview.
   - Stripped redundant outer glass card backgrounds and hardcoded max-width constraints, allowing all hubs to fluidly fill expanded desktop windows up to ultrawide dimensions without letterboxing.
+  - Removed nested `LiquidGlassBackground` wrappers from all hub views on both macOS and iOS (`HealthMainView`, `FinancesMainView`, `NewsFeedView`, `TagdosNotesHubView`), ensuring secondary hubs inherit the root backdrop seamlessly without rendering disjointed dark boxes or card seams.
 
 ---
 
@@ -87,9 +88,11 @@ In `SettingsView` -> `macOS Desktop Integration`:
 - **Typography Shadow**: Added high-contrast black drop shadow (`Offset(0f, 2f)`, `blurRadius = 4f`) to ensure crisp legibility inside the concentric rings across all themes.
 - **Secondary Hub Consistency**: Parameterized `horizontalPadding` and `applyStatusBarsPadding` across all Android hubs, eliminating double outer margins and ensuring 1:1 proportional symmetry between master dashboard and detail hubs.
 
-### iOS (iPhone Duo)
+### iOS (iPhone Duo & Physical iPhone Schmitz)
 - **Top Alignment**: Balanced `DashboardView` top padding with the unfolded companion pane header (`10pt`).
 - **Typography Shadow**: Synchronized text drop shadow across iOS mascot status labels.
+- **Unified Dual-Pane Backdrop**: Removed nested `LiquidGlassBackground` from all 4 secondary hub views (`HealthMainView`, `FinancesMainView`, `NewsFeedView`, `TagdosNotesHubView`). On iPhone Duo unfolded split-screen, secondary hubs now smoothly share the root `LiquidGlassBackground` without redundant card layers or hard cutoff gradients.
+- **News Category Selector Parity**: Maintained circular frosted button with cyan accent tint and hidden indicator on both iPhone Duo and compact iPhones.
 
 ---
 
@@ -97,10 +100,10 @@ In `SettingsView` -> `macOS Desktop Integration`:
 
 | Platform / Target | Environment / Device | Test / Deployment Procedure | Status | Result & Live Telemetry |
 | :--- | :--- | :--- | :--- | :--- |
-| **macOS Desktop** | macOS 15.0+ (ARM64 Apple Silicon) | Xcodebuild native compilation + runtime inspection | **PASS** | 0.0% idle CPU; window toggle 1040pt <-> 480pt; fluid hub resize; pinned top bars; borderless News category menu verified (Pop up buttons: 0) |
-| **iOS (iPhone Duo)** | SimulaDuo (`6BB33377-B7BD-4306-9BBA-AACBD99FBC76`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 16251); dual-pane split & clean News header verified |
-| **iOS Simulator** | SimulaPhone (`E618B1DA-82AC-477A-A6D6-CC11F969FA62`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 16395) |
-| **Physical iPhone** | iPhone 16 Pro ("Schmitz", `00008140-000E2C863EFB001C`) | Xcodebuild for device + `devicectl install` + launch | **VERIFIED LIVE** | Success; launched live via devicectl; verified borderless category menu |
+| **macOS Desktop** | macOS 15.0+ (ARM64 Apple Silicon) | Xcodebuild native compilation + runtime inspection | **PASS** | 0.0% idle CPU; window toggle 1040pt <-> 480pt; fluid hub resize; pinned top bars; circular frosted News category menu verified |
+| **iOS (iPhone Duo)** | SimulaDuo (`6BB33377-B7BD-4306-9BBA-AACBD99FBC76`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 20720); dual-pane split verified; nested hub backgrounds eliminated; seamless root backdrop |
+| **iOS Simulator** | SimulaPhone (`E618B1DA-82AC-477A-A6D6-CC11F969FA62`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 20766); verified clean single-screen rendering |
+| **Physical iPhone** | iPhone 16 Pro ("Schmitz", `00008140-000E2C863EFB001C`) | Xcodebuild for device + `devicectl install` + launch | **VERIFIED LIVE** | Success; launched live via devicectl; verified category menu and seamless hub views |
 | **Android Foldable Emulator** | Pixel 9 Pro Fold (`emulator-5554`) | `./gradlew assembleDebug` + `adb install` + launch | **PASS** | Launched live (PID 12548); concentric rings & MINI mascot verified |
 | **Samsung Galaxy Z Fold 8** | Physical Device ("RADAR", `SM-F971B`) | Wireless ADB mDNS TLS (`port 5038`) + streamed install | **VERIFIED LIVE** | Success; launched PID 16404; zero fatal logcat crashes; rings verified |
 | **Google Pixel 9 Pro** | Physical Device (`caiman`) | Wireless ADB mDNS TLS (`port 5038`) + streamed install | **VERIFIED LIVE** | Success; launched live |

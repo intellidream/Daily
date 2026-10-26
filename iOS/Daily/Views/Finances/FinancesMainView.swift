@@ -48,9 +48,8 @@ public struct FinancesMainView: View {
     }
 
     public var body: some View {
-        LiquidGlassBackground {
-            VStack(spacing: 0) {
-                // Top Header Bar
+        VStack(spacing: 0) {
+            // Top Header Bar
                 headerBar
                     .padding(.horizontal, 20)
                     .padding(.top, 14)
@@ -103,7 +102,6 @@ public struct FinancesMainView: View {
                     }
                 }
             }
-        }
         .sheet(isPresented: $showingAddTransactionSheet) {
             AddTransactionSheet()
         }

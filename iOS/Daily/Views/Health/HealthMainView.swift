@@ -37,9 +37,8 @@ public struct HealthMainView: View {
     }
     
     public var body: some View {
-        LiquidGlassBackground {
-            ZStack(alignment: .topTrailing) {
-                VStack(spacing: 0) {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
                     // Top Header Bar: Back Button, Centered Date Navigator & Device Selector Menu
                     headerBar
                         .padding(.horizontal, 20)
@@ -144,7 +143,6 @@ public struct HealthMainView: View {
             deviceDropdownOverlay
         }
     }
-}
     
     // MARK: - Header Bar
     

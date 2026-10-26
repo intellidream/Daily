@@ -61,8 +61,7 @@ public struct TagdosNotesHubView: View {
     }
 
     public var body: some View {
-        LiquidGlassBackground {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 // Top Navigation Bar
                 navigationBar
 
@@ -118,7 +117,6 @@ public struct TagdosNotesHubView: View {
                     await store.syncWithSupabase()
                 }
             }
-        }
         .simultaneousGesture(
             DragGesture(minimumDistance: 20, coordinateSpace: .global)
                 .onEnded { value in
