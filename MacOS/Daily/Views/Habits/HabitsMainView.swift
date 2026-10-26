@@ -21,14 +21,18 @@ public struct HabitsMainView: View {
     }
     
     public var body: some View {
-        ScrollViewReader { scrollProxy in
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Top Day Navigator & Guidance Header
-                    headerDayNavigator
-                    
-                    // Habit Switcher: Bubbles vs Smokes
-                    habitTypeSwitcher
+        VStack(spacing: 0) {
+            // Pinned Top Day Navigator & Guidance Header
+            headerDayNavigator
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+            
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Habit Switcher: Bubbles vs Smokes
+                        habitTypeSwitcher
                     
                     // Hero Visual Gauge
                     if habitsService.activeHabit == .water {
@@ -128,6 +132,7 @@ public struct HabitsMainView: View {
                     }
                 }
             }
+        }
         }
         .refreshable {
             await habitsService.loadDataForSelectedDate(forceRefresh: true)

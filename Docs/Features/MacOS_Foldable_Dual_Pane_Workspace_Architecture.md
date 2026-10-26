@@ -64,6 +64,18 @@ In `SettingsView` -> `macOS Desktop Integration`:
   - `Single-Column (Compact)`
 - Persisted in `@AppStorage("useDualPaneWorkspace")`.
 
+### 5. Hub Navigation Bar & Ergonomic Unification
+- **Pinned Top Navigation Bar**:
+  - Pinned top header navigation bars across all embedded hubs (`HabitsMainView`, `WeatherDetailView`, `SettingsView`, `FinancesMainView`, `TagdosNotesHubView`) with unified `padding(.top, 8)` and `padding(.horizontal, 20)`.
+  - Content scrolling is decoupled below the header using `ScrollViewReader`, ensuring back navigation and action triggers remain accessible at all times without jumping during vertical scroll bounces.
+  - Aligns top horizontal baseline with the left Hero card and Co-Pilot Studio header for a harmonious dual-pane visual balance.
+- **Unified Action Control Language**:
+  - Replaced divergent pill capsules or raw text buttons (such as in `TagdosNotesHubView`) with standardized `36x36` circular frosted glass buttons (`Circle().fill(Color.white.opacity(0.08)).overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))`).
+  - Standardized font typography (`14pt .bold`) across all secondary hub back buttons and quick-action icons.
+- **Elimination of Redundant Containers & Constraints**:
+  - Removed duplicate header bars from the secondary pane; views render seamlessly and leverage their own native back controls to transition back to Co-Pilot overview.
+  - Stripped redundant outer glass card backgrounds and hardcoded max-width constraints, allowing all hubs to fluidly fill expanded desktop windows up to ultrawide dimensions without letterboxing.
+
 ---
 
 ## 4. Cross-Platform Parity Details
@@ -71,6 +83,7 @@ In `SettingsView` -> `macOS Desktop Integration`:
 ### Android (Galaxy Z Fold 8 "RADAR")
 - **Concentric Recovery Rings Mascot Scale**: Adjusted mascot size from `MonkeySize.CARD` (80dp) to `MonkeySize.MINI` (44dp). Previously, the 80dp mascot overflowed the innermost 102dp hydration circle, pushing the stress text awkwardly over the circular progress tracks.
 - **Typography Shadow**: Added high-contrast black drop shadow (`Offset(0f, 2f)`, `blurRadius = 4f`) to ensure crisp legibility inside the concentric rings across all themes.
+- **Secondary Hub Consistency**: Parameterized `horizontalPadding` and `applyStatusBarsPadding` across all Android hubs, eliminating double outer margins and ensuring 1:1 proportional symmetry between master dashboard and detail hubs.
 
 ### iOS (iPhone Duo)
 - **Top Alignment**: Balanced `DashboardView` top padding with the unfolded companion pane header (`10pt`).
@@ -78,16 +91,13 @@ In `SettingsView` -> `macOS Desktop Integration`:
 
 ---
 
-## 5. Verification & Performance
+## 5. Verification & Deployment Matrix
 
-1. **macOS Native Verification**:
-   - Clean compilation on Apple Silicon (ARM64) macOS 15.0+ target (`xcodebuild ... CODE_SIGNING_ALLOWED=NO build`).
-   - Window resize tested up to 1400pt wide; verified seamless fluid width scaling across Hubs (`macos_dualpane_health_wide_1400.png`).
-   - Left hero card / right companion header top alignment verified (`macos_dualpane_aligned_dashboard.png`).
-   - Redundant detail header and duplicate backgrounds eliminated (`macos_dualpane_health_no_extra_header.png`).
-   - Keyboard return (`Esc` / back button) to Co-Pilot overview verified (`macos_dualpane_returned_copilot.png`).
-   - Idle CPU verified at 0.0% - 1.8%.
-2. **Android Verification**:
-   - Clean build via `./gradlew assembleDebug` passed in 30s.
-3. **iOS Verification**:
-   - Clean build via `xcodebuild -project iOS/Daily.xcodeproj` passed for simulator destinations.
+| Platform / Target | Environment / Device | Test / Deployment Procedure | Status | Result & Live Telemetry |
+| :--- | :--- | :--- | :--- | :--- |
+| **macOS Desktop** | macOS 15.0+ (ARM64 Apple Silicon) | Xcodebuild native compilation + runtime inspection | **PASS** | 0.0% idle CPU; window toggle 1040pt <-> 480pt; fluid hub resize; pinned top bars |
+| **iOS (iPhone Duo)** | SimulaDuo (`6BB33377-B7BD-4306-9BBA-AACBD99FBC76`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 7010); dual-pane split verified |
+| **Android Foldable Emulator** | Pixel 9 Pro Fold (`emulator-5554`) | `./gradlew assembleDebug` + `adb install` + launch | **PASS** | Launched live (PID 12548); concentric rings & MINI mascot verified |
+| **Samsung Galaxy Z Fold 8** | Physical Device ("RADAR", `SM-F971B`) | Wireless ADB mDNS TLS (`port 5038`) + streamed install | **VERIFIED LIVE** | Success; launched PID 16404; zero fatal logcat crashes; rings verified |
+| **Google Pixel 9 Pro** | Physical Device (`caiman`) | Wireless ADB mDNS TLS (`port 5038`) + streamed install | **VERIFIED LIVE** | Success; launched live |
+

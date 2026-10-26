@@ -128,18 +128,17 @@ public struct FinancesMainView: View {
     // MARK: - Header Bar
     @ViewBuilder
     private var headerBar: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             if let onNavigateBack = onNavigateBack {
                 Button(action: onNavigateBack) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(Circle())
-                        .overlay {
-                            Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
-                        }
+                        .background(
+                            Circle().fill(Color.white.opacity(0.08))
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
             }

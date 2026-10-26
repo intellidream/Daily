@@ -64,13 +64,13 @@ public struct TagdosNotesHubView: View {
         VStack(spacing: 0) {
             // Top Navigation Bar
             navigationBar
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 6)
 
             // Stream Selector Tabs (1 to 5 + Notes)
             streamSelectorBar
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.top, 4)
                 .padding(.bottom, 12)
 
@@ -93,7 +93,7 @@ public struct TagdosNotesHubView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 40)
             }
                 .simultaneousGesture(
@@ -169,23 +169,26 @@ public struct TagdosNotesHubView: View {
 
     // MARK: - Navigation Bar
     private var navigationBar: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 10) {
             Button {
                 handleBack()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(Color.white.opacity(0.08))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    )
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
             HStack(spacing: 6) {
                 Text("Tagdos & Notes")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
 
                 if store.isSyncing {
@@ -219,26 +222,21 @@ public struct TagdosNotesHubView: View {
                         isRawEditMode.toggle()
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(isRawEditMode ? "Canvas" : "Raw Text")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                    }
-                    .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.18))
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.4), lineWidth: 1)
-                    )
+                    Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle().fill(Color.white.opacity(0.08))
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                        )
                 }
+                .buttonStyle(.plain)
+                .help(isRawEditMode ? "Switch to Canvas View" : "Switch to Raw Text View")
+            } else {
+                Color.clear.frame(width: 36, height: 36)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
     }
 
     // MARK: - Stream Selector Tabs
@@ -335,7 +333,6 @@ public struct TagdosNotesHubView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
         }
     }
 

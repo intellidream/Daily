@@ -29,14 +29,18 @@ public struct WeatherDetailView: View {
     }
 
     public var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Top Navigation & Location Bar
-                    topLocationBar
-
-                    // Content or Loading State
-                    if let weather = weatherService.currentWeather {
+        VStack(spacing: 0) {
+            // Pinned Top Navigation & Location Bar
+            topLocationBar
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+            
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Content or Loading State
+                        if let weather = weatherService.currentWeather {
                         // Hero Weather Card
                         heroWeatherCard(weather: weather)
 
@@ -85,7 +89,8 @@ public struct WeatherDetailView: View {
             }
         }
     }
-
+}
+    
     // MARK: - Top Location Bar
 
     private var topLocationBar: some View {

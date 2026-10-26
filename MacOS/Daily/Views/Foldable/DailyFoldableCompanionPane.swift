@@ -212,7 +212,7 @@ public struct DailyFoldableCompanionPane: View {
                 // 4. Unified Daily Spotlight & Hub Matrix (Replaces redundant mini-widget tiles)
                 dailySpotlightMatrix
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 20)
             .padding(.bottom, 60)
         }
         .scrollBounceBehavior(.always, axes: .vertical)
