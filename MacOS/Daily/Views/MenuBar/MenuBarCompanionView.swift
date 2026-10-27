@@ -17,6 +17,7 @@ public enum TagdosEntryMode: String, CaseIterable, Identifiable {
 }
 
 public struct MenuBarCompanionView: View {
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @ObservedObject private var habitsService = HabitsService.shared
     @ObservedObject private var healthService = HealthDataService.shared
@@ -43,9 +44,17 @@ public struct MenuBarCompanionView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
     }
     
+    private func openFullApp(_ tab: NavigationTab? = nil) {
+        triggerHaptic()
+        openWindow(id: "main")
+        dismissWindow(id: "glance")
+        MacOSWindowManager.shared.closeGlanceWindow()
+        onOpenFullApp?(tab)
+    }
+    
     public var body: some View {
         LiquidGlassBackground {
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 // Top Header Bar
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
@@ -65,10 +74,7 @@ public struct MenuBarCompanionView: View {
                     Spacer()
                     
                     Button {
-                        triggerHaptic()
-                        dismissWindow(id: "glance")
-                        MacOSWindowManager.shared.closeGlanceWindow()
-                        onOpenFullApp?(nil)
+                        openFullApp(nil)
                     } label: {
                         HStack(spacing: 4) {
                             Text("Full App")
@@ -92,7 +98,7 @@ public struct MenuBarCompanionView: View {
                 .padding(.top, 14)
                 
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 10) {
                         // 1. Weather & Vitals Quick Row
                         weatherAndVitalsRow
                         
@@ -112,7 +118,7 @@ public struct MenuBarCompanionView: View {
                         Rectangle()
                             .fill(Color.white.opacity(0.1))
                             .frame(height: 1)
-                            .padding(.top, 4)
+                            .padding(.top, 3)
                             .padding(.bottom, 2)
                         
                         // 6. Exit App Button (matching WinUI Taskbar Glance)
@@ -123,7 +129,11 @@ public struct MenuBarCompanionView: View {
                 }
             }
         }
-        .frame(width: 360, height: 580)
+        .frame(width: 360, height: 680)
+        .onAppear {
+            MacOSWindowManager.shared.openWindowAction = openWindow
+            MacOSWindowManager.shared.dismissWindowAction = dismissWindow
+        }
     }
     
     // MARK: - 1. Weather & Vitals Row
@@ -132,12 +142,9 @@ public struct MenuBarCompanionView: View {
         HStack(spacing: 10) {
             // Weather Card
             Button {
-                triggerHaptic()
-                dismissWindow(id: "glance")
-                MacOSWindowManager.shared.closeGlanceWindow()
-                onOpenFullApp?(.weather)
+                openFullApp(.weather)
             } label: {
-                GlassCard(cornerRadius: 14, padding: 12) {
+                GlassCard(cornerRadius: 14, padding: 10) {
                     HStack(spacing: 8) {
                         let icon = WeatherConditionHelper.sfSymbol(for: weatherService.currentWeather?.weather.first?.icon ?? "")
                         Image(systemName: icon)
@@ -163,12 +170,9 @@ public struct MenuBarCompanionView: View {
             
             // Health Vitals Card (Consumer Mode)
             Button {
-                triggerHaptic()
-                dismissWindow(id: "glance")
-                MacOSWindowManager.shared.closeGlanceWindow()
-                onOpenFullApp?(.health)
+                openFullApp(.health)
             } label: {
-                GlassCard(cornerRadius: 14, padding: 12) {
+                GlassCard(cornerRadius: 14, padding: 10) {
                     HStack(spacing: 8) {
                         Image(systemName: "heart.fill")
                             .font(.system(size: 20))
@@ -532,10 +536,7 @@ public struct MenuBarCompanionView: View {
     @ViewBuilder
     private func quickNavButton(title: String, icon: String, color: Color, tab: NavigationTab) -> some View {
         Button {
-            triggerHaptic()
-            dismissWindow(id: "glance")
-            MacOSWindowManager.shared.closeGlanceWindow()
-            onOpenFullApp?(tab)
+            openFullApp(tab)
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: icon)

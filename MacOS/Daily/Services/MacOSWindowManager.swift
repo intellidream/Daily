@@ -21,7 +21,8 @@ public final class MacOSWindowManager: ObservableObject {
         
         let mainWindow = NSApp.windows.first { window in
             let title = window.title
-            return (title == "DayOne" || title.isEmpty || window.identifier?.rawValue == "main") && !title.contains("Glance")
+            let id = window.identifier?.rawValue ?? ""
+            return (title == "DayOne" || id == "main") && !title.contains("Glance") && id != "glance"
         }
         
         if let window = mainWindow {
@@ -58,15 +59,20 @@ public final class MacOSWindowManager: ObservableObject {
         openWindowAction?(id: "glance")
     }
     
-    /// Hides or closes the DayOne Glance HUD floating window.
+    /// Hides or closes the DayOne Glance HUD floating window and any auxiliary status windows.
     public func closeGlanceWindow() {
         dismissWindowAction?(id: "glance")
         
         for window in NSApp.windows {
             let title = window.title
-            if title.contains("Glance") || window.identifier?.rawValue == "glance" {
+            let id = window.identifier?.rawValue ?? ""
+            let isMainWindow = (title == "DayOne" || id == "main") && !title.contains("Glance") && id != "glance"
+            
+            if !isMainWindow {
                 window.orderOut(nil)
-                window.close()
+                if title.contains("Glance") || id == "glance" {
+                    window.close()
+                }
             }
         }
     }
@@ -76,7 +82,8 @@ public final class MacOSWindowManager: ObservableObject {
     public func setMainWindowDualPane(enabled: Bool) {
         guard let window = NSApp.windows.first(where: {
             let title = $0.title
-            return (title == "DayOne" || title.isEmpty || $0.identifier?.rawValue == "main") && !title.contains("Glance")
+            let id = $0.identifier?.rawValue ?? ""
+            return (title == "DayOne" || id == "main") && !title.contains("Glance") && id != "glance"
         }) else { return }
         
         var currentFrame = window.frame
