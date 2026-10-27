@@ -39,10 +39,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.Calendar
+import java.util.TimeZone
 import kotlinx.coroutines.async
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import com.intellidream.daily.wearos.domain.util.HabitDateParser
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -96,6 +99,10 @@ class WatchSessionManager private constructor(private val context: Context) {
             }
             install(Postgrest)
         }
+    }
+
+    val offlineSyncManager: OfflineSyncManager by lazy {
+        OfflineSyncManager.getInstance(context)
     }
 
     private val _isAuthenticated = MutableStateFlow(
@@ -214,9 +221,36 @@ class WatchSessionManager private constructor(private val context: Context) {
         cachedSmokesLogs = smokesDayCache[todayStr]
     }
 
+    private var saveCacheJob: Job? = null
+    private val saveCacheMutex = kotlinx.coroutines.sync.Mutex()
+
     fun saveCachesToDisk() {
-        scope.launch {
+        saveCacheJob?.cancel()
+        saveCacheJob = scope.launch {
+            delay(500) // 500ms debounce
+            saveCacheMutex.lock()
             try {
+                // Prune day caches to max 30 recent days
+                if (bubblesDayCache.size > 30) {
+                    val sortedKeys = bubblesDayCache.keys().toList().sortedDescending()
+                    for (k in sortedKeys.drop(30)) {
+                        bubblesDayCache.remove(k)
+                    }
+                }
+                if (smokesDayCache.size > 30) {
+                    val sortedKeys = smokesDayCache.keys().toList().sortedDescending()
+                    for (k in sortedKeys.drop(30)) {
+                        smokesDayCache.remove(k)
+                    }
+                }
+                // Prune week caches to max 8 weeks (0 down to -7)
+                for (k in bubblesWeekCache.keys().toList()) {
+                    if (k < -7 || k > 0) bubblesWeekCache.remove(k)
+                }
+                for (k in smokesWeekCache.keys().toList()) {
+                    if (k < -7 || k > 0) smokesWeekCache.remove(k)
+                }
+
                 val bDayJson = json.encodeToString(bubblesDayCache.toMap())
                 val sDayJson = json.encodeToString(smokesDayCache.toMap())
                 val bWeekMap = bubblesWeekCache.mapKeys { it.key.toString() }
@@ -232,6 +266,8 @@ class WatchSessionManager private constructor(private val context: Context) {
                     .apply()
             } catch (e: Exception) {
                 android.util.Log.w("WatchSessionManager", "Failed to save caches to disk: ${e.message}")
+            } finally {
+                saveCacheMutex.unlock()
             }
         }
     }
@@ -273,19 +309,161 @@ class WatchSessionManager private constructor(private val context: Context) {
     }
 
     fun updateBubblesWeekToday(isCoffee: Boolean, delta: Double) {
-        bubblesWeekCache[0]?.find { it.isToday }?.let { bucket ->
-            if (isCoffee) bucket.coffee = maxOf(0.0, bucket.coffee + delta)
-            else bucket.water = maxOf(0.0, bucket.water + delta)
+        val current = bubblesWeekCache[0] ?: return
+        val updated = current.map { bucket ->
+            if (bucket.isToday) {
+                if (isCoffee) bucket.copy(coffee = maxOf(0.0, bucket.coffee + delta))
+                else bucket.copy(water = maxOf(0.0, bucket.water + delta))
+            } else {
+                bucket
+            }
         }
+        bubblesWeekCache[0] = updated
         saveCachesToDisk()
     }
 
     fun updateSmokesWeekToday(isHeated: Boolean, delta: Double) {
-        smokesWeekCache[0]?.find { it.isToday }?.let { bucket ->
-            if (isHeated) bucket.heat = maxOf(0.0, bucket.heat + delta)
-            else bucket.cig = maxOf(0.0, bucket.cig + delta)
+        val current = smokesWeekCache[0] ?: return
+        val updated = current.map { bucket ->
+            if (bucket.isToday) {
+                if (isHeated) bucket.copy(heat = maxOf(0.0, bucket.heat + delta))
+                else bucket.copy(cig = maxOf(0.0, bucket.cig + delta))
+            } else {
+                bucket
+            }
         }
+        smokesWeekCache[0] = updated
         saveCachesToDisk()
+    }
+
+    fun logWater(amount: Int, type: String, dayOffset: Int = 0): HabitLog {
+        val isCoffee = type.contains("Coffee")
+        val targetCal = Calendar.getInstance()
+        if (dayOffset != 0) {
+            targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
+        }
+        val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val currentDateStr = localDateFmt.format(targetCal.time)
+        val loggedAtStr = isoFmt.format(targetCal.time)
+        val metadata = buildJsonObject { put("drink", type) }.toString()
+
+        val newLog = HabitLog(
+            user_id = _currentUserId.value,
+            habit_type = "water",
+            value = amount.toDouble(),
+            unit = "ml",
+            logged_at = loggedAtStr,
+            metadata = metadata
+        )
+
+        val existing = bubblesDayCache[currentDateStr] ?: emptyList()
+        val updated = listOf(newLog) + existing
+        setBubblesLogs(currentDateStr, updated)
+
+        if (dayOffset == 0) {
+            val totalWater = updated.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
+            val totalCoffee = updated.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
+            persistWaterTotal(totalWater + totalCoffee)
+            updateBubblesWeekToday(isCoffee = isCoffee, delta = amount.toDouble())
+        }
+
+        offlineSyncManager.enqueueInsert(newLog)
+
+        scope.launch {
+            offlineSyncManager.syncPendingLogs(supabaseClient)
+        }
+
+        _dataRefreshTrigger.value++
+        return newLog
+    }
+
+    fun logSmoke(type: String, dayOffset: Int = 0): HabitLog {
+        val isHeat = type.contains("Heated")
+        val targetCal = Calendar.getInstance()
+        if (dayOffset != 0) {
+            targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
+        }
+        val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val currentDateStr = localDateFmt.format(targetCal.time)
+        val loggedAtStr = isoFmt.format(targetCal.time)
+        val metadata = buildJsonObject { put("brand", type) }.toString()
+
+        val newLog = HabitLog(
+            user_id = _currentUserId.value,
+            habit_type = "smokes",
+            value = 1.0,
+            unit = "count",
+            logged_at = loggedAtStr,
+            metadata = metadata
+        )
+
+        val existing = smokesDayCache[currentDateStr] ?: emptyList()
+        val updated = listOf(newLog) + existing
+        setSmokesLogs(currentDateStr, updated)
+
+        if (dayOffset == 0) {
+            val totalCig = updated.filter { it.metadata?.contains("Heated") != true }.sumOf { maxOf(1, it.value.toInt()) }
+            val totalHeat = updated.filter { it.metadata?.contains("Heated") == true }.sumOf { maxOf(1, it.value.toInt()) }
+            persistSmokesTotal(totalCig + totalHeat)
+            updateSmokesWeekToday(isHeated = isHeat, delta = 1.0)
+        }
+
+        offlineSyncManager.enqueueInsert(newLog)
+
+        scope.launch {
+            offlineSyncManager.syncPendingLogs(supabaseClient)
+        }
+
+        _dataRefreshTrigger.value++
+        return newLog
+    }
+
+    fun deleteHabitLog(log: HabitLog, dayOffset: Int = 0) {
+        val isWater = log.habit_type == "water"
+        val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dateStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+            ?: localDateFmt.format(Date())
+
+        if (isWater) {
+            val isCoffee = log.metadata?.contains("Coffee") == true
+            val existing = bubblesDayCache[dateStr] ?: emptyList()
+            val updated = existing.filter { it.id != log.id }
+            setBubblesLogs(dateStr, updated)
+
+            if (dayOffset == 0) {
+                val totalWater = updated.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
+                val totalCoffee = updated.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
+                persistWaterTotal(totalWater + totalCoffee)
+                updateBubblesWeekToday(isCoffee = isCoffee, delta = -log.value)
+            }
+        } else {
+            val isHeat = log.metadata?.contains("Heated") == true
+            val count = maxOf(1.0, log.value)
+            val existing = smokesDayCache[dateStr] ?: emptyList()
+            val updated = existing.filter { it.id != log.id }
+            setSmokesLogs(dateStr, updated)
+
+            if (dayOffset == 0) {
+                val totalCig = updated.filter { it.metadata?.contains("Heated") != true }.sumOf { maxOf(1, it.value.toInt()) }
+                val totalHeat = updated.filter { it.metadata?.contains("Heated") == true }.sumOf { maxOf(1, it.value.toInt()) }
+                persistSmokesTotal(totalCig + totalHeat)
+                updateSmokesWeekToday(isHeated = isHeat, delta = -count)
+            }
+        }
+
+        offlineSyncManager.enqueueDelete(log)
+
+        scope.launch {
+            offlineSyncManager.syncPendingLogs(supabaseClient)
+        }
+
+        _dataRefreshTrigger.value++
     }
 
     fun getWeekWindow(offset: Int): Pair<Calendar, Calendar> {
@@ -417,13 +595,14 @@ class WatchSessionManager private constructor(private val context: Context) {
                             dCal.add(Calendar.DAY_OF_YEAR, i)
                             val dStr = localDateFmt.format(dCal.time)
                             val lbl = dayLabelFmt.format(dCal.time).take(1)
-                            val bucket = WaterDayBucket(dStr, lbl, dStr == todayDateStr)
                             val dayLogsForDate = waterGrouped[dStr] ?: emptyList()
+                            var w = 0.0
+                            var c = 0.0
                             for (log in dayLogsForDate) {
                                 val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
-                                if (isCoffee) bucket.coffee += log.value else bucket.water += log.value
+                                if (isCoffee) c += log.value else w += log.value
                             }
-                            buckets.add(bucket)
+                            buckets.add(WaterDayBucket(dStr, lbl, dStr == todayDateStr, water = w, coffee = c))
                         }
                         bubblesWeekCache[offset] = buckets
                     }
@@ -458,14 +637,15 @@ class WatchSessionManager private constructor(private val context: Context) {
                             dCal.add(Calendar.DAY_OF_YEAR, i)
                             val dStr = localDateFmt.format(dCal.time)
                             val lbl = dayLabelFmt.format(dCal.time).take(1)
-                            val bucket = SmokeDayBucket(dStr, lbl, dStr == todayDateStr)
                             val dayLogsForDate = smokesGrouped[dStr] ?: emptyList()
+                            var cig = 0.0
+                            var heat = 0.0
                             for (log in dayLogsForDate) {
                                 val isHeated = log.metadata?.contains("Heated", ignoreCase = true) == true
                                 val count = maxOf(1.0, log.value)
-                                if (isHeated) bucket.heat += count else bucket.cig += count
+                                if (isHeated) heat += count else cig += count
                             }
-                            buckets.add(bucket)
+                            buckets.add(SmokeDayBucket(dStr, lbl, dStr == todayDateStr, cig = cig, heat = heat))
                         }
                         smokesWeekCache[offset] = buckets
                     }
@@ -480,6 +660,168 @@ class WatchSessionManager private constructor(private val context: Context) {
                 android.util.Log.e("WatchSessionManager", "syncAllHabits error: ${e.message}", e)
             } finally {
                 isSyncingHabits = false
+            }
+        }
+    }
+
+    suspend fun fetchWeekData(habitType: String, weekOffset: Int) {
+        val uid = _currentUserId.value ?: return
+        withContext(Dispatchers.IO) {
+            try {
+                val (monCal, nextMonCal) = getWeekWindow(weekOffset)
+                val startStr = Instant.ofEpochMilli(monCal.timeInMillis).toString()
+                val endStr = Instant.ofEpochMilli(nextMonCal.timeInMillis).toString()
+
+                val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val dayLabelFmt = SimpleDateFormat("EEE", Locale.getDefault())
+                val todayDateStr = localDateFmt.format(Date())
+
+                if (habitType == "water") {
+                    val logs = supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                eq("habit_type", "water")
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
+                            }
+                        }.decodeList<HabitLog>()
+
+                    val grouped = mutableMapOf<String, MutableList<HabitLog>>()
+                    for (log in logs) {
+                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                        if (dStr != null) {
+                            grouped.getOrPut(dStr) { mutableListOf() }.add(log)
+                        }
+                    }
+                    for ((dStr, list) in grouped) {
+                        bubblesDayCache[dStr] = list
+                    }
+
+                    val buckets = mutableListOf<WaterDayBucket>()
+                    for (i in 0 until 7) {
+                        val dCal = monCal.clone() as Calendar
+                        dCal.add(Calendar.DAY_OF_YEAR, i)
+                        val dStr = localDateFmt.format(dCal.time)
+                        val lbl = dayLabelFmt.format(dCal.time).take(1)
+                        val dayLogsForDate = grouped[dStr] ?: emptyList()
+                        var w = 0.0
+                        var c = 0.0
+                        for (log in dayLogsForDate) {
+                            val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
+                            if (isCoffee) c += log.value else w += log.value
+                        }
+                        buckets.add(WaterDayBucket(dStr, lbl, dStr == todayDateStr, water = w, coffee = c))
+                    }
+                    bubblesWeekCache[weekOffset] = buckets
+                } else {
+                    val logs = supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                or {
+                                    eq("habit_type", "smokes")
+                                    eq("habit_type", "smoke")
+                                }
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
+                            }
+                        }.decodeList<HabitLog>()
+
+                    val grouped = mutableMapOf<String, MutableList<HabitLog>>()
+                    for (log in logs) {
+                        val dStr = HabitDateParser.parseToLocalDate(log.logged_at)?.toString()
+                        if (dStr != null) {
+                            grouped.getOrPut(dStr) { mutableListOf() }.add(log)
+                        }
+                    }
+                    for ((dStr, list) in grouped) {
+                        smokesDayCache[dStr] = list
+                    }
+
+                    val buckets = mutableListOf<SmokeDayBucket>()
+                    for (i in 0 until 7) {
+                        val dCal = monCal.clone() as Calendar
+                        dCal.add(Calendar.DAY_OF_YEAR, i)
+                        val dStr = localDateFmt.format(dCal.time)
+                        val lbl = dayLabelFmt.format(dCal.time).take(1)
+                        val dayLogsForDate = grouped[dStr] ?: emptyList()
+                        var cig = 0.0
+                        var heat = 0.0
+                        for (log in dayLogsForDate) {
+                            val isHeated = log.metadata?.contains("Heated", ignoreCase = true) == true
+                            val count = maxOf(1.0, log.value)
+                            if (isHeated) heat += count else cig += count
+                        }
+                        buckets.add(SmokeDayBucket(dStr, lbl, dStr == todayDateStr, cig = cig, heat = heat))
+                    }
+                    smokesWeekCache[weekOffset] = buckets
+                }
+
+                saveCachesToDisk()
+                _dataRefreshTrigger.value++
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("WatchSessionManager", "fetchWeekData error: ${e.message}", e)
+            }
+        }
+    }
+
+    suspend fun fetchDayLogs(habitType: String, dateStr: String) {
+        val uid = _currentUserId.value ?: return
+        withContext(Dispatchers.IO) {
+            try {
+                val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val parsedDate = localDateFmt.parse(dateStr) ?: return@withContext
+                val cal = Calendar.getInstance().apply { time = parsedDate }
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val startStr = Instant.ofEpochMilli(cal.timeInMillis).toString()
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                val endStr = Instant.ofEpochMilli(cal.timeInMillis).toString()
+
+                if (habitType == "water") {
+                    val logs = supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                eq("habit_type", "water")
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
+                            }
+                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
+                    bubblesDayCache[dateStr] = logs
+                } else {
+                    val logs = supabaseClient.postgrest["habits_logs"]
+                        .select {
+                            filter {
+                                or {
+                                    eq("habit_type", "smokes")
+                                    eq("habit_type", "smoke")
+                                }
+                                eq("is_deleted", false)
+                                and {
+                                    gte("logged_at", startStr)
+                                    lt("logged_at", endStr)
+                                }
+                            }
+                        }.decodeList<HabitLog>().sortedByDescending { it.logged_at }
+                    smokesDayCache[dateStr] = logs
+                }
+
+                saveCachesToDisk()
+                _dataRefreshTrigger.value++
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                android.util.Log.e("WatchSessionManager", "fetchDayLogs error: ${e.message}", e)
             }
         }
     }
@@ -880,7 +1222,7 @@ class WatchSessionManager private constructor(private val context: Context) {
 
             // Flush any logs that were queued while offline
             if (_isAuthenticated.value) {
-                OfflineSyncManager.shared.syncPendingLogs(supabaseClient)
+                offlineSyncManager.syncPendingLogs(supabaseClient)
                 recordHealthSync()
                 syncAllHabits(force = false)
             }

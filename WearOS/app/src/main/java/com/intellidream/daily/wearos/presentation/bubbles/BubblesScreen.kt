@@ -87,7 +87,6 @@ fun BubblesScreen(
     val view = LocalView.current
     var dayOffset by remember { mutableIntStateOf(0) }
     val dailyGoal by sessionManager.bubblesGoal.collectAsState()
-    var isLogging by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     // RotaryMode.Scroll provides silky-smooth 60/120Hz scrolling with crown haptic ticks
@@ -153,90 +152,27 @@ fun BubblesScreen(
             todayCoffee = 0
             todayTotal = 0
             if (isPageActive) {
-                sessionManager.triggerHabitsSync()
+                scope.launch {
+                    sessionManager.fetchDayLogs("water", targetDate)
+                }
             }
         }
     }
 
-    LaunchedEffect(dayOffset, refreshTrigger) {
+    LaunchedEffect(dayOffset, refreshTrigger, isPageActive) {
         loadCachedDate(targetDateStr)
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
-        val isCoffee = log.metadata?.contains("Coffee") == true
-        if (isCoffee) {
-            todayCoffee = maxOf(0, todayCoffee - log.value.toInt())
-        } else {
-            todayWater = maxOf(0, todayWater - log.value.toInt())
-        }
-        todayTotal = todayWater + todayCoffee
-        val newLogs = dayLogs.filter { it.id != log.id }
-        dayLogs = newLogs
-
-        sessionManager.setBubblesLogs(targetDateStr, newLogs)
-        if (dayOffset == 0) {
-            sessionManager.persistWaterTotal(todayTotal)
-            sessionManager.updateBubblesWeekToday(isCoffee = isCoffee, delta = -log.value)
-        }
         SoundAndHapticFeedback.playClick(context, view)
-
-        scope.launch(Dispatchers.IO) {
-            try {
-                sessionManager.supabaseClient.postgrest["habits_logs"]
-                    .update({
-                        set("is_deleted", true)
-                    }) {
-                        filter { eq("id", log.id) }
-                    }
-            } catch (_: Exception) {}
-        }
+        sessionManager.deleteHabitLog(log, dayOffset)
+        loadCachedDate(targetDateStr)
     }
 
     val logWater: (Int, String) -> Unit = { amount, type ->
-        if (!isLogging) {
-            isLogging = true
-            SoundAndHapticFeedback.playLogAdded(context, view)
-
-            val isCoffee = type.contains("Coffee")
-            if (isCoffee) todayCoffee += amount else todayWater += amount
-            todayTotal = todayWater + todayCoffee
-
-            val metadata = buildJsonObject { put("drink", type) }.toString()
-
-            val targetCal = Calendar.getInstance()
-            if (dayOffset != 0) {
-                targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
-            }
-            val loggedAtStr = isoFormat.format(targetCal.time)
-            val currentDateStr = localFormat.format(targetCal.time)
-
-            val newLog = HabitLog(
-                user_id = sessionManager.currentUserId.value,
-                habit_type = "water",
-                value = amount.toDouble(),
-                unit = "ml",
-                logged_at = loggedAtStr,
-                metadata = metadata
-            )
-
-            val newHistory = listOf(newLog) + dayLogs
-            dayLogs = newHistory
-            sessionManager.setBubblesLogs(currentDateStr, newHistory)
-            if (dayOffset == 0) {
-                sessionManager.persistWaterTotal(todayTotal)
-                sessionManager.updateBubblesWeekToday(isCoffee = isCoffee, delta = amount.toDouble())
-            }
-
-            scope.launch(Dispatchers.IO) {
-                try {
-                    sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
-                } catch (_: Exception) {
-                    OfflineSyncManager.shared.enqueue(newLog)
-                } finally {
-                    isLogging = false
-                }
-            }
-        }
+        SoundAndHapticFeedback.playLogAdded(context, view)
+        sessionManager.logWater(amount, type, dayOffset)
+        loadCachedDate(targetDateStr)
     }
 
     val totalG = maxOf(dailyGoal, 1).toFloat()
@@ -416,7 +352,7 @@ fun BubblesScreen(
                         .clickable {
                             SoundAndHapticFeedback.playClick(context, view)
                             if (dayLogs.isNotEmpty()) {
-                                scope.launch { columnState.state.animateScrollToItem(6) }
+                                scope.launch { columnState.state.animateScrollToItem(7) }
                             }
                             onOpenLogs?.invoke("water", formattedDateTitle, dayLogs, deleteLog)
                         }

@@ -127,12 +127,19 @@ fun Smokes7DaysScreen(
         } else {
             isLoading = true
             if (isPageActive) {
-                sessionManager.triggerHabitsSync()
+                scope.launch {
+                    sessionManager.fetchWeekData("smokes", offset)
+                    val reloaded = sessionManager.getSmokesWeek(offset)
+                    if (reloaded != null) {
+                        buckets = reloaded
+                    }
+                    isLoading = false
+                }
             }
         }
     }
 
-    LaunchedEffect(weekOffset, refreshTrigger) {
+    LaunchedEffect(weekOffset, refreshTrigger, isPageActive) {
         loadCachedWeek(weekOffset)
     }
 

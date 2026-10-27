@@ -87,7 +87,6 @@ fun SmokesScreen(
     val view = LocalView.current
     var dayOffset by remember { mutableIntStateOf(0) }
     val dailyGoal by sessionManager.smokesGoal.collectAsState()
-    var isLogging by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     // RotaryMode.Scroll provides silky-smooth 60/120Hz scrolling with crown haptic ticks
@@ -163,92 +162,27 @@ fun SmokesScreen(
             todayHeat = 0
             todayTotal = 0
             if (isPageActive) {
-                sessionManager.triggerHabitsSync()
+                scope.launch {
+                    sessionManager.fetchDayLogs("smokes", targetDate)
+                }
             }
         }
     }
 
-    LaunchedEffect(dayOffset, refreshTrigger) {
+    LaunchedEffect(dayOffset, refreshTrigger, isPageActive) {
         loadCachedDate(targetDateStr)
     }
 
     val deleteLog: (HabitLog) -> Unit = { log ->
-        val count = maxOf(1, log.value.toInt())
-        val isHeat = log.metadata?.contains("Heated") == true
-        if (isHeat) {
-            todayHeat = maxOf(0, todayHeat - count)
-        } else {
-            todayCig = maxOf(0, todayCig - count)
-        }
-        todayTotal = todayCig + todayHeat
-        val newLogs = dayLogs.filter { it.id != log.id }
-        dayLogs = newLogs
-
-        sessionManager.setSmokesLogs(targetDateStr, newLogs)
-        if (dayOffset == 0) {
-            sessionManager.persistSmokesTotal(todayTotal)
-            sessionManager.updateSmokesWeekToday(isHeated = isHeat, delta = -count.toDouble())
-        }
         SoundAndHapticFeedback.playClick(context, view)
-
-        scope.launch {
-            try {
-                sessionManager.supabaseClient.postgrest["habits_logs"]
-                    .update({
-                        set("is_deleted", true)
-                    }) {
-                        filter { eq("id", log.id) }
-                    }
-            } catch (_: Exception) {}
-        }
+        sessionManager.deleteHabitLog(log, dayOffset)
+        loadCachedDate(targetDateStr)
     }
 
     val logSmoke: (String) -> Unit = { type ->
-        if (!isLogging) {
-            isLogging = true
-            SoundAndHapticFeedback.playLogAdded(context, view)
-
-            val isHeat = type.contains("Heated")
-            if (isHeat) todayHeat += 1 else todayCig += 1
-            todayTotal = todayCig + todayHeat
-
-            val metadata = buildJsonObject { put("brand", type) }.toString()
-
-            val targetCal = Calendar.getInstance()
-            if (dayOffset != 0) {
-                targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
-            }
-            val loggedAtStr = isoFormat.format(targetCal.time)
-            val currentDateStr = localFormat.format(targetCal.time)
-
-            // Canonical habit_type = "smokes" matching DailyCore and Android
-            val newLog = HabitLog(
-                user_id = sessionManager.currentUserId.value,
-                habit_type = "smokes",
-                value = 1.0,
-                unit = "count",
-                logged_at = loggedAtStr,
-                metadata = metadata
-            )
-
-            val newHistory = listOf(newLog) + dayLogs
-            dayLogs = newHistory
-            sessionManager.setSmokesLogs(currentDateStr, newHistory)
-            if (dayOffset == 0) {
-                sessionManager.persistSmokesTotal(todayTotal)
-                sessionManager.updateSmokesWeekToday(isHeated = isHeat, delta = 1.0)
-            }
-
-            scope.launch {
-                try {
-                    sessionManager.supabaseClient.postgrest["habits_logs"].insert(newLog)
-                } catch (_: Exception) {
-                    OfflineSyncManager.shared.enqueue(newLog)
-                } finally {
-                    isLogging = false
-                }
-            }
-        }
+        SoundAndHapticFeedback.playLogAdded(context, view)
+        sessionManager.logSmoke(type, dayOffset)
+        loadCachedDate(targetDateStr)
     }
 
     val progress = (todayTotal.toFloat() / maxOf(dailyGoal, 1).toFloat()).coerceIn(0f, 1f)
@@ -314,7 +248,7 @@ fun SmokesScreen(
                         .clickable {
                             SoundAndHapticFeedback.playClick(context, view)
                             if (dayLogs.isNotEmpty()) {
-                                scope.launch { columnState.state.animateScrollToItem(5) }
+                                scope.launch { columnState.state.animateScrollToItem(6) }
                             }
                             onOpenLogs?.invoke("smokes", formattedDateTitle, dayLogs, deleteLog)
                         }
@@ -402,7 +336,7 @@ fun SmokesScreen(
                         .clickable {
                             SoundAndHapticFeedback.playClick(context, view)
                             if (dayLogs.isNotEmpty()) {
-                                scope.launch { columnState.state.animateScrollToItem(5) }
+                                scope.launch { columnState.state.animateScrollToItem(6) }
                             }
                             onOpenLogs?.invoke("smokes", formattedDateTitle, dayLogs, deleteLog)
                         }

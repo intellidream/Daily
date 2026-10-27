@@ -16,17 +16,24 @@ import android.view.View
  */
 object SoundAndHapticFeedback {
 
+    @Volatile
     private var toneGenerator: ToneGenerator? = null
 
-    init {
-        try {
-            // STREAM_NOTIFICATION with gentle volume (35/100)
-            toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 35)
-        } catch (_: Exception) {
-            try {
-                toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 35)
-            } catch (_: Exception) {}
+    private fun getToneGenerator(): ToneGenerator? {
+        if (toneGenerator == null) {
+            synchronized(this) {
+                if (toneGenerator == null) {
+                    try {
+                        toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 35)
+                    } catch (_: Exception) {
+                        try {
+                            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 35)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
         }
+        return toneGenerator
     }
 
     /**
@@ -55,18 +62,20 @@ object SoundAndHapticFeedback {
      * - Single subtle tick / click haptic
      */
     fun playClick(context: Context, view: View? = null) {
-        view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-
-        try {
-            val vibrator = getVibrator(context)
-            if (vibrator != null && vibrator.hasVibrator()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
-                } else {
-                    vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE))
+        if (view != null) {
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        } else {
+            try {
+                val vibrator = getVibrator(context)
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                    } else {
+                        vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE))
+                    }
                 }
-            }
-        } catch (_: Exception) {}
+            } catch (_: Exception) {}
+        }
     }
 
     private fun vibrateSuccess(context: Context, view: View? = null) {
@@ -95,7 +104,7 @@ object SoundAndHapticFeedback {
             if (audioManager?.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
                 return
             }
-            toneGenerator?.startTone(toneType, durationMs)
+            getToneGenerator()?.startTone(toneType, durationMs)
         } catch (_: Exception) {}
     }
 

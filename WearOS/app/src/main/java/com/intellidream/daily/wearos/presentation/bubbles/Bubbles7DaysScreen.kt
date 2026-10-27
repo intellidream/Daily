@@ -127,12 +127,19 @@ fun Bubbles7DaysScreen(
         } else {
             isLoading = true
             if (isPageActive) {
-                sessionManager.triggerHabitsSync()
+                scope.launch {
+                    sessionManager.fetchWeekData("water", offset)
+                    val reloaded = sessionManager.getBubblesWeek(offset)
+                    if (reloaded != null) {
+                        buckets = reloaded
+                    }
+                    isLoading = false
+                }
             }
         }
     }
 
-    LaunchedEffect(weekOffset, refreshTrigger) {
+    LaunchedEffect(weekOffset, refreshTrigger, isPageActive) {
         loadCachedWeek(weekOffset)
     }
 
