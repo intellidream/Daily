@@ -396,16 +396,16 @@ private fun ReaderActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Color.White.copy(alpha = 0.10f),
+    backgroundColor: Color = Color.White.copy(alpha = 0.08f),
     iconTint: Color = Color.White,
-    iconSize: androidx.compose.ui.unit.Dp = 16.dp
+    iconSize: androidx.compose.ui.unit.Dp = 18.dp
 ) {
     Box(
         modifier = modifier
-            .size(34.dp)
+            .size(36.dp)
             .clip(CircleShape)
             .background(backgroundColor)
-            .border(0.5.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

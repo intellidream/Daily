@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -317,10 +318,10 @@ private fun TopLocationBar(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Back Button
+        // Back Button (exact 36dp Health Hub parity)
         Box(
             modifier = Modifier
-                .size(38.dp)
+                .size(36.dp)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.08f))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
@@ -328,7 +329,7 @@ private fun TopLocationBar(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                 contentDescription = "Back",
                 tint = Color.White,
                 modifier = Modifier.size(18.dp)
@@ -395,7 +396,7 @@ private fun TopLocationBar(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Right Quick Actions
+        // Right Quick Actions (exact 36dp Health Hub parity)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -403,7 +404,7 @@ private fun TopLocationBar(
             if (!isAutoLocation) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.08f))
                         .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
@@ -421,7 +422,7 @@ private fun TopLocationBar(
 
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.08f))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)

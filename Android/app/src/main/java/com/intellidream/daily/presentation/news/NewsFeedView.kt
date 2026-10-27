@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.BookmarkRemove
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Clear
@@ -378,7 +379,7 @@ private fun NewsHeaderBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Back Button
+        // Back Button (exact Health Hub 36dp circular glass pill)
         Box(
             modifier = Modifier
                 .size(36.dp)
@@ -397,10 +398,10 @@ private fun NewsHeaderBar(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                 contentDescription = "Back",
                 tint = Color.White,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
 
@@ -499,7 +500,7 @@ private fun NewsHeaderBar(
                     .padding(horizontal = 6.dp, vertical = 6.dp)
             )
         } else {
-            // Manage Feeds Button
+            // Manage Feeds Button (exact 36dp Health Hub parity)
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -513,11 +514,11 @@ private fun NewsHeaderBar(
                     imageVector = Icons.Rounded.Tune,
                     contentDescription = "Manage Feeds",
                     tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
-            // Category Selector Menu
+            // Category Selector Menu (exact 36dp Health Hub parity)
             Box {
                 Box(
                     modifier = Modifier
@@ -532,7 +533,7 @@ private fun NewsHeaderBar(
                         imageVector = categoryIcon(selectedCategory),
                         contentDescription = "Category",
                         tint = ThemeColors.accentCyan,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 

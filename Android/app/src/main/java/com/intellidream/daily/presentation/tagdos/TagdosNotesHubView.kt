@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Description
@@ -142,7 +143,7 @@ fun TagdosNotesHubView(
                 .fillMaxSize()
                 .then(if (applyStatusBarsPadding) Modifier.statusBarsPadding() else Modifier)
         ) {
-            // MARK: - Top Navigation Bar
+            // MARK: - Top Navigation Bar (exact 36dp Health Hub parity)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -150,31 +151,37 @@ fun TagdosNotesHubView(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Back Button (circular Liquid Glass)
+                // Back Button (exact Health Hub 36dp circular glass pill)
                 Box(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
                         .clickable(onClick = onNavigateBack),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                         contentDescription = "Back",
-                        tint = ThemeColors.accentCyan,
+                        tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
                 }
 
-                // Center Title with Sync status
+                // Center Title Capsule (matching Health Hub centered pill)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = "Tagdos & Notes",
-                        fontSize = 15.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -195,19 +202,15 @@ fun TagdosNotesHubView(
                     }
                 }
 
-                // Right Mode Toggle (Canvas vs Raw Text)
+                // Right Mode Toggle (exact 36dp Health Hub circular glass pill)
                 if (!isNotesTab) {
+                    val modeColor = if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple
                     Box(
                         modifier = Modifier
+                            .size(36.dp)
                             .clip(CircleShape)
-                            .background(
-                                (if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple).copy(alpha = 0.18f)
-                            )
-                            .border(
-                                1.dp,
-                                (if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple).copy(alpha = 0.40f),
-                                CircleShape
-                            )
+                            .background(modeColor.copy(alpha = 0.18f))
+                            .border(1.dp, modeColor.copy(alpha = 0.40f), CircleShape)
                             .clickable {
                                 if (isRawEditMode) {
                                     if (currentStream != null) {
@@ -219,26 +222,15 @@ fun TagdosNotesHubView(
                                     }
                                 }
                                 isRawEditMode = !isRawEditMode
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isRawEditMode) Icons.Rounded.GridView else Icons.Rounded.TextFields,
-                                contentDescription = null,
-                                tint = if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = if (isRawEditMode) "Canvas" else "Raw Text",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple
-                            )
-                        }
+                        Icon(
+                            imageVector = if (isRawEditMode) Icons.Rounded.GridView else Icons.Rounded.TextFields,
+                            contentDescription = if (isRawEditMode) "Canvas Mode" else "Raw Text Mode",
+                            tint = modeColor,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 } else {
                     Spacer(modifier = Modifier.size(36.dp))

@@ -347,12 +347,13 @@ fun SmartBriefingContent(
                     ) {
                         // TTS Speaker Toggle
                         record?.let { rec ->
+                            // Read Aloud / TTS Voice Control (exact 36dp Health Hub parity)
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .background(if (isSpeaking) ThemeColors.accentCyan.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
-                                    .border(1.dp, if (isSpeaking) ThemeColors.accentCyan else Color.White.copy(alpha = 0.15f), CircleShape)
+                                    .border(1.dp, if (isSpeaking) ThemeColors.accentCyan else Color.White.copy(alpha = 0.12f), CircleShape)
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         repository.toggleSpeechReadout(rec.narrative.fullConcatenatedText)
@@ -363,30 +364,30 @@ fun SmartBriefingContent(
                                     imageVector = if (isSpeaking) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
                                     contentDescription = "Read Aloud",
                                     tint = if (isSpeaking) ThemeColors.accentCyan else Color.White,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
 
-                        // Close Button
+                        // Close Button (exact 36dp Health Hub parity)
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.08f))
-                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    repository.stopSpeech()
-                                    onDismiss()
-                                },
+                                .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                repository.stopSpeech()
+                                onDismiss()
+                            },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = "Close",
                                 tint = Color.White,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }

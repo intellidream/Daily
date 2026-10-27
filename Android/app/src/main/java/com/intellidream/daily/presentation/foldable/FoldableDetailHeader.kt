@@ -202,7 +202,7 @@ fun FoldableDetailHeader(
                 }
             }
 
-            // Right Actions: Optional trailing pill + Consistent 40dp Circular Glass Close Button
+            // Right Actions: Optional trailing pill + Consistent 36dp Circular Glass Close Button (Health Hub parity)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -211,17 +211,10 @@ fun FoldableDetailHeader(
 
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .shadow(4.dp, CircleShape)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF080F1E).copy(alpha = 0.72f))
-                        .border(
-                            1.dp,
-                            Brush.linearGradient(
-                                listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f))
-                            ),
-                            CircleShape
-                        )
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onCloseClick()

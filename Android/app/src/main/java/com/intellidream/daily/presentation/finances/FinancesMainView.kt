@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -97,7 +98,7 @@ fun FinancesMainView(
             .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header Bar
+            // Header Bar (exact 36dp Health Hub parity)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -105,13 +106,13 @@ fun FinancesMainView(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Back Button
+                // Back Button (exact Health Hub 36dp circular glass pill)
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.12f))
-                        .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
                         .clickable(onClick = onNavigateBack),
                     contentAlignment = Alignment.Center
                 ) {
@@ -119,7 +120,7 @@ fun FinancesMainView(
                         imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
@@ -127,9 +128,10 @@ fun FinancesMainView(
                 Row(
                     modifier = Modifier
                         .weight(1f)
+                        .height(36.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.08f))
-                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -145,6 +147,7 @@ fun FinancesMainView(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
+                                .fillMaxHeight()
                                 .clip(CircleShape)
                                 .background(
                                     if (isSelected) {
@@ -161,8 +164,7 @@ fun FinancesMainView(
                                         Modifier.border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
                                     } else Modifier
                                 )
-                                .clickable { financeDataRepository.setActiveSubTab(tab) }
-                                .padding(vertical = 8.dp),
+                                .clickable { financeDataRepository.setActiveSubTab(tab) },
                             contentAlignment = Alignment.Center
                         ) {
                             Row(

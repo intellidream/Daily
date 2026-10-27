@@ -78,6 +78,33 @@ The architecture ensures that when the device is unfolded or used on an expanded
 - **Predictive Back Navigation**:
   - Pressing the system Back button or gesture while in a detail hub immediately collapses the right pane back to the Companion (`NavigationTab.Dashboard`), keeping the user contextually anchored on the master dashboard without exiting the app.
 
+### 5. Unified Hub Header Button Architecture (Health Hub Golden Standard)
+To achieve complete visual harmony across all hubs opened in the right pane on foldables (as well as single-screen phones), all header navigation and action buttons adhere strictly to the **Health Hub golden standard**:
+- **Button Geometry & Shape**:
+  - Outer bounding box: Exactly `36.dp` diameter (`size(36.dp)`), shaped with `CircleShape`.
+  - Icon dimensions: Centered `18.dp` icon (`size(18.dp)`), providing optimal touch target semantics (`minimumInteractiveComponentSize` via `Box`) without excess Material padding.
+  - Navigation Icon: Standardized on `Icons.AutoMirrored.Rounded.KeyboardArrowLeft` with `Color.White` tint for consistent chevron visual weight.
+- **Glassmorphic Material Styling**:
+  - Rest/Normal background: `Color.White.copy(alpha = 0.08f)`.
+  - Rest/Normal border: `1.dp` solid with `Color.White.copy(alpha = 0.12f)` and `CircleShape`.
+  - Active/Highlighted states: Dynamic accent tinting (`accentColor.copy(alpha = 0.18f..0.20f)` fill, `accentColor.copy(alpha = 0.40f..0.60f)` border).
+- **Header Row Alignment & Vertical Center Parity**:
+  - Row vertical padding is unified across all hubs to `vertical = 12.dp`.
+  - Inner navigation arrows (e.g. Day navigator in Habits and Health) standardized to `26.dp` circular buttons with `14.dp` icons inside a `10.dp horizontal / 5.dp vertical` glass capsule.
+  - Sub-tab switchers (e.g. Finances Money/Stocks/World) standardized to `height(36.dp)` with `3.dp` padding, keeping all leading, center, and trailing controls on the exact same vertical center coordinate (`y = 266 px`).
+- **Standardized Surfaces**:
+  - **Health Studio** (`HealthMainView.kt`): Serves as the golden reference.
+  - **Habits Tracker** (`HabitsMainView.kt`): Replaced Material `IconButton` with `36.dp` circular glass Box for back and guidance buttons; unified day navigation capsule to 26dp circular controls.
+  - **Smart Ledger** (`FinancesMainView.kt`): Replaced `38.dp` back button with `36.dp` circular glass Box; aligned 36dp sub-tab switcher.
+  - **Tagdos & Notes** (`TagdosNotesHubView.kt`): Replaced irregular text toggle pill and cyan back arrow with `36.dp` circular glass Box (`18.dp` GridView/TextFields icon), matching Health's trailing action pattern; centered title inside a glass capsule.
+  - **Curated News** (`NewsFeedView.kt` & `NewsReaderSheet.kt`): Standardized back, manage feeds, category selector, and reader action buttons to `36.dp` circular glass buttons with `18.dp` icons and `1.dp` borders.
+  - **Weather Detail** (`WeatherDetailView.kt`): Standardized `38.dp` back, reset location, and search location buttons to `36.dp` with `18.dp` icons.
+  - **Customize Dashboard** (`CustomizeDashboardScreen.kt`): Replaced square 12dp-radius `GlassButton` with `36.dp` circular glass Box with `KeyboardArrowLeft`.
+  - **Settings & Profile** (`SettingsScreen.kt`): Standardized back button to `36.dp` circular glass Box with `KeyboardArrowLeft`.
+  - **Smart Briefing** (`SmartBriefingBottomSheet.kt`): Replaced `34.dp` close and audio buttons with `36.dp` circular glass buttons with `18.dp` icons.
+  - **Clinical Guidance** (`HabitGuidanceSheet.kt`): Standardized close button from `32.dp` `IconButton` to `36.dp` circular glass Box with `Close` (`18.dp`).
+  - **Foldable Detail Container** (`FoldableDetailHeader.kt`): Standardized close button to `36.dp` circular glass Box.
+
 ---
 
 ## Key Files & Components
@@ -98,14 +125,16 @@ The architecture ensures that when the device is unfolded or used on an expanded
 
 ## Verification & Device Matrix
 
-1. **Pixel 9 Pro Fold Emulator (`emulator-5556`)**:
+1. **Pixel 9 Pro Fold Emulator (`emulator-5554` / `emulator-5556`)**:
    - Resolution: `2076x2152` px at 390 dpi (~851 dp width).
-   - Verified: Dual-pane master-detail renders with 1:1 symmetrical card widths (969px each); diurnal wish header displays accurately; executive summary cards display live data; circular 40dp close buttons match master pane; swipe-down gesture dismisses detail pane; Smart Briefing contains single header and single close button.
-2. **Standard Phone Emulator (`emulator-5554`) & Compact Layout**:
+   - Verified: Dual-pane master-detail renders with 1:1 symmetrical card widths (969px each); diurnal wish header displays accurately; executive summary cards display live data.
+   - Header Buttons: Verified via `uiautomator` bounds inspection that all hubs opened in the right pane (Health, Habits, Finances, Tagdos/Notes, News, Weather) feature identical `36.dp` (`44x44` px) circular glass buttons (`CircleShape`, `18.dp` icon, `Color.White.copy(0.08f)` fill, `Color.White.copy(0.12f)` border), perfectly aligned on the vertical center axis (`y = 266 px`).
+   - Gestures & Navigation: Verified dismissal back to Companion pane via header back button, drag handle swipe-down, and system back gesture.
+2. **Standard Phone Emulator & Compact Layout**:
    - Verified: Single-pane mobile layout with centered bottom capsule retains 100% normal behavior with zero regression.
 3. **Physical Samsung Galaxy Z Fold 8 ("RADAR", `SM-F971B`)**:
-   - Deployed over wireless adb (`192.168.3.64:32995`).
-   - Verified: Live execution, responsive layout, fluid 120Hz scrolling, and seamless transitions on physical hardware.
-4. **Physical Google Pixel 9 Pro**:
-   - Deployed over wireless adb (`192.168.3.8:39221`).
-   - Verified: Compact mobile layout functions identically on physical hardware.
+   - Deployed over wireless adb (`adb-R3GL70B1LGP-HLPtmw._adb-tls-connect._tcp`).
+   - Verified: Native build deployed and launched cleanly; 120Hz smooth scrolling; pixel-perfect header button styling and fluid responsive transitions across folded cover display and inner foldable workspace.
+4. **Physical Google Pixel 9 Pro ("Trapper")**:
+   - Deployed over wireless adb (`adb-48231FDAP0011V-Ma9KPE._adb-tls-connect._tcp`).
+   - Verified: Native build deployed and launched cleanly; compact mobile layout and header buttons function identically on physical phone hardware.

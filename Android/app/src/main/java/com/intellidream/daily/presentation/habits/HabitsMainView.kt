@@ -28,9 +28,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -144,63 +146,70 @@ fun HabitsMainView(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Top Header Day Navigator & Actions
+        // Top Header Day Navigator & Actions (1:1 shape, dimensions & aspect with Health Hub)
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(
-                onClick = onNavigateBack,
+            Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.08f))
-                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                    .clickable(onClick = onNavigateBack),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                     contentDescription = "Back",
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
                 )
             }
 
-            // Date Navigator Capsule
+            // Date Navigator Capsule (exact Health Hub styling)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.06f))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
-                IconButton(
-                    onClick = { repository.goToPreviousDay() },
-                    modifier = Modifier.size(26.dp)
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .clickable { repository.goToPreviousDay() },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.KeyboardArrowLeft,
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                         contentDescription = "Previous Day",
                         tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
+                        .clip(CircleShape)
                         .clickable { showDatePickerDialog = true }
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.CalendarMonth,
-                        contentDescription = null,
+                        imageVector = Icons.Rounded.CalendarToday,
+                        contentDescription = "Select Date",
                         tint = ThemeColors.accentCyan,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                     Text(
                         text = dateTitle,
@@ -226,27 +235,45 @@ fun HabitsMainView(
                         )
                     }
 
-                    IconButton(
-                        onClick = { repository.goToNextDay() },
-                        modifier = Modifier.size(26.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .clickable { repository.goToNextDay() },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                             contentDescription = "Next Day",
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.size(26.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.2f),
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
             }
 
-            IconButton(
-                onClick = { showGuidanceSheet = true },
+            // Right Guidance Button (matching Health Hub Device Selector 36dp circular glass pill)
+            Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.08f))
-                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                    .clickable { showGuidanceSheet = true },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.AutoAwesome,

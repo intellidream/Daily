@@ -108,18 +108,21 @@ fun HabitGuidanceSheet(
                     color = Color.White
                 )
 
-                IconButton(
-                    onClick = onDismiss,
+                // Close Button (exact 36dp Health Hub circular glass pill)
+                Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
                         tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
