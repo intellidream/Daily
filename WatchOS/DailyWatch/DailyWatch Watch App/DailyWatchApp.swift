@@ -22,7 +22,7 @@ class ExtensionDelegate: NSObject, WKExtensionDelegate {
                     }
                     
                     // Also flush any offline habits
-                    OfflineSyncManager.shared.processQueue()
+                    await OfflineSyncManager.shared.processQueue()
                     
                     // Schedule next task (respects the user's setting, defaults to 15 mins)
                     let syncFreq = UserDefaults.standard.integer(forKey: "WatchSyncFrequency")
@@ -48,13 +48,15 @@ class ExtensionDelegate: NSObject, WKExtensionDelegate {
 struct DailyWatchApp: App {
     @WKExtensionDelegateAdaptor(ExtensionDelegate.self) var extensionDelegate
     
-    // Initialize our WCSessionManager on app start
+    // Initialize our WCSessionManager and WatchHabitStore on app start
     @StateObject private var sessionManager = WatchSessionManager.shared
+    @StateObject private var habitStore = WatchHabitStore.shared
     @Environment(\.scenePhase) private var scenePhase
     
     init() {
-        // Force evaluation of the singleton immediately on launch
+        // Force evaluation of singletons immediately on launch
         _ = WatchSessionManager.shared
+        _ = WatchHabitStore.shared
     }
     
     var body: some Scene {
@@ -72,8 +74,10 @@ struct DailyWatchApp: App {
                 }
                 
                 // Eagerly try to flush any offline habits and health data
-                OfflineSyncManager.shared.processQueue()
                 Task {
+                    await OfflineSyncManager.shared.processQueue()
+                    await habitStore.fetchFullSync()
+                    
                     let lastDeepSync = UserDefaults.standard.double(forKey: "lastDeepSync")
                     let isDeepSync = Date().timeIntervalSince1970 - lastDeepSync >= 4 * 3600
                     

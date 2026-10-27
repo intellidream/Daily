@@ -3,15 +3,6 @@ import WatchKit
 import Charts
 import Supabase
 
-struct WaterDayBucket: Identifiable, Codable {
-    var id: UUID = UUID()
-    let date: Date
-    let dayLabel: String
-    var water: Double
-    var coffee: Double
-    var total: Double { water + coffee }
-}
-
 private struct HabitWeekLogItem: Decodable {
     let value: FlexibleDouble
     let metadata: HabitLogMetadataHelper?
@@ -19,40 +10,18 @@ private struct HabitWeekLogItem: Decodable {
 }
 
 struct Bubbles7DaysView: View {
+    @ObservedObject private var store = WatchHabitStore.shared
     @State private var weekOffset: Int = 0
-    @State private var dailyGoal: Int = 2000
-    @State private var isSyncing: Bool = false
-    @State private var buckets: [WaterDayBucket] = []
+    @State private var crownAccumulator: Double = 0.0
+    @State private var historicalBuckets: [WaterDayBucket] = []
+    @State private var isHistoricalSyncing: Bool = false
     
     @Environment(\.scenePhase) private var scenePhase
     
-    init() {
-        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
-           let cachedGoalStr = groupPrefs.string(forKey: "water_goal"),
-           let cachedGoal = Int(cachedGoalStr) {
-            _dailyGoal = State(initialValue: cachedGoal)
-        }
-    }
+    private var isCurrentWeek: Bool { weekOffset == 0 }
     
-    // Calculates Monday-to-Sunday window
-    private func getWeekWindow(offset: Int) -> (monday: Date, nextMonday: Date, sunday: Date, days: [Date]) {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfToday = calendar.startOfDay(for: now)
-        let weekday = calendar.component(.weekday, from: startOfToday) // 1=Sun, 2=Mon, ...
-        let daysFromMonday = (weekday == 1) ? 6 : (weekday - 2)
-        let thisMonday = calendar.date(byAdding: .day, value: -daysFromMonday, to: startOfToday) ?? startOfToday
-        let targetMonday = calendar.date(byAdding: .day, value: offset * 7, to: thisMonday) ?? thisMonday
-        let nextMonday = calendar.date(byAdding: .day, value: 7, to: targetMonday) ?? targetMonday
-        let targetSunday = calendar.date(byAdding: .day, value: 6, to: targetMonday) ?? targetMonday
-        
-        var days: [Date] = []
-        for i in 0..<7 {
-            if let d = calendar.date(byAdding: .day, value: i, to: targetMonday) {
-                days.append(d)
-            }
-        }
-        return (targetMonday, nextMonday, targetSunday, days)
+    private var activeBuckets: [WaterDayBucket] {
+        isCurrentWeek ? store.waterWeekBuckets : historicalBuckets
     }
     
     private var formattedWeekTitle: String {
@@ -61,7 +30,7 @@ struct Bubbles7DaysView: View {
         } else if weekOffset == -1 {
             return "Last Week"
         } else {
-            let window = getWeekWindow(offset: weekOffset)
+            let window = store.getWeekWindow(offset: weekOffset)
             let formatter = DateFormatter()
             formatter.dateFormat = "d MMM"
             return "\(formatter.string(from: window.monday)) - \(formatter.string(from: window.sunday))"
@@ -69,28 +38,28 @@ struct Bubbles7DaysView: View {
     }
     
     private var weeklyAverage: Int {
-        guard !buckets.isEmpty else { return 0 }
-        let sum = buckets.reduce(0.0) { $0 + $1.total }
+        guard !activeBuckets.isEmpty else { return 0 }
+        let sum = activeBuckets.reduce(0.0) { $0 + $1.total }
         if weekOffset == 0 {
             let calendar = Calendar.current
             let weekday = calendar.component(.weekday, from: Date()) // 1=Sun, 2=Mon, ...
             let daysElapsed = (weekday == 1) ? 7 : max(1, weekday - 1)
             return Int(sum / Double(daysElapsed))
         } else {
-            return Int(sum / Double(buckets.count))
+            return Int(sum / Double(activeBuckets.count))
         }
     }
     
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
-                // Header Title - button icon (drop.fill) & color (.cyan)
+                // Header Title
                 HStack(spacing: 6) {
                     Image(systemName: "drop.fill")
                         .foregroundColor(.cyan)
                         .font(.system(size: 15))
                     Text("7 Days")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                 }
                 .padding(.top, 2)
                 
@@ -100,24 +69,24 @@ struct Bubbles7DaysView: View {
                     canGoForward: weekOffset < 0,
                     accentColor: .cyan,
                     onPrevious: {
-                        navigateWeek(by: -1)
+                        navigateToWeek(by: -1)
                     },
                     onNext: {
                         if weekOffset < 0 {
-                            navigateWeek(by: 1)
+                            navigateToWeek(by: 1)
                         }
                     }
                 )
                 
                 // 7 Days Chart (Mon to Sun)
-                if buckets.isEmpty {
+                if activeBuckets.isEmpty {
                     VStack {
                         ProgressView()
                             .padding(.vertical, 30)
                     }
                 } else {
                     Chart {
-                        ForEach(buckets) { item in
+                        ForEach(activeBuckets) { item in
                             // Water Bar
                             BarMark(
                                 x: .value("Day", item.date, unit: .day),
@@ -138,14 +107,14 @@ struct Bubbles7DaysView: View {
                         }
                         
                         // Daily Goal Target Line
-                        RuleMark(y: .value("Goal", dailyGoal))
+                        RuleMark(y: .value("Goal", store.waterGoal))
                             .foregroundStyle(Color.blue.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                     }
-                    .frame(height: 95)
+                    .frame(height: 100)
                     .chartYAxis {
                         AxisMarks(position: .leading) { value in
-                            if let intVal = value.as(Int.self), intVal == dailyGoal || intVal == 0 {
+                            if let intVal = value.as(Int.self), intVal == store.waterGoal || intVal == 0 {
                                 AxisValueLabel()
                                     .font(.system(size: 8))
                             }
@@ -159,7 +128,7 @@ struct Bubbles7DaysView: View {
                     }
                     .padding(.horizontal, 4)
                     
-                    // Summary row: Average & Goal comparison with button icons & colors
+                    // Summary row: Average & Goal comparison
                     HStack {
                         HStack(spacing: 3) {
                             Image(systemName: "drop.fill")
@@ -170,7 +139,7 @@ struct Bubbles7DaysView: View {
                                 .foregroundColor(.primary)
                         }
                         Spacer()
-                        Text("Goal: \(dailyGoal) ml")
+                        Text("Goal: \(store.waterGoal) ml")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                     }
@@ -178,72 +147,79 @@ struct Bubbles7DaysView: View {
                 }
                 
                 // Sync indicator
-                SyncFooterView(isSyncing: isSyncing)
+                SyncFooterView(isSyncing: store.isSyncing || isHistoricalSyncing)
             }
             .padding(.horizontal, 6)
             .padding(.bottom, 8)
         }
+        .focusable()
+        .digitalCrownRotation(
+            $crownAccumulator,
+            from: -52.0,
+            through: 0.0,
+            by: 1.0,
+            sensitivity: .medium,
+            isContinuous: false,
+            isHapticFeedbackEnabled: true
+        )
+        .onChange(of: crownAccumulator) { oldVal, newVal in
+            let step = Int(newVal)
+            if step != weekOffset && step <= 0 {
+                weekOffset = step
+                if step != 0 {
+                    loadHistoricalWeek(offset: step)
+                }
+            }
+        }
         .onAppear {
-            applyWeekSkeletonOrCache(for: weekOffset)
-            fetchWeekData(for: weekOffset)
+            if isCurrentWeek {
+                store.fetchFullSync()
+            }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .active {
-                fetchWeekData(for: weekOffset)
+            if newPhase == .active && isCurrentWeek {
+                store.fetchFullSync()
             }
         }
     }
     
-    // MARK: - Navigation & Local Cache
+    // MARK: - Navigation & Historical Fetch
     
-    private func navigateWeek(by delta: Int) {
+    private func navigateToWeek(by delta: Int) {
         let newOffset = weekOffset + delta
         if newOffset > 0 { return }
         weekOffset = newOffset
-        applyWeekSkeletonOrCache(for: newOffset)
-        fetchWeekData(for: newOffset)
+        crownAccumulator = Double(newOffset)
+        if newOffset != 0 {
+            loadHistoricalWeek(offset: newOffset)
+        }
     }
     
-    private func applyWeekSkeletonOrCache(for offset: Int) {
-        let window = getWeekWindow(offset: offset)
-        let key = (offset == 0) ? "bubbles_week_cache" : "bubbles_week_cache_\(offset)"
+    private func loadHistoricalWeek(offset: Int) {
+        let window = store.getWeekWindow(offset: offset)
+        let key = "bubbles_week_cache_\(offset)"
         if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
            let data = groupPrefs.data(forKey: key),
            let cached = try? JSONDecoder().decode([WaterDayBucket].self, from: data),
            !cached.isEmpty {
-            self.buckets = cached
+            self.historicalBuckets = cached
         } else {
-            self.buckets = window.days.map { WaterDayBucket(date: $0, dayLabel: "", water: 0, coffee: 0) }
+            self.historicalBuckets = window.days.map { WaterDayBucket(date: $0) }
         }
+        fetchHistoricalWeekData(for: offset)
     }
     
-    private func saveCache(for offset: Int, buckets: [WaterDayBucket]) {
-        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
-           let data = try? JSONEncoder().encode(buckets) {
-            let key = (offset == 0) ? "bubbles_week_cache" : "bubbles_week_cache_\(offset)"
-            groupPrefs.set(data, forKey: key)
-        }
-    }
-    
-    // MARK: - Data Fetching
-    
-    private func fetchWeekData(for offset: Int) {
+    private func fetchHistoricalWeekData(for offset: Int) {
         guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
         
-        isSyncing = true
-        let window = getWeekWindow(offset: offset)
-        
-        let isoUtcFormatter = ISO8601DateFormatter()
-        isoUtcFormatter.formatOptions = [.withInternetDateTime]
-        isoUtcFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-        let startStr = isoUtcFormatter.string(from: window.monday)
-        let endStr = isoUtcFormatter.string(from: window.nextMonday)
+        isHistoricalSyncing = true
+        let window = store.getWeekWindow(offset: offset)
+        let startStr = HabitDateParser.toIsoUtcString(window.monday)
+        let endStr = HabitDateParser.toIsoUtcString(window.nextMonday)
         
         Task {
             do {
-                var initialBuckets: [WaterDayBucket] = window.days.map {
-                    WaterDayBucket(date: $0, dayLabel: "", water: 0, coffee: 0)
-                }
+                var initialBuckets: [WaterDayBucket] = window.days.map { WaterDayBucket(date: $0) }
                 
                 let logs: [HabitWeekLogItem] = try await pClient
                     .from("habits_logs")
@@ -272,16 +248,20 @@ struct Bubbles7DaysView: View {
                 DispatchQueue.main.async {
                     guard self.weekOffset == offset else { return }
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        self.buckets = initialBuckets
+                        self.historicalBuckets = initialBuckets
                     }
-                    self.isSyncing = false
-                    self.saveCache(for: offset, buckets: initialBuckets)
+                    self.isHistoricalSyncing = false
+                    
+                    if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
+                       let data = try? JSONEncoder().encode(initialBuckets) {
+                        groupPrefs.set(data, forKey: "bubbles_week_cache_\(offset)")
+                    }
                     WKInterfaceDevice.current().play(.success)
                 }
             } catch {
                 DispatchQueue.main.async {
                     guard self.weekOffset == offset else { return }
-                    self.isSyncing = false
+                    self.isHistoricalSyncing = false
                 }
             }
         }

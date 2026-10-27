@@ -1,19 +1,97 @@
 import Foundation
 
-struct HabitLog: Codable, Identifiable {
-    var id: UUID = UUID()
-    var user_id: UUID?
-    var habit_type: String
-    var value: Double
-    var unit: String
-    var logged_at: String // ISO8601 string
-    var metadata: String?
+public struct HabitLog: Codable, Identifiable, Sendable {
+    public var id: UUID = UUID()
+    public var user_id: UUID?
+    public var habit_type: String
+    public var value: Double
+    public var unit: String
+    public var logged_at: String // ISO8601 string
+    public var metadata: String?
+    
+    public init(
+        id: UUID = UUID(),
+        user_id: UUID? = nil,
+        habit_type: String,
+        value: Double,
+        unit: String,
+        logged_at: String,
+        metadata: String? = nil
+    ) {
+        self.id = id
+        self.user_id = user_id
+        self.habit_type = habit_type
+        self.value = value
+        self.unit = unit
+        self.logged_at = logged_at
+        self.metadata = metadata
+    }
+}
+
+// MARK: - HabitLog Domain Helpers
+
+extension HabitLog {
+    public var parsedMetadataDict: [String: String]? {
+        guard let metadata = metadata, let data = metadata.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
+    }
+    
+    public var isHeatedSmoke: Bool {
+        if let dict = parsedMetadataDict {
+            let brand = dict["brand"] ?? ""
+            let type = dict["type"] ?? ""
+            let smokeType = dict["smokeType"] ?? ""
+            let combined = "\(brand) \(type) \(smokeType)".lowercased()
+            if combined.contains("heat") || combined.contains("vape") || combined.contains("iqos") || combined.contains("glo") || combined.contains("ploom") {
+                return true
+            }
+        }
+        if let raw = metadata?.lowercased() {
+            if raw.contains("heat") || raw.contains("vape") || raw.contains("iqos") {
+                return true
+            }
+        }
+        return false
+    }
+    
+    public var isCoffeeDrink: Bool {
+        if let dict = parsedMetadataDict {
+            let drink = (dict["drink"] ?? dict["type"] ?? "").lowercased()
+            if drink.contains("coffee") || drink.contains("espresso") || drink.contains("cappuccino") || drink.contains("latte") {
+                return true
+            }
+        }
+        if let raw = metadata?.lowercased() {
+            if raw.contains("coffee") || raw.contains("espresso") {
+                return true
+            }
+        }
+        return false
+    }
+    
+    public var displayDrinkName: String {
+        if isCoffeeDrink { return "Coffee" }
+        if let dict = parsedMetadataDict, let drink = dict["drink"], drink == "Small Water" {
+            return "Small"
+        }
+        return "Water"
+    }
+    
+    public var displaySmokeName: String {
+        let count = max(1, Int(value))
+        let base = isHeatedSmoke ? "Heated Tobacco" : "Cigarette"
+        return count > 1 ? "\(count)× \(base)" : base
+    }
 }
 
 // MARK: - Safe Decodable Helpers for Remote Aggregations
 
-public struct FlexibleDouble: Decodable {
+public struct FlexibleDouble: Codable, Sendable {
     public let value: Double
+    
+    public init(value: Double) {
+        self.value = value
+    }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -27,9 +105,14 @@ public struct FlexibleDouble: Decodable {
             self.value = 0.0
         }
     }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
 }
 
-public enum AnyCodableScalar: Decodable {
+public enum AnyCodableScalar: Decodable, Sendable {
     case string(String)
     case int(Int)
     case double(Double)
@@ -60,7 +143,7 @@ public enum AnyCodableScalar: Decodable {
     }
 }
 
-public struct HabitLogMetadataHelper: Decodable {
+public struct HabitLogMetadataHelper: Decodable, Sendable {
     public let rawString: String
     
     public init(from decoder: Decoder) throws {
@@ -87,13 +170,13 @@ public struct HabitLogMetadataHelper: Decodable {
 }
 
 public enum HabitDateParser {
-    private static let isoFractional: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let isoFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
     
-    private static let isoStandard: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let isoStandard: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
@@ -139,6 +222,12 @@ public enum HabitDateParser {
         return f
     }()
 
+    private static let shortTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+
     public static func parse(_ raw: String) -> Date? {
         if let d = isoFractional.date(from: raw) { return d }
         if let d = isoStandard.date(from: raw) { return d }
@@ -166,5 +255,14 @@ public enum HabitDateParser {
         }
         
         return nil
+    }
+
+    public static func formatShortTime(from dateString: String) -> String {
+        guard let date = parse(dateString) else { return "" }
+        return shortTimeFormatter.string(from: date)
+    }
+
+    public static func toIsoUtcString(_ date: Date) -> String {
+        isoFractional.string(from: date)
     }
 }

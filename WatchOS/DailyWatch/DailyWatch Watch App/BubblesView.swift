@@ -1,27 +1,40 @@
 import SwiftUI
 import WatchKit
-import Supabase
 import WidgetKit
+import Supabase
 
 struct BubblesView: View {
+    @ObservedObject private var store = WatchHabitStore.shared
     @State private var dayOffset: Int = 0
-    @State private var dayTotal: Int = 0
-    @State private var dayWater: Int = 0
-    @State private var dayCoffee: Int = 0
-    @State private var dailyGoal: Int = 2000
-    @State private var isSyncing: Bool = false
-    @State private var historyLogs: [HabitLog] = []
+    @State private var crownAccumulator: Double = 0.0
+    
+    // Non-zero offset local data
+    @State private var historicalLogs: [HabitLog] = []
+    @State private var historicalTotal: Int = 0
+    @State private var historicalWater: Int = 0
+    @State private var historicalCoffee: Int = 0
+    @State private var isHistoricalLoading: Bool = false
+    
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
-    
     @Environment(\.scenePhase) private var scenePhase
     
-    init() {
-        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily"),
-           let cachedGoalStr = groupPrefs.string(forKey: "water_goal"),
-           let cachedGoal = Int(cachedGoalStr) {
-            _dailyGoal = State(initialValue: cachedGoal)
-        }
+    private var isToday: Bool { dayOffset == 0 }
+    
+    private var displayTotal: Int {
+        isToday ? store.waterTotalToday : historicalTotal
+    }
+    
+    private var displayWater: Int {
+        isToday ? store.waterAmountToday : historicalWater
+    }
+    
+    private var displayCoffee: Int {
+        isToday ? store.coffeeAmountToday : historicalCoffee
+    }
+    
+    private var displayLogs: [HabitLog] {
+        isToday ? store.todayWaterLogs : historicalLogs
     }
     
     private var formattedDateTitle: String {
@@ -37,144 +50,151 @@ struct BubblesView: View {
         }
     }
     
-    private func parseMetadata(_ metadata: String?) -> [String: String]? {
-        guard let data = metadata?.data(using: .utf8) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: String]
-    }
-    
     var body: some View {
         ScrollView {
-            VStack(spacing: 8) {
-                // Header Title - using button icon (drop.fill) and color (.cyan)
+            VStack(spacing: 10) {
+                // 1. Category Header
                 HStack(spacing: 6) {
                     Image(systemName: "drop.fill")
                         .foregroundColor(.cyan)
                         .font(.system(size: 15))
                     Text("Bubbles")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                 }
                 .padding(.top, 2)
                 
-                // Temporal Navigation (Days)
+                // 2. Temporal Navigation Header
                 TemporalNavHeader(
                     title: formattedDateTitle,
                     canGoForward: dayOffset < 0,
                     accentColor: .cyan,
                     onPrevious: {
-                        dayOffset -= 1
-                        fetchData()
+                        navigateToDay(offset: dayOffset - 1)
                     },
                     onNext: {
                         if dayOffset < 0 {
-                            dayOffset += 1
-                            fetchData()
+                            navigateToDay(offset: dayOffset + 1)
                         }
                     }
                 )
                 
-                // Ring & Quick-Add Buttons
-                HStack(spacing: 10) {
-                    // Circular Progress Ring
-                    ZStack {
-                        let totalG = CGFloat(max(dailyGoal, 1))
-                        let wProg = CGFloat(dayWater) / totalG
-                        let cProg = CGFloat(dayCoffee) / totalG
-                        
-                        Circle()
-                            .stroke(Color.gray.opacity(0.25), lineWidth: 9)
-                        
-                        Circle()
-                            .trim(from: 0.0, to: min(wProg, 1.0))
-                            .stroke(Color.cyan, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .animation(.easeOut(duration: 0.5), value: wProg)
-                            
-                        Circle()
-                            .trim(from: min(wProg, 1.0), to: min(wProg + cProg, 1.0))
-                            .stroke(Color.orange, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .animation(.easeOut(duration: 0.5), value: cProg)
-                        
-                        VStack(spacing: 0) {
-                            Text("\(dayTotal)")
-                                .font(.system(size: 19, weight: .bold, design: .rounded))
-                                .foregroundColor(.primary)
-                            Text("/ \(dailyGoal)")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .frame(width: 86, height: 86)
+                // 3. Centered 122pt Hero Progress Ring
+                ZStack {
+                    let totalG = CGFloat(max(store.waterGoal, 1))
+                    let wProg = CGFloat(displayWater) / totalG
+                    let cProg = CGFloat(displayCoffee) / totalG
                     
-                    // 3 Quick Add Buttons
-                    VStack(spacing: 5) {
-                        QuickAddMiniButton(icon: "drop.fill", amount: 300, color: .cyan) {
-                            logWater(amount: 300, type: "Large Water")
-                        }
-                        QuickAddMiniButton(icon: "drop", amount: 150, color: .cyan) {
-                            logWater(amount: 150, type: "Small Water")
-                        }
-                        QuickAddMiniButton(icon: "cup.and.saucer.fill", amount: 100, color: .orange) {
-                            logWater(amount: 100, type: "Coffee")
-                        }
+                    Circle()
+                        .stroke(Color.white.opacity(0.12), lineWidth: 10)
+                    
+                    Circle()
+                        .trim(from: 0.0, to: min(wProg, 1.0))
+                        .stroke(Color.cyan, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.4), value: wProg)
+                        
+                    Circle()
+                        .trim(from: min(wProg, 1.0), to: min(wProg + cProg, 1.0))
+                        .stroke(Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.4), value: cProg)
+                    
+                    VStack(spacing: 1) {
+                        Text("\(displayTotal)")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+                            .contentTransition(.numericText())
+                        
+                        Text("/ \(store.waterGoal) ml")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
                     }
-                    .frame(width: 68)
                 }
-                .padding(.vertical, 2)
+                .frame(width: 122, height: 122)
+                .padding(.vertical, 4)
                 
-                // Breakdown summary text using button icons and exact colors
-                HStack(spacing: 6) {
-                    HStack(spacing: 3) {
+                // 4. Breakdown Summary Ticker
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
                         Image(systemName: "drop.fill")
                             .foregroundColor(.cyan)
                             .font(.system(size: 11))
-                        Text("\(dayWater) ml")
+                        Text("\(displayWater) ml")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundColor(.primary)
                     }
                     Text("·")
-                        .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.secondary)
-                    HStack(spacing: 3) {
+                        .font(.system(size: 12, weight: .bold))
+                    HStack(spacing: 4) {
                         Image(systemName: "cup.and.saucer.fill")
                             .foregroundColor(.orange)
                             .font(.system(size: 11))
-                        Text("\(dayCoffee) ml")
+                        Text("\(displayCoffee) ml")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundColor(.primary)
                     }
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Capsule())
                 
-                // Logs for this specific day
-                if !historyLogs.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(dayOffset == 0 ? "TODAY'S LOGS" : "LOGS")
-                            .font(.system(size: 10, weight: .semibold))
+                // 5. Full-Width Ergonomic Touch Chips (Apple HIG 44pt+)
+                VStack(spacing: 7) {
+                    QuickAddActionChip(
+                        icon: "drop.fill",
+                        title: "+300 ml Water",
+                        color: .cyan
+                    ) {
+                        logWater(amount: 300, type: "Large Water")
+                    }
+                    
+                    QuickAddActionChip(
+                        icon: "drop",
+                        title: "+150 ml Water",
+                        color: .cyan
+                    ) {
+                        logWater(amount: 150, type: "Small Water")
+                    }
+                    
+                    QuickAddActionChip(
+                        icon: "cup.and.saucer.fill",
+                        title: "+100 ml Coffee",
+                        color: .orange
+                    ) {
+                        logWater(amount: 100, type: "Coffee")
+                    }
+                }
+                .padding(.top, 4)
+                
+                // 6. Logs Section
+                if !displayLogs.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(isToday ? "TODAY'S LOGS" : "LOGS")
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.secondary)
-                            .padding(.top, 4)
+                            .padding(.top, 6)
+                            .padding(.horizontal, 2)
                         
-                        ForEach(historyLogs) { log in
+                        ForEach(displayLogs) { log in
                             HStack {
-                                let type = parseMetadata(log.metadata)?["drink"] ?? "Water"
-                                let isCoffee = type.contains("Coffee")
-                                let isSmall = type == "Small Water"
-                                let displayType = isCoffee ? "Coffee" : (isSmall ? "Small" : "Large")
+                                Image(systemName: log.isCoffeeDrink ? "cup.and.saucer.fill" : "drop.fill")
+                                    .foregroundColor(log.isCoffeeDrink ? .orange : .cyan)
+                                    .font(.system(size: 13))
+                                    .frame(width: 18)
                                 
-                                Image(systemName: isCoffee ? "cup.and.saucer.fill" : "drop.fill")
-                                    .foregroundColor(isCoffee ? .orange : .cyan)
-                                    .font(.system(size: 11))
+                                Text("\(Int(log.value)) \(log.unit) \(log.displayDrinkName)")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
                                 
-                                Text("\(Int(log.value)) \(log.unit) \(displayType)")
-                                    .font(.system(size: 11, weight: .medium, design: .rounded))
                                 Spacer()
-                                Text(formatTime(dateString: log.logged_at))
-                                    .font(.system(size: 9))
+                                
+                                Text(HabitDateParser.formatShortTime(from: log.logged_at))
+                                    .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
-                            .padding(.vertical, 5)
-                            .padding(.horizontal, 7)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(6)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 10)
+                            .background(Color.white.opacity(0.10))
+                            .cornerRadius(10)
                             .onTapGesture {
                                 WKInterfaceDevice.current().play(.click)
                                 selectedLog = log
@@ -184,66 +204,126 @@ struct BubblesView: View {
                     }
                 }
                 
-                // Syncing indicator
-                SyncFooterView(isSyncing: isSyncing)
+                // 7. Sync Footer
+                SyncFooterView(isSyncing: store.isSyncing || isHistoricalLoading)
                     .padding(.top, 2)
             }
             .padding(.horizontal, 8)
-            .padding(.bottom, 10)
+            .padding(.bottom, 12)
+        }
+        .focusable()
+        .digitalCrownRotation(
+            $crownAccumulator,
+            from: -100.0,
+            through: 0.0,
+            by: 1.0,
+            sensitivity: .medium,
+            isContinuous: false,
+            isHapticFeedbackEnabled: true
+        )
+        .onChange(of: crownAccumulator) { oldVal, newVal in
+            let step = Int(newVal)
+            if step != dayOffset && step <= 0 {
+                navigateToDay(offset: step)
+            }
         }
         .alert("Delete Log?", isPresented: $showDeleteConfirm, presenting: selectedLog) { log in
             Button("Delete", role: .destructive) {
                 deleteLog(log)
             }
             Button("Cancel", role: .cancel) {}
+        } message: { log in
+            Text("Delete \(Int(log.value)) \(log.unit) \(log.displayDrinkName)?")
         }
         .onAppear {
-            loadCache()
-            fetchData()
+            if isToday {
+                store.fetchFullSync()
+            }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .active {
-                fetchData()
+            if newPhase == .active && isToday {
+                store.fetchFullSync()
             }
         }
     }
     
-    // MARK: - Data Fetching
+    // MARK: - Actions
     
-    private func fetchData() {
+    private func navigateToDay(offset: Int) {
+        guard offset <= 0 else { return }
+        dayOffset = offset
+        crownAccumulator = Double(offset)
+        if offset != 0 {
+            fetchHistoricalData(offset: offset)
+        }
+    }
+    
+    private func logWater(amount: Int, type: String) {
+        if isToday {
+            store.logWater(amount: amount, type: type, dayOffset: 0)
+        } else {
+            store.logWater(amount: amount, type: type, dayOffset: dayOffset)
+            // Immediately reflect in historical view
+            historicalTotal += amount
+            if type.lowercased().contains("coffee") {
+                historicalCoffee += amount
+            } else {
+                historicalWater += amount
+            }
+            let now = Date()
+            let cal = Calendar.current
+            var comps = cal.dateComponents([.year, .month, .day], from: cal.date(byAdding: .day, value: dayOffset, to: now) ?? now)
+            let timeComps = cal.dateComponents([.hour, .minute, .second], from: now)
+            comps.hour = timeComps.hour
+            comps.minute = timeComps.minute
+            comps.second = timeComps.second
+            let loggedDate = cal.date(from: comps) ?? now
+            let newLog = HabitLog(
+                id: UUID(),
+                user_id: WatchSessionManager.shared.currentUserId,
+                habit_type: "water",
+                value: Double(amount),
+                unit: "ml",
+                logged_at: HabitDateParser.toIsoUtcString(loggedDate),
+                metadata: "{\"drink\":\"\(type)\"}"
+            )
+            historicalLogs.insert(newLog, at: 0)
+        }
+    }
+    
+    private func deleteLog(_ log: HabitLog) {
+        if isToday {
+            store.deleteLog(log)
+        } else {
+            store.deleteLog(log)
+            historicalLogs.removeAll { $0.id == log.id }
+            let val = Int(log.value)
+            historicalTotal = max(0, historicalTotal - val)
+            if log.isCoffeeDrink {
+                historicalCoffee = max(0, historicalCoffee - val)
+            } else {
+                historicalWater = max(0, historicalWater - val)
+            }
+        }
+    }
+    
+    private func fetchHistoricalData(offset: Int) {
         guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
+        isHistoricalLoading = true
         
-        isSyncing = true
-        let calendar = Calendar.current
-        let baseDate = calendar.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
-        let startOfDay = calendar.startOfDay(for: baseDate)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            isSyncing = false
+        let cal = Calendar.current
+        let targetDate = cal.date(byAdding: .day, value: offset, to: Date()) ?? Date()
+        let startOfDay = cal.startOfDay(for: targetDate)
+        guard let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) else {
+            isHistoricalLoading = false
             return
         }
         
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let startStr = formatter.string(from: startOfDay)
-        let endStr = formatter.string(from: endOfDay)
+        let startStr = HabitDateParser.toIsoUtcString(startOfDay)
+        let endStr = HabitDateParser.toIsoUtcString(endOfDay)
         
         Task {
             do {
-                if dayOffset == 0 {
-                    struct PrefRow: Codable {
-                        let water_goal: Int?
-                    }
-                    if let prefs: [PrefRow] = try? await pClient.from("user_preferences").select("water_goal").execute().value,
-                       let first = prefs.first, let goal = first.water_goal, goal > 0 {
-                        DispatchQueue.main.async {
-                            self.dailyGoal = goal
-                            if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
-                                groupPrefs.set(String(goal), forKey: "water_goal")
-                            }
-                        }
-                    }
-                }
-                
                 let logs: [HabitLog] = try await pClient
                     .from("habits_logs")
                     .select("id,user_id,habit_type,value,unit,logged_at,metadata")
@@ -255,187 +335,60 @@ struct BubblesView: View {
                     .execute()
                     .value
                 
-                var total = 0.0
-                var water = 0.0
-                var coffee = 0.0
-                
-                for log in logs {
-                    total += log.value
-                    let type = parseMetadata(log.metadata)?["drink"] ?? "Water"
-                    if type.contains("Coffee") {
-                        coffee += log.value
-                    } else {
-                        water += log.value
-                    }
+                var tot = 0.0, w = 0.0, c = 0.0
+                for l in logs {
+                    tot += l.value
+                    if l.isCoffeeDrink { c += l.value } else { w += l.value }
                 }
                 
                 DispatchQueue.main.async {
-                    self.dayTotal = Int(total)
-                    self.dayWater = Int(water)
-                    self.dayCoffee = Int(coffee)
-                    self.historyLogs = logs
-                    self.isSyncing = false
-                    
-                    if self.dayOffset == 0 {
-                        self.saveCache()
-                    }
-                    WKInterfaceDevice.current().play(.success)
+                    guard self.dayOffset == offset else { return }
+                    self.historicalLogs = logs
+                    self.historicalTotal = Int(tot)
+                    self.historicalWater = Int(w)
+                    self.historicalCoffee = Int(c)
+                    self.isHistoricalLoading = false
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.isSyncing = false
+                    guard self.dayOffset == offset else { return }
+                    self.isHistoricalLoading = false
                 }
-            }
-        }
-    }
-    
-    // MARK: - Logging Habit
-    
-    private func logWater(amount: Int, type: String) {
-        WKInterfaceDevice.current().play(.success)
-        
-        let now = Date()
-        let targetDate: Date
-        if dayOffset == 0 {
-            targetDate = now
-        } else {
-            let calendar = Calendar.current
-            var components = calendar.dateComponents([.year, .month, .day], from: calendar.date(byAdding: .day, value: dayOffset, to: now) ?? now)
-            let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: now)
-            components.hour = timeComponents.hour
-            components.minute = timeComponents.minute
-            components.second = timeComponents.second
-            targetDate = calendar.date(from: components) ?? now
-        }
-        
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let loggedAt = formatter.string(from: targetDate)
-        
-        let isCoffee = type.contains("Coffee")
-        let metadataString = "{\"drink\":\"\(type)\"}"
-        
-        let newLog = HabitLog(
-            id: UUID(),
-            user_id: WatchSessionManager.shared.currentUserId,
-            habit_type: "water",
-            value: Double(amount),
-            unit: "ml",
-            logged_at: loggedAt,
-            metadata: metadataString
-        )
-        
-        dayTotal += amount
-        if isCoffee {
-            dayCoffee += amount
-        } else {
-            dayWater += amount
-        }
-        historyLogs.insert(newLog, at: 0)
-        
-        if dayOffset == 0 {
-            saveCache()
-        }
-        
-        Task {
-            isSyncing = true
-            do {
-                guard let pClient = WatchSessionManager.shared.supabaseClient else {
-                    OfflineSyncManager.shared.enqueue(log: newLog)
-                    DispatchQueue.main.async { self.isSyncing = false }
-                    return
-                }
-                
-                try await pClient.from("habits_logs").insert(newLog).execute()
-                
-                DispatchQueue.main.async {
-                    self.isSyncing = false
-                    WidgetCenter.shared.reloadAllTimelines()
-                    WKInterfaceDevice.current().play(.success)
-                }
-            } catch {
-                OfflineSyncManager.shared.enqueue(log: newLog)
-                DispatchQueue.main.async {
-                    self.isSyncing = false
-                    WidgetCenter.shared.reloadAllTimelines()
-                }
-            }
-        }
-    }
-    
-    private func deleteLog(_ log: HabitLog) {
-        guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
-        
-        let isCoffee = (parseMetadata(log.metadata)?["drink"] ?? "").contains("Coffee")
-        dayTotal = max(0, dayTotal - Int(log.value))
-        if isCoffee {
-            dayCoffee = max(0, dayCoffee - Int(log.value))
-        } else {
-            dayWater = max(0, dayWater - Int(log.value))
-        }
-        historyLogs.removeAll { $0.id == log.id }
-        
-        Task {
-            struct DeleteUpdate: Encodable { let is_deleted = true }
-            _ = try? await pClient.from("habits_logs")
-                .update(DeleteUpdate())
-                .eq("id", value: log.id.uuidString.lowercased())
-                .execute()
-            
-            DispatchQueue.main.async {
-                WidgetCenter.shared.reloadAllTimelines()
-            }
-        }
-    }
-    
-    private func formatTime(dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = formatter.date(from: dateString) {
-            let outFormatter = DateFormatter()
-            outFormatter.timeStyle = .short
-            return outFormatter.string(from: d)
-        }
-        return ""
-    }
-    
-    // MARK: - Local Cache
-    
-    private func saveCache() {
-        if let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
-            groupPrefs.set(dayTotal, forKey: "cached_water_total")
-        }
-    }
-    
-    private func loadCache() {
-        if dayOffset == 0, let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily") {
-            let cached = groupPrefs.integer(forKey: "cached_water_total")
-            if cached > 0 && dayTotal == 0 {
-                dayTotal = cached
             }
         }
     }
 }
 
-struct QuickAddMiniButton: View {
+// MARK: - Ergonomic Full-Width Touch Chip (44pt+ Apple HIG)
+
+struct QuickAddActionChip: View {
     let icon: String
-    let amount: Int
+    let title: String
     let color: Color
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 3) {
+            HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(color)
+                    .frame(width: 22)
                 
-                Text("\(amount)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
             }
-            .frame(maxWidth: .infinity, minHeight: 25)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(Color.white.opacity(0.12))
-            .cornerRadius(7)
+            .cornerRadius(12)
         }
         .buttonStyle(.plain)
     }
