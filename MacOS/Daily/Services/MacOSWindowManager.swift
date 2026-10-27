@@ -40,7 +40,7 @@ public final class MacOSWindowManager: ObservableObject {
         }
     }
     
-    /// Summons or focuses the DayOne Glance HUD floating window.
+    /// Summons or focuses the DayOne Glance HUD floating window, ensuring safe bounds across all resolutions.
     public func activateGlanceWindow() {
         NSApp.activate(ignoringOtherApps: true)
         
@@ -52,6 +52,29 @@ public final class MacOSWindowManager: ObservableObject {
             if window.isMiniaturized {
                 window.deminiaturize(nil)
             }
+            
+            // Screen resolution & multi-monitor safety: clamp frame within screen visibleFrame
+            let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first
+            if let visibleFrame = screen?.visibleFrame {
+                var frame = window.frame
+                if frame.height > visibleFrame.height {
+                    frame.size.height = max(380, visibleFrame.height - 20)
+                }
+                if frame.maxX > visibleFrame.maxX {
+                    frame.origin.x = visibleFrame.maxX - frame.width - 20
+                }
+                if frame.minX < visibleFrame.minX {
+                    frame.origin.x = visibleFrame.minX + 20
+                }
+                if frame.maxY > visibleFrame.maxY {
+                    frame.origin.y = visibleFrame.maxY - frame.height - 10
+                }
+                if frame.minY < visibleFrame.minY {
+                    frame.origin.y = visibleFrame.minY + 10
+                }
+                window.setFrame(frame, display: true)
+            }
+            
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }

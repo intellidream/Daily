@@ -29,6 +29,19 @@ public struct MenuBarCompanionView: View {
     @State private var saveStatusMessage: String? = nil
     @State private var isExitHovered: Bool = false
     
+    public static let standardCompanionHeight: CGFloat = 586
+    
+    @State private var screenAvailableHeight: CGFloat = {
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        return screen?.visibleFrame.height ?? 800
+    }()
+    
+    private var optimalHeight: CGFloat {
+        // Safe headroom: leave margin for menu bar and dock so window never overflows any screen resolution
+        let maxAllowed = max(380, screenAvailableHeight - 50)
+        return min(Self.standardCompanionHeight, maxAllowed)
+    }
+    
     public var onOpenFullApp: ((NavigationTab?) -> Void)?
     public var onExitApp: (() -> Void)?
     
@@ -129,10 +142,21 @@ public struct MenuBarCompanionView: View {
                 }
             }
         }
-        .frame(width: 360, height: 680)
+        .frame(width: 360, height: optimalHeight)
         .onAppear {
+            updateScreenMetrics()
             MacOSWindowManager.shared.openWindowAction = openWindow
             MacOSWindowManager.shared.dismissWindowAction = dismissWindow
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
+            updateScreenMetrics()
+        }
+    }
+    
+    private func updateScreenMetrics() {
+        let screen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        if let vf = screen?.visibleFrame {
+            screenAvailableHeight = vf.height
         }
     }
     

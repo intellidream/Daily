@@ -125,7 +125,6 @@ struct DailyMacOSApp: App {
                 }
             )
             .preferredColorScheme(colorScheme)
-            .frame(width: 360, height: 680)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -145,7 +144,6 @@ struct DailyMacOSApp: App {
                 }
             )
             .preferredColorScheme(colorScheme)
-            .frame(width: 360, height: 680)
         } label: {
             menuBarLabel
         }

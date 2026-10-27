@@ -80,9 +80,14 @@ In `SettingsView` -> `macOS Desktop Integration`:
   - Removed nested `LiquidGlassBackground` wrappers from all hub views on both macOS and iOS (`HealthMainView`, `FinancesMainView`, `NewsFeedView`, `TagdosNotesHubView`), ensuring secondary hubs inherit the root backdrop seamlessly without rendering disjointed dark boxes or card seams.
 
 ### 6. DayOne Glance Companion Ergonomics & App Lifecycle
-- **Glance Window Dimensions & Zero-Scroll Visibility**:
-  - Expanded Glance window height from `580pt` to `680pt` (`width: 360, height: 680`, total window frame height `712pt` with window title bar chrome) across both the floating window (`Window("DayOne Glance")`) and menu bar drop-down popover (`MenuBarExtra`).
-  - Tightened vertical spacing (`VStack(spacing: 10)` in `ScrollView`, `GlassCard` padding from `12` to `10`) so that total content height is ~650pt. This ensures all cards (Weather, Health, Hydration, Smokes, TagDoS Quick Entry), the 5-item quick-jump navigation grid, divider, and the **Exit DayOne** button fit cleanly on-screen with zero cutoff and without requiring any downward scrolling.
+- **Snug Adaptive Dimensions & Zero-Void Bottom Layout**:
+  - Calibrated Glance window height dynamically to `optimalHeight = min(Self.standardCompanionHeight, maxAllowed)` where `standardCompanionHeight = 586pt` (`width: 360`, total window frame height `618pt` with window title bar chrome).
+  - Eliminated the previous ~94-110pt dead void under the Exit button. The distance from the bottom of the **Exit DayOne** button (`y = 854`) to the window's bottom edge (`y = 870`) is now **exactly 16pt**, establishing 100% visual symmetry with the 16pt horizontal content margins.
+- **Universal Multi-Resolution & Screen Safety**:
+  - Automatically queries active display visible bounds (`screen.visibleFrame.height`) with margin deduction (`maxAllowed = max(380, screenAvailableHeight - 50)`).
+  - Reacts dynamically to display topology changes, external monitor connect/disconnect events, and resolution changes via `NSApplication.didChangeScreenParametersNotification`.
+  - On ultra-compact screens or constrained display resolutions (e.g. 768p/800p with large bottom Docks), the window height safely clamps to the display's visible bounds and leverages internal `ScrollView` deceleration so no action button or content card ever overflows the screen.
+  - In `MacOSWindowManager.swift`, `activateGlanceWindow()` clamps window coordinates inside `visibleFrame`, preventing off-screen positioning across multi-monitor setups.
 - **Auto-Hide / Dismiss on Full App Trigger**:
   - When the user taps the top-right **"Full App"** button or clicks any quick-jump card/button (Weather, Health, Money, Habits, TagDoS, News) in Glance, the Glance floating HUD window and any auxiliary status windows immediately hide and close (`dismissWindow(id: "glance")` and `MacOSWindowManager.shared.closeGlanceWindow()`). This prevents the floating companion from awkwardly hovering over and occluding the primary full-sized workspace.
   - Refactored `MacOSWindowManager.shared.activateMainWindow` to strictly match the true main window (`(title == "DayOne" || id == "main") && !title.contains("Glance") && id != "glance"`), completely eliminating the `title.isEmpty` pitfall that previously misidentified the `MenuBarExtra` popup window as the main window and prevented the real full app window from gaining focus.
