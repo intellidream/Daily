@@ -7,6 +7,7 @@ public final class MacOSWindowManager: ObservableObject {
     public static let shared = MacOSWindowManager()
     
     public var openWindowAction: OpenWindowAction? = nil
+    public var dismissWindowAction: DismissWindowAction? = nil
     
     private init() {}
     
@@ -52,8 +53,21 @@ public final class MacOSWindowManager: ObservableObject {
             }
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
-        } else {
-            openWindowAction?(id: "glance")
+        }
+        
+        openWindowAction?(id: "glance")
+    }
+    
+    /// Hides or closes the DayOne Glance HUD floating window.
+    public func closeGlanceWindow() {
+        dismissWindowAction?(id: "glance")
+        
+        for window in NSApp.windows {
+            let title = window.title
+            if title.contains("Glance") || window.identifier?.rawValue == "glance" {
+                window.orderOut(nil)
+                window.close()
+            }
         }
     }
     

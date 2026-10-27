@@ -79,6 +79,15 @@ In `SettingsView` -> `macOS Desktop Integration`:
   - Stripped redundant outer glass card backgrounds and hardcoded max-width constraints, allowing all hubs to fluidly fill expanded desktop windows up to ultrawide dimensions without letterboxing.
   - Removed nested `LiquidGlassBackground` wrappers from all hub views on both macOS and iOS (`HealthMainView`, `FinancesMainView`, `NewsFeedView`, `TagdosNotesHubView`), ensuring secondary hubs inherit the root backdrop seamlessly without rendering disjointed dark boxes or card seams.
 
+### 6. DayOne Glance Companion Ergonomics & App Lifecycle
+- **Auto-Hide / Dismiss on Full App Trigger**:
+  - When the user taps the top-right **"Full App"** button or clicks any quick-jump card/button (Weather, Health, Money, Habits, TagDoS, News) in Glance, the Glance floating HUD window immediately hides/closes (`dismissWindow(id: "glance")` and `MacOSWindowManager.shared.closeGlanceWindow()`). This prevents the floating companion from awkwardly hovering over and occluding the primary full-sized workspace.
+  - When summoned subsequently via `⌘ 0`, menu bar action, or URL `daily://glance`, `MacOSWindowManager.shared.activateGlanceWindow()` brings the companion window smoothly back to the foreground.
+- **Exit DayOne Action Button (WinUI 1:1 Parity)**:
+  - Integrated an **Exit DayOne** action button at the bottom of `MenuBarCompanionView`, positioned directly beneath the quick-jump navigation grid and separated by a subtle 1pt glass divider (`Color.white.opacity(0.1)`), matching the layout of the WinUI Taskbar Glance flyout.
+  - Includes an SF Symbol `power` glyph, muted idle typography (`ThemeColors.fgMutedDark`), and an interactive liquid glass red hover highlight (`Color.red.opacity(0.12)` fill, `0.25` stroke, and `0.95` foreground).
+  - Explicitly terminates the application through `NSApplication.shared.terminate(nil)` supported by `AppDelegate.applicationShouldTerminate(_:) -> .terminateNow` and fallback teardown, enabling complete application exit directly from Glance without requiring menu navigation.
+
 ---
 
 ## 4. Cross-Platform Parity Details
@@ -100,7 +109,7 @@ In `SettingsView` -> `macOS Desktop Integration`:
 
 | Platform / Target | Environment / Device | Test / Deployment Procedure | Status | Result & Live Telemetry |
 | :--- | :--- | :--- | :--- | :--- |
-| **macOS Desktop** | macOS 15.0+ (ARM64 Apple Silicon) | Xcodebuild native compilation + runtime inspection | **PASS** | 0.0% idle CPU; window toggle 1040pt <-> 480pt; fluid hub resize; pinned top bars; circular frosted News category menu verified |
+| **macOS Desktop** | macOS 15.0+ (ARM64 Apple Silicon) | Xcodebuild native compilation + runtime inspection | **PASS** | 0.0% idle CPU; window toggle 1040pt <-> 480pt; fluid hub resize; pinned top bars; circular frosted News category menu verified; Glance auto-dismiss on full app verified; Exit DayOne full termination verified |
 | **iOS (iPhone Duo)** | SimulaDuo (`6BB33377-B7BD-4306-9BBA-AACBD99FBC76`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 20720); dual-pane split verified; nested hub backgrounds eliminated; seamless root backdrop |
 | **iOS Simulator** | SimulaPhone (`E618B1DA-82AC-477A-A6D6-CC11F969FA62`) | Xcodebuild + `simctl install` + launch | **PASS** | Launched live (PID 20766); verified clean single-screen rendering |
 | **Physical iPhone** | iPhone 16 Pro ("Schmitz", `00008140-000E2C863EFB001C`) | Xcodebuild for device + `devicectl install` + launch | **VERIFIED LIVE** | Success; launched live via devicectl; verified category menu and seamless hub views |

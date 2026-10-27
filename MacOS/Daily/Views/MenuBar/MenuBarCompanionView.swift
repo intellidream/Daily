@@ -17,6 +17,7 @@ public enum TagdosEntryMode: String, CaseIterable, Identifiable {
 }
 
 public struct MenuBarCompanionView: View {
+    @Environment(\.dismissWindow) private var dismissWindow
     @ObservedObject private var habitsService = HabitsService.shared
     @ObservedObject private var healthService = HealthDataService.shared
     @ObservedObject private var weatherService = WeatherService.shared
@@ -25,11 +26,17 @@ public struct MenuBarCompanionView: View {
     @State private var tagdosMode: TagdosEntryMode = .note
     @State private var quickEntryText: String = ""
     @State private var saveStatusMessage: String? = nil
+    @State private var isExitHovered: Bool = false
     
     public var onOpenFullApp: ((NavigationTab?) -> Void)?
+    public var onExitApp: (() -> Void)?
     
-    public init(onOpenFullApp: ((NavigationTab?) -> Void)? = nil) {
+    public init(
+        onOpenFullApp: ((NavigationTab?) -> Void)? = nil,
+        onExitApp: (() -> Void)? = nil
+    ) {
         self.onOpenFullApp = onOpenFullApp
+        self.onExitApp = onExitApp
     }
     
     private func triggerHaptic() {
@@ -59,6 +66,8 @@ public struct MenuBarCompanionView: View {
                     
                     Button {
                         triggerHaptic()
+                        dismissWindow(id: "glance")
+                        MacOSWindowManager.shared.closeGlanceWindow()
                         onOpenFullApp?(nil)
                     } label: {
                         HStack(spacing: 4) {
@@ -98,13 +107,23 @@ public struct MenuBarCompanionView: View {
                         
                         // 5. Quick Jump Navigation Grid
                         quickNavigationGrid
+                        
+                        // Subtle Divider (matching WinUI Taskbar Glance)
+                        Rectangle()
+                            .fill(Color.white.opacity(0.1))
+                            .frame(height: 1)
+                            .padding(.top, 4)
+                            .padding(.bottom, 2)
+                        
+                        // 6. Exit App Button (matching WinUI Taskbar Glance)
+                        exitAppButton
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
                 }
             }
         }
-        .frame(width: 360, height: 560)
+        .frame(width: 360, height: 580)
     }
     
     // MARK: - 1. Weather & Vitals Row
@@ -113,6 +132,9 @@ public struct MenuBarCompanionView: View {
         HStack(spacing: 10) {
             // Weather Card
             Button {
+                triggerHaptic()
+                dismissWindow(id: "glance")
+                MacOSWindowManager.shared.closeGlanceWindow()
                 onOpenFullApp?(.weather)
             } label: {
                 GlassCard(cornerRadius: 14, padding: 12) {
@@ -141,6 +163,9 @@ public struct MenuBarCompanionView: View {
             
             // Health Vitals Card (Consumer Mode)
             Button {
+                triggerHaptic()
+                dismissWindow(id: "glance")
+                MacOSWindowManager.shared.closeGlanceWindow()
                 onOpenFullApp?(.health)
             } label: {
                 GlassCard(cornerRadius: 14, padding: 12) {
@@ -508,6 +533,8 @@ public struct MenuBarCompanionView: View {
     private func quickNavButton(title: String, icon: String, color: Color, tab: NavigationTab) -> some View {
         Button {
             triggerHaptic()
+            dismissWindow(id: "glance")
+            MacOSWindowManager.shared.closeGlanceWindow()
             onOpenFullApp?(tab)
         } label: {
             VStack(spacing: 4) {
@@ -524,6 +551,48 @@ public struct MenuBarCompanionView: View {
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
+    }
+    
+    // MARK: - 6. Exit App Button
+    @ViewBuilder
+    private var exitAppButton: some View {
+        Button {
+            triggerHaptic()
+            if let onExitApp = onExitApp {
+                onExitApp()
+            } else {
+                NSApplication.shared.terminate(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    exit(0)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "power")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Exit DayOne")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(isExitHovered ? Color.red.opacity(0.95) : ThemeColors.fgMutedDark)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isExitHovered ? Color.red.opacity(0.12) : Color.white.opacity(0.04))
+            )
+            .overlay {
+                if isExitHovered {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.red.opacity(0.25), lineWidth: 1)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isExitHovered = hovering
+        }
+        .help("Completely quit DayOne (⌘Q)")
     }
     
     // MARK: - TagDoS Submission Logic

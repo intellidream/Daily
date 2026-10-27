@@ -3,6 +3,10 @@ import DailyCore
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        return .terminateNow
+    }
+    
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         MacOSWindowManager.shared.activateMainWindow()
         return true
@@ -108,22 +112,40 @@ struct DailyMacOSApp: App {
         
         // On-demand Glance Floating Window (Accessible via ⌘0, Menu Bar, or Navigate menu)
         Window("DayOne Glance", id: "glance") {
-            MenuBarCompanionView(onOpenFullApp: { requestedTab in
-                MacOSWindowManager.shared.activateMainWindow(selectingTab: requestedTab)
-            })
+            MenuBarCompanionView(
+                onOpenFullApp: { requestedTab in
+                    MacOSWindowManager.shared.closeGlanceWindow()
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: requestedTab)
+                },
+                onExitApp: {
+                    NSApplication.shared.terminate(nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        exit(0)
+                    }
+                }
+            )
             .preferredColorScheme(colorScheme)
-            .frame(width: 360, height: 560)
+            .frame(width: 360, height: 580)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
 
         // Persistent MenuBarExtra Companion (Quick Drop-down)
         MenuBarExtra {
-            MenuBarCompanionView(onOpenFullApp: { requestedTab in
-                MacOSWindowManager.shared.activateMainWindow(selectingTab: requestedTab)
-            })
+            MenuBarCompanionView(
+                onOpenFullApp: { requestedTab in
+                    MacOSWindowManager.shared.closeGlanceWindow()
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: requestedTab)
+                },
+                onExitApp: {
+                    NSApplication.shared.terminate(nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        exit(0)
+                    }
+                }
+            )
             .preferredColorScheme(colorScheme)
-            .frame(width: 360, height: 560)
+            .frame(width: 360, height: 580)
         } label: {
             menuBarLabel
         }

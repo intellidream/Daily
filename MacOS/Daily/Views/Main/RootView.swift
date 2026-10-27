@@ -11,6 +11,7 @@ public struct RootView: View {
     @State private var isNavCapsuleExpandedWhileReading: Bool = false
     @State private var isHoveringNavBubble: Bool = false
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
@@ -115,7 +116,7 @@ public struct RootView: View {
                 Button("") { switchTab(.habits) }.keyboardShortcut("5", modifiers: .command)
                 Button("") { switchTab(.weather) }.keyboardShortcut("6", modifiers: .command)
                 Button("") { switchTab(.news) }.keyboardShortcut("7", modifiers: .command)
-                Button("") { openWindow(id: "glance") }.keyboardShortcut("0", modifiers: .command)
+                Button("") { MacOSWindowManager.shared.activateGlanceWindow() }.keyboardShortcut("0", modifiers: .command)
                 Button("") { switchTab(.settings) }.keyboardShortcut(",", modifiers: .command)
                 Button("") {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -196,6 +197,7 @@ public struct RootView: View {
         }
         .onAppear {
             MacOSWindowManager.shared.openWindowAction = openWindow
+            MacOSWindowManager.shared.dismissWindowAction = dismissWindow
         }
         .onReceive(NotificationCenter.default.publisher(for: .dailySelectTab)) { notification in
             if let tab = notification.object as? NavigationTab {
