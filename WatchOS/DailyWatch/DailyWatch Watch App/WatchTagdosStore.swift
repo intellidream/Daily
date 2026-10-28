@@ -14,6 +14,7 @@ public final class WatchTagdosStore: ObservableObject {
 
     private let streamsCacheKey = "watch_tagdos_streams_cache_v1"
     private let notesCacheKey = "watch_tagdos_quick_notes_cache_v1"
+    private var lastFetchDate: Date? = nil
 
     private var defaults: UserDefaults {
         UserDefaults(suiteName: "group.com.intellidream.daily") ?? UserDefaults.standard
@@ -21,9 +22,6 @@ public final class WatchTagdosStore: ObservableObject {
 
     private init() {
         loadCachedData()
-        Task {
-            await fetchTagdosData()
-        }
     }
 
     // MARK: - Local Cache
@@ -86,14 +84,20 @@ public final class WatchTagdosStore: ObservableObject {
 
     // MARK: - Supabase Cloud Synchronization
 
-    public func fetchTagdosData() async {
+    public func fetchTagdosData(force: Bool = false) async {
+        if !force, let last = lastFetchDate, Date().timeIntervalSince(last) < 45 {
+            return
+        }
         guard let client = WatchSessionManager.shared.supabaseClient,
               let userId = WatchSessionManager.shared.currentUserId else {
             return
         }
 
         isSyncing = true
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            lastFetchDate = Date()
+        }
 
         // 1. Fetch Streams
         do {

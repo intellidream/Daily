@@ -58,9 +58,6 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
     private init() {
         loadCachedData()
-        Task {
-            await fetchLedgerData()
-        }
     }
 
     // MARK: - Local Cache (< 1ms load)
@@ -111,14 +108,20 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
     // MARK: - Supabase Cloud Sync
 
-    public func fetchLedgerData() async {
+    public func fetchLedgerData(force: Bool = false) async {
+        if !force, let last = lastSyncDate, Date().timeIntervalSince(last) < 45 {
+            return
+        }
         guard let client = WatchSessionManager.shared.supabaseClient,
               let userId = WatchSessionManager.shared.currentUserId else {
             return
         }
 
         isSyncing = true
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            lastSyncDate = Date()
+        }
 
         do {
             struct RemoteLedgerDTO: Codable {

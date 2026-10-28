@@ -9,6 +9,9 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Provides gentle, subtle sound and tactile haptic feedback on WearOS,
@@ -79,7 +82,8 @@ object SoundAndHapticFeedback {
     }
 
     private fun vibrateSuccess(context: Context, view: View? = null) {
-        view?.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        val viewHandled = view?.performHapticFeedback(HapticFeedbackConstants.CONFIRM) == true
+        if (viewHandled) return
 
         try {
             val vibrator = getVibrator(context)
@@ -98,14 +102,16 @@ object SoundAndHapticFeedback {
     }
 
     private fun playTone(context: Context, toneType: Int, durationMs: Int) {
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            // Respect silent / vibrate / DND mode
-            if (audioManager?.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
-                return
-            }
-            getToneGenerator()?.startTone(toneType, durationMs)
-        } catch (_: Exception) {}
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            try {
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                // Respect silent / vibrate / DND mode
+                if (audioManager?.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
+                    return@launch
+                }
+                getToneGenerator()?.startTone(toneType, durationMs)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun getVibrator(context: Context): Vibrator? {

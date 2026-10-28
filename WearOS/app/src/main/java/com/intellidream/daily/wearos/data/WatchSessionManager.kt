@@ -126,6 +126,13 @@ class WatchSessionManager private constructor(private val context: Context) {
     )
     val currentUserId: StateFlow<String?> = _currentUserId
 
+    // Background I/O Coroutine Scope
+    private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    // Bumped on every resume or cache update to tell screens to re-fetch data
+    private val _dataRefreshTrigger = MutableStateFlow(0)
+    val dataRefreshTrigger: StateFlow<Int> = _dataRefreshTrigger
+
     // Reactive persistent goals (backed by SharedPreferences with immediate 0ms availability)
     private val _bubblesGoal = MutableStateFlow(
         prefs.getString(KEY_WATER_GOAL, null)?.toIntOrNull() ?: 2000
@@ -173,53 +180,56 @@ class WatchSessionManager private constructor(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun initCachesFromDisk() {
-        try {
-            val bDayJson = prefs.getString(KEY_BUBBLES_DAY_CACHE, null)
-            if (!bDayJson.isNullOrEmpty()) {
-                val map = json.decodeFromString<Map<String, List<HabitLog>>>(bDayJson)
-                bubblesDayCache.putAll(map)
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("WatchSessionManager", "Failed to load bubblesDayCache from disk: ${e.message}")
-        }
-
-        try {
-            val sDayJson = prefs.getString(KEY_SMOKES_DAY_CACHE, null)
-            if (!sDayJson.isNullOrEmpty()) {
-                val map = json.decodeFromString<Map<String, List<HabitLog>>>(sDayJson)
-                smokesDayCache.putAll(map)
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("WatchSessionManager", "Failed to load smokesDayCache from disk: ${e.message}")
-        }
-
-        try {
-            val bWeekJson = prefs.getString(KEY_BUBBLES_WEEK_CACHE, null)
-            if (!bWeekJson.isNullOrEmpty()) {
-                val map = json.decodeFromString<Map<String, List<WaterDayBucket>>>(bWeekJson)
-                for ((k, v) in map) {
-                    k.toIntOrNull()?.let { bubblesWeekCache[it] = v }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bDayJson = prefs.getString(KEY_BUBBLES_DAY_CACHE, null)
+                if (!bDayJson.isNullOrEmpty()) {
+                    val map = json.decodeFromString<Map<String, List<HabitLog>>>(bDayJson)
+                    bubblesDayCache.putAll(map)
                 }
+            } catch (e: Exception) {
+                android.util.Log.w("WatchSessionManager", "Failed to load bubblesDayCache from disk: ${e.message}")
             }
-        } catch (e: Exception) {
-            android.util.Log.w("WatchSessionManager", "Failed to load bubblesWeekCache from disk: ${e.message}")
-        }
 
-        try {
-            val sWeekJson = prefs.getString(KEY_SMOKES_WEEK_CACHE, null)
-            if (!sWeekJson.isNullOrEmpty()) {
-                val map = json.decodeFromString<Map<String, List<SmokeDayBucket>>>(sWeekJson)
-                for ((k, v) in map) {
-                    k.toIntOrNull()?.let { smokesWeekCache[it] = v }
+            try {
+                val sDayJson = prefs.getString(KEY_SMOKES_DAY_CACHE, null)
+                if (!sDayJson.isNullOrEmpty()) {
+                    val map = json.decodeFromString<Map<String, List<HabitLog>>>(sDayJson)
+                    smokesDayCache.putAll(map)
                 }
+            } catch (e: Exception) {
+                android.util.Log.w("WatchSessionManager", "Failed to load smokesDayCache from disk: ${e.message}")
             }
-        } catch (e: Exception) {
-            android.util.Log.w("WatchSessionManager", "Failed to load smokesWeekCache from disk: ${e.message}")
-        }
 
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        cachedBubblesLogs = bubblesDayCache[todayStr]
-        cachedSmokesLogs = smokesDayCache[todayStr]
+            try {
+                val bWeekJson = prefs.getString(KEY_BUBBLES_WEEK_CACHE, null)
+                if (!bWeekJson.isNullOrEmpty()) {
+                    val map = json.decodeFromString<Map<String, List<WaterDayBucket>>>(bWeekJson)
+                    for ((k, v) in map) {
+                        k.toIntOrNull()?.let { bubblesWeekCache[it] = v }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("WatchSessionManager", "Failed to load bubblesWeekCache from disk: ${e.message}")
+            }
+
+            try {
+                val sWeekJson = prefs.getString(KEY_SMOKES_WEEK_CACHE, null)
+                if (!sWeekJson.isNullOrEmpty()) {
+                    val map = json.decodeFromString<Map<String, List<SmokeDayBucket>>>(sWeekJson)
+                    for ((k, v) in map) {
+                        k.toIntOrNull()?.let { smokesWeekCache[it] = v }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("WatchSessionManager", "Failed to load smokesWeekCache from disk: ${e.message}")
+            }
+
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            cachedBubblesLogs = bubblesDayCache[todayStr]
+            cachedSmokesLogs = smokesDayCache[todayStr]
+            _dataRefreshTrigger.value++
+        }
     }
 
     private var saveCacheJob: Job? = null
@@ -899,10 +909,6 @@ class WatchSessionManager private constructor(private val context: Context) {
         }
     }
 
-    // Bumped on every resume to tell screens to re-fetch data
-    private val _dataRefreshTrigger = MutableStateFlow(0)
-    val dataRefreshTrigger: StateFlow<Int> = _dataRefreshTrigger
-
     fun recordHealthSync(status: String = "synced") {
         val now = System.currentTimeMillis()
         prefs.edit()
@@ -926,7 +932,6 @@ class WatchSessionManager private constructor(private val context: Context) {
     @Volatile private var pollJob: Job? = null
     @Volatile private var isPolling = false
     @Volatile private var isPairingCompleted = false
-    private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     @Volatile private var isRecovering = false
     @Volatile private var isCheckingSession = false
 

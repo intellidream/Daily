@@ -37,6 +37,17 @@ struct ContentView: View {
                         .tag(5)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
+                .onChange(of: selectedTab) { _, newTab in
+                    if newTab == 2 {
+                        Task {
+                            await WatchTagdosStore.shared.fetchTagdosData()
+                        }
+                    } else if newTab == 4 {
+                        Task {
+                            await WatchSmartLedgerStore.shared.fetchLedgerData()
+                        }
+                    }
+                }
             } else {
                 // Watch-Driven PIN Pairing Screen (Zepp OS Parity)
                 ScrollView {

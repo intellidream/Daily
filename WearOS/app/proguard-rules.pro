@@ -14,11 +14,14 @@
     @kotlinx.serialization.Serializable class *;
 }
 
-# Keep WearOS Domain and Data models
+# Keep WearOS Domain, Data and Presentation models
 -keep class com.intellidream.daily.wearos.domain.model.** { *; }
--keep class com.intellidream.daily.wearos.data.PendingSyncItem { *; }
--keep class com.intellidream.daily.wearos.data.SyncActionType { *; }
--keep class com.intellidream.daily.wearos.data.OfflineSyncManager { *; }
+-keep class com.intellidream.daily.wearos.domain.util.** { *; }
+-keep class com.intellidream.daily.wearos.data.** { *; }
+-keep class com.intellidream.daily.wearos.presentation.orbit.** { *; }
+-keep class com.intellidream.daily.wearos.presentation.components.** { *; }
+-keep class com.intellidream.daily.wearos.presentation.tagdos.** { *; }
+-keep class com.intellidream.daily.wearos.presentation.pulse.** { *; }
 
 # Supabase and Ktor
 -keep class io.github.jan.supabase.** { *; }
