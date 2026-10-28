@@ -177,7 +177,7 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         set { _smokesBreakdown = value; OnPropertyChanged(); }
     }
 
-    public string CurrentViewLabel => HabitsFlipView?.SelectedIndex == 0 ? "Bubbles" : "Smokes";
+    public string CurrentViewLabel => (HabitsFlipView?.SelectedIndex ?? 0) == 0 ? "Bubbles" : "Smokes";
 
 
 
@@ -664,9 +664,18 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         return null;
     }
 
+    private void EnsureSubscribed()
+    {
+        if (_habitsService != null)
+        {
+            _habitsService.OnHabitsUpdated -= HabitsService_OnHabitsUpdated;
+            _habitsService.OnHabitsUpdated += HabitsService_OnHabitsUpdated;
+        }
+    }
+
     private async void HabitsWidgetControl_Loaded(object sender, RoutedEventArgs e)
     {
-        _habitsService.OnHabitsUpdated += HabitsService_OnHabitsUpdated;
+        EnsureSubscribed();
         DispatcherQueue.TryEnqueue(() =>
         {
             UpdateVisualState();
@@ -702,30 +711,42 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         }
     }
 
-    /// <summary>Called by the dashboard refresh button: loads local SQLite immediately (0ms), then performs background sync.</summary>
+    /// <summary>Called by the dashboard refresh button: loads local SQLite immediately (0ms), then performs delta sync.</summary>
     public async Task RefreshAsync()
     {
+        EnsureSubscribed();
+
         // 1. Immediately reload local SQLite data for 0ms instantaneous UI update
         await LoadDataAsync();
 
-        // 2. Perform background delta sync without blocking the UI transition
+        // 2. Perform delta sync and refresh again when finished
         if (_syncService != null)
         {
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                // Run sync with a safe 4-second timeout so UI wipe animation is never blocked
+                using var cts = new System.Threading.CancellationTokenSource(4000);
+                var syncTask = _syncService.SyncAsync(SyncScope.Habits);
+                var completedTask = await System.Threading.Tasks.Task.WhenAny(syncTask, System.Threading.Tasks.Task.Delay(4000, cts.Token));
+
+                if (completedTask == syncTask)
                 {
-                    await _syncService.SyncAsync(SyncScope.Habits);
-                    DispatcherQueue?.TryEnqueue(async () =>
-                    {
-                        await LoadDataAsync();
-                    });
+                    cts.Cancel();
+                    await syncTask;
                 }
-                catch (Exception ex)
+                else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[HabitsWidgetControl] Background sync failed: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine("[HabitsWidgetControl] Background sync timed out after 4s, keeping local state.");
                 }
-            });
+
+                // 3. Re-read local SQLite which now includes fresh synced data
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[HabitsWidgetControl] Background sync failed: {ex.Message}");
+                await LoadDataAsync();
+            }
         }
     }
 
@@ -736,7 +757,16 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
             return;
         }
 
-        var isWater = HabitsFlipView.SelectedIndex == 0;
+        var index = HabitsFlipView?.SelectedIndex ?? 0;
+        if (index < 0)
+        {
+            index = 0;
+            if (HabitsFlipView != null)
+            {
+                HabitsFlipView.SelectedIndex = 0;
+            }
+        }
+        var isWater = index == 0;
         if (isWater)
         {
             var waterGoal = await _habitsService.GetGoalAsync("water");
@@ -1097,9 +1127,14 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
 
     private async void HabitsFlipView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (HabitsFlipView != null && HabitsFlipView.SelectedIndex < 0)
+        {
+            HabitsFlipView.SelectedIndex = 0;
+        }
+
         if (_habitsService != null)
         {
-            _habitsService.CurrentViewType = HabitsFlipView.SelectedIndex == 0 ? "water" : "smokes";
+            _habitsService.CurrentViewType = (HabitsFlipView?.SelectedIndex ?? 0) == 0 ? "water" : "smokes";
         }
 
         OnPropertyChanged(nameof(CurrentViewLabel));

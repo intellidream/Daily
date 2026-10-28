@@ -208,6 +208,18 @@ public partial class App : Application
                                 });
                             }
                         }
+                        else if (line.Equals("refresh", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received refresh command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(async () =>
+                                {
+                                    await app.MainWindow.TriggerCurrentViewRefreshAsync();
+                                });
+                            }
+                        }
                         else if (line.Equals("companion", StringComparison.OrdinalIgnoreCase) ||
                                  line.Equals("quickdrop", StringComparison.OrdinalIgnoreCase) ||
                                  line.Equals("flyout", StringComparison.OrdinalIgnoreCase))

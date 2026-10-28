@@ -83,6 +83,13 @@ namespace Daily.Services
                     RunStartupMigration();
                 }
 
+                // Listen for background sync pulls completing with fresh habit data
+                _syncService.OnHabitsPulled += () =>
+                {
+                    InvalidateRpcCache();
+                    OnHabitsUpdated?.Invoke();
+                };
+
                 // Listen for global refresh (triggered by Auth/Settings changes)
                 _refreshService.RefreshRequested += async () =>
                 {
@@ -91,6 +98,7 @@ namespace Daily.Services
                     {
                         _ = _syncService.SyncAsync();
                     }
+                    InvalidateRpcCache();
                     OnHabitsUpdated?.Invoke();
                 };
 
@@ -112,7 +120,12 @@ namespace Daily.Services
                                 {
                                     await SetupRealtimeAsync();
                                     Console.WriteLine("[HabitsService] Reconnected. Triggering background habits catch-up pull...");
-                                    _ = _syncService.PullAsync(SyncScope.Habits);
+                                    var pulled = await _syncService.PullAsync(SyncScope.Habits);
+                                    if (pulled > 0)
+                                    {
+                                        InvalidateRpcCache();
+                                        OnHabitsUpdated?.Invoke();
+                                    }
                                 }
                             }
                             catch (TaskCanceledException) { }

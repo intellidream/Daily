@@ -386,6 +386,11 @@ namespace Daily.Services
 
                 totalPulled += pulled;
                 SetPreference(key, DateTime.UtcNow.ToString("O"));
+
+                if (pulled > 0)
+                {
+                    OnHabitsPulled?.Invoke();
+                }
             }
 
             if ((scope & SyncScope.Preferences) != 0)
@@ -470,14 +475,19 @@ namespace Daily.Services
                     var query = _supabase.From<HabitLog>()
                         .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending);
                     
-                    var threshold = DateTime.UtcNow.AddDays(-14);
+                    DateTime threshold;
                     if (lastPull == DateTime.MinValue)
                     {
-                        threshold = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                        threshold = DateTime.UtcNow.AddDays(-30);
                     }
-                    else if (lastPull < threshold)
+                    else
                     {
-                        threshold = lastPull;
+                        // 15-minute safety overlap before last pull to ensure in-flight logs are never missed
+                        threshold = lastPull.AddMinutes(-15);
+                        if (threshold < DateTime.UtcNow.AddDays(-90))
+                        {
+                            threshold = DateTime.UtcNow.AddDays(-90);
+                        }
                     }
                     
                     query = query.Filter("created_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
@@ -555,6 +565,7 @@ namespace Daily.Services
         // --- Helper for Debugging ---
         public string DebugLog { get; private set; } = "";
         public event Action OnDebugLogUpdated;
+        public event Action? OnHabitsPulled;
         public event Action OnPreferencesPulled;
         public event Action OnRssSubscriptionsPulled;
         public event Action OnSavedArticlesPulled;

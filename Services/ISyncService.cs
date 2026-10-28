@@ -35,6 +35,7 @@ namespace Daily.Services
         string LastSyncMessage { get; }
         string DebugLog { get; }
         event Action? OnDebugLogUpdated;
+        event Action? OnHabitsPulled;
         event Action? OnPreferencesPulled;
         event Action? OnRssSubscriptionsPulled;
         event Action? OnSavedArticlesPulled;

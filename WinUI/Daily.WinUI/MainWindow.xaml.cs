@@ -226,10 +226,9 @@ public sealed partial class MainWindow : Window
 
     // ── Theme toggle handler ──────────────────────────────────────────────────
 
-    private void TitleBarRefresh_Click(object sender, RoutedEventArgs e)
+    private async void TitleBarRefresh_Click(object sender, RoutedEventArgs e)
     {
-        if (RootFrame.Content is MainPage mainPage)
-            mainPage.TriggerRefresh();
+        await TriggerCurrentViewRefreshAsync();
     }
 
     private void TitleBarBriefing_Click(object sender, RoutedEventArgs e)
@@ -510,24 +509,61 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public async Task TriggerCurrentViewRefreshAsync()
+    {
+        try
+        {
+            if (RootFrame.Content is MainPage mainPage)
+            {
+                mainPage.TriggerRefresh();
+            }
+            else if (RootFrame.Content is Views.HabitsDetailPage habitsPage)
+            {
+                await habitsPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.WeatherDetailPage weatherPage)
+            {
+                await weatherPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.HealthDetailPage healthPage)
+            {
+                await healthPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.FinancesDetailPage financesPage)
+            {
+                await financesPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.RssFeedDetailPage newsPage)
+            {
+                await newsPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.CalendarDetailPage calendarPage)
+            {
+                await calendarPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.TagdosNotesDetailPage tagdosPage)
+            {
+                await tagdosPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.CosmosDetailPage cosmosPage)
+            {
+                await cosmosPage.RefreshFromTitleBarAsync();
+            }
+            else
+            {
+                var sync = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+                if (sync != null) await sync.SyncAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] TriggerCurrentViewRefreshAsync failed: {ex}");
+        }
+    }
+
     public void TriggerGlobalSync()
     {
-        if (RootFrame.Content is MainPage mp)
-        {
-            mp.TriggerRefresh();
-        }
-        else
-        {
-            _ = System.Threading.Tasks.Task.Run(async () =>
-            {
-                try
-                {
-                    var sync = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
-                    if (sync != null) await sync.SyncAsync();
-                }
-                catch { }
-            });
-        }
+        _ = TriggerCurrentViewRefreshAsync();
     }
 
     public void OpenSettings()
