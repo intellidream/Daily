@@ -273,7 +273,7 @@ public sealed partial class WeatherDetailPage : Page
 
     private void CosmosHubButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        if (App.CurrentWindow is MainWindow mw)
+        if (App.Current?.MainWindow is MainWindow mw)
         {
             mw.NavigateToTab(9);
         }

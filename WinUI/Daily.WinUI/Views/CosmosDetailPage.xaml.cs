@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -656,7 +657,7 @@ namespace Daily_WinUI.Views
 
         private void CatalogSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         {
-            if (args.Reason == AutoSuggestionReason.UserInput)
+            if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 var results = _catalogRepo.Search(sender.Text);
                 sender.ItemsSource = results;
@@ -775,7 +776,7 @@ namespace Daily_WinUI.Views
             {
                 Frame.GoBack();
             }
-            else if (App.CurrentWindow is MainWindow mw)
+            else if (App.Current?.MainWindow is MainWindow mw)
             {
                 mw.NavigateToTab(1);
             }
@@ -783,7 +784,11 @@ namespace Daily_WinUI.Views
 
         private void PopOutButton_Click(object sender, RoutedEventArgs e)
         {
-            DetailWindow.OpenDetailWindow(typeof(CosmosDetailPage));
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.OpenDetailWindow(typeof(CosmosDetailPage));
+                mw.NavigateToTab(1);
+            }
         }
     }
 }

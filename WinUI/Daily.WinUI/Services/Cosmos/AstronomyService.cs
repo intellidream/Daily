@@ -26,7 +26,7 @@ namespace Daily_WinUI.Services.Cosmos
             var observer = new Observer(latitude, longitude, elevationMeters);
             var astroBody = ToAstroBody(body);
 
-            var equator = Astronomy.Equator(astroBody, astroTime, observer, EquatorEpoch.OfDate, Aberration.Refraction);
+            var equator = Astronomy.Equator(astroBody, astroTime, observer, EquatorEpoch.OfDate, Aberration.None);
             var horizon = Astronomy.Horizon(astroTime, observer, equator.ra, equator.dec, Refraction.Normal);
 
             double? mag = null;

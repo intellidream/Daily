@@ -93,7 +93,7 @@ namespace Daily_WinUI.Controls
 
         private void OpenHubButton_Click(object sender, RoutedEventArgs e)
         {
-            if (App.CurrentWindow is MainWindow mw)
+            if (App.Current?.MainWindow is MainWindow mw)
             {
                 mw.NavigateToTab(9);
             }
