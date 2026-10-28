@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Compress
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.WaterDrop
@@ -93,6 +94,7 @@ fun WeatherDetailView(
     weatherRepository: WeatherRepository,
     onNavigateBack: () -> Unit,
     onRefreshWeather: () -> Unit,
+    onNavigateToCosmos: () -> Unit = {},
     onSelectManualLocation: (Double, Double, String) -> Unit,
     onResetToAutoLocation: () -> Unit,
     modifier: Modifier = Modifier,
@@ -156,6 +158,7 @@ fun WeatherDetailView(
             isAutoLocation = isAutoLocation,
             onBackClick = onNavigateBack,
             onSearchClick = { showingSearchSheet = true },
+            onCosmosClick = onNavigateToCosmos,
             onResetToAutoLocation = onResetToAutoLocation
         )
 
@@ -312,6 +315,7 @@ private fun TopLocationBar(
     isAutoLocation: Boolean,
     onBackClick: () -> Unit,
     onSearchClick: () -> Unit,
+    onCosmosClick: () -> Unit,
     onResetToAutoLocation: () -> Unit
 ) {
     Row(
@@ -418,6 +422,23 @@ private fun TopLocationBar(
                         modifier = Modifier.size(18.dp)
                     )
                 }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF7C4DFF).copy(alpha = 0.20f))
+                    .border(1.dp, Color(0xFFB388FF).copy(alpha = 0.35f), CircleShape)
+                    .clickable(onClick = onCosmosClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.NightsStay,
+                    contentDescription = "Cosmos Observatory",
+                    tint = Color(0xFFB388FF),
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             Box(

@@ -38,7 +38,8 @@ enum class DashboardWidgetType(val id: String, val title: String) {
     Stress("stress", "Stress & Mind Balance"),
     Habits("habits", "Habits & Cravings"),
     Finances("finances", "Finances & Markets"),
-    TagdosNotes("tagdos_notes", "Tagdos & Notes")
+    TagdosNotes("tagdos_notes", "Tagdos & Notes"),
+    Cosmos("cosmos", "Cosmos & Observator")
 }
 
 @Serializable
@@ -50,6 +51,7 @@ data class DashboardWidgetConfig(
     companion object {
         val defaultLayout: List<DashboardWidgetConfig> = listOf(
             DashboardWidgetConfig(DashboardWidgetType.Weather.id, DashboardWidgetSize.Wide, true),
+            DashboardWidgetConfig(DashboardWidgetType.Cosmos.id, DashboardWidgetSize.Wide, true),
             DashboardWidgetConfig(DashboardWidgetType.News.id, DashboardWidgetSize.Wide, true),
             DashboardWidgetConfig(DashboardWidgetType.Health.id, DashboardWidgetSize.Wide, true),
             DashboardWidgetConfig(DashboardWidgetType.Habits.id, DashboardWidgetSize.Wide, true),

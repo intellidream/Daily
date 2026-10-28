@@ -425,6 +425,9 @@ class MainActivity : ComponentActivity() {
                     host.contains("news") -> {
                         selectedTab = NavigationTab.News
                     }
+                    host.contains("cosmos") || host.contains("sky") || path.contains("cosmos") || path.contains("sky") -> {
+                        selectedTab = NavigationTab.Cosmos
+                    }
                     else -> {
                         selectedTab = NavigationTab.Dashboard
                     }
@@ -442,6 +445,7 @@ class MainActivity : ComponentActivity() {
                 TAB_TAGDOS -> NavigationTab.Tagdos
                 TAB_WEATHER -> NavigationTab.Weather
                 TAB_NEWS -> NavigationTab.News
+                TAB_COSMOS -> NavigationTab.Cosmos
                 else -> NavigationTab.Dashboard
             }
             selectedTab = target
@@ -490,6 +494,7 @@ class MainActivity : ComponentActivity() {
         const val TAB_TAGDOS = "tagdos"
         const val TAB_WEATHER = "weather"
         const val TAB_NEWS = "news"
+        const val TAB_COSMOS = "cosmos"
     }
 }
 
@@ -641,6 +646,12 @@ fun DailyRootScreen(
                             onSetShowSettings?.invoke(false)
                             onSetShowCustomize?.invoke(false)
                             onSelectTab(NavigationTab.Weather)
+                        },
+                        onNavigateToCosmos = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Cosmos)
                         },
                         forceSingleColumn = true,
                         onBriefingClick = {
@@ -808,9 +819,18 @@ fun DailyRootScreen(
                                     weatherRepository = weatherRepository,
                                     onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
                                     onRefreshWeather = onRefreshWeather,
+                                    onNavigateToCosmos = { onSelectTab(NavigationTab.Cosmos) },
                                     onSelectManualLocation = onSelectManualLocation,
                                     onResetToAutoLocation = onResetToAutoLocation,
                                     horizontalPadding = 0.dp
+                                )
+                            }
+                        }
+                        selectedTab == NavigationTab.Cosmos -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
+                                com.intellidream.daily.cosmos.CosmosScreen(
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                                 )
                             }
                         }
@@ -877,6 +897,7 @@ fun DailyRootScreen(
                                 onNavigateToTagdos = { onSelectTab(NavigationTab.Tagdos) },
                                 onNavigateToNews = { onSelectTab(NavigationTab.News) },
                                 onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
+                                onNavigateToCosmos = { onSelectTab(NavigationTab.Cosmos) },
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                             )
                         }
@@ -894,6 +915,7 @@ fun DailyRootScreen(
                                 weatherRepository = weatherRepository,
                                 onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
                                 onRefreshWeather = onRefreshWeather,
+                                onNavigateToCosmos = { onSelectTab(NavigationTab.Cosmos) },
                                 onSelectManualLocation = onSelectManualLocation,
                                 onResetToAutoLocation = onResetToAutoLocation
                             )
@@ -927,6 +949,11 @@ fun DailyRootScreen(
                             com.intellidream.daily.presentation.news.NewsFeedView(
                                 repository = newsRepository,
                                 settings = settings,
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                            )
+                        }
+                        NavigationTab.Cosmos -> {
+                            com.intellidream.daily.cosmos.CosmosScreen(
                                 onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
                             )
                         }
@@ -994,15 +1021,17 @@ fun DailyRootScreen(
                 }
             }
 
-            // Floating Glass Capsule Navigation at the bottom (Centered on phone mode)
-            FloatingGlassCapsule(
-                selectedTab = selectedTab,
-                onTabSelected = onSelectTab,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 16.dp)
-            )
+            // Floating Glass Capsule Navigation at the bottom (Centered on phone mode, hidden in immersive Cosmos)
+            if (selectedTab != NavigationTab.Cosmos) {
+                FloatingGlassCapsule(
+                    selectedTab = selectedTab,
+                    onTabSelected = onSelectTab,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 16.dp)
+                )
+            }
         }
     }
 }

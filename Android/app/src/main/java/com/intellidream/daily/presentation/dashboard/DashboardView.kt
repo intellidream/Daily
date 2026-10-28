@@ -48,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
+import com.intellidream.daily.model.AstronomyService
+import com.intellidream.daily.model.CelestialBody
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
@@ -97,6 +99,7 @@ fun DashboardView(
     onNavigateToTagdos: () -> Unit = {},
     onNavigateToNews: () -> Unit = {},
     onNavigateToWeather: () -> Unit = {},
+    onNavigateToCosmos: () -> Unit = {},
     forceSingleColumn: Boolean = false,
     onBriefingClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -110,6 +113,27 @@ fun DashboardView(
     val waterGoal by habitsRepository.waterGoal.collectAsState()
     val smokesTotal by habitsRepository.smokesTotalToday.collectAsState()
     val smokesSettings by habitsRepository.smokesSettings.collectAsState()
+
+    // Real-time Cosmos calculations for dashboard card
+    val cosmosData = remember(weather) {
+        val lat = weather?.coord?.lat ?: 44.4323
+        val lon = weather?.coord?.lon ?: 26.1063
+        val clouds = weather?.clouds?.all ?: 15
+        val conditions = AstronomyService.evaluateStargazingConditions(
+            latitude = lat,
+            longitude = lon,
+            cloudCoverTotal = clouds,
+            cloudCoverLow = (clouds * 0.3).toInt(),
+            cloudCoverMid = (clouds * 0.4).toInt(),
+            cloudCoverHigh = (clouds * 0.3).toInt(),
+            bortleClass = 4
+        )
+        val moon = AstronomyService.moonPhase()
+        val planets = CelestialBody.majorPlanets.filter {
+            AstronomyService.coordinates(it, lat, lon).isVisible
+        }
+        Triple(conditions, moon, planets)
+    }
 
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -177,6 +201,10 @@ fun DashboardView(
             onNavigateToTagdos = onNavigateToTagdos,
             onNavigateToNews = onNavigateToNews,
             onNavigateToWeather = onNavigateToWeather,
+            onNavigateToCosmos = onNavigateToCosmos,
+            cosmosConditions = cosmosData.first,
+            cosmosMoon = cosmosData.second,
+            cosmosVisiblePlanets = cosmosData.third,
             onLongClick = onLongClick
         )
     }
@@ -581,6 +609,10 @@ private fun DashboardWidgetRenderer(
     onNavigateToTagdos: () -> Unit,
     onNavigateToNews: () -> Unit,
     onNavigateToWeather: () -> Unit,
+    onNavigateToCosmos: () -> Unit = {},
+    cosmosConditions: com.intellidream.daily.model.StargazingConditions? = null,
+    cosmosMoon: com.intellidream.daily.model.MoonPhaseInfo? = null,
+    cosmosVisiblePlanets: List<com.intellidream.daily.model.CelestialBody> = emptyList(),
     onLongClick: () -> Unit
 ) {
     when (config.id) {
@@ -647,6 +679,17 @@ private fun DashboardWidgetRenderer(
                 size = config.size,
                 repository = tagdosRepository,
                 onNavigateToHub = onNavigateToTagdos,
+                onLongClick = onLongClick
+            )
+        }
+        DashboardWidgetType.Cosmos.id -> {
+            CosmosDashboardCard(
+                size = config.size,
+                conditions = cosmosConditions,
+                moon = cosmosMoon,
+                visiblePlanets = cosmosVisiblePlanets,
+                settings = settings,
+                onTap = onNavigateToCosmos,
                 onLongClick = onLongClick
             )
         }

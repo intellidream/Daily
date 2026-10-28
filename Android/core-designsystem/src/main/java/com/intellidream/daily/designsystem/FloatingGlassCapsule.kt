@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Newspaper
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ enum class NavigationTab(val displayName: String, val icon: ImageVector) {
     Habits("Habits", Icons.Filled.WaterDrop),
     Weather("Weather", Icons.Filled.Cloud),
     News("News", Icons.Filled.Newspaper),
+    Cosmos("Cosmos", Icons.Filled.NightsStay),
     Settings("Settings", Icons.Filled.Settings);
 
     companion object {

@@ -50,6 +50,14 @@
                     android:host="login-callback"
                     android:scheme="com.intellidream.daily" />
             </intent-filter>
+
+            <!-- App deep links (daily://cosmos, daily://weather, daily://habits, daily://health) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="daily" />
+            </intent-filter>
         </activity>
 
         <!-- Health Connect permission rationale and usage alias (Android 14+) -->

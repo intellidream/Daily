@@ -1,0 +1,79 @@
+[
+  {
+    "id" : "PER",
+    "nameEn" : "Perseids",
+    "nameRo" : "Perseidele",
+    "parentBody" : "109P\/Swift-Tuttle",
+    "peakDate" : "12-13 August",
+    "radiantDecDegrees" : 58,
+    "radiantRaHours" : 3.1,
+    "velocityKmS" : 59,
+    "zhr" : 100
+  },
+  {
+    "id" : "GEM",
+    "nameEn" : "Geminids",
+    "nameRo" : "Geminidele",
+    "parentBody" : "3200 Phaethon",
+    "peakDate" : "13-14 Decembrie",
+    "radiantDecDegrees" : 33,
+    "radiantRaHours" : 7.5,
+    "velocityKmS" : 35,
+    "zhr" : 150
+  },
+  {
+    "id" : "QUA",
+    "nameEn" : "Quadrantids",
+    "nameRo" : "Quadrantidele",
+    "parentBody" : "2003 EH1",
+    "peakDate" : "3-4 Ianuarie",
+    "radiantDecDegrees" : 49,
+    "radiantRaHours" : 15.3,
+    "velocityKmS" : 41,
+    "zhr" : 110
+  },
+  {
+    "id" : "LYR",
+    "nameEn" : "Lyrids",
+    "nameRo" : "Liridele",
+    "parentBody" : "C\/1861 G1 (Thatcher)",
+    "peakDate" : "21-22 Aprilie",
+    "radiantDecDegrees" : 34,
+    "radiantRaHours" : 18.1,
+    "velocityKmS" : 49,
+    "zhr" : 18
+  },
+  {
+    "id" : "ETA",
+    "nameEn" : "Eta Aquariids",
+    "nameRo" : "Eta Aquaridele",
+    "parentBody" : "1P\/Halley",
+    "peakDate" : "5-6 Mai",
+    "radiantDecDegrees" : -1,
+    "radiantRaHours" : 22.5,
+    "velocityKmS" : 66,
+    "zhr" : 50
+  },
+  {
+    "id" : "ORI",
+    "nameEn" : "Orionids",
+    "nameRo" : "Orionidele",
+    "parentBody" : "1P\/Halley",
+    "peakDate" : "21-22 Octombrie",
+    "radiantDecDegrees" : 16,
+    "radiantRaHours" : 6.3,
+    "velocityKmS" : 66,
+    "zhr" : 25
+  },
+  {
+    "id" : "LEO",
+    "nameEn" : "Leonids",
+    "nameRo" : "Leonidele",
+    "parentBody" : "55P\/Tempel-Tuttle",
+    "peakDate" : "17-18 Noiembrie",
+    "radiantDecDegrees" : 22,
+    "radiantRaHours" : 10.2,
+    "velocityKmS" : 71,
+    "zhr" : 15
+  }
+]
