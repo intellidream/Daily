@@ -539,6 +539,32 @@ Following the comprehensive audit and architectural specification in `Docs/WinUI
     ```
   - Zero placeholder blinking, zero widget blanking, instantaneous presentation from SQLite and memory snapshots.
 
+---
+
+## 15. Habits Refresh & Multi-Hub TitleBar Sync Architecture (2026-10-28)
+
+### Root Cause Analysis (6 Interconnected Bugs Resolved)
+1. **TitleBar Single-Window Refresh Asymmetry (`MainWindow.xaml.cs`)**:
+   - The global DayOne refresh button (`TitleBarRefreshButton`) and keyboard shortcut (`Ctrl+R`) previously only handled `if (RootFrame.Content is MainPage mainPage)`. Whenever the user navigated into any Hub (e.g. `HabitsDetailPage`, `WeatherDetailPage`, `HealthDetailPage`), clicking the refresh button or pressing `Ctrl+R` silently did nothing.
+2. **Missing Sync Event in Data Layer (`ISyncService.cs`, `SyncService.cs`)**:
+   - While `SyncService` notified listeners for preferences, RSS subscriptions, and saved articles via dedicated events (`OnPreferencesPulled`, etc.), it lacked any event for habits (`OnHabitsPulled`). Background or catch-up pulls updated SQLite silently without notifying `HabitsService` or the UI.
+3. **Inverted Pull Threshold Query (`SyncService.cs`)**:
+   - In `PullLogsInternalAsync`, line 478 checked `else if (lastPull < threshold)` where `threshold = DateTime.UtcNow.AddDays(-14)`. When `lastPull` was recent (e.g. 5 minutes ago), `lastPull < threshold` evaluated to `false`, causing the query to fall through and pull 14 days of logs every time.
+4. **Silent Realtime Reconnection Catch-up (`HabitsService.cs`)**:
+   - When the Supabase Realtime channel reconnected, `HabitsService` ran `_ = _syncService.PullAsync(SyncScope.Habits);` without invalidating RPC caches or notifying subscribers on completion.
+5. **Subscription Drops in Cached Container (`HabitsWidgetControl.xaml.cs`)**:
+   - Because `MainPage` uses `NavigationCacheMode.Required`, GridView controls may not re-trigger `Loaded` consistently on every navigation return. Unsubscribing on `Unloaded` left the widget permanently decoupled from `OnHabitsUpdated`.
+6. **FlipView Index Underflow (`HabitsWidgetControl.xaml.cs`)**:
+   - `HabitsFlipView.SelectedIndex` can evaluate to `-1` before layout completion or during template recycling. Previously, `SelectedIndex == 0` evaluating to `false` caused Water to be processed as Smokes, corrupting the metrics view.
+
+### Architectural Solution
+- **Dynamic View-Aware TitleBar Refresh**: `MainWindow.xaml.cs` implements `TriggerCurrentViewRefreshAsync()`, which inspects the active page in `RootFrame.Content` and invokes the page's dedicated `RefreshFromTitleBarAsync()` or `TriggerRefresh()` method.
+- **Data Layer Reactive Pull Pipeline**: Added `event Action? OnHabitsPulled` to `ISyncService` and `SyncService`. `HabitsService` subscribes to this event, invalidates its RPC cache, and raises `OnHabitsUpdated`.
+- **Incremental Sync Calculation**: Fixed `PullLogsInternalAsync` to compute `lastPull.AddMinutes(-15)` with bounded safety limits (30-90 days), avoiding unnecessary bulk log downloads.
+- **Resilient UI Binding**: Implemented `EnsureSubscribed()` in `HabitsWidgetControl.xaml.cs` to ensure `OnHabitsUpdated` is always active, clamped `SelectedIndex < 0` to `0`, and made `RefreshAsync()` immediately present 0ms SQLite data before running background sync.
+- **IPC Protocol Support**: Added `refresh` command to `DailyWinUI_ProtocolPipe` in `App.xaml.cs` for automated testing.
+
+
 
 
 
