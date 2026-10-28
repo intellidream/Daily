@@ -13,6 +13,8 @@
     <UserControl.Resources>
         <converters:CurrencyConverter x:Key="CurrencyConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
         <converters:PercentConverter x:Key="PercentConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" xmlns:converters="using:Daily_WinUI.Converters"/>
     </UserControl.Resources>
 
     <Grid Padding="16,12,16,14">
@@ -238,32 +240,38 @@
                         <RowDefinition Height="0" x:Name="StocksMainRow1" />
                     </Grid.RowDefinitions>
 
-                    <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
-                        <ItemsControl ItemsSource="{x:Bind TopStocks, Mode=OneWay}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:StockQuote">
-                                    <Border CornerRadius="8" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12,8" Margin="0,0,0,8">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <PersonPicture Grid.Column="0" ProfilePicture="{Binding LogoUrl}" DisplayName="{Binding Symbol}" Width="24" Height="24" Margin="0,0,12,0" />
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{x:Bind Symbol}" FontSize="14" FontWeight="SemiBold" />
-                                                <TextBlock Text="{x:Bind CompanyName}" FontSize="10" Opacity="0.5" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                                <TextBlock Text="{x:Bind CurrentPrice, Converter={StaticResource CurrencyConverter}}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right" />
-                                                <TextBlock Text="{x:Bind PercentChange, Converter={StaticResource PercentConverter}}" FontSize="11" HorizontalAlignment="Right" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                    <Grid Grid.Row="0" Grid.Column="0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0" Visibility="{x:Bind HasStocks, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ItemsControl ItemsSource="{x:Bind TopStocks, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:StockQuote">
+                                        <Border CornerRadius="8" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="12,8" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <PersonPicture Grid.Column="0" ProfilePicture="{Binding LogoUrl}" DisplayName="{Binding Symbol}" Width="24" Height="24" Margin="0,0,12,0" />
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{x:Bind Symbol}" FontSize="14" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{x:Bind CompanyName}" FontSize="10" Opacity="0.5" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                    <TextBlock Text="{x:Bind CurrentPrice, Converter={StaticResource CurrencyConverter}}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right" />
+                                                    <TextBlock Text="{x:Bind PercentChange, Converter={StaticResource PercentConverter}}" FontSize="11" HorizontalAlignment="Right" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Opacity="0.5" Visibility="{x:Bind HasStocks, Mode=OneWay, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                            <FontIcon Glyph="&#xE8D6;" FontFamily="Segoe Fluent Icons" FontSize="22" HorizontalAlignment="Center" />
+                            <TextBlock Text="No stock quotes available" FontSize="11" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
 
                     <Grid x:Name="StocksExtendedPanel" Grid.Row="1" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Stretch">
                         <ListView ItemsSource="{x:Bind ExtendedStocks, Mode=OneWay}" SelectionMode="None">

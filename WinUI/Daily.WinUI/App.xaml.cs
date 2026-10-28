@@ -338,6 +338,10 @@ public partial class App : Application
 
     private readonly TaskCompletionSource<bool> _sessionRestoredTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public Task SessionRestoredTask => _sessionRestoredTcs.Task;
+
+    private readonly TaskCompletionSource<bool> _preferencesHydratedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task PreferencesHydratedTask => _preferencesHydratedTcs.Task;
+
     public Task InitializationTask { get; private set; } = Task.CompletedTask;
 
     private void ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
@@ -482,6 +486,9 @@ public partial class App : Application
             await settingsService.InitializeAsync();
             LogDiagnostic("InitializeAsync: SettingsService initialized");
 
+            // Signal user preferences hydration barrier
+            _preferencesHydratedTcs.TrySetResult(true);
+
             var userId = SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
             var seeder = Services.GetRequiredService<Daily.Services.ISeederService>();
             await seeder.SeedRssFeedsAsync(userId);
@@ -505,6 +512,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            _preferencesHydratedTcs.TrySetResult(false);
             LogDiagnostic($"InitializeAsync: Core services init error: {ex}");
         }
 

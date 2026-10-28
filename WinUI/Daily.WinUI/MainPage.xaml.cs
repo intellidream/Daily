@@ -852,8 +852,16 @@ public sealed partial class MainPage : Page
         BriefingGrid.Visibility = Visibility.Visible;
 
         // Bind Weather Card
-        BriefingWeatherTempText.Text = $"{data.WeatherTemp:F0}°C";
-        BriefingWeatherCondText.Text = data.WeatherCondition;
+        if (!string.IsNullOrEmpty(data.WeatherCondition))
+        {
+            BriefingWeatherTempText.Text = $"{data.WeatherTemp:F0}°C";
+            BriefingWeatherCondText.Text = data.WeatherCondition;
+        }
+        else
+        {
+            BriefingWeatherTempText.Text = "--°";
+            BriefingWeatherCondText.Text = "Unavailable";
+        }
         
         // 5-day forecast columns
         if (data.WeatherForecast.Count >= 5)
@@ -883,6 +891,14 @@ public sealed partial class MainPage : Page
             ForecastDay5Icon.Glyph = data.WeatherForecast[4].Icon;
             ForecastDay5Icon.Foreground = GetBrushFromHex(data.WeatherForecast[4].ColorHex);
         }
+        else
+        {
+            ForecastDay1Text.Text = "--"; ForecastDay1Temp.Text = "--";
+            ForecastDay2Text.Text = "--"; ForecastDay2Temp.Text = "--";
+            ForecastDay3Text.Text = "--"; ForecastDay3Temp.Text = "--";
+            ForecastDay4Text.Text = "--"; ForecastDay4Temp.Text = "--";
+            ForecastDay5Text.Text = "--"; ForecastDay5Temp.Text = "--";
+        }
 
         // Set advices
         WeatherAdviceText.Text = data.WeatherAdvice;
@@ -898,7 +914,7 @@ public sealed partial class MainPage : Page
         BriefingHeartRateText.Text = $"{data.HealthAvgHr} bpm";
 
         // Bind Finances Card
-        BriefingNetWorthText.Text = data.NetWorth.ToString("C0");
+        BriefingNetWorthText.Text = data.HasLedgerData ? data.NetWorth.ToString("C0") : "--";
         var greenBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 76, 175, 80));
         var redBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 244, 67, 54));
         var greenBgBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(51, 76, 175, 80));
@@ -906,33 +922,36 @@ public sealed partial class MainPage : Page
 
         if (data.WatchlistStocks.Count >= 2)
         {
+            StockRow1.Visibility = Visibility.Visible;
+            StockRow2.Visibility = Visibility.Visible;
+
             Stock1Symbol.Text = data.WatchlistStocks[0].Symbol;
             Stock1Price.Text = data.WatchlistStocks[0].Price.ToString("F2");
             Stock1Change.Text = data.WatchlistStocks[0].FormattedChange;
-            if (data.WatchlistStocks[0].IsPositive)
-            {
-                Stock1Badge.Background = greenBgBrush;
-                Stock1Change.Foreground = greenBrush;
-            }
-            else
-            {
-                Stock1Badge.Background = redBgBrush;
-                Stock1Change.Foreground = redBrush;
-            }
+            Stock1Badge.Background = data.WatchlistStocks[0].IsPositive ? greenBgBrush : redBgBrush;
+            Stock1Change.Foreground = data.WatchlistStocks[0].IsPositive ? greenBrush : redBrush;
 
             Stock2Symbol.Text = data.WatchlistStocks[1].Symbol;
             Stock2Price.Text = data.WatchlistStocks[1].Price.ToString("F2");
             Stock2Change.Text = data.WatchlistStocks[1].FormattedChange;
-            if (data.WatchlistStocks[1].IsPositive)
-            {
-                Stock2Badge.Background = greenBgBrush;
-                Stock2Change.Foreground = greenBrush;
-            }
-            else
-            {
-                Stock2Badge.Background = redBgBrush;
-                Stock2Change.Foreground = redBrush;
-            }
+            Stock2Badge.Background = data.WatchlistStocks[1].IsPositive ? greenBgBrush : redBgBrush;
+            Stock2Change.Foreground = data.WatchlistStocks[1].IsPositive ? greenBrush : redBrush;
+        }
+        else if (data.WatchlistStocks.Count == 1)
+        {
+            StockRow1.Visibility = Visibility.Visible;
+            StockRow2.Visibility = Visibility.Collapsed;
+
+            Stock1Symbol.Text = data.WatchlistStocks[0].Symbol;
+            Stock1Price.Text = data.WatchlistStocks[0].Price.ToString("F2");
+            Stock1Change.Text = data.WatchlistStocks[0].FormattedChange;
+            Stock1Badge.Background = data.WatchlistStocks[0].IsPositive ? greenBgBrush : redBgBrush;
+            Stock1Change.Foreground = data.WatchlistStocks[0].IsPositive ? greenBrush : redBrush;
+        }
+        else
+        {
+            StockRow1.Visibility = Visibility.Collapsed;
+            StockRow2.Visibility = Visibility.Collapsed;
         }
 
         // Bind Habits Card

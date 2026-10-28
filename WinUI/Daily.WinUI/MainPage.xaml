@@ -411,11 +411,11 @@
                                     <TextBlock Text="Weather" FontSize="13" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
-                                    <TextBlock x:Name="BriefingWeatherTempText" Text="21°C" FontSize="26" FontWeight="Light" Foreground="{ThemeResource AppFgColorBrush}"/>
-                                    <TextBlock x:Name="BriefingWeatherCondText" Text="sunny" FontSize="13" VerticalAlignment="Bottom" Margin="0,0,0,4" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                    <TextBlock x:Name="BriefingWeatherTempText" Text="--°" FontSize="26" FontWeight="Light" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <TextBlock x:Name="BriefingWeatherCondText" Text="" FontSize="13" VerticalAlignment="Bottom" Margin="0,0,0,4" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
                                 </StackPanel>
                                 <!-- Horizontal 5-day forecast columns -->
-                                <Grid Grid.Row="2" Margin="0,4,0,0">
+                                <Grid x:Name="BriefingForecastGrid" Grid.Row="2" Margin="0,4,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
@@ -424,29 +424,29 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="4">
-                                        <TextBlock x:Name="ForecastDay1Text" Text="Mon" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay1Text" Text="--" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         <FontIcon x:Name="ForecastDay1Icon" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF9800"/>
-                                        <TextBlock x:Name="ForecastDay1Temp" Text="22°" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay1Temp" Text="--" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="4">
-                                        <TextBlock x:Name="ForecastDay2Text" Text="Tue" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay2Text" Text="--" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         <FontIcon x:Name="ForecastDay2Icon" Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#B0BEC5"/>
-                                        <TextBlock x:Name="ForecastDay2Temp" Text="20°" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay2Temp" Text="--" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="4">
-                                        <TextBlock x:Name="ForecastDay3Text" Text="Wed" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay3Text" Text="--" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         <FontIcon x:Name="ForecastDay3Icon" Glyph="&#x26C6;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#2196F3"/>
-                                        <TextBlock x:Name="ForecastDay3Temp" Text="19°" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay3Temp" Text="--" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="3" HorizontalAlignment="Center" Spacing="4">
-                                        <TextBlock x:Name="ForecastDay4Text" Text="Thu" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay4Text" Text="--" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         <FontIcon x:Name="ForecastDay4Icon" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF9800"/>
-                                        <TextBlock x:Name="ForecastDay4Temp" Text="21°" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay4Temp" Text="--" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="4" HorizontalAlignment="Center" Spacing="4">
-                                        <TextBlock x:Name="ForecastDay5Text" Text="Fri" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay5Text" Text="--" FontSize="10" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         <FontIcon x:Name="ForecastDay5Icon" Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#B0BEC5"/>
-                                        <TextBlock x:Name="ForecastDay5Temp" Text="18°" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="ForecastDay5Temp" Text="--" FontSize="10" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                 </Grid>
                                 <!-- AI/Rule Advice -->
@@ -482,23 +482,23 @@
                                     <StackPanel Spacing="2">
                                         <Grid>
                                             <TextBlock Text="Steps" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
-                                            <TextBlock x:Name="BriefingStepsText" Text="4,250" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <TextBlock x:Name="BriefingStepsText" Text="--" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         </Grid>
-                                        <ProgressBar x:Name="BriefingStepsProgress" Minimum="0" Maximum="10000" Value="4250" Height="3" Foreground="#FF9800" Background="#33FFFFFF"/>
+                                        <ProgressBar x:Name="BriefingStepsProgress" Minimum="0" Maximum="10000" Value="0" Height="3" Foreground="#FF9800" Background="#33FFFFFF"/>
                                     </StackPanel>
                                     <!-- Sleep -->
                                     <StackPanel Spacing="2">
                                         <Grid>
                                             <TextBlock Text="Sleep" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
-                                            <TextBlock x:Name="BriefingSleepText" Text="7.2 hrs" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <TextBlock x:Name="BriefingSleepText" Text="--" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{ThemeResource AppFgColorBrush}"/>
                                         </Grid>
-                                        <ProgressBar x:Name="BriefingSleepProgress" Minimum="0" Maximum="8" Value="7.2" Height="3" Foreground="#7C4DFF" Background="#33FFFFFF"/>
+                                        <ProgressBar x:Name="BriefingSleepProgress" Minimum="0" Maximum="8" Value="0" Height="3" Foreground="#7C4DFF" Background="#33FFFFFF"/>
                                     </StackPanel>
                                     <!-- Heart Rate -->
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF5252" VerticalAlignment="Center"/>
                                         <TextBlock Text="Resting HR:" FontSize="11" Opacity="0.7" Foreground="{ThemeResource AppFgColorBrush}"/>
-                                        <TextBlock x:Name="BriefingHeartRateText" Text="64 bpm" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock x:Name="BriefingHeartRateText" Text="--" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <!-- AI/Rule Advice -->
@@ -532,25 +532,25 @@
                                 </StackPanel>
                                 <StackPanel Grid.Row="1" Margin="0,0,0,8">
                                     <TextBlock Text="Net Worth" FontSize="10" Opacity="0.6" Foreground="{ThemeResource AppFgColorBrush}"/>
-                                    <TextBlock x:Name="BriefingNetWorthText" Text="$24,530" FontSize="20" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <TextBlock x:Name="BriefingNetWorthText" Text="--" FontSize="20" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
                                 </StackPanel>
                                 <!-- Stock rows -->
                                 <StackPanel Grid.Row="2" Spacing="6" VerticalAlignment="Bottom">
-                                    <Grid x:Name="StockRow1" Height="20">
-                                        <TextBlock x:Name="Stock1Symbol" Text="MSFT" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                    <Grid x:Name="StockRow1" Height="20" Visibility="Collapsed">
+                                        <TextBlock x:Name="Stock1Symbol" Text="--" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <TextBlock x:Name="Stock1Price" Text="421.90" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <TextBlock x:Name="Stock1Price" Text="--" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
                                             <Border x:Name="Stock1Badge" Background="#334CAF50" CornerRadius="4" Padding="4,2">
-                                                <TextBlock x:Name="Stock1Change" Text="+1.4%" FontSize="9" FontWeight="Bold" Foreground="#FF4CAF50"/>
+                                                <TextBlock x:Name="Stock1Change" Text="--" FontSize="9" FontWeight="Bold" Foreground="#FF4CAF50"/>
                                             </Border>
                                         </StackPanel>
                                     </Grid>
-                                    <Grid x:Name="StockRow2" Height="20">
-                                        <TextBlock x:Name="Stock2Symbol" Text="AAPL" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                                    <Grid x:Name="StockRow2" Height="20" Visibility="Collapsed">
+                                        <TextBlock x:Name="Stock2Symbol" Text="--" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <TextBlock x:Name="Stock2Price" Text="189.84" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                            <TextBlock x:Name="Stock2Price" Text="--" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}"/>
                                             <Border x:Name="Stock2Badge" Background="#33F44336" CornerRadius="4" Padding="4,2">
-                                                <TextBlock x:Name="Stock2Change" Text="-0.3%" FontSize="9" FontWeight="Bold" Foreground="#FFF44336"/>
+                                                <TextBlock x:Name="Stock2Change" Text="--" FontSize="9" FontWeight="Bold" Foreground="#FFF44336"/>
                                             </Border>
                                         </StackPanel>
                                     </Grid>

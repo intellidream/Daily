@@ -189,22 +189,52 @@ public sealed class WeatherClient
         }
     }
 
-    public async Task<IReadOnlyList<ForecastDaySnapshot>> GetFiveDayForecastAsync(
-        double latitude,
-        double longitude,
-        string unitSystem = "metric",
-        bool forceRefresh = false,
-        CancellationToken cancellationToken = default)
+    public WeatherSnapshot? GetCachedSnapshot(double? latitude = null, double? longitude = null, string unitSystem = "metric")
     {
-        var response = await GetForecastResponseAsync(latitude, longitude, unitSystem, forceRefresh, cancellationToken);
+        if (latitude.HasValue && longitude.HasValue)
+        {
+            var direct = TryGetCachedSnapshot(latitude.Value, longitude.Value, unitSystem);
+            if (direct != null) return direct;
+        }
 
+        var normUnit = NormalizeUnitSystem(unitSystem);
+        var freshest = _currentWeatherCache.Values
+            .Where(e => (DateTime.UtcNow - e.TimestampUtc < CacheDuration) && e.UnitSystem == normUnit)
+            .OrderByDescending(e => e.TimestampUtc)
+            .FirstOrDefault();
+        return freshest?.Data ?? _currentWeatherCache.Values.OrderByDescending(e => e.TimestampUtc).FirstOrDefault()?.Data;
+    }
+
+    public IReadOnlyList<ForecastDaySnapshot> GetCachedFiveDayForecast(double? latitude = null, double? longitude = null, string unitSystem = "metric")
+    {
+        ForecastResponse? response = null;
+        if (latitude.HasValue && longitude.HasValue)
+        {
+            response = TryGetCachedForecast(latitude.Value, longitude.Value, unitSystem);
+        }
+
+        if (response == null)
+        {
+            var normUnit = NormalizeUnitSystem(unitSystem);
+            var freshest = _forecastCache.Values
+                .Where(e => (DateTime.UtcNow - e.TimestampUtc < CacheDuration) && e.UnitSystem == normUnit)
+                .OrderByDescending(e => e.TimestampUtc)
+                .FirstOrDefault();
+            response = freshest?.Data ?? _forecastCache.Values.OrderByDescending(e => e.TimestampUtc).FirstOrDefault()?.Data;
+        }
+
+        return ParseFiveDayForecast(response);
+    }
+
+    public static IReadOnlyList<ForecastDaySnapshot> ParseFiveDayForecast(ForecastResponse? response)
+    {
         if (response?.List is null || response.List.Count == 0)
         {
             return Array.Empty<ForecastDaySnapshot>();
         }
 
         var nowDate = DateTimeOffset.UtcNow.Date;
-        var items = response.List
+        return response.List
             .Select(item =>
             {
                 var at = DateTimeOffset.FromUnixTimeSeconds(item.Dt).ToLocalTime().DateTime;
@@ -232,8 +262,17 @@ public sealed class WeatherClient
                 MaxTemp = g.Max(x => x.Temp)
             })
             .ToList();
+    }
 
-        return items;
+    public async Task<IReadOnlyList<ForecastDaySnapshot>> GetFiveDayForecastAsync(
+        double latitude,
+        double longitude,
+        string unitSystem = "metric",
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await GetForecastResponseAsync(latitude, longitude, unitSystem, forceRefresh, cancellationToken);
+        return ParseFiveDayForecast(response);
     }
 
     public async Task<IReadOnlyList<HourlyForecastSnapshot>> GetHourlyForecastAsync(

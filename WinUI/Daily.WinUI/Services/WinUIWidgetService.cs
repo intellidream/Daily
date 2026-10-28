@@ -32,8 +32,13 @@ namespace Daily_WinUI.Services
             };
         }
 
-        public Task<List<WidgetModel>> GetWidgetsAsync()
+        public async Task<List<WidgetModel>> GetWidgetsAsync()
         {
+            if (App.Current != null)
+            {
+                await Task.WhenAny(App.Current.PreferencesHydratedTask, Task.Delay(3000));
+            }
+
             var json = _settingsService.Settings.WinUIDashboardWidgetsJson;
             List<WidgetModel> widgets;
             if (string.IsNullOrEmpty(json)) 
@@ -66,11 +71,16 @@ namespace Daily_WinUI.Services
                 _ = _settingsService.SaveSettingsAsync();
             }
 
-            return Task.FromResult(widgets);
+            return widgets;
         }
 
         public async Task SaveWidgetsAsync(List<WidgetModel> widgets)
         {
+            if (App.Current != null)
+            {
+                await Task.WhenAny(App.Current.PreferencesHydratedTask, Task.Delay(3000));
+            }
+
             _settingsService.Settings.WinUIDashboardWidgetsJson = Newtonsoft.Json.JsonConvert.SerializeObject(widgets);
             await _settingsService.SaveSettingsAsync();
         }

@@ -225,20 +225,11 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             var stocksToDisplay = portfolio;
             if (!stocksToDisplay.Any())
             {
-                // Fallback to defaults via API
-                stocksToDisplay = await _financesService.GetStockQuotesAsync(new List<string> { "AAPL", "MSFT", "NVDA", "TSLA" });
-                
-                // Hard fallback if API fails
-                if (!stocksToDisplay.Any())
-                {
-                    stocksToDisplay = new List<StockQuote>
-                    {
-                        new StockQuote { Symbol = "AAPL", CompanyName = "Apple", CurrentPrice = 175.50m, PercentChange = 1.2m, MarketType = "stock" },
-                        new StockQuote { Symbol = "MSFT", CompanyName = "Microsoft", CurrentPrice = 330.10m, PercentChange = 0.5m, MarketType = "stock" },
-                        new StockQuote { Symbol = "NVDA", CompanyName = "Nvidia", CurrentPrice = 450.25m, PercentChange = 2.1m, MarketType = "stock" },
-                        new StockQuote { Symbol = "TSLA", CompanyName = "Tesla", CurrentPrice = 210.80m, PercentChange = -1.5m, MarketType = "stock" }
-                    };
-                }
+                var watchlist = await _financesService.GetWatchlistSymbolsAsync();
+                var symbolsToFetch = (watchlist != null && watchlist.Any()) 
+                    ? watchlist 
+                    : new List<string> { "AAPL", "MSFT", "NVDA", "TSLA" };
+                stocksToDisplay = (await _financesService.GetStockQuotesAsync(symbolsToFetch)) ?? new List<StockQuote>();
             }
 
             var _cryptoSymbols = new List<string> { "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "LINK-USD" };
