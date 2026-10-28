@@ -148,7 +148,7 @@
         </Grid>
 
         <!-- ── Main Sky Dome & HUD Overlay ───────────────────────── -->
-        <Grid Grid.Row="1" x:Name="ViewportContainer" ClipToBounds="True">
+        <Grid Grid.Row="1" x:Name="ViewportContainer">
             <!-- Sky Canvas (Interactive Drawing Surface) -->
             <Canvas
                 x:Name="SkyCanvas"
