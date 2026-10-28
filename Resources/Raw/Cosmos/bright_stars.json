@@ -1,0 +1,192 @@
+[
+  {
+    "bayer" : "Alpha CMa",
+    "colorHex" : "#FFFFFF",
+    "colorIndexBV" : 0,
+    "constellation" : "CMA",
+    "decDegrees" : -16.72,
+    "mag" : -1.46,
+    "name" : "Sirius",
+    "raHours" : 6.75
+  },
+  {
+    "bayer" : "Alpha Car",
+    "colorHex" : "#F8F9FA",
+    "colorIndexBV" : 0.15,
+    "constellation" : "CAR",
+    "decDegrees" : -52.7,
+    "mag" : -0.74,
+    "name" : "Canopus",
+    "raHours" : 6.4
+  },
+  {
+    "bayer" : "Alpha Cen",
+    "colorHex" : "#FFE4B5",
+    "colorIndexBV" : 0.71,
+    "constellation" : "CEN",
+    "decDegrees" : -60.83,
+    "mag" : -0.27,
+    "name" : "Rigil Kentaurus",
+    "raHours" : 14.66
+  },
+  {
+    "bayer" : "Alpha Boo",
+    "colorHex" : "#FFB347",
+    "colorIndexBV" : 1.23,
+    "constellation" : "BOO",
+    "decDegrees" : 19.18,
+    "mag" : -0.05,
+    "name" : "Arcturus",
+    "raHours" : 14.26
+  },
+  {
+    "bayer" : "Alpha Lyr",
+    "colorHex" : "#E6F0FA",
+    "colorIndexBV" : 0,
+    "constellation" : "LYR",
+    "decDegrees" : 38.78,
+    "mag" : 0.03,
+    "name" : "Vega",
+    "raHours" : 18.62
+  },
+  {
+    "bayer" : "Alpha Aur",
+    "colorHex" : "#FFF3A8",
+    "colorIndexBV" : 0.8,
+    "constellation" : "AUR",
+    "decDegrees" : 46,
+    "mag" : 0.08,
+    "name" : "Capella",
+    "raHours" : 5.28
+  },
+  {
+    "bayer" : "Beta Ori",
+    "colorHex" : "#BBDEFB",
+    "colorIndexBV" : -0.03,
+    "constellation" : "ORI",
+    "decDegrees" : -8.2,
+    "mag" : 0.13,
+    "name" : "Rigel",
+    "raHours" : 5.24
+  },
+  {
+    "bayer" : "Alpha CMi",
+    "colorHex" : "#FFF9E6",
+    "colorIndexBV" : 0.42,
+    "constellation" : "CMI",
+    "decDegrees" : 5.22,
+    "mag" : 0.38,
+    "name" : "Procyon",
+    "raHours" : 7.65
+  },
+  {
+    "bayer" : "Alpha Ori",
+    "colorHex" : "#FF6F00",
+    "colorIndexBV" : 1.85,
+    "constellation" : "ORI",
+    "decDegrees" : 7.41,
+    "mag" : 0.5,
+    "name" : "Betelgeuse",
+    "raHours" : 5.92
+  },
+  {
+    "bayer" : "Alpha Aql",
+    "colorHex" : "#F4F6F9",
+    "colorIndexBV" : 0.22,
+    "constellation" : "AQL",
+    "decDegrees" : 8.87,
+    "mag" : 0.77,
+    "name" : "Altair",
+    "raHours" : 19.85
+  },
+  {
+    "bayer" : "Alpha Tau",
+    "colorHex" : "#FF8C00",
+    "colorIndexBV" : 1.54,
+    "constellation" : "TAU",
+    "decDegrees" : 16.51,
+    "mag" : 0.85,
+    "name" : "Aldebaran",
+    "raHours" : 4.6
+  },
+  {
+    "bayer" : "Alpha Sco",
+    "colorHex" : "#FF3D00",
+    "colorIndexBV" : 1.83,
+    "constellation" : "SCO",
+    "decDegrees" : -26.43,
+    "mag" : 0.96,
+    "name" : "Antares",
+    "raHours" : 16.49
+  },
+  {
+    "bayer" : "Alpha Vir",
+    "colorHex" : "#90CAF9",
+    "colorIndexBV" : -0.23,
+    "constellation" : "VIR",
+    "decDegrees" : -11.16,
+    "mag" : 0.98,
+    "name" : "Spica",
+    "raHours" : 13.42
+  },
+  {
+    "bayer" : "Beta Gem",
+    "colorHex" : "#FFD54F",
+    "colorIndexBV" : 1,
+    "constellation" : "GEM",
+    "decDegrees" : 28.03,
+    "mag" : 1.14,
+    "name" : "Pollux",
+    "raHours" : 7.76
+  },
+  {
+    "bayer" : "Alpha PsA",
+    "colorHex" : "#E1F5FE",
+    "colorIndexBV" : 0.09,
+    "constellation" : "PSA",
+    "decDegrees" : -29.62,
+    "mag" : 1.16,
+    "name" : "Fomalhaut",
+    "raHours" : 22.96
+  },
+  {
+    "bayer" : "Alpha Cyg",
+    "colorHex" : "#E3F2FD",
+    "colorIndexBV" : 0.09,
+    "constellation" : "CYG",
+    "decDegrees" : 45.28,
+    "mag" : 1.25,
+    "name" : "Deneb",
+    "raHours" : 20.69
+  },
+  {
+    "bayer" : "Alpha Leo",
+    "colorHex" : "#BBDEFB",
+    "colorIndexBV" : -0.11,
+    "constellation" : "LEO",
+    "decDegrees" : 11.97,
+    "mag" : 1.36,
+    "name" : "Regulus",
+    "raHours" : 10.14
+  },
+  {
+    "bayer" : "Alpha Gem",
+    "colorHex" : "#E8EAF6",
+    "colorIndexBV" : 0.03,
+    "constellation" : "GEM",
+    "decDegrees" : 31.89,
+    "mag" : 1.58,
+    "name" : "Castor",
+    "raHours" : 7.58
+  },
+  {
+    "bayer" : "Alpha UMi",
+    "colorHex" : "#FFFDE7",
+    "colorIndexBV" : 0.6,
+    "constellation" : "UMI",
+    "decDegrees" : 89.26,
+    "mag" : 1.97,
+    "name" : "Polaris",
+    "raHours" : 2.53
+  }
+]

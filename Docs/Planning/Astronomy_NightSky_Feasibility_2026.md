@@ -2,7 +2,7 @@
 
 **Autor:** Antigravity Architecture Team  
 **Data:** 28 Octombrie 2026  
-**Status:** Studiu de Fezabilitate Funcțională, Tehnică & UI/UX (Pre-Implementare)  
+**Status:** Arhitectură Agreată & Plan de Execuție Aprobat (Post /grill-me Alignment)  
 **Platforme Țintă:** iOS (iPhone & iPhone Duo + WidgetKit) · macOS (`Daily` Window + `MenuBarExtra`) · Android (Phone, Samsung Galaxy Z Fold 8 „RADAR”, Pixel 9 Pro Fold + Jetpack Glance) · Windows 11 (`WinUI 3` .NET 10 ARM64/x64 + Taskbar Flyout)
 
 ---
@@ -327,18 +327,25 @@ Pentru o execuție curată, testabilă riguros pe simulatoare și pe dispozitive
 
 ---
 
-## 8. Decizii Deschise pentru Aliniere (De Discutat Înainte de Implementare)
+## 8. Decizii de Arhitectură & Produs Agreate (Rezoluție /grill-me)
 
-Înainte de a trece la proiectarea de detaliu și codare (Faza 1), iată cele **5 decizii de produs și UX** pe care merită să le stabilim împreună:
+În urma sesiunii interactive de rafinare și aliniere arhitecturală, următoarele 7 decizii cheie au fost stabilite și aprobate definitiv pentru ghidarea implementării:
 
-1. **Încadrarea în Navigația Principală:**
-   - **Varianta 1 (Recomandată pt. ergonomie curată):** `Cosmos` este un **Widget de primă clasă pe Dashboard** (și în Companion-ul Foldable) + secțiune dedicată în **Desktop Sidebar** (`⌘8` pe macOS / `Ctrl+9` pe WinUI) + **Portal rapid din Weather Hub** (*„Weather & Sky”* switch în header), păstrând `FloatingGlassCapsule` mobilă aerisită la cele 5 tab-uri principale actuale.
-   - **Varianta 2:** Adăugarea directă a iconiței `sparkles` / `moon.stars.fill` în `FloatingGlassCapsule` ca tab primar.
-2. **Naming-ul Modulului în UI:**
-   - Preferi **`Cosmos`** (*Cosmos & Night Sky*), **`Orbit Sky`** (aliniat cu strategia *DayOne Orbit*), **`Observatory`** sau **`Sky`**?
-3. **Nivelul de Zoom Fotografic pentru Obiecte Deep-Sky (Galaxii & Nebuloase):**
-   - La zoom adânc pe o nebuloasă/galaxie (ex: *M31 Andromeda* sau *M42 Orion*), preferi **simboluri vectoriale luminoase & siluete procedurale cu glow Liquid Glass** (100% offline, ultra-curat vizual, `0 MB` extra) + o fotografie reală NASA/Hubble în cardul de detalii al obiectului, sau dorești și un mod opțional online de streaming HiPS (`Aladin Lite` / DSS tiles) pentru astrofotografi avansați?
-4. **Alerte & Notificări Pro-Active:**
-   - Vrei notificări locale configurabile (opt-in) pentru **3 evenimente majore**: *(a)* Trecere ISS foarte strălucitoare ($\text{mag} < -3.0$) pe cer senin seara, *(b)* Alertă rară de Auroră Boreală ($Kp \ge 6.5$), și *(c)* Seară cu scor astronomic excepțional ($\ge 90/100$) în weekend / eclipsă?
-5. **Ordinea Platformelor la Implementare:**
-   - Începem clasic cu **`DailyCore` + iOS & iPhone Duo + macOS** (Golden Standard), urmat imediat de **Android + Galaxy Z Fold 8 („RADAR” cu modul Tabletop Flex)** și **WinUI 3**, sau vrei să prioritizăm simultan mobilul + Z Fold 8 pentru testarea în teren cu senzorii AR și balamaua Flex?
+1. **Navigație & Puncte de Intrare:**
+   - **Soluție Agreată:** **Mod Hibrid**. Modulul `Cosmos` este integrat ca **Dashboard Widget** de primă clasă ([`CosmosDashboardCard`](file:///Users/mihai/Source/Daily/iOS/Daily/Views/Dashboard)), ca portal contextual în **Weather Hub** (comutator fluid *„Weather & Sky”* în antetul [`WeatherDetailView`](file:///Users/mihai/Source/Daily/iOS/Daily/Views/Weather/WeatherDetailView.swift)) și ca intrare dedicată în **Desktop Sidebar** (`⌘8` pe macOS / `Ctrl+9` pe WinUI 3).
+   - **Beneficiu:** Păstrează bara de navigație flotantă [`FloatingGlassCapsule`](file:///Users/mihai/Source/Daily/iOS/Daily/DesignSystem/FloatingGlassCapsule.swift) compactă și ergonomică la cele 5 tab-uri primare pe telefoane.
+2. **Denumire & Identitate Oficială:**
+   - **Nume Agreat:** **`Cosmos`** (ex: *Cosmos Hub*, *CosmosDashboardCard*, *CosmosWidget*, *CosmosService*).
+3. **Fidelitate Vizuală & Deep-Sky (DSO):**
+   - **Soluție Agreată:** **100% Nativ & Offline Procedural Liquid Glass**. Discuri planetare cu iluminare direcțională realistă (faze Venus/Mercur, inelele lui Saturn, cele 4 luni galileene ale lui Jupiter), forme vectoriale luminoase pentru nebuloase și galaxii cu strălucire EDR/HDR + **fotografie reală NASA/Hubble** integrată în cardul de detalii/inspector al obiectului. Zero dependență de streaming online HiPS.
+4. **Capabilități Senzoriale & Foldables (Galaxy Z Fold 8 „RADAR”):**
+   - **Soluție Agreată:** **Flagship complet în v1**. Includem urmărirea AR prin giroscop/busolă cu săgeată ghidare („Point to Sky”), filtrul roșu nocturn pentru protejarea rodopsinei oculare (**Red Night-Vision `#FF1824`**) și modul special **Tabletop Flex Mode pe Galaxy Z Fold 8** (`FoldingFeature.State.HALF_OPENED` — ecranul de sus acționează ca vizor fără butoane aliniat la unghiul balamalei, ecranul de jos ca o consolă tactilă stabilă fără vibrații).
+5. **Alerte & Notificări:**
+   - **Soluție Agreată:** **Alerte Pro-Active Opt-In (Notificări Locale de Sistem)**. Comutatoare dedicate în Settings pentru: *(a)* Treceri ISS foarte luminoase ($\text{mag} < -3.0$) vizibile seara, *(b)* Alerte de Auroră Boreală ($Kp \ge 6.5$) și *(c)* Nopți de weekend cu cer de cristal ($\text{Scor} \ge 85$).
+6. **Persistență & Sincronizare Cloud:**
+   - **Soluție Agreată:** **Hibrid Nativ & Supabase**. Calculele de efemeride și cache-ul API rămân 100% locale pe device; obiectele favorite salvate (*Bookmarks*) și însemnările din jurnalul de observație (*„Sky Log”*) se sincronizează prin Supabase pe toate dispozitivele utilizatorului.
+7. **Secvențiere & Verificare pe Platforme:**
+   - **Etapa 1:** `DailyCore` (Swift Package) + Script generare cataloage offline (`~1.85 MB`) + `Astronomy Engine` (C99/Swift) + API Clients (Open-Meteo, CelesTrak, NOAA).
+   - **Etapa 2:** iOS & macOS Golden Standard (Dashboard Widget, MenuBarExtra, 120Hz Metal Canvas Cosmos Hub, AR Gyro). Verificare pe SimulaPhone, iPhone fizic „Schmitz” și nativ Mac.
+   - **Etapa 3:** Android & Foldables (Kotlin Astronomy Engine, Compose Canvas, Glance Widget, Dual-Pane & Tabletop Flex Mode). Verificare pe Pixel 9 Pro și fizic pe Samsung Galaxy Z Fold 8 „RADAR”.
+   - **Etapa 4:** WinUI 3 (C# Astronomy Engine, Win2D Canvas 120fps, Taskbar Flyout, Syncfusion Calendar). Verificare pe Parallels Windows 11 ARM64 VM.

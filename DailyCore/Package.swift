@@ -18,9 +18,19 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "CAstronomy",
+            dependencies: [],
+            path: "Sources/CAstronomy",
+            publicHeadersPath: "include"
+        ),
+        .target(
             name: "DailyCore",
             dependencies: [
+                "CAstronomy",
                 .product(name: "Supabase", package: "supabase-swift")
+            ],
+            resources: [
+                .process("Resources")
             ]
         ),
         .testTarget(

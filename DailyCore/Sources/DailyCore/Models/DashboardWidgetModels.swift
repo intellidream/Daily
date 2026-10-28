@@ -53,6 +53,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
     case habits  = "habits"
     case finances = "finances"
     case tagdosNotes = "tagdos_notes"
+    case cosmos = "cosmos"
     
     public var title: String {
         switch self {
@@ -63,6 +64,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .habits:  return "Habits & Cravings"
         case .finances: return "Finances & Markets"
         case .tagdosNotes: return "Tagdos & Notes"
+        case .cosmos: return "Cosmos & Night Sky"
         }
     }
     
@@ -75,6 +77,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .habits:  return "drop.fill"
         case .finances: return "chart.line.uptrend.xyaxis"
         case .tagdosNotes: return "checklist"
+        case .cosmos: return "moon.stars.fill"
         }
     }
 }
