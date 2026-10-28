@@ -570,9 +570,47 @@ namespace Daily.Services.Finances
             var user = _supabaseClient.Auth.CurrentUser;
             if (user == null) return null;
 
-            return await _databaseService.Connection.Table<LocalSmartLedger>()
+            var local = await _databaseService.Connection.Table<LocalSmartLedger>()
                 .Where(l => l.UserId == user.Id)
                 .FirstOrDefaultAsync();
+
+            // Try pulling latest from Supabase cloud
+            try
+            {
+                if (Guid.TryParse(user.Id, out var userGuid))
+                {
+                    var remoteRes = await _supabaseClient.From<SmartLedger>()
+                        .Where(x => x.UserId == userGuid)
+                        .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                        .Limit(1)
+                        .Get();
+
+                    var remote = remoteRes.Models.FirstOrDefault();
+                    if (remote != null)
+                    {
+                        if (local == null || remote.UpdatedAt > local.UpdatedAt)
+                        {
+                            var localUpdated = new LocalSmartLedger
+                            {
+                                Id = remote.Id.ToString(),
+                                UserId = user.Id,
+                                LedgerText = remote.LedgerText,
+                                CreatedAt = remote.CreatedAt,
+                                UpdatedAt = remote.UpdatedAt,
+                                SyncedAt = DateTime.UtcNow
+                            };
+                            await _databaseService.Connection.InsertOrReplaceAsync(localUpdated);
+                            return localUpdated;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FinancesService] Remote smart_ledgers pull notice: {ex.Message}");
+            }
+
+            return local;
         }
 
         public async Task SaveSmartLedgerAsync(string ledgerText)
@@ -580,24 +618,45 @@ namespace Daily.Services.Finances
             var user = _supabaseClient.Auth.CurrentUser;
             if (user == null) return;
 
-            var existing = await GetSmartLedgerAsync();
-            if (existing == null)
+            var existing = await _databaseService.Connection.Table<LocalSmartLedger>()
+                .Where(l => l.UserId == user.Id)
+                .FirstOrDefaultAsync();
+
+            var now = DateTime.UtcNow;
+            string recordId = existing?.Id ?? Guid.NewGuid().ToString();
+
+            var localRecord = new LocalSmartLedger
             {
-                var newLedger = new LocalSmartLedger
+                Id = recordId,
+                UserId = user.Id,
+                LedgerText = ledgerText,
+                CreatedAt = existing?.CreatedAt ?? now,
+                UpdatedAt = now,
+                SyncedAt = null // Mark dirty for sync
+            };
+            await _databaseService.Connection.InsertOrReplaceAsync(localRecord);
+
+            // Immediate push to Supabase
+            try
+            {
+                if (Guid.TryParse(user.Id, out var userGuid) && Guid.TryParse(recordId, out var recordGuid))
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    UserId = user.Id,
-                    LedgerText = ledgerText,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                await _databaseService.Connection.InsertAsync(newLedger);
+                    var remote = new SmartLedger
+                    {
+                        Id = recordGuid,
+                        UserId = userGuid,
+                        LedgerText = ledgerText,
+                        CreatedAt = localRecord.CreatedAt,
+                        UpdatedAt = now
+                    };
+                    await _supabaseClient.From<SmartLedger>().Upsert(remote);
+                    localRecord.SyncedAt = DateTime.UtcNow;
+                    await _databaseService.Connection.UpdateAsync(localRecord);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                existing.LedgerText = ledgerText;
-                existing.UpdatedAt = DateTime.UtcNow;
-                await _databaseService.Connection.UpdateAsync(existing);
+                System.Diagnostics.Debug.WriteLine($"[FinancesService] Remote smart_ledgers push notice: {ex.Message}");
             }
         }
 

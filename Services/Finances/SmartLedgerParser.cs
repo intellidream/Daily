@@ -304,5 +304,377 @@ namespace Daily.Services.Finances
 
             return tags;
         }
+
+        // ==========================================
+        // COMPREHENSIVE AST PARSER & MUTATION ENGINE
+        // ==========================================
+
+        public static ParsedSmartLedger Parse(string text, decimal eurRate = 5.0m)
+        {
+            var sections = new List<SmartLedgerSection>();
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+            string currentSectionName = "Overview";
+            var currentItems = new List<SmartLedgerItem>();
+            bool currentSectionScaled = true;
+            decimal? currentSectionExplicitTotal = null;
+            decimal? currentSectionRawTotal = null;
+            bool hasEncounteredDeposit = false;
+
+            void FinishCurrentSection()
+            {
+                if (!currentItems.Any() && currentSectionExplicitTotal == null) return;
+
+                decimal itemsCalculatedSum = currentItems.Where(x => !x.IsPureNote).Sum(x => x.CalculatedAmount);
+                decimal itemsRawSum = currentItems.Where(x => !x.IsPureNote).Sum(x => x.RawAmount);
+
+                decimal finalCalculatedTotal = currentSectionExplicitTotal ?? itemsCalculatedSum;
+                decimal finalRawTotal = currentSectionRawTotal ?? itemsRawSum;
+
+                if (finalCalculatedTotal > 0)
+                {
+                    foreach (var it in currentItems)
+                    {
+                        if (!it.IsPureNote)
+                        {
+                            it.PercentageOfSection = it.CalculatedAmount / finalCalculatedTotal;
+                        }
+                    }
+                }
+
+                var sec = new SmartLedgerSection
+                {
+                    Name = currentSectionName,
+                    Items = new List<SmartLedgerItem>(currentItems),
+                    TotalCalculated = finalCalculatedTotal,
+                    TotalRaw = finalRawTotal,
+                    IsScaled = currentSectionScaled
+                };
+                sections.Add(sec);
+
+                currentItems.Clear();
+                currentSectionExplicitTotal = null;
+                currentSectionRawTotal = null;
+            }
+
+            for (int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+            {
+                string rawLine = lines[lineIndex];
+                string line = rawLine.Trim();
+
+                if (string.IsNullOrEmpty(line) || line == "---" || line == "- - -")
+                {
+                    continue;
+                }
+
+                if (line.StartsWith("**") && line.EndsWith("**") && line.Length > 4)
+                {
+                    FinishCurrentSection();
+                    string secName = line.Substring(2, line.Length - 4).Trim();
+                    currentSectionName = secName;
+
+                    if (string.Equals(secName, "Deposit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasEncounteredDeposit = true;
+                    }
+
+                    currentSectionScaled = !hasEncounteredDeposit;
+                    continue;
+                }
+
+                if (line.StartsWith("(") && line.EndsWith(")"))
+                {
+                    string inner = line.Substring(1, line.Length - 2).Trim();
+                    if (inner.StartsWith("Total =", StringComparison.OrdinalIgnoreCase) || inner.StartsWith("Total=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parts = inner.Split('=');
+                        if (parts.Length >= 2)
+                        {
+                            var parsedVal = ParseNumericDetailed(parts[1], currentSectionScaled, eurRate);
+                            currentSectionExplicitTotal = parsedVal.Calculated;
+                            currentSectionRawTotal = parsedVal.Raw;
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        var item = new SmartLedgerItem
+                        {
+                            SectionName = currentSectionName,
+                            LineIndex = lineIndex,
+                            RawLine = rawLine,
+                            Key = inner,
+                            RawAmount = 0,
+                            CalculatedAmount = 0,
+                            Currency = "Lei",
+                            IsScaled = currentSectionScaled,
+                            Notes = new List<string> { inner },
+                            IsPureNote = true
+                        };
+                        currentItems.Add(item);
+                        continue;
+                    }
+                }
+
+                if (line.Contains("="))
+                {
+                    int eqIdx = line.IndexOf("=");
+                    string keyPart = line.Substring(0, eqIdx).Trim();
+                    string valuePart = line.Substring(eqIdx + 1).Trim();
+
+                    if (string.Equals(keyPart, "Total", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parsedVal = ParseNumericDetailed(valuePart, currentSectionScaled, eurRate);
+                        currentSectionExplicitTotal = parsedVal.Calculated;
+                        currentSectionRawTotal = parsedVal.Raw;
+                        continue;
+                    }
+
+                    var notes = ExtractParentheses(line);
+                    var parsedNum = ParseNumericDetailed(valuePart, currentSectionScaled, eurRate);
+
+                    var item = new SmartLedgerItem
+                    {
+                        SectionName = currentSectionName,
+                        LineIndex = lineIndex,
+                        RawLine = rawLine,
+                        Key = keyPart,
+                        RawAmount = parsedNum.Raw,
+                        CalculatedAmount = parsedNum.Calculated,
+                        Currency = parsedNum.IsEUR ? "EUR" : "Lei",
+                        IsScaled = currentSectionScaled,
+                        Notes = notes,
+                        IsPureNote = false
+                    };
+                    currentItems.Add(item);
+                }
+                else
+                {
+                    var item = new SmartLedgerItem
+                    {
+                        SectionName = currentSectionName,
+                        LineIndex = lineIndex,
+                        RawLine = rawLine,
+                        Key = line,
+                        RawAmount = 0,
+                        CalculatedAmount = 0,
+                        Currency = "Lei",
+                        IsScaled = currentSectionScaled,
+                        Notes = new List<string> { line },
+                        IsPureNote = true
+                    };
+                    currentItems.Add(item);
+                }
+            }
+
+            FinishCurrentSection();
+
+            var incomingSec = sections.FirstOrDefault(x => string.Equals(x.Name, "Incoming", StringComparison.OrdinalIgnoreCase));
+            var outgoingSec = sections.FirstOrDefault(x => string.Equals(x.Name, "Outgoing", StringComparison.OrdinalIgnoreCase));
+            var balanceSec = sections.FirstOrDefault(x => string.Equals(x.Name, "Balance", StringComparison.OrdinalIgnoreCase));
+            var dentistSec = sections.FirstOrDefault(x => string.Equals(x.Name, "Dentist", StringComparison.OrdinalIgnoreCase));
+            var depositSec = sections.FirstOrDefault(x => string.Equals(x.Name, "Deposit", StringComparison.OrdinalIgnoreCase));
+
+            decimal inTotal = incomingSec?.TotalCalculated ?? 0m;
+            decimal outTotal = outgoingSec?.TotalCalculated ?? 0m;
+            decimal balTotal = balanceSec?.TotalCalculated ?? Math.Max(0, inTotal - outTotal);
+            decimal dentTotal = dentistSec?.TotalCalculated ?? 0m;
+            decimal depTotal = depositSec?.TotalCalculated ?? 0m;
+
+            decimal nw = depTotal + balTotal;
+            decimal nwEUR = eurRate > 0 ? nw / eurRate : 0m;
+
+            return new ParsedSmartLedger
+            {
+                Sections = sections,
+                IncomingTotal = inTotal,
+                OutgoingTotal = outTotal,
+                BalanceTotal = balTotal,
+                DentistTotal = dentTotal,
+                DepositTotal = depTotal,
+                NetWorth = nw,
+                NetWorthEUR = nwEUR,
+                RawText = text
+            };
+        }
+
+        private static (decimal Raw, decimal Calculated, bool IsEUR) ParseNumericDetailed(string valStr, bool isScaled, decimal eurRate = 5.0m)
+        {
+            string clean = Regex.Replace(valStr, @"\(.*?\)", "").Trim();
+            int commentIdx = clean.IndexOf("//");
+            if (commentIdx >= 0)
+            {
+                clean = clean.Substring(0, commentIdx).Trim();
+            }
+
+            bool isEUR = clean.Contains("€") || clean.IndexOf("EUR", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            var unwantedChars = new[] { 'L', '€', '$', '~', '%', ' ' };
+            foreach (var ch in unwantedChars)
+            {
+                clean = clean.Replace(ch.ToString(), "");
+            }
+            clean = Regex.Replace(clean, "EUR", "", RegexOptions.IgnoreCase).Trim();
+
+            if (string.IsNullOrEmpty(clean)) return (0m, 0m, isEUR);
+
+            string normalized = clean;
+            if (normalized.Contains(","))
+            {
+                normalized = normalized.Replace(".", "").Replace(",", ".");
+            }
+            else if (normalized.Contains("."))
+            {
+                var parts = normalized.Split('.');
+                if (parts.Length == 2 && parts[1].Length == 3)
+                {
+                    normalized = normalized.Replace(".", "");
+                }
+            }
+
+            if (decimal.TryParse(normalized, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal num))
+            {
+                decimal baseCalc = isScaled ? num * 100m : num;
+                decimal calc = isEUR ? baseCalc * eurRate : baseCalc;
+                return (num, calc, isEUR);
+            }
+
+            return (0m, 0m, isEUR);
+        }
+
+        private static List<string> ExtractParentheses(string line)
+        {
+            var notes = new List<string>();
+            var matches = Regex.Matches(line, @"\((.*?)\)");
+            foreach (Match m in matches)
+            {
+                if (m.Groups.Count > 1)
+                {
+                    string content = m.Groups[1].Value.Trim();
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        notes.Add(content);
+                    }
+                }
+            }
+            return notes;
+        }
+
+        public static string AdjustItemAmount(string text, int lineIndex, decimal deltaRaw)
+        {
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            if (lineIndex < 0 || lineIndex >= lines.Length) return text;
+
+            string line = lines[lineIndex];
+            int eqIdx = line.IndexOf("=");
+            if (eqIdx < 0) return text;
+
+            string keyPart = line.Substring(0, eqIdx + 1);
+            string remainder = line.Substring(eqIdx + 1).Trim();
+
+            int commentIdx = remainder.IndexOf("//");
+            string mathPart = commentIdx >= 0 ? remainder.Substring(0, commentIdx) : remainder;
+            string commentPart = commentIdx >= 0 ? remainder.Substring(commentIdx) : "";
+
+            var match = Regex.Match(mathPart, @"^\s*([\-\d\.\,]+)(.*)");
+            if (match.Success)
+            {
+                string numStr = match.Groups[1].Value.Replace(',', '.');
+                string suffix = match.Groups.Count > 2 ? match.Groups[2].Value : "";
+
+                if (decimal.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal currentVal))
+                {
+                    decimal newVal = currentVal + deltaRaw;
+                    string formattedNum = newVal % 1 == 0 ? newVal.ToString("F0") : newVal.ToString("G");
+                    lines[lineIndex] = $"{keyPart} {formattedNum}{suffix} {commentPart}".TrimEnd();
+                }
+            }
+
+            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+        }
+
+        public static string SetItemAmount(string text, int lineIndex, decimal newRaw)
+        {
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            if (lineIndex < 0 || lineIndex >= lines.Length) return text;
+
+            string line = lines[lineIndex];
+            int eqIdx = line.IndexOf("=");
+            if (eqIdx < 0) return text;
+
+            string keyPart = line.Substring(0, eqIdx + 1);
+            string remainder = line.Substring(eqIdx + 1).Trim();
+
+            int commentIdx = remainder.IndexOf("//");
+            string mathPart = commentIdx >= 0 ? remainder.Substring(0, commentIdx) : remainder;
+            string commentPart = commentIdx >= 0 ? remainder.Substring(commentIdx) : "";
+
+            var match = Regex.Match(mathPart, @"^\s*([\-\d\.\,]+)(.*)");
+            if (match.Success)
+            {
+                string suffix = match.Groups.Count > 2 ? match.Groups[2].Value : "";
+                string formattedNum = newRaw % 1 == 0 ? newRaw.ToString("F0") : newRaw.ToString("G");
+                lines[lineIndex] = $"{keyPart} {formattedNum}{suffix} {commentPart}".TrimEnd();
+            }
+
+            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+        }
+
+        public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string? note = null)
+        {
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+            int insertIndex = -1;
+            bool insideTargetSection = false;
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.StartsWith("**") && line.EndsWith("**"))
+                {
+                    string secName = line.Substring(2, line.Length - 4).Trim();
+                    if (string.Equals(secName, sectionName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        insideTargetSection = true;
+                        continue;
+                    }
+                    else if (insideTargetSection)
+                    {
+                        insertIndex = i;
+                        break;
+                    }
+                }
+
+                if (insideTargetSection && line.StartsWith("Total =", StringComparison.OrdinalIgnoreCase))
+                {
+                    insertIndex = i;
+                    break;
+                }
+            }
+
+            if (insertIndex < 0)
+            {
+                insertIndex = lines.Count;
+            }
+
+            string formattedNum = rawAmount % 1 == 0 ? rawAmount.ToString("F0") : rawAmount.ToString("G");
+            string newLine = string.IsNullOrWhiteSpace(note) 
+                ? $"{key} = {formattedNum}" 
+                : $"{key} = {formattedNum} ({note})";
+
+            lines.Insert(insertIndex, newLine);
+            lines.Insert(insertIndex + 1, "");
+
+            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+        }
+
+        public static string DeleteItem(string text, int lineIndex)
+        {
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+            if (lineIndex >= 0 && lineIndex < lines.Count)
+            {
+                lines.RemoveAt(lineIndex);
+            }
+            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+        }
     }
 }

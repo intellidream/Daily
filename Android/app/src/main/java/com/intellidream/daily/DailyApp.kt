@@ -63,6 +63,25 @@ class DailyApp : Application() {
         smartLedgerRepository = com.intellidream.daily.database.SmartLedgerRepository(dailyDatabase.smartLedgerDao())
         financeDataRepository = com.intellidream.daily.database.FinanceDataRepository()
         financeRemoteService = com.intellidream.daily.network.FinanceRemoteService()
+        smartLedgerRepository.syncHandler = object : com.intellidream.daily.database.SmartLedgerSyncHandler {
+            override suspend fun fetchRemoteLedger(userId: String): Pair<String, Long>? {
+                val record = financeRemoteService.fetchLedger(userId) ?: return null
+                val epoch = try {
+                    val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }
+                    val cleanIso = (record.updated_at ?: "").replace("Z", "").substringBefore("+")
+                    isoFormat.parse(cleanIso)?.time ?: 0L
+                } catch (_: Exception) {
+                    0L
+                }
+                return Pair(record.ledger_text, epoch)
+            }
+
+            override suspend fun pushLedger(userId: String, text: String): Boolean {
+                return financeRemoteService.pushLedger(text, userId)
+            }
+        }
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
         val newsHandler = object : com.intellidream.daily.database.NewsSyncHandler {
@@ -133,6 +152,7 @@ class DailyApp : Application() {
                 healthRepository.currentUserId = uid
                 healthRepository.syncUnsyncedTelemetry()
                 healthRepository.syncUnsyncedVitals()
+                smartLedgerRepository.setUserId(uid)
             }
             weatherRepository.refreshWeather(
                 force = false,

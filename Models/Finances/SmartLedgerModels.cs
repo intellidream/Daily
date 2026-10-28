@@ -167,4 +167,92 @@ namespace Daily.Models.Finances
         public DateTime? SyncedAt { get; set; }
         public bool IsDeleted { get; set; }
     }
+
+    // ==========================================
+    // SMART LEDGER AST / PARSED DOMAIN MODELS
+    // ==========================================
+
+    public class SmartLedgerItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string SectionName { get; set; } = string.Empty;
+        public int LineIndex { get; set; } = -1;
+        public string RawLine { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public decimal RawAmount { get; set; }
+        public decimal CalculatedAmount { get; set; }
+        public string Currency { get; set; } = "Lei";
+        public bool IsScaled { get; set; } = true;
+        public List<string> Notes { get; set; } = new();
+        public bool IsPureNote { get; set; }
+        public decimal PercentageOfSection { get; set; }
+
+        public string DisplayName
+        {
+            get
+            {
+                if (IsPureNote) return Key;
+                var clean = System.Text.RegularExpressions.Regex.Replace(Key, @"\(.*?\)", "").Trim();
+                clean = clean.TrimEnd('/');
+                return string.IsNullOrWhiteSpace(clean) ? Key : clean;
+            }
+        }
+
+        public string FormattedCalculatedAmount
+        {
+            get
+            {
+                if (Currency == "EUR")
+                {
+                    return RawAmount % 1 == 0 
+                        ? $"{RawAmount:N0} €" 
+                        : $"{RawAmount:N2} €";
+                }
+                return CalculatedAmount % 1 == 0 
+                    ? $"{CalculatedAmount:N0} Lei" 
+                    : $"{CalculatedAmount:N2} Lei";
+            }
+        }
+
+        public string FormattedRawAmount
+        {
+            get
+            {
+                return RawAmount % 1 == 0
+                    ? $"{RawAmount:F0}"
+                    : $"{RawAmount:G}";
+            }
+        }
+    }
+
+    public class SmartLedgerSection
+    {
+        public string Name { get; set; } = string.Empty;
+        public List<SmartLedgerItem> Items { get; set; } = new();
+        public decimal TotalCalculated { get; set; }
+        public decimal TotalRaw { get; set; }
+        public bool IsScaled { get; set; } = true;
+
+        public string FormattedTotal => TotalCalculated % 1 == 0 
+            ? $"{TotalCalculated:N0} Lei" 
+            : $"{TotalCalculated:N2} Lei";
+    }
+
+    public class ParsedSmartLedger
+    {
+        public List<SmartLedgerSection> Sections { get; set; } = new();
+        public decimal IncomingTotal { get; set; }
+        public decimal OutgoingTotal { get; set; }
+        public decimal BalanceTotal { get; set; }
+        public decimal DentistTotal { get; set; }
+        public decimal DepositTotal { get; set; }
+        public decimal NetWorth { get; set; }
+        public decimal NetWorthEUR { get; set; }
+        public string RawText { get; set; } = string.Empty;
+
+        public string FormattedNetWorth => $"{NetWorth:N0} Lei";
+        public string FormattedIncoming => $"{IncomingTotal:N0} Lei";
+        public string FormattedOutgoing => $"{OutgoingTotal:N0} Lei";
+        public string FormattedBalance => $"{BalanceTotal:N0} Lei";
+    }
 }

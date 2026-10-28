@@ -42,27 +42,51 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     public ObservableCollection<StockQuote> WatchlistStocks { get; } = new();
     private List<StockQuote> _allWatchlistStocks = new();
 
-    // Money
-    private string _netWorthDisplay = "$0";
-    public string NetWorthDisplay
+    // Money / Smart Ledger
+    private string _formattedNetWorth = "0 Lei";
+    public string FormattedNetWorth
     {
-        get => _netWorthDisplay;
-        set { _netWorthDisplay = value; OnPropertyChanged(); }
+        get => _formattedNetWorth;
+        set { _formattedNetWorth = value; OnPropertyChanged(); }
     }
 
-    private string _cashDisplay = "$0";
-    public string CashDisplay
+    private string _formattedNetWorthEUR = "~0 €";
+    public string FormattedNetWorthEUR
     {
-        get => _cashDisplay;
-        set { _cashDisplay = value; OnPropertyChanged(); }
+        get => _formattedNetWorthEUR;
+        set { _formattedNetWorthEUR = value; OnPropertyChanged(); }
     }
 
-    private string _investmentsDisplay = "$0";
-    public string InvestmentsDisplay
+    private string _formattedDeposits = "0 Lei";
+    public string FormattedDeposits
     {
-        get => _investmentsDisplay;
-        set { _investmentsDisplay = value; OnPropertyChanged(); }
+        get => _formattedDeposits;
+        set { _formattedDeposits = value; OnPropertyChanged(); }
     }
+
+    private string _formattedBalance = "0 Lei";
+    public string FormattedBalance
+    {
+        get => _formattedBalance;
+        set { _formattedBalance = value; OnPropertyChanged(); }
+    }
+
+    private string _formattedIncoming = "0 Lei";
+    public string FormattedIncoming
+    {
+        get => _formattedIncoming;
+        set { _formattedIncoming = value; OnPropertyChanged(); }
+    }
+
+    private string _formattedDentist = "0 Lei";
+    public string FormattedDentist
+    {
+        get => _formattedDentist;
+        set { _formattedDentist = value; OnPropertyChanged(); }
+    }
+
+    public ObservableCollection<SmartLedgerSection> LedgerSections { get; } = new();
+    public ParsedSmartLedger? CurrentParsedLedger { get; private set; }
 
     public ObservableCollection<LocalAccount> Accounts { get; } = new();
     
@@ -70,22 +94,8 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     public ObservableCollection<object> Holdings { get; } = new();
 
     public ObservableCollection<Daily.Models.Finances.LocalLedgerTransaction> LedgerTransactions { get; } = new();
-    
-    private ObservableCollection<AccountBalance> _accountBalances = new();
-    public ObservableCollection<AccountBalance> AccountBalances 
-    { 
-        get => _accountBalances; 
-        set { _accountBalances = value; OnPropertyChanged(); } 
-    }
 
-    private ObservableCollection<AccountBalance> _assetCategories = new();
-    public ObservableCollection<AccountBalance> AssetCategories
-    {
-        get => _assetCategories;
-        set { _assetCategories = value; OnPropertyChanged(); }
-    }
-
-    // Smart Ledger
+    // Smart Ledger Text
     private string _smartLedgerText = string.Empty;
     public string SmartLedgerText
     {
@@ -97,14 +107,14 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
                 _smartLedgerText = value; 
                 OnPropertyChanged(); 
                 
-                // Auto-save and recalculate headers
+                // Parse AST and update sections & headers
+                UpdateParsedLedgerUI();
+
+                // Save to SQLite and Supabase
                 _ = SaveSmartLedgerAsync();
-                UpdateSmartLedgerHeaders();
             }
         }
     }
-
-    private TextBlock? _lastAiBubbleText;
 
     public FinancesDetailPage()
     {
@@ -222,7 +232,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             {
                 _smartLedgerText = ledger.LedgerText;
                 OnPropertyChanged(nameof(SmartLedgerText));
-                UpdateSmartLedgerHeaders();
+                UpdateParsedLedgerUI();
             }
             
             NetWorthDisplay = nw.ToString("C0");
@@ -388,199 +398,203 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         await _financesService.SaveSmartLedgerAsync(_smartLedgerText);
     }
 
-    private void UpdateSmartLedgerHeaders()
+    private void UpdateParsedLedgerUI()
     {
-        var headers = Daily.Services.Finances.SmartLedgerParser.ExtractHeaders(_smartLedgerText);
-        NetWorthDisplay = headers.NetWorth;
-        CashDisplay = headers.Cash;
-        InvestmentsDisplay = headers.Investments;
-        
-        var values = Daily.Services.Finances.SmartLedgerParser.ExtractHeaderValues(_smartLedgerText);
-        AssetCategories = new ObservableCollection<AccountBalance>
+        if (string.IsNullOrWhiteSpace(_smartLedgerText))
         {
-            new AccountBalance { AccountName = "Cash", Balance = values.Cash },
-            new AccountBalance { AccountName = "Investments", Balance = values.Investments }
-        };
-        
-        var balances = Daily.Services.Finances.SmartLedgerParser.ExtractBalances(_smartLedgerText);
-        AccountBalances = new ObservableCollection<AccountBalance>(balances);
-    }
+            LedgerSections.Clear();
+            FormattedNetWorth = "0 Lei";
+            FormattedNetWorthEUR = "~0 €";
+            FormattedDeposits = "0 Lei";
+            FormattedBalance = "0 Lei";
+            FormattedIncoming = "0 Lei";
+            FormattedDentist = "0 Lei";
+            return;
+        }
 
-    private void LedgerChatInput_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
-    {
-        if (e.Key == Windows.System.VirtualKey.Enter)
+        var parsed = Daily.Services.Finances.SmartLedgerParser.Parse(_smartLedgerText);
+        CurrentParsedLedger = parsed;
+
+        FormattedNetWorth = parsed.FormattedNetWorth;
+        FormattedNetWorthEUR = $"~{parsed.NetWorthEUR:N0} €";
+        FormattedDeposits = $"{parsed.DepositTotal:N0} Lei";
+        FormattedBalance = $"{parsed.BalanceTotal:N0} Lei";
+        FormattedIncoming = $"{parsed.IncomingTotal:N0} Lei";
+        FormattedDentist = $"{parsed.DentistTotal:N0} Lei";
+
+        LedgerSections.Clear();
+        foreach (var s in parsed.Sections)
         {
-            SendLedgerChatBtn_Click(sender, null);
-            e.Handled = true;
+            LedgerSections.Add(s);
         }
     }
 
-    private async void SendLedgerChatBtn_Click(object sender, RoutedEventArgs e)
+    private async void EditRawDsl_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(LedgerChatInput.Text)) return;
-        
-        string userText = LedgerChatInput.Text;
-        LedgerChatInput.Text = string.Empty;
-        
-        AddChatBubble(userText, true);
-        AddChatBubble("Processing...", false);
-        
-        try 
+        var textBox = new TextBox
         {
-            var intelligenceService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.ISmartIntelligenceService>();
-            
-            // System prompt instructing to output JSON command
-            string systemPrompt = @"You are a financial AI parsing a Ledger. User dictates an expense, income, or scheduled transfer.
-Output ONLY valid JSON. No conversational text.
-For immediate: {""action"":""transfer"",""source"":""Card"",""target"":""Mega"",""amount"":5}
-For recurring: {""action"":""schedule"",""source"":""Checking"",""target"":""Savings"",""amount"":50,""frequency"":""monthly""}
-Frequency options: daily, weekly, monthly. Target MUST be the exact alias mentioned.";
+            Text = SmartLedgerText,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            MinHeight = 400,
+            MinWidth = 550,
+            ScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
 
-            if (_lastAiBubbleText != null) _lastAiBubbleText.Text = "Processing...";
+        var dialog = new ContentDialog
+        {
+            Title = "Edit Smart Ledger DSL",
+            PrimaryButtonText = "Save & Recalculate",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = textBox,
+            XamlRoot = this.XamlRoot
+        };
 
-            var stream = intelligenceService.GenerateResponseStreamAsync(systemPrompt, userText);
-            
-            var sb = new System.Text.StringBuilder();
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            SmartLedgerText = textBox.Text;
+        }
+    }
 
-            await foreach (var token in stream)
+    private async void RefreshLedger_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            IsMoneyLoading = true;
+            var ledger = await _financesService.GetSmartLedgerAsync();
+            if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
             {
-                sb.Append(token);
-            }
-
-            string aiResponse = sb.ToString();
-            string jsonResponse = aiResponse;
-            
-            if (string.IsNullOrWhiteSpace(jsonResponse))
-            {
-                // Fallback extraction if stream logic missed it
-                var match = System.Text.RegularExpressions.Regex.Match(aiResponse, @"\{[^{}]*\}", System.Text.RegularExpressions.RegexOptions.Singleline);
-                if (match.Success)
-                {
-                    jsonResponse = match.Value;
-                }
-            }
-
-            if (_lastAiBubbleText != null) _lastAiBubbleText.Text = "Recorded successfully.";
-
-            // Clean up the json string extracted from stream
-            var finalMatch = System.Text.RegularExpressions.Regex.Match(jsonResponse, @"\{[^{}]*\}", System.Text.RegularExpressions.RegexOptions.Singleline);
-            if (finalMatch.Success)
-            {
-                jsonResponse = finalMatch.Value;
-            }
-            else
-            {
-                jsonResponse = string.Empty;
-            }
-
-            if (string.IsNullOrWhiteSpace(jsonResponse))
-            {
-                throw new Exception("The AI response did not contain a valid JSON command block.");
-            }
-  
-            // Try parse JSON
-            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var command = System.Text.Json.JsonSerializer.Deserialize<Daily.Services.Finances.SmartLedgerParser.LedgerCommand>(jsonResponse, options);
-            
-            if (command != null && command.action != null)
-            {
-                if (command.action.Equals("schedule", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (_financesService != null)
-                    {
-                        var recurring = new Daily.Models.Finances.LocalRecurringTransaction
-                        {
-                            Id = Guid.NewGuid().ToString(),
-                            Source = command.source ?? "",
-                            Target = command.target ?? "",
-                            Amount = command.amount,
-                            ActionType = "transfer",
-                            Frequency = command.frequency ?? "monthly",
-                            NextRunAt = DateTime.UtcNow
-                        };
-                        await _financesService.SaveRecurringTransactionAsync(recurring);
-                        
-                        // Immediately process it to catch the first run
-                        await _financesService.ProcessRecurringTransactionsAsync();
-                        
-                        // Reload ledger and transactions
-                        SmartLedgerText = (await _financesService.GetSmartLedgerAsync())?.LedgerText ?? SmartLedgerText;
-                        
-                        var updatedTransactions = await _financesService.GetLedgerTransactionsAsync();
-                        LedgerTransactions.Clear();
-                        foreach(var t in updatedTransactions.Take(50)) LedgerTransactions.Add(t);
-                    }
-                }
-                else
-                {
-                    var newText = Daily.Services.Finances.SmartLedgerParser.ExecuteCommand(SmartLedgerText, command);
-                    SmartLedgerText = newText; // Triggers setter, which saves and recalculates
-
-                    // Record the transaction
-                    if (_financesService != null)
-                    {
-                        var transaction = new Daily.Models.Finances.LocalLedgerTransaction
-                        {
-                            Id = Guid.NewGuid().ToString(),
-                            Source = command.source ?? "",
-                            Target = command.target ?? "",
-                            Amount = command.amount,
-                            ActionType = command.action ?? ""
-                        };
-                        await _financesService.SaveLedgerTransactionAsync(transaction);
-                        LedgerTransactions.Insert(0, transaction);
-                    }
-                }
+                _smartLedgerText = ledger.LedgerText;
+                OnPropertyChanged(nameof(SmartLedgerText));
+                UpdateParsedLedgerUI();
             }
         }
         catch (Exception ex)
         {
-            if (_lastAiBubbleText != null) _lastAiBubbleText.Text += $"\n\nFailed to process command. Error: {ex.Message}";
-            System.Diagnostics.Debug.WriteLine($"Smart Ledger AI error: {ex}");
-            Daily_WinUI.Services.LlmDebugLogger.LastError = ex.ToString();
+            System.Diagnostics.Debug.WriteLine($"Error refreshing ledger: {ex.Message}");
+        }
+        finally
+        {
+            IsMoneyLoading = false;
         }
     }
 
-    private void AddChatBubble(string text, bool isUser)
+    private void ItemMinus_Click(object sender, RoutedEventArgs e)
     {
-        var themeKey = App.Current.RequestedTheme == ApplicationTheme.Light ? "Light" : "Dark";
-        var border = new Microsoft.UI.Xaml.Controls.Border
+        if (sender is Button btn && btn.Tag is SmartLedgerItem item)
         {
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 8, 12, 8),
-            Margin = isUser ? new Thickness(32, 0, 0, 0) : new Thickness(0, 0, 32, 0),
-            HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left
+            decimal delta = item.IsScaled ? -1m : -100m;
+            var newText = Daily.Services.Finances.SmartLedgerParser.AdjustItemAmount(SmartLedgerText, item, delta);
+            SmartLedgerText = newText;
+        }
+    }
+
+    private void ItemPlus_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is SmartLedgerItem item)
+        {
+            decimal delta = item.IsScaled ? 1m : 100m;
+            var newText = Daily.Services.Finances.SmartLedgerParser.AdjustItemAmount(SmartLedgerText, item, delta);
+            SmartLedgerText = newText;
+        }
+    }
+
+    private async void ItemQuickAdjust_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not SmartLedgerItem item) return;
+
+        var stack = new StackPanel { Spacing = 16, MinWidth = 320 };
+        stack.Children.Add(new TextBlock 
+        { 
+            Text = $"Current: {item.DisplayName} = {item.RawAmount} ({item.FormattedCalculatedAmount})", 
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold 
+        });
+
+        var numberBox = new TextBox
+        {
+            Text = item.RawAmount.ToString(),
+            PlaceholderText = "New raw amount..."
+        };
+        stack.Children.Add(numberBox);
+
+        var quickButtonsPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+        var deltas = item.IsScaled ? new decimal[] { -5, -1, 1, 5 } : new decimal[] { -500, -100, 100, 500 };
+        foreach (var d in deltas)
+        {
+            var deltaBtn = new Button 
+            { 
+                Content = d > 0 ? $"+{d}" : $"{d}", 
+                Padding = new Thickness(10, 4, 10, 4) 
+            };
+            deltaBtn.Click += (s, args) =>
+            {
+                if (decimal.TryParse(numberBox.Text, out var currentVal))
+                {
+                    numberBox.Text = Math.Max(0, currentVal + d).ToString();
+                }
+            };
+            quickButtonsPanel.Children.Add(deltaBtn);
+        }
+        stack.Children.Add(quickButtonsPanel);
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Quick Adjust · {item.DisplayName}",
+            PrimaryButtonText = "Set Amount",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = stack,
+            XamlRoot = this.XamlRoot
         };
 
-        if (isUser)
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            border.Background = themeKey == "Light"
-                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 0, 120, 215))
-                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x44, 0, 120, 215));
+            if (decimal.TryParse(numberBox.Text, out var newAmt))
+            {
+                var newText = Daily.Services.Finances.SmartLedgerParser.SetItemAmount(SmartLedgerText, item, newAmt);
+                SmartLedgerText = newText;
+            }
         }
-        else
-        {
-            border.Background = themeKey == "Light"
-                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x0F, 0, 0, 0))
-                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x15, 255, 255, 255));
-        }
+    }
 
-        var textBlock = new TextBlock
+    private async void AddSectionItem_Click(object sender, RoutedEventArgs e)
+    {
+        string sectionName = (sender as Button)?.Tag as string ?? "Outgoing";
+
+        var stack = new StackPanel { Spacing = 12, MinWidth = 320 };
+        stack.Children.Add(new TextBlock { Text = $"Add item to section: {sectionName}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+
+        var nameBox = new TextBox { PlaceholderText = "Item name (e.g. Netflix, Sala, Bonus)" };
+        var amountBox = new TextBox { PlaceholderText = "Amount (e.g. 50 or 100)" };
+        var scaledCheck = new CheckBox { Content = "Scaled item (e.g. daily/multiplier like Tigari)", IsChecked = false };
+
+        stack.Children.Add(nameBox);
+        stack.Children.Add(amountBox);
+        stack.Children.Add(scaledCheck);
+
+        var dialog = new ContentDialog
         {
-            Text = text,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 14,
-            Opacity = 0.8
+            Title = "Add Ledger Item",
+            PrimaryButtonText = "Add Item",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = stack,
+            XamlRoot = this.XamlRoot
         };
-        border.Child = textBlock;
-        SmartLedgerChatPanel.Children.Add(border);
 
-        if (!isUser)
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(nameBox.Text))
         {
-            _lastAiBubbleText = textBlock;
+            decimal.TryParse(amountBox.Text, out var amount);
+            var newText = Daily.Services.Finances.SmartLedgerParser.AddItem(
+                SmartLedgerText, 
+                sectionName, 
+                nameBox.Text.Trim(), 
+                amount, 
+                "Lei", 
+                scaledCheck.IsChecked == true);
+            SmartLedgerText = newText;
         }
-
-        SmartLedgerChatScrollViewer.UpdateLayout();
-        SmartLedgerChatScrollViewer.ChangeView(null, SmartLedgerChatScrollViewer.ScrollableHeight, null);
     }
 }

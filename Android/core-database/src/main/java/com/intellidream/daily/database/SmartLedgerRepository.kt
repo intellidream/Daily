@@ -7,14 +7,21 @@ import com.intellidream.daily.model.ParsedSmartLedger
 import com.intellidream.daily.model.SmartLedgerParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+interface SmartLedgerSyncHandler {
+    suspend fun fetchRemoteLedger(userId: String): Pair<String, Long>? // (ledger_text, updated_at_epoch)
+    suspend fun pushLedger(userId: String, text: String): Boolean
+}
+
 /**
- * Manages local Room persistence, reactive publishing, and live re-calculation
- * of the user's Smart Ledger text document.
+ * Manages local Room persistence, reactive publishing, live re-calculation,
+ * and Supabase cloud synchronization of the user's Smart Ledger text document.
  */
 class SmartLedgerRepository(
     private val smartLedgerDao: SmartLedgerDao,
@@ -25,6 +32,10 @@ class SmartLedgerRepository(
 
     private val _parsedLedger = MutableStateFlow(SmartLedgerParser.parse(DEFAULT_LEDGER_TEXT))
     val parsedLedger: StateFlow<ParsedSmartLedger> = _parsedLedger.asStateFlow()
+
+    var syncHandler: SmartLedgerSyncHandler? = null
+    private var activeUserId: String? = null
+    private var pushJob: Job? = null
 
     init {
         scope.launch {
@@ -49,21 +60,76 @@ class SmartLedgerRepository(
         }
     }
 
-    fun saveLedgerText(newText: String) {
+    fun setUserId(userId: String?) {
+        activeUserId = userId
+        if (userId != null) {
+            scope.launch {
+                syncWithCloud()
+            }
+        }
+    }
+
+    suspend fun syncWithCloud() {
+        val uid = activeUserId ?: return
+        val handler = syncHandler ?: return
+        try {
+            val remote = handler.fetchRemoteLedger(uid)
+            val local = smartLedgerDao.getLedgerSync("primary_ledger")
+            val localUpdated = local?.updatedAt ?: 0L
+            if (remote != null) {
+                val (remoteText, remoteUpdated) = remote
+                if (remoteUpdated > localUpdated) {
+                    _rawText.value = remoteText
+                    _parsedLedger.value = SmartLedgerParser.parse(remoteText)
+                    smartLedgerDao.upsert(
+                        SmartLedgerEntity(
+                            id = "primary_ledger",
+                            rawText = remoteText,
+                            updatedAt = remoteUpdated,
+                            syncedAt = System.currentTimeMillis()
+                        )
+                    )
+                } else if (localUpdated > remoteUpdated && local?.syncedAt == null) {
+                    if (handler.pushLedger(uid, _rawText.value)) {
+                        smartLedgerDao.markSynced("primary_ledger")
+                    }
+                }
+            } else {
+                if (handler.pushLedger(uid, _rawText.value)) {
+                    smartLedgerDao.markSynced("primary_ledger")
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun saveLedgerText(newText: String, triggerCloudPush: Boolean = true) {
         val trimmed = newText.trim()
         val textToUse = if (trimmed.isEmpty()) DEFAULT_LEDGER_TEXT else newText
         _rawText.value = textToUse
         _parsedLedger.value = SmartLedgerParser.parse(textToUse)
 
+        val now = System.currentTimeMillis()
         scope.launch {
             smartLedgerDao.upsert(
                 SmartLedgerEntity(
                     id = "primary_ledger",
                     rawText = textToUse,
-                    updatedAt = System.currentTimeMillis(),
+                    updatedAt = now,
                     syncedAt = null
                 )
             )
+        }
+
+        if (triggerCloudPush && activeUserId != null) {
+            pushJob?.cancel()
+            pushJob = scope.launch {
+                delay(500L) // 500ms debounce
+                val uid = activeUserId ?: return@launch
+                val handler = syncHandler ?: return@launch
+                if (handler.pushLedger(uid, textToUse)) {
+                    smartLedgerDao.markSynced("primary_ledger")
+                }
+            }
         }
     }
 

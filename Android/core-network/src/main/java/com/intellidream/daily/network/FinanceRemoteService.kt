@@ -22,10 +22,11 @@ import java.net.URLEncoder
 
 @Serializable
 data class RemoteLedgerRecord(
-    val id: String = "primary_ledger",
+    val id: String? = null,
     val user_id: String? = null,
-    val raw_text: String,
-    val updated_at: Long = System.currentTimeMillis()
+    val ledger_text: String,
+    val created_at: String? = null,
+    val updated_at: String? = null
 )
 
 class FinanceRemoteService(
@@ -87,31 +88,38 @@ class FinanceRemoteService(
     }
 
     suspend fun pushLedger(rawText: String, userId: String? = null): Boolean = withContext(Dispatchers.IO) {
+        if (userId == null) return@withContext false
         try {
-            clientManager.client.postgrest["smart_ledgers"].upsert(
-                RemoteLedgerRecord(
-                    id = "primary_ledger",
-                    user_id = userId,
-                    raw_text = rawText,
-                    updated_at = System.currentTimeMillis()
-                )
+            val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+            val existing = fetchLedger(userId)
+            val payload = RemoteLedgerRecord(
+                id = existing?.id,
+                user_id = userId,
+                ledger_text = rawText,
+                updated_at = isoFormat.format(java.util.Date())
             )
+            clientManager.client.postgrest["smart_ledgers"].upsert(payload)
             true
         } catch (_: Exception) {
             false
         }
     }
 
-    suspend fun fetchLedger(): String? = withContext(Dispatchers.IO) {
+    suspend fun fetchLedger(userId: String? = null): RemoteLedgerRecord? = withContext(Dispatchers.IO) {
+        if (userId == null) return@withContext null
         try {
-            val record = clientManager.client.postgrest["smart_ledgers"]
+            val list = clientManager.client.postgrest["smart_ledgers"]
                 .select {
                     filter {
-                        eq("id", "primary_ledger")
+                        eq("user_id", userId)
                     }
+                    order("updated_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    limit(1)
                 }
-                .decodeSingleOrNull<RemoteLedgerRecord>()
-            record?.raw_text
+                .decodeList<RemoteLedgerRecord>()
+            list.firstOrNull()
         } catch (_: Exception) {
             null
         }
