@@ -1,0 +1,112 @@
+[
+  {
+    "constellation" : "AND",
+    "decDegrees" : 41.27,
+    "descRo" : "Cea mai apropiată galaxie spirală gigantă de Calea Lactee, vizibilă cu ochiul liber ca un nor eliptic diafan.",
+    "id" : "M31",
+    "name" : "Andromeda Galaxy",
+    "optics" : "Ochi liber \/ Binoclu",
+    "raHours" : 0.71,
+    "type" : "Galaxy",
+    "visualMag" : 3.4
+  },
+  {
+    "constellation" : "ORI",
+    "decDegrees" : -5.39,
+    "descRo" : "Cea mai spectaculoasă pepinieră stelară de pe cerul nopții, vizibilă sub centura lui Orion.",
+    "id" : "M42",
+    "name" : "Orion Nebula",
+    "optics" : "Ochi liber \/ Binoclu \/ Telescop",
+    "raHours" : 5.59,
+    "type" : "Emission Nebula",
+    "visualMag" : 4
+  },
+  {
+    "constellation" : "TAU",
+    "decDegrees" : 24.11,
+    "descRo" : "Celebrul roi deschis din Taurul, format din peste 1000 de stele tinere învăluite în reflexii albastre.",
+    "id" : "M45",
+    "name" : "Pleiades (Cloșca cu Pui)",
+    "optics" : "Ochi liber \/ Binoclu",
+    "raHours" : 3.79,
+    "type" : "Open Cluster",
+    "visualMag" : 1.6
+  },
+  {
+    "constellation" : "HER",
+    "decDegrees" : 36.46,
+    "descRo" : "Cel mai strălucitor roi globular din emisfera nordică, conținând peste 300.000 de stele bătrâne.",
+    "id" : "M13",
+    "name" : "Great Hercules Cluster",
+    "optics" : "Binoclu \/ Telescop",
+    "raHours" : 16.69,
+    "type" : "Globular Cluster",
+    "visualMag" : 5.8
+  },
+  {
+    "constellation" : "LYR",
+    "decDegrees" : 33.03,
+    "descRo" : "Înveliș gazos spectaculos expulzat de o gigantă roșie muribundă în Lira.",
+    "id" : "M57",
+    "name" : "Ring Nebula",
+    "optics" : "Telescop mic\/mediu",
+    "raHours" : 18.89,
+    "type" : "Planetary Nebula",
+    "visualMag" : 8.8
+  },
+  {
+    "constellation" : "SGR",
+    "decDegrees" : -24.38,
+    "descRo" : "Nor gigantic de gaz interstelar ionizat în inima Căii Lactee din Săgetătorul.",
+    "id" : "M8",
+    "name" : "Lagoon Nebula",
+    "optics" : "Binoclu \/ Telescop",
+    "raHours" : 18.06,
+    "type" : "Emission Nebula",
+    "visualMag" : 6
+  },
+  {
+    "constellation" : "CVN",
+    "decDegrees" : 47.2,
+    "descRo" : "Galaxie spirală grandioasă cu brațe pronunțate, în interacțiune gravitațională cu o galaxie satelit.",
+    "id" : "M51",
+    "name" : "Whirlpool Galaxy",
+    "optics" : "Telescop",
+    "raHours" : 13.5,
+    "type" : "Galaxy",
+    "visualMag" : 8.4
+  },
+  {
+    "constellation" : "VIR",
+    "decDegrees" : -11.62,
+    "descRo" : "Galaxie cu un bulb central luminos și o dungă groasă de praf întunecat ce amintește de o pălărie sombrero.",
+    "id" : "M104",
+    "name" : "Sombrero Galaxy",
+    "optics" : "Telescop",
+    "raHours" : 12.67,
+    "type" : "Galaxy",
+    "visualMag" : 8
+  },
+  {
+    "constellation" : "SCO",
+    "decDegrees" : -34.82,
+    "descRo" : "Roi deschis luminos în coada Scorpionului, cunoscut încă din antichitate de astronomul Ptolemeu.",
+    "id" : "M7",
+    "name" : "Ptolemy Cluster",
+    "optics" : "Ochi liber \/ Binoclu",
+    "raHours" : 17.9,
+    "type" : "Open Cluster",
+    "visualMag" : 3.3
+  },
+  {
+    "constellation" : "VUL",
+    "decDegrees" : 22.72,
+    "descRo" : "Prima nebuloasă planetară descoperită vreodată (de Charles Messier în 1764), în formă de clepsidră.",
+    "id" : "M27",
+    "name" : "Dumbbell Nebula",
+    "optics" : "Binoclu \/ Telescop",
+    "raHours" : 19.99,
+    "type" : "Planetary Nebula",
+    "visualMag" : 7.4
+  }
+]

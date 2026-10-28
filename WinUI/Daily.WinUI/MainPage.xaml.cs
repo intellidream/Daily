@@ -301,6 +301,8 @@ public sealed partial class MainPage : Page
             {
                 if (glassContainer.Content is WeatherWidgetControl weather)
                     glassContainer.RefreshWithAnimation(() => weather.RefreshAsync());
+                else if (glassContainer.Content is CosmosWidgetControl cosmos)
+                    glassContainer.RefreshWithAnimation(() => cosmos.RefreshAsync());
                 else if (glassContainer.Content is HabitsWidgetControl habits)
                     glassContainer.RefreshWithAnimation(() => habits.RefreshAsync());
                 else if (glassContainer.Content is RssFeedWidgetControl rss)
@@ -338,6 +340,8 @@ public sealed partial class MainPage : Page
                 {
                     if (glassContainer.Content is WeatherWidgetControl weather)
                         tasks.Add(weather.RefreshAsync());
+                    else if (glassContainer.Content is CosmosWidgetControl cosmos)
+                        tasks.Add(cosmos.RefreshAsync());
                     else if (glassContainer.Content is HabitsWidgetControl habits)
                         tasks.Add(habits.RefreshAsync());
                     else if (glassContainer.Content is RssFeedWidgetControl rss)
@@ -616,6 +620,9 @@ public sealed partial class MainPage : Page
                     case "WeatherWidget":
                         mw.NavigateToTab(6);
                         break;
+                    case "CosmosWidget":
+                        mw.NavigateToTab(9);
+                        break;
                     case "RssFeedWidget":
                         mw.NavigateToTab(7);
                         break;
@@ -643,6 +650,9 @@ public sealed partial class MainPage : Page
                 {
                     case "WeatherWidget":
                         OpenDetailWindow(typeof(WeatherDetailPage));
+                        break;
+                    case "CosmosWidget":
+                        OpenDetailWindow(typeof(CosmosDetailPage));
                         break;
                     case "RssFeedWidget":
                         OpenDetailWindow(typeof(RssFeedDetailPage));

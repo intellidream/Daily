@@ -184,6 +184,22 @@
                             <TextBlock Grid.Column="2" Text="Ctrl+8" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" Opacity="0.7"/>
                         </Grid>
                     </Button>
+
+                    <!-- Tab 9: Cosmos -->
+                    <Button x:Name="SidebarItem9" Click="SidebarItem_Click" Tag="9"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon x:Name="SidebarIcon9" Grid.Column="0" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,0,12,0"/>
+                            <TextBlock x:Name="SidebarText9" Grid.Column="1" Text="Cosmos" FontSize="13" FontWeight="Normal" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="Ctrl+9" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" Opacity="0.7"/>
+                        </Grid>
+                    </Button>
                 </StackPanel>
             </ScrollViewer>
 

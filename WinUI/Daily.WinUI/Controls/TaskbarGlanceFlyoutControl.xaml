@@ -100,6 +100,26 @@
                         </Button>
                     </Grid>
 
+                    <!-- Cosmos Stargazing Quick Glance -->
+                    <Button Click="CosmosCard_Click"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1"
+                            CornerRadius="12" Padding="12" ToolTipService.ToolTip="Deschide Observatorul Cosmos (Ctrl+9)">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="Cosmos • Cerul Nopții" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                                <TextBlock Text="Observator cer senin • Planete &amp; stele" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Button>
+
                     <!-- 2. Water & Hydration Card (Mac Parity: +100 Water, +150 Coffee, +300 Water) -->
                     <Border Background="#14FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="12" Padding="12">
                         <StackPanel Spacing="10">

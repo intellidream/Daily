@@ -27,6 +27,7 @@ namespace Daily_WinUI.Services
                 new WidgetModel { Title = "Health & Vitals", ComponentType = "HealthWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "Habits", ComponentType = "HabitsWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 },
+                new WidgetModel { Title = "Cosmos", ComponentType = "CosmosWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "TagDoS & Notes", ComponentType = "NotesWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 }
             };
@@ -61,6 +62,12 @@ namespace Daily_WinUI.Services
             if (!widgets.Any(w => w.ComponentType == "NotesWidget"))
             {
                 widgets.Add(new WidgetModel { Title = "TagDoS & Notes", ComponentType = "NotesWidget", ColumnSpan = 1, RowSpan = 1 });
+            }
+
+            // Ensure CosmosWidget is present in dashboard layout
+            if (!widgets.Any(w => w.ComponentType == "CosmosWidget"))
+            {
+                widgets.Add(new WidgetModel { Title = "Cosmos", ComponentType = "CosmosWidget", ColumnSpan = 1, RowSpan = 1 });
             }
 
             // Purge obsolete and orphaned widgets

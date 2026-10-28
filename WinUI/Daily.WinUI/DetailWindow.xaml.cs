@@ -189,6 +189,7 @@ public sealed partial class DetailWindow : Window
         if (pageType == typeof(FinancesDetailPage)) return "Finances";
         if (pageType == typeof(RssFeedDetailPage)) return "News";
         if (pageType == typeof(CalendarDetailPage)) return "Calendar";
+        if (pageType == typeof(CosmosDetailPage)) return "Cosmos";
         return "Detail";
     }
 
@@ -204,6 +205,7 @@ public sealed partial class DetailWindow : Window
             "Finances" => "\uE825", // FinancesDetailPage top icon
             "News" => "\uE736",     // RssFeedDetailPage top icon
             "Calendar" => "\uE787", // CalendarDetailPage top icon
+            "Cosmos" => "\uE706",   // CosmosDetailPage top icon
             _ => "\uE706"
         };
     }
@@ -248,6 +250,10 @@ public sealed partial class DetailWindow : Window
             else if (RootFrame.Content is TagdosNotesDetailPage tagdosPage)
             {
                 await tagdosPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is CosmosDetailPage cosmosPage)
+            {
+                await cosmosPage.RefreshFromTitleBarAsync();
             }
         }
         catch (Exception ex)

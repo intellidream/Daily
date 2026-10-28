@@ -120,6 +120,18 @@
                     <TextBlock x:Name="TabText8" Text="Calendar" FontSize="12" FontWeight="SemiBold" Foreground="#B3FFFFFF" VerticalAlignment="Center" Visibility="Collapsed" />
                 </StackPanel>
             </Button>
+
+            <!-- Tab 9: Cosmos -->
+            <Button x:Name="TabButton9" Click="TabButton_Click" Tag="9"
+                    Style="{ThemeResource DefaultButtonStyle}"
+                    Background="Transparent" BorderThickness="1" BorderBrush="Transparent"
+                    CornerRadius="20" Height="38" Padding="10,0"
+                    ToolTipService.ToolTip="Cosmos (Ctrl+9)">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <FontIcon x:Name="TabIcon9" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#B3FFFFFF" />
+                    <TextBlock x:Name="TabText9" Text="Cosmos" FontSize="12" FontWeight="SemiBold" Foreground="#B3FFFFFF" VerticalAlignment="Center" Visibility="Collapsed" />
+                </StackPanel>
+            </Button>
         </StackPanel>
     </Border>
 </UserControl>

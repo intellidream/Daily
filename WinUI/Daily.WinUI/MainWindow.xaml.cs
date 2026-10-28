@@ -448,6 +448,7 @@ public sealed partial class MainWindow : Window
                 var t when t == typeof(Views.WeatherDetailPage) => 6,
                 var t when t == typeof(Views.RssFeedDetailPage) => 7,
                 var t when t == typeof(Views.CalendarDetailPage) => 8,
+                var t when t == typeof(Views.CosmosDetailPage) => 9,
                 _ => 1
             };
 
@@ -464,7 +465,7 @@ public sealed partial class MainWindow : Window
 
     public void NavigateToTab(int tabIndex, object? parameter = null)
     {
-        if (tabIndex < 1 || tabIndex > 8) return;
+        if (tabIndex < 1 || tabIndex > 9) return;
         _currentTabIndex = tabIndex;
         NavCapsule.SetSelectedTab(tabIndex);
         AppSidebar.SetSelectedTab(tabIndex);
@@ -479,6 +480,7 @@ public sealed partial class MainWindow : Window
             6 => typeof(Views.WeatherDetailPage),
             7 => typeof(Views.RssFeedDetailPage),
             8 => typeof(Views.CalendarDetailPage),
+            9 => typeof(Views.CosmosDetailPage),
             _ => typeof(MainPage)
         };
 
@@ -583,6 +585,7 @@ public sealed partial class MainWindow : Window
     private void OnAcceleratorCtrl6(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(6); }
     private void OnAcceleratorCtrl7(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(7); }
     private void OnAcceleratorCtrl8(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(8); }
+    private void OnAcceleratorCtrl9(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(9); }
     private void OnAcceleratorCtrlS(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; ToggleSidebar(); }
     private void OnAcceleratorCtrlR(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; TriggerGlobalSync(); }
     private void OnAcceleratorCtrlN(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(3); }

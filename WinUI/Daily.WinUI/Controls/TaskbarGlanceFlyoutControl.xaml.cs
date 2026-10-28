@@ -190,6 +190,11 @@ namespace Daily_WinUI.Controls
             NavigateToTab(6); // Weather Hub
         }
 
+        private void CosmosCard_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateToTab(9); // Cosmos Hub
+        }
+
         private void HealthCard_Click(object sender, RoutedEventArgs e)
         {
             NavigateToTab(4); // Health Hub

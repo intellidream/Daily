@@ -33,7 +33,7 @@ namespace Daily_WinUI.Controls
 
         public void SetSelectedTab(int tabIndex)
         {
-            if (tabIndex < 1 || tabIndex > 8) return;
+            if (tabIndex < 1 || tabIndex > 9) return;
             _selectedTabIndex = tabIndex;
             UpdateVisualState();
         }
@@ -50,7 +50,7 @@ namespace Daily_WinUI.Controls
                 ? new SolidColorBrush(Color.FromArgb(0x99, 0x1A, 0x1A, 0x1A))
                 : new SolidColorBrush(Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF));
 
-            for (int i = 1; i <= 8; i++)
+            for (int i = 1; i <= 9; i++)
             {
                 var button = FindName($"TabButton{i}") as Button;
                 var icon = FindName($"TabIcon{i}") as FontIcon;

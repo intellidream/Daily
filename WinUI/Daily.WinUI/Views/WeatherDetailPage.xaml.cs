@@ -271,6 +271,18 @@ public sealed partial class WeatherDetailPage : Page
         }
     }
 
+    private void CosmosHubButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (App.CurrentWindow is MainWindow mw)
+        {
+            mw.NavigateToTab(9);
+        }
+        else
+        {
+            Frame.Navigate(typeof(CosmosDetailPage));
+        }
+    }
+
     private async void AutoLocationButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         SearchButton?.Flyout?.Hide();
