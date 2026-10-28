@@ -24,7 +24,7 @@ public sealed class FinancesSnapshot
     public decimal Investments { get; init; }
     public List<MacroIndicator> MacroIndicators { get; init; } = new();
     public List<CountryEconomicData> HeatmapData { get; init; } = new();
-    public List<LocalFinanceAccount> Accounts { get; init; } = new();
+    public List<LocalAccount> Accounts { get; init; } = new();
     public List<StockQuote> TopStocks { get; init; } = new();
     public List<StockQuote> ExtendedStocks { get; init; } = new();
     public DateTime RetrievedAtUtc { get; init; } = DateTime.UtcNow;
@@ -340,7 +340,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
                a.CompanyName == b.CompanyName;
     }
 
-    private static bool AreAccountsEqual(LocalFinanceAccount a, LocalFinanceAccount b)
+    private static bool AreAccountsEqual(LocalAccount a, LocalAccount b)
     {
         if (ReferenceEquals(a, b)) return true;
         if (a == null || b == null) return false;
