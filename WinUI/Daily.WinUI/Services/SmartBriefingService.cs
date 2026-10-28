@@ -1149,16 +1149,6 @@ Expect a rainy afternoon with temperatures dropping to 15°C, so grab an umbrell
 
             return metrics;
         }
-            else
-                habitsAdvice = "Habits are on track today. Stay consistent!";
-
-            metrics.WeatherAdvice = weatherAdvice;
-            metrics.HealthAdvice = healthAdvice;
-            metrics.FinanceAdvice = financeAdvice;
-            metrics.HabitsAdvice = habitsAdvice;
-
-            return metrics;
-        }
 
         private static string BuildWeatherSentence(double temp, string condition)
         {
