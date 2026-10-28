@@ -561,6 +561,12 @@ namespace Daily.Services.Finances
             return notes;
         }
 
+        public static string AdjustItemAmount(string text, SmartLedgerItem item, decimal deltaRaw)
+        {
+            if (item == null) return text;
+            return AdjustItemAmount(text, item.LineIndex, deltaRaw);
+        }
+
         public static string AdjustItemAmount(string text, int lineIndex, decimal deltaRaw)
         {
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
@@ -594,6 +600,12 @@ namespace Daily.Services.Finances
             return RecalculateTotals(string.Join(Environment.NewLine, lines));
         }
 
+        public static string SetItemAmount(string text, SmartLedgerItem item, decimal newRaw)
+        {
+            if (item == null) return text;
+            return SetItemAmount(text, item.LineIndex, newRaw);
+        }
+
         public static string SetItemAmount(string text, int lineIndex, decimal newRaw)
         {
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
@@ -619,6 +631,12 @@ namespace Daily.Services.Finances
             }
 
             return RecalculateTotals(string.Join(Environment.NewLine, lines));
+        }
+
+        public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string currency, bool isScaled)
+        {
+            string? note = isScaled ? "Scaled" : null;
+            return AddItem(text, sectionName, key, rawAmount, note);
         }
 
         public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string? note = null)

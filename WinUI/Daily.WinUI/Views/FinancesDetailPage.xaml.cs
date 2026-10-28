@@ -85,6 +85,27 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         set { _formattedDentist = value; OnPropertyChanged(); }
     }
 
+    private string _netWorthDisplay = "$0";
+    public string NetWorthDisplay
+    {
+        get => _netWorthDisplay;
+        set { _netWorthDisplay = value; OnPropertyChanged(); }
+    }
+
+    private string _cashDisplay = "$0";
+    public string CashDisplay
+    {
+        get => _cashDisplay;
+        set { _cashDisplay = value; OnPropertyChanged(); }
+    }
+
+    private string _investmentsDisplay = "$0";
+    public string InvestmentsDisplay
+    {
+        get => _investmentsDisplay;
+        set { _investmentsDisplay = value; OnPropertyChanged(); }
+    }
+
     public ObservableCollection<SmartLedgerSection> LedgerSections { get; } = new();
     public ParsedSmartLedger? CurrentParsedLedger { get; private set; }
 
@@ -438,9 +459,9 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             TextWrapping = TextWrapping.Wrap,
             FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
             MinHeight = 400,
-            MinWidth = 550,
-            ScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            MinWidth = 550
         };
+        ScrollViewer.SetVerticalScrollBarVisibility(textBox, ScrollBarVisibility.Auto);
 
         var dialog = new ContentDialog
         {
