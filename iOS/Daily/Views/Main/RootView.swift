@@ -188,6 +188,8 @@ public struct RootView: View {
                     HealthDataService.shared.activeSubTab = .stress
                 } else if fullPath.contains("tagdos") {
                     selectedTab = .tagdos
+                } else if fullPath.contains("cosmos") || fullPath.contains("sky") || fullPath.contains("astronomy") {
+                    selectedTab = .cosmos
                 } else if fullPath.contains("summary") || fullPath.contains("briefing") {
                     selectedTab = .dashboard
                     Task { @MainActor in
@@ -198,6 +200,7 @@ public struct RootView: View {
                     switch fullPath {
                     case "dashboard": selectedTab = .dashboard
                     case "weather": selectedTab = .weather
+                    case "cosmos": selectedTab = .cosmos
                     case "news": selectedTab = .news
                     case "health": selectedTab = .health
                     case "habits": selectedTab = .habits
@@ -223,6 +226,11 @@ public struct RootView: View {
                         onNavigateToWeather: {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                 selectedTab = .weather
+                            }
+                        },
+                        onNavigateToCosmos: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .cosmos
                             }
                         },
                         onNavigateToNews: {
@@ -257,7 +265,23 @@ public struct RootView: View {
                         }
                     )
                 case .weather:
-                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                    WeatherDetailView(
+                        onNavigateBack: navigateToDashboard,
+                        onNavigateToCosmos: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .cosmos
+                            }
+                        }
+                    )
+                case .cosmos:
+                    CosmosDetailView(
+                        onNavigateBack: navigateToDashboard,
+                        onNavigateToWeather: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .weather
+                            }
+                        }
+                    )
                 case .news:
                     NewsFeedView(onNavigateBack: navigateToDashboard)
                 case .health:
@@ -309,6 +333,11 @@ public struct RootView: View {
                     onNavigateToWeather: {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                             selectedTab = .weather
+                        }
+                    },
+                    onNavigateToCosmos: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .cosmos
                         }
                     },
                     onNavigateToNews: {
@@ -381,7 +410,23 @@ public struct RootView: View {
                             }
                         )
                     case .weather:
-                        WeatherDetailView(onNavigateBack: navigateToDashboard)
+                        WeatherDetailView(
+                            onNavigateBack: navigateToDashboard,
+                            onNavigateToCosmos: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    selectedTab = .cosmos
+                                }
+                            }
+                        )
+                    case .cosmos:
+                        CosmosDetailView(
+                            onNavigateBack: navigateToDashboard,
+                            onNavigateToWeather: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                    selectedTab = .weather
+                                }
+                            }
+                        )
                     case .news:
                         NewsFeedView(onNavigateBack: navigateToDashboard)
                     case .health:

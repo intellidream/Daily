@@ -2,13 +2,14 @@ import SwiftUI
 import DailyCore
 import AppKit
 
-public enum NavigationTab: String, CaseIterable, Identifiable {
+public enum NavigationTab: String, CaseIterable, Identifiable, Sendable {
     case dashboard = "Dashboard"
     case finances = "Money"
     case tagdos = "TagDoS"
     case health = "Health"
     case habits = "Habits"
     case weather = "Weather"
+    case cosmos = "Cosmos"
     case news = "News"
     case settings = "Settings"
     
@@ -22,6 +23,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .health: return "heart.fill"
         case .habits: return "drop.fill"
         case .weather: return "cloud.sun.fill"
+        case .cosmos: return "moon.stars.fill"
         case .news: return "newspaper.fill"
         case .settings: return "gearshape.fill"
         }
@@ -36,12 +38,13 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .habits: return "5"
         case .weather: return "6"
         case .news: return "7"
+        case .cosmos: return "8"
         case .settings: return ","
         }
     }
     
     public static let primaryTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits]
-    public static let allNavTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits, .weather, .news, .settings]
+    public static let allNavTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits, .weather, .cosmos, .news, .settings]
 }
 
 /// Floating Liquid Glass navigation capsule anchored at the bottom of the viewport on macOS.

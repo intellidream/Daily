@@ -4,13 +4,14 @@ import DailyCore
 import UIKit
 #endif
 
-public enum NavigationTab: String, CaseIterable, Identifiable {
+public enum NavigationTab: String, CaseIterable, Identifiable, Sendable {
     case dashboard = "Dashboard"
     case finances = "Money"
     case tagdos = "TagDoS"
     case health = "Health"
     case habits = "Habits"
     case weather = "Weather"
+    case cosmos = "Cosmos"
     case news = "News"
     case settings = "Settings"
     
@@ -24,6 +25,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable {
         case .health: return "heart.fill"
         case .habits: return "drop.fill"
         case .weather: return "cloud.sun.fill"
+        case .cosmos: return "moon.stars.fill"
         case .news: return "newspaper.fill"
         case .settings: return "gearshape.fill"
         }

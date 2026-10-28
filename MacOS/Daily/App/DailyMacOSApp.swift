@@ -92,6 +92,16 @@ struct DailyMacOSApp: App {
                 }
                 .keyboardShortcut("7", modifiers: .command)
                 
+                Button("Cosmos & Night Sky") {
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .cosmos)
+                }
+                .keyboardShortcut("8", modifiers: .command)
+                
+                Button("Open Cosmos Observatory Window...") {
+                    openWindow(id: "cosmos")
+                }
+                .keyboardShortcut("8", modifiers: [.command, .option])
+                
                 Divider()
                 
                 Button("DayOne Glance Companion") {
@@ -128,6 +138,14 @@ struct DailyMacOSApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+
+        // Dedicated Cosmos Observatory Window (Can be detached to secondary monitor or full-screen observation)
+        Window("Cosmos Observatory", id: "cosmos") {
+            CosmosDetailView()
+                .preferredColorScheme(.dark)
+                .frame(minWidth: 800, minHeight: 600)
+        }
+        .windowStyle(.hiddenTitleBar)
 
         // Persistent MenuBarExtra Companion (Quick Drop-down)
         MenuBarExtra {

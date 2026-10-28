@@ -13,6 +13,7 @@ public struct DashboardView: View {
     
     private let forceSingleColumn: Bool
     private let onNavigateToWeather: () -> Void
+    private let onNavigateToCosmos: () -> Void
     private let onNavigateToNews: () -> Void
     private let onNavigateToHealth: () -> Void
     private let onNavigateToHabits: () -> Void
@@ -23,6 +24,7 @@ public struct DashboardView: View {
     public init(
         forceSingleColumn: Bool = false,
         onNavigateToWeather: @escaping () -> Void = {},
+        onNavigateToCosmos: @escaping () -> Void = {},
         onNavigateToNews: @escaping () -> Void = {},
         onNavigateToHealth: @escaping () -> Void = {},
         onNavigateToHabits: @escaping () -> Void = {},
@@ -32,6 +34,7 @@ public struct DashboardView: View {
     ) {
         self.forceSingleColumn = forceSingleColumn
         self.onNavigateToWeather = onNavigateToWeather
+        self.onNavigateToCosmos = onNavigateToCosmos
         self.onNavigateToNews = onNavigateToNews
         self.onNavigateToHealth = onNavigateToHealth
         self.onNavigateToHabits = onNavigateToHabits
@@ -185,6 +188,9 @@ public struct DashboardView: View {
         switch config.id {
         case DashboardWidgetType.weather.rawValue:
             WeatherDashboardCard(size: config.size, onTap: onNavigateToWeather)
+                .equatable()
+        case DashboardWidgetType.cosmos.rawValue:
+            CosmosDashboardCard(size: config.size, onTap: onNavigateToCosmos)
                 .equatable()
         case DashboardWidgetType.news.rawValue:
             NewsDashboardCard(size: config.size, onTap: onNavigateToNews)

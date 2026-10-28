@@ -96,7 +96,12 @@ public struct CustomizeDashboardSheet: View {
                 }
             }
             .onAppear {
-                widgets = settingsService.settings.dashboardWidgets
+                var current = settingsService.settings.dashboardWidgets
+                if !current.contains(where: { $0.id == DashboardWidgetType.cosmos.rawValue }) {
+                    current.append(DashboardWidgetConfig(id: DashboardWidgetType.cosmos.rawValue, size: .wide, isVisible: true))
+                    settingsService.update { $0.dashboardWidgets = current }
+                }
+                widgets = current
             }
         }
     }

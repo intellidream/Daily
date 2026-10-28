@@ -116,6 +116,7 @@ public struct RootView: View {
                 Button("") { switchTab(.habits) }.keyboardShortcut("5", modifiers: .command)
                 Button("") { switchTab(.weather) }.keyboardShortcut("6", modifiers: .command)
                 Button("") { switchTab(.news) }.keyboardShortcut("7", modifiers: .command)
+                Button("") { switchTab(.cosmos) }.keyboardShortcut("8", modifiers: .command)
                 Button("") { MacOSWindowManager.shared.activateGlanceWindow() }.keyboardShortcut("0", modifiers: .command)
                 Button("") { switchTab(.settings) }.keyboardShortcut(",", modifiers: .command)
                 Button("") {
@@ -174,6 +175,8 @@ public struct RootView: View {
                     HealthDataService.shared.activeSubTab = .stress
                 } else if fullPath.contains("tagdos") {
                     selectedTab = .tagdos
+                } else if fullPath.contains("cosmos") || fullPath.contains("sky") || fullPath.contains("astronomy") {
+                    selectedTab = .cosmos
                 } else if fullPath.contains("summary") || fullPath.contains("briefing") {
                     selectedTab = .dashboard
                     Task { @MainActor in
@@ -184,6 +187,7 @@ public struct RootView: View {
                     switch fullPath {
                     case "dashboard": selectedTab = .dashboard
                     case "weather": selectedTab = .weather
+                    case "cosmos": selectedTab = .cosmos
                     case "news": selectedTab = .news
                     case "health": selectedTab = .health
                     case "habits": selectedTab = .habits
@@ -294,6 +298,7 @@ public struct RootView: View {
             ZStack(alignment: .bottom) {
                 DashboardView(
                     onNavigateToWeather: { switchTab(.weather) },
+                    onNavigateToCosmos: { switchTab(.cosmos) },
                     onNavigateToNews: { switchTab(.news) },
                     onNavigateToHealth: { switchTab(.health) },
                     onNavigateToHabits: { switchTab(.habits) },
@@ -334,7 +339,15 @@ public struct RootView: View {
                         }
                     )
                 case .weather:
-                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                    WeatherDetailView(
+                        onNavigateBack: navigateToDashboard,
+                        onNavigateToCosmos: { switchTab(.cosmos) }
+                    )
+                case .cosmos:
+                    CosmosDetailView(
+                        onNavigateBack: navigateToDashboard,
+                        onNavigateToWeather: { switchTab(.weather) }
+                    )
                 case .news:
                     NewsFeedView(
                         onNavigateBack: navigateToDashboard,
@@ -367,6 +380,7 @@ public struct RootView: View {
                 case .dashboard:
                     DashboardView(
                         onNavigateToWeather: { switchTab(.weather) },
+                        onNavigateToCosmos: { switchTab(.cosmos) },
                         onNavigateToNews: { switchTab(.news) },
                         onNavigateToHealth: { switchTab(.health) },
                         onNavigateToHabits: { switchTab(.habits) },
@@ -375,7 +389,15 @@ public struct RootView: View {
                         onNavigateToTagdos: { switchTab(.tagdos) }
                     )
                 case .weather:
-                    WeatherDetailView(onNavigateBack: navigateToDashboard)
+                    WeatherDetailView(
+                        onNavigateBack: navigateToDashboard,
+                        onNavigateToCosmos: { switchTab(.cosmos) }
+                    )
+                case .cosmos:
+                    CosmosDetailView(
+                        onNavigateBack: navigateToDashboard,
+                        onNavigateToWeather: { switchTab(.weather) }
+                    )
                 case .news:
                     NewsFeedView(
                         onNavigateBack: navigateToDashboard,

@@ -102,6 +102,7 @@ public struct DashboardWidgetConfig: Codable, Identifiable, Equatable, Sendable 
     public static var defaultLayout: [DashboardWidgetConfig] {
         [
             DashboardWidgetConfig(id: DashboardWidgetType.weather.rawValue, size: .wide, isVisible: true),
+            DashboardWidgetConfig(id: DashboardWidgetType.cosmos.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.news.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.health.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.habits.rawValue, size: .wide, isVisible: true),

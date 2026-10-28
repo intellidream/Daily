@@ -399,6 +399,17 @@ public enum DSOType: String, Codable, Sendable {
         case .supernovaRemnant: return "sun.dust.fill"
         }
     }
+
+    public var displayNameRo: String {
+        switch self {
+        case .galaxy: return "Galaxie Spirală"
+        case .emissionNebula: return "Nebuloasă de Emisie"
+        case .planetaryNebula: return "Nebuloasă Planetară"
+        case .globularCluster: return "Roi Globular"
+        case .openCluster: return "Roi Deschis"
+        case .supernovaRemnant: return "Rămășiță de Supernovă"
+        }
+    }
 }
 
 public struct DeepSkyObject: Codable, Identifiable, Equatable, Sendable {

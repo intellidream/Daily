@@ -22,8 +22,8 @@ struct DashboardLayoutTests {
     @Test("Default Dashboard Layout Configuration")
     func testDefaultLayout() {
         let defaults = DashboardWidgetConfig.defaultLayout
-        #expect(defaults.count == 6)
-        #expect(defaults.map(\.id) == ["weather", "news", "health", "habits", "finances", "tagdos_notes"])
+        #expect(defaults.count == 7)
+        #expect(defaults.map(\.id) == ["weather", "cosmos", "news", "health", "habits", "finances", "tagdos_notes"])
         #expect(defaults.allSatisfy { $0.size == .wide && $0.isVisible })
     }
     
@@ -32,6 +32,7 @@ struct DashboardLayoutTests {
         var settings = AppSettings()
         settings.dashboardWidgets = [
             DashboardWidgetConfig(id: "weather", size: .small),
+            DashboardWidgetConfig(id: "cosmos", size: .wide),
             DashboardWidgetConfig(id: "health", size: .small),
             DashboardWidgetConfig(id: "news", size: .tall),
             DashboardWidgetConfig(id: "habits", size: .large),
@@ -45,13 +46,14 @@ struct DashboardLayoutTests {
         let decoder = JSONDecoder()
         let decoded = try decoder.decode(AppSettings.self, from: data)
         
-        #expect(decoded.dashboardWidgets.count == 6)
+        #expect(decoded.dashboardWidgets.count == 7)
         #expect(decoded.dashboardWidgets[0].size == .small)
-        #expect(decoded.dashboardWidgets[1].size == .small)
-        #expect(decoded.dashboardWidgets[2].size == .tall)
-        #expect(decoded.dashboardWidgets[3].size == .large)
-        #expect(decoded.dashboardWidgets[4].size == .wide)
+        #expect(decoded.dashboardWidgets[1].size == .wide)
+        #expect(decoded.dashboardWidgets[2].size == .small)
+        #expect(decoded.dashboardWidgets[3].size == .tall)
+        #expect(decoded.dashboardWidgets[4].size == .large)
         #expect(decoded.dashboardWidgets[5].size == .wide)
+        #expect(decoded.dashboardWidgets[6].size == .wide)
     }
     
     @Test("Legacy AppSettings JSON Graceful Fallback to Default Widgets")
@@ -67,7 +69,7 @@ struct DashboardLayoutTests {
         let data = legacyJson.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
         
-        #expect(decoded.dashboardWidgets.count == 6)
+        #expect(decoded.dashboardWidgets.count == 7)
         #expect(decoded.dashboardWidgets == DashboardWidgetConfig.defaultLayout)
     }
 }

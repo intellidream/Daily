@@ -9,9 +9,11 @@ public struct WeatherDetailView: View {
 
     @State private var showingSearchSheet: Bool = false
     public var onNavigateBack: (() -> Void)? = nil
+    public var onNavigateToCosmos: (() -> Void)? = nil
 
-    public init(onNavigateBack: (() -> Void)? = nil) {
+    public init(onNavigateBack: (() -> Void)? = nil, onNavigateToCosmos: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
+        self.onNavigateToCosmos = onNavigateToCosmos
     }
 
     private var unitSymbol: String {
@@ -29,18 +31,14 @@ public struct WeatherDetailView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Pinned Top Navigation & Location Bar
-            topLocationBar
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-            
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Content or Loading State
-                        if let weather = weatherService.currentWeather {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Top Navigation & Location Bar
+                    topLocationBar
+
+                    // Content or Loading State
+                    if let weather = weatherService.currentWeather {
                         // Hero Weather Card
                         heroWeatherCard(weather: weather)
 
@@ -71,9 +69,8 @@ public struct WeatherDetailView: View {
                         errorCard(message: error)
                     }
                 }
-                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
+                .padding(.top, 16)
                 .padding(.bottom, 110) // Clear floating navigation capsule
             }
             .refreshable {
@@ -89,8 +86,7 @@ public struct WeatherDetailView: View {
             }
         }
     }
-}
-    
+
     // MARK: - Top Location Bar
 
     private var topLocationBar: some View {
@@ -166,6 +162,23 @@ public struct WeatherDetailView: View {
                     .buttonStyle(.plain)
                 }
 
+                // Cosmos & Night Sky Button
+                if let onNavigateToCosmos = onNavigateToCosmos {
+                    Button {
+                        onNavigateToCosmos()
+                    } label: {
+                        Image(systemName: "moon.stars.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle().fill(Color.white.opacity(0.08))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // City Search Button
                 Button {
                     showingSearchSheet = true
@@ -181,7 +194,7 @@ public struct WeatherDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .frame(width: 80, alignment: .trailing)
+            .frame(minWidth: 80, alignment: .trailing)
         }
     }
 

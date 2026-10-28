@@ -10,9 +10,10 @@ public struct DashboardView: View {
     
     @State private var showingCustomizeSheet = false
     @State private var showingBriefingSheet = false
-    @Environment(\.openWindow) private var openWindow
     
+    private let forceSingleColumn: Bool
     private let onNavigateToWeather: () -> Void
+    private let onNavigateToCosmos: () -> Void
     private let onNavigateToNews: () -> Void
     private let onNavigateToHealth: () -> Void
     private let onNavigateToHabits: () -> Void
@@ -21,7 +22,9 @@ public struct DashboardView: View {
     private let onNavigateToTagdos: () -> Void
     
     public init(
+        forceSingleColumn: Bool = false,
         onNavigateToWeather: @escaping () -> Void = {},
+        onNavigateToCosmos: @escaping () -> Void = {},
         onNavigateToNews: @escaping () -> Void = {},
         onNavigateToHealth: @escaping () -> Void = {},
         onNavigateToHabits: @escaping () -> Void = {},
@@ -29,7 +32,9 @@ public struct DashboardView: View {
         onNavigateToSettings: @escaping () -> Void = {},
         onNavigateToTagdos: @escaping () -> Void = {}
     ) {
+        self.forceSingleColumn = forceSingleColumn
         self.onNavigateToWeather = onNavigateToWeather
+        self.onNavigateToCosmos = onNavigateToCosmos
         self.onNavigateToNews = onNavigateToNews
         self.onNavigateToHealth = onNavigateToHealth
         self.onNavigateToHabits = onNavigateToHabits
@@ -58,16 +63,23 @@ public struct DashboardView: View {
                 
                 // Native Coalesced Row-Grid Architecture (100% 120 FPS ProMotion stability)
                 let visibleWidgets = settingsService.settings.dashboardWidgets.filter(\.isVisible)
-                let rows = DashboardRowBuilder.buildRows(from: visibleWidgets)
                 
-                VStack(spacing: 14) {
-                    ForEach(rows) { row in
-                        dashboardRowView(row: row, allWidgets: visibleWidgets)
+                if forceSingleColumn {
+                    VStack(spacing: 14) {
+                        ForEach(visibleWidgets) { config in
+                            widgetItemView(config: config, allWidgets: visibleWidgets)
+                        }
+                    }
+                } else {
+                    let rows = DashboardRowBuilder.buildRows(from: visibleWidgets)
+                    VStack(spacing: 14) {
+                        ForEach(rows) { row in
+                            dashboardRowView(row: row, allWidgets: visibleWidgets)
+                        }
                     }
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 8) // Aligned with secondary companion & hub headers
+            .padding(.top, 10) // Clean top alignment across master & foldable companion
             .padding(.horizontal, 20)
             .padding(.bottom, 110) // Leave room for FloatingGlassCapsule
         }
@@ -176,6 +188,9 @@ public struct DashboardView: View {
         switch config.id {
         case DashboardWidgetType.weather.rawValue:
             WeatherDashboardCard(size: config.size, onTap: onNavigateToWeather)
+                .equatable()
+        case DashboardWidgetType.cosmos.rawValue:
+            CosmosDashboardCard(size: config.size, onTap: onNavigateToCosmos)
                 .equatable()
         case DashboardWidgetType.news.rawValue:
             NewsDashboardCard(size: config.size, onTap: onNavigateToNews)
