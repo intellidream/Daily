@@ -353,9 +353,9 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
     {
         if (ReferenceEquals(a, b)) return true;
         if (a == null || b == null) return false;
-        return a.IndicatorKey == b.IndicatorKey &&
-               a.Value == b.Value &&
-               a.FormattedValue == b.FormattedValue;
+        return a.Symbol == b.Symbol &&
+               a.CurrentPrice == b.CurrentPrice &&
+               a.PercentChange == b.PercentChange;
     }
 
     private static bool AreHeatmapsEqual(CountryEconomicData a, CountryEconomicData b)
