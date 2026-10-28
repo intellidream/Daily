@@ -24,7 +24,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Title & Icon -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Tapped="Header_Tapped">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <Border Width="28" Height="28" CornerRadius="14" Background="#1FFF2D55">
                     <FontIcon Glyph="&#xEB51;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF2D55" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
@@ -49,7 +49,7 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
                 <!-- 4-COLUMN VITALS GLANCE (Matching iOS/Android HealthDashboardCard) -->
-                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12,10" Tapped="Header_Tapped">
+                <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="14" Padding="12,10">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

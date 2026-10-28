@@ -9,6 +9,7 @@ using Daily.Services.Finances;
 using Daily.Models;
 using Daily.Models.Health;
 using Daily.Models.Finances;
+using Daily_WinUI.Models;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Daily_WinUI.Services
@@ -1074,7 +1075,7 @@ Expect a rainy afternoon with temperatures dropping to 15°C, so grab an umbrell
             }
         }
 
-        private static void PopulateForecastData(SmartBriefingData data, IReadOnlyList<Daily.Models.ForecastDaySnapshot> forecastList, out string fiveDayWeatherDetails)
+        private static void PopulateForecastData(SmartBriefingData data, IReadOnlyList<ForecastDaySnapshot> forecastList, out string fiveDayWeatherDetails)
         {
             var sb = new StringBuilder();
             int added = 0;
