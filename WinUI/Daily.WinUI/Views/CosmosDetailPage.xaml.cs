@@ -184,13 +184,12 @@ namespace Daily_WinUI.Views
             SkyCanvas.Children.Add(zLineH);
             SkyCanvas.Children.Add(zLineV);
 
-            // 5. Celestial Canvas Layer with Strict Circular EllipseGeometry Clipping
-            // This guarantees stars, constellations, DSOs, and planets NEVER spill outside the dome aperture when zooming
+            // 5. Celestial Canvas Layer with Bounding Clipping
             var celestialLayer = new Canvas
             {
                 Width = w,
                 Height = h,
-                Clip = new EllipseGeometry { Center = new Point(cx, cy), RadiusX = radius, RadiusY = radius }
+                Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(cx - radius, cy - radius, radius * 2, radius * 2) }
             };
             SkyCanvas.Children.Add(celestialLayer);
 
@@ -451,8 +450,8 @@ namespace Daily_WinUI.Views
             if (altFraction < 0.0) return null;
             double r = radius * altFraction;
 
-            // Outside 2.5x radius skip
-            if (r > radius * 2.5) return null;
+            // Strict circular boundary: celestial objects beyond the circular horizon aperture are clipped
+            if (r > radius) return null;
 
             // Relative azimuth to camera orientation
             double relAzRad = (azimuthDeg - _cameraAzimuth) * (Math.PI / 180.0);
@@ -664,7 +663,7 @@ namespace Daily_WinUI.Views
                 var (az, alt) = _astronomyService.EquatorialToHorizontal(dso.RaHours, dso.DecDegrees, CurrentSimulationTime, _latitude, _longitude);
                 TargetCoordsText.Text = $"Az: {az:F1}° • Alt: {alt:F1}°";
                 TargetMagDistText.Text = $"Mag: {dso.VisualMag:F1} • {dso.Optics}";
-                TargetOpticsText.Text = string.IsNullOrEmpty(dso.DescEn) ? dso.DescRo : dso.DescEn;
+                TargetOpticsText.Text = dso.Description;
             }
         }
 

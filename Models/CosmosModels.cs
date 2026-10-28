@@ -145,6 +145,11 @@ namespace Daily.Models
 
         [JsonPropertyName("descRo")]
         public string DescRo { get; set; } = string.Empty;
+
+        [JsonPropertyName("descEn")]
+        public string DescEn { get; set; } = string.Empty;
+
+        public string Description => !string.IsNullOrEmpty(DescEn) ? DescEn : DescRo;
     }
 
     public class MeteorShower
