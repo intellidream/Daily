@@ -41,26 +41,11 @@ public sealed partial class MainWindow : Window
         RootFrame.CacheSize = 10;
         RootFrame.Navigated += RootFrame_Navigated;
 
-        var persistence = new Daily_WinUI.Services.WinUISessionPersistence();
-        bool hasSession = persistence.LoadSession() != null;
-        App.LogDiagnostic($"MainWindow ctor: hasSession={hasSession}");
-
-        if (hasSession)
-        {
-            LoadingOverlay.Visibility = Visibility.Visible;
-            _minBootTimeTask = System.Threading.Tasks.Task.CompletedTask;
-            LoadingStoryboard.Begin();
-            App.LogDiagnostic("MainWindow ctor: calling NavigateAfterHydrationAsync");
-            _ = NavigateAfterHydrationAsync();
-        }
-        else
-        {
-            LoadingOverlay.Visibility = Visibility.Collapsed;
-            RootFrame.Opacity = 1.0;
-            _minBootTimeTask = System.Threading.Tasks.Task.CompletedTask;
-            App.LogDiagnostic("MainWindow ctor: no session, navigating to LoginPage");
-            RootFrame.Navigate(typeof(Views.LoginPage));
-        }
+        LoadingOverlay.Visibility = Visibility.Visible;
+        _minBootTimeTask = System.Threading.Tasks.Task.CompletedTask;
+        LoadingStoryboard.Begin();
+        App.LogDiagnostic("MainWindow ctor: calling NavigateAfterHydrationAsync");
+        _ = NavigateAfterHydrationAsync();
 
         AppWindow.Changed += AppWindow_Changed;
         Closed += MainWindow_Closed;

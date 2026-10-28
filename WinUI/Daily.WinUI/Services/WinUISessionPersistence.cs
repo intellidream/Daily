@@ -27,7 +27,18 @@ namespace Daily_WinUI.Services
         private string? LoadSetting(string key)
         {
             var file = GetSettingsFile(key);
-            return File.Exists(file) ? File.ReadAllText(file) : null;
+            if (!File.Exists(file)) return null;
+            try
+            {
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WinUISessionPersistence] LoadSetting error for {key}: {ex.Message}");
+                return null;
+            }
         }
 
         private void DeleteSetting(string key)
