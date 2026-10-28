@@ -1,3 +1,5 @@
+param([int]$x = 500, [int]$y = 780)
+
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -14,5 +16,4 @@ public class MouseOps {
 }
 "@
 
-param([int]$x = 500, [int]$y = 780)
 [MouseOps]::Click($x, $y)
