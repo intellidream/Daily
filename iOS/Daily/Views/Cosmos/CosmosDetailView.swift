@@ -164,7 +164,7 @@ public struct CosmosDetailView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "cloud.sun.fill")
                             .font(.system(size: 11, weight: .semibold))
-                        Text("Vreme")
+                        Text("Weather")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : ThemeColors.accentCyan)
@@ -266,8 +266,8 @@ public struct CosmosDetailView: View {
     @ViewBuilder
     private var bottomControlBar: some View {
         VStack(spacing: 8) {
-            // Time Machine Scrubber Capsule
-            HStack(spacing: 12) {
+            // Time Machine Scrubber Capsule & Zoom Controls
+            HStack(spacing: 10) {
                 // -1 Hour
                 Button {
                     triggerHaptic()
@@ -280,7 +280,7 @@ public struct CosmosDetailView: View {
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : .white)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Capsule())
@@ -296,11 +296,11 @@ public struct CosmosDetailView: View {
                         Circle()
                             .fill(vm.isLiveTime ? ThemeColors.accentGreen : ThemeColors.accentOrange)
                             .frame(width: 6, height: 6)
-                        Text(vm.isLiveTime ? "LIVE" : "RESETEAZĂ")
+                        Text(vm.isLiveTime ? "LIVE" : "RESET")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                     }
                     .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : (vm.isLiveTime ? ThemeColors.accentGreen : .white))
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(vm.isLiveTime ? ThemeColors.accentGreen.opacity(0.16) : Color.white.opacity(0.08))
                     .clipShape(Capsule())
@@ -319,12 +319,56 @@ public struct CosmosDetailView: View {
                             .font(.system(size: 9))
                     }
                     .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : .white)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+
+                Divider()
+                    .frame(height: 18)
+                    .background(Color.white.opacity(0.15))
+
+                // Zoom Controls (Effortless Trackpad / Mouse Zoom on macOS)
+                HStack(spacing: 4) {
+                    Button {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.25)) {
+                            vm.fov = max(20.0, vm.fov - 8.0)
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : .white)
+                            .frame(width: 26, height: 26)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Zoom In")
+
+                    Text("\(Int(vm.fov))°")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF8888") : ThemeColors.accentCyan)
+                        .frame(width: 32)
+
+                    Button {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.25)) {
+                            vm.fov = min(100.0, vm.fov + 8.0)
+                        }
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : .white)
+                            .frame(width: 26, height: 26)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Zoom Out")
+                }
 
                 Spacer()
 
@@ -336,21 +380,21 @@ public struct CosmosDetailView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 11))
-                        Text("Recomandări")
+                        Text("Tonight's Best")
                             .font(.system(size: 11, weight: .semibold))
                         Image(systemName: "chevron.up")
                             .font(.system(size: 9, weight: .bold))
                     }
                     .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : ThemeColors.accentCyan)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 11)
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
             .background(.ultraThinMaterial)
             .clipShape(Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
@@ -384,7 +428,7 @@ public struct CosmosDetailView: View {
         // 3. Draw Constellation Labels
         if vm.showConstellationLabels {
             for lbl in elements.labels {
-                let text = Text(lbl.record.nameRo)
+                let text = Text(lbl.record.nameEn)
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundColor(vm.isNightVisionMode ? primaryRed.opacity(0.7) : ThemeColors.accentCyan.opacity(0.65))
                 context.draw(text, at: CGPoint(x: lbl.screenX, y: lbl.screenY))
@@ -464,39 +508,61 @@ public struct CosmosDetailView: View {
     }
 
     private func drawCompassAndHorizon(context: GraphicsContext, size: CGSize) {
-        // Horizon curve line and cardinal markers
-        let cardinals: [(String, Double)] = [
-            ("N", 0.0), ("NE", 45.0), ("E", 90.0), ("SE", 135.0),
-            ("S", 180.0), ("SW", 225.0), ("W", 270.0), ("NW", 315.0)
-        ]
+        let (hPoints, cards, zenith) = vm.projectHorizon(in: size)
 
-        let strokeColor = vm.isNightVisionMode ? Color(hex: "#880005").opacity(0.6) : ThemeColors.accentCyan.opacity(0.3)
+        let strokeColor = vm.isNightVisionMode ? Color(hex: "#FF1824").opacity(0.4) : ThemeColors.accentCyan.opacity(0.35)
+        let primaryRed = Color(hex: "#FF1824")
 
-        for (label, az) in cardinals {
-            // Compute relative screen position for cardinal label
-            var diff = az - vm.cameraAzimuth
-            if diff > 180 { diff -= 360 }
-            if diff < -180 { diff += 360 }
-
-            if abs(diff) < (vm.fov * 0.7) {
-                let screenX = (Double(size.width) * 0.5) + (diff / vm.fov) * Double(size.width)
-                // Horizon altitude line calculation
-                let altFraction = (0.0 - vm.cameraAltitude) / vm.fov
-                let screenY = (Double(size.height) * 0.5) - (altFraction * Double(size.height))
-
-                if screenY >= 40 && screenY <= Double(size.height) - 40 {
-                    let text = Text(label)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : ThemeColors.accentCyan)
-                    context.draw(text, at: CGPoint(x: screenX, y: screenY))
-
-                    // Small vertical notch
-                    var notch = Path()
-                    notch.move(to: CGPoint(x: screenX, y: screenY - 8))
-                    notch.addLine(to: CGPoint(x: screenX, y: screenY + 8))
-                    context.stroke(notch, with: .color(strokeColor), style: StrokeStyle(lineWidth: 1.5))
-                }
+        // 1. Draw Horizon Curve / Circular Vault
+        if hPoints.count > 1 {
+            var path = Path()
+            path.move(to: hPoints[0])
+            for pt in hPoints.dropFirst() {
+                path.addLine(to: pt)
             }
+            if vm.cameraAltitude > 70 && hPoints.count > 30 {
+                path.closeSubpath()
+            }
+            context.stroke(path, with: .color(strokeColor), style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+        }
+
+        // 2. Draw Cardinal Badges (N, NE, E, SE, S, SW, W, NW)
+        for card in cards {
+            let pt = CGPoint(x: card.x, y: card.y)
+            let isPri = card.isPrimary
+
+            let discSize: CGFloat = isPri ? 22 : 16
+            let badgeRect = CGRect(x: pt.x - discSize * 0.5, y: pt.y - discSize * 0.5, width: discSize, height: discSize)
+            let bgCol = vm.isNightVisionMode
+                ? (isPri ? primaryRed.opacity(0.25) : Color.black.opacity(0.4))
+                : (isPri ? ThemeColors.accentCyan.opacity(0.2) : Color.black.opacity(0.3))
+            let borderCol = vm.isNightVisionMode
+                ? (isPri ? primaryRed : primaryRed.opacity(0.5))
+                : (isPri ? ThemeColors.accentCyan : ThemeColors.accentCyan.opacity(0.4))
+
+            context.fill(Path(ellipseIn: badgeRect), with: .color(bgCol))
+            context.stroke(Path(ellipseIn: badgeRect), with: .color(borderCol), style: StrokeStyle(lineWidth: isPri ? 1.5 : 1))
+
+            let text = Text(card.label)
+                .font(.system(size: isPri ? 11 : 9, weight: .bold, design: .rounded))
+                .foregroundColor(vm.isNightVisionMode ? primaryRed : (isPri ? .white : ThemeColors.fgMutedDark))
+            context.draw(text, at: pt)
+        }
+
+        // 3. Draw Zenith Crosshair & Label (alt = 90°)
+        if let z = zenith {
+            let zPt = CGPoint(x: z.x, y: z.y)
+            var zCross = Path()
+            zCross.move(to: CGPoint(x: zPt.x - 8, y: zPt.y))
+            zCross.addLine(to: CGPoint(x: zPt.x + 8, y: zPt.y))
+            zCross.move(to: CGPoint(x: zPt.x, y: zPt.y - 8))
+            zCross.addLine(to: CGPoint(x: zPt.x, y: zPt.y + 8))
+            context.stroke(zCross, with: .color(strokeColor), style: StrokeStyle(lineWidth: 1.2))
+
+            let zText = Text("ZENITH")
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundColor(vm.isNightVisionMode ? primaryRed.opacity(0.7) : ThemeColors.accentCyan.opacity(0.7))
+            context.draw(zText, at: CGPoint(x: zPt.x, y: zPt.y - 14))
         }
     }
 
@@ -576,7 +642,7 @@ public struct CosmosDetailView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "scope")
                                 .font(.system(size: 11, weight: .bold))
-                            Text("Centrează")
+                            Text("Center")
                                 .font(.system(size: 11, weight: .semibold))
                         }
                         .foregroundColor(vm.isNightVisionMode ? Color(hex: "#FF1824") : ThemeColors.accentCyan)
@@ -604,16 +670,16 @@ public struct CosmosDetailView: View {
                 // Coordinates & Metrics Row
                 HStack(spacing: 12) {
                     if let mag = target.visualMagnitude {
-                        metricPill(title: "MAGNITUDINE", value: String(format: "%.1f", mag))
+                        metricPill(title: "MAGNITUDE", value: String(format: "%.1f", mag))
                     }
                     if let dist = target.distanceDescription {
-                        metricPill(title: "DISTANȚĂ", value: dist)
+                        metricPill(title: "DISTANCE", value: dist)
                     }
                     if let const = target.constellationName {
-                        metricPill(title: "CONSTELAȚIE", value: const)
+                        metricPill(title: "CONSTELLATION", value: const)
                     }
                     if let optics = target.recommendedOptics {
-                        metricPill(title: "OPTICĂ", value: optics)
+                        metricPill(title: "OPTICS", value: optics)
                     }
                 }
 
@@ -652,7 +718,7 @@ public struct CosmosDetailView: View {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(ThemeColors.fgMutedDark)
-                        TextField("Caută stele, planete, obiecte Messier...", text: $vm.searchQuery)
+                        TextField("Search stars, planets, Messier objects...", text: $vm.searchQuery)
                             .foregroundColor(.white)
                         if !vm.searchQuery.isEmpty {
                             Button { vm.searchQuery = "" } label: {
@@ -704,11 +770,11 @@ public struct CosmosDetailView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-            .navigationTitle("Catalog Cosmos")
+            .navigationTitle("Cosmos Catalog")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Închide") { showingSearchSheet = false }
+                    Button("Close") { showingSearchSheet = false }
                         .foregroundColor(ThemeColors.accentCyan)
                 }
             }
@@ -726,7 +792,7 @@ public struct CosmosDetailView: View {
                         GlassCard(cornerRadius: 16, padding: 14) {
                             HStack(spacing: 14) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("SCOR DE OBSERVARE")
+                                    Text("STARGAZING SCORE")
                                         .font(.system(size: 9, weight: .bold))
                                         .foregroundColor(ThemeColors.fgMutedDark)
                                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -745,10 +811,10 @@ public struct CosmosDetailView: View {
                                 Spacer()
 
                                 VStack(alignment: .trailing, spacing: 4) {
-                                    Text("Luna: \(vm.currentMoonPhase.quarter.displayNameRo)")
+                                    Text("Moon: \(vm.currentMoonPhase.quarter.displayName)")
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundColor(.white)
-                                    Text("\(vm.currentMoonPhase.illuminationPercent)% iluminată")
+                                    Text("\(vm.currentMoonPhase.illuminationPercent)% illuminated")
                                         .font(.system(size: 11))
                                         .foregroundColor(ThemeColors.fgMutedDark)
                                 }
@@ -757,12 +823,12 @@ public struct CosmosDetailView: View {
 
                         // ISS Satellite Passes
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("TRECERI STAȚIA SPAȚIALĂ (ISS)")
+                            Text("SPACE STATION (ISS) PASSES")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(ThemeColors.fgMutedDark)
 
                             if liveService.upcomingIssPasses.isEmpty {
-                                Text("Nicio trecere strălucitoare calculată pentru următoarele 24h.")
+                                Text("No bright passes calculated for the next 24 hours.")
                                     .font(.system(size: 12))
                                     .foregroundColor(ThemeColors.fgMutedDark)
                             } else {
@@ -774,7 +840,7 @@ public struct CosmosDetailView: View {
                                             Text(pass.startTime.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.system(size: 13, weight: .semibold))
                                                 .foregroundColor(.white)
-                                            Text("Magnitudine max: \(String(format: "%.1f", pass.peakMagnitude)) · Alt: \(Int(pass.maxAltitudeDegrees))°")
+                                            Text("Max Mag: \(String(format: "%.1f", pass.peakMagnitude)) · Alt: \(Int(pass.maxAltitudeDegrees))°")
                                                 .font(.system(size: 11))
                                                 .foregroundColor(ThemeColors.fgMutedDark)
                                         }
@@ -789,7 +855,7 @@ public struct CosmosDetailView: View {
 
                         // Space Weather & Aurora
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("VREMEA SPAȚIALĂ & AURORĂ")
+                            Text("SPACE WEATHER & AURORA")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(ThemeColors.fgMutedDark)
 
@@ -798,10 +864,10 @@ public struct CosmosDetailView: View {
                                     Image(systemName: "waveform.path.ecg")
                                         .foregroundColor(ThemeColors.accentCyan)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("Index Geomagnetic Kp: \(String(format: "%.1f", sw.kpIndex))")
+                                        Text("Geomagnetic Kp Index: \(String(format: "%.1f", sw.kpIndex))")
                                             .font(.system(size: 13, weight: .semibold))
                                             .foregroundColor(.white)
-                                        Text(sw.isAuroraAlertActive ? "ALERTA AURORĂ ACTIVĂ" : "Câmp geomagnetic liniștit.")
+                                        Text(sw.isAuroraAlertActive ? "AURORA ALERT ACTIVE" : "Quiet geomagnetic field.")
                                             .font(.system(size: 11))
                                             .foregroundColor(sw.isAuroraAlertActive ? ThemeColors.accentGreen : ThemeColors.fgMutedDark)
                                     }
@@ -816,11 +882,11 @@ public struct CosmosDetailView: View {
                     .padding(16)
                 }
             }
-            .navigationTitle("Recomandările Nopții")
+            .navigationTitle("Tonight's Best")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Gata") { showingDrawer = false }
+                    Button("Done") { showingDrawer = false }
                         .foregroundColor(ThemeColors.accentCyan)
                 }
             }

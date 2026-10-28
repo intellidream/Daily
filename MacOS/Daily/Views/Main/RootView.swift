@@ -419,7 +419,7 @@ public struct RootView: View {
             
             // Floating Liquid Glass Navigation Capsule (Shown when sidebar is collapsed or preferred)
             if !isSidebarVisible {
-                if selectedTab == .news && isReadingArticleInNews {
+                if (selectedTab == .news && isReadingArticleInNews) || selectedTab == .cosmos {
                     if isNavCapsuleExpandedWhileReading {
                         HStack(spacing: 8) {
                             FloatingGlassCapsule(selectedTab: $selectedTab)

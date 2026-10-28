@@ -47,8 +47,8 @@
                 
                 <Border BorderBrush="#22FFFFFF" BorderThickness="2,0,0,0" Padding="14,0,0,0" Margin="0,4,0,4">
                     <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Text="INDEX OBSERVATOR" FontSize="10" FontWeight="Bold" Opacity="0.6" CharacterSpacing="50" Foreground="{ThemeResource AppFgMutedColorBrush}" />
-                        <TextBlock x:Name="ConditionSummaryText" Text="Calculare efemeride..." FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="OBSERVER INDEX" FontSize="10" FontWeight="Bold" Opacity="0.6" CharacterSpacing="50" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                        <TextBlock x:Name="ConditionSummaryText" Text="Calculating ephemeris..." FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" MaxWidth="180" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -57,7 +57,7 @@
             <Border Grid.Column="1" Background="#15FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="16" Padding="12,8" VerticalAlignment="Center">
                 <StackPanel Spacing="3" HorizontalAlignment="Center">
                     <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="#FFFFD166" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="MoonPhaseText" Text="Lună" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
+                    <TextBlock x:Name="MoonPhaseText" Text="Moon" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgColorBrush}" />
                     <TextBlock x:Name="MoonIllumText" Text="--%" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                 </StackPanel>
             </Border>
@@ -72,14 +72,14 @@
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" VerticalAlignment="Center" />
-                <TextBlock x:Name="VisiblePlanetsText" Text="Planete vizibile: --" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" MaxWidth="260" VerticalAlignment="Center"/>
+                <TextBlock x:Name="VisiblePlanetsText" Text="Visible planets: --" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" MaxWidth="260" VerticalAlignment="Center"/>
             </StackPanel>
 
             <Button Grid.Column="1" x:Name="OpenHubButton" Click="OpenHubButton_Click"
                     Background="Transparent" BorderThickness="0" Padding="4,2" CornerRadius="6"
-                    ToolTipService.ToolTip="Deschide Observatorul Cosmos (Ctrl+9)">
+                    ToolTipService.ToolTip="Open Cosmos Observatory (Ctrl+9)">
                 <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="Observator" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                    <TextBlock Text="Observatory" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
                     <FontIcon Glyph="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>

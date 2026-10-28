@@ -90,22 +90,22 @@ namespace Daily_WinUI.Services.Cosmos
             if (phaseAngle < 45.0 || phaseAngle >= 315.0)
             {
                 quarter = MoonPhaseQuarter.NewMoon;
-                description = phaseAngle < 45.0 ? "Semilună Crescătoare" : "Semilună Descrescătoare";
+                description = phaseAngle < 45.0 ? "Waxing Crescent" : "Waning Crescent";
             }
             else if (phaseAngle < 135.0)
             {
                 quarter = MoonPhaseQuarter.FirstQuarter;
-                description = phaseAngle < 90.0 ? "Primul Pătrar" : "Lună Convexă Crescătoare";
+                description = phaseAngle < 90.0 ? "First Quarter" : "Waxing Gibbous";
             }
             else if (phaseAngle < 225.0)
             {
                 quarter = MoonPhaseQuarter.FullMoon;
-                description = "Lună Plină";
+                description = "Full Moon";
             }
             else
             {
                 quarter = MoonPhaseQuarter.ThirdQuarter;
-                description = phaseAngle < 270.0 ? "Lună Convexă Descrescătoare" : "Ultimul Pătrar";
+                description = phaseAngle < 270.0 ? "Waning Gibbous" : "Third Quarter";
             }
 
             return new MoonPhaseInfo
@@ -158,22 +158,22 @@ namespace Daily_WinUI.Services.Cosmos
             if (totalScore >= 80)
             {
                 quality = StargazingQuality.Excellent;
-                summary = "Condiții perfecte de observare stelară";
+                summary = "Pristine stargazing conditions";
             }
             else if (totalScore >= 60)
             {
                 quality = StargazingQuality.Good;
-                summary = "Cer favorabil cu detalii vizibile clare";
+                summary = "Good clear sky with sharp visibility";
             }
             else if (totalScore >= 40)
             {
                 quality = StargazingQuality.Fair;
-                summary = "Observare acceptabilă pentru planete și lună";
+                summary = "Fair viewing for planets and Moon";
             }
             else
             {
                 quality = StargazingQuality.Poor;
-                summary = "Nori sau luminozitate ridicată";
+                summary = "Poor viewing due to clouds or light pollution";
             }
 
             return new StargazingConditions
@@ -182,7 +182,7 @@ namespace Daily_WinUI.Services.Cosmos
                 Score = totalScore,
                 CloudCover = cloudCoverPercentage,
                 MoonIllumination = moonIlluminationFraction,
-                Seeing = totalScore >= 70 ? "Excelent (0.8\")" : "Mediu (1.5\")",
+                Seeing = totalScore >= 70 ? "Excellent (0.8\")" : "Moderate (1.5\")",
                 Transparency = totalScore >= 70 ? "Foarte Bună" : "Moderată",
                 LightPollutionBortle = bortleScale,
                 Summary = summary

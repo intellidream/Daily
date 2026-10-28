@@ -59,7 +59,7 @@ namespace Daily_WinUI.Controls
                 }
                 else
                 {
-                    VisiblePlanetsText.Text = "Nicio planetă deasupra orizontului";
+                    VisiblePlanetsText.Text = "No planets above the horizon";
                 }
 
                 // 3. Stargazing evaluation

@@ -285,17 +285,17 @@ public final class AstronomyService: Sendable {
         // Narrative advice
         let advice: String
         if sunCoords.altitudeDegrees > -6.0 {
-            advice = "Ziua este luminoasă. Harta cerului arată poziția Soarelui și a corpurilor cerești dincolo de lumina atmosferei."
+            advice = "Daylight conditions. The sky dome displays the Sun and celestial bodies beyond atmospheric glare."
         } else if finalScore >= 80 {
-            advice = "Condiții excepționale de observare! Cer senin cu transparență excelentă. Recomandat pentru Calea Lactee și obiecte Deep-Sky."
+            advice = "Exceptional stargazing conditions! Clear sky with outstanding transparency. Highly recommended for the Milky Way and Deep-Sky objects."
         } else if finalScore >= 60 {
-            advice = "Condiții bune pentru observare vizuală. Planetele și constelațiile majore sunt clar vizibile."
+            advice = "Good conditions for visual observation. Major planets and bright constellations are clearly visible."
         } else if moonCoords.isVisible && moon.illuminatedFraction > 0.6 {
-            advice = "Lumina puternică a Lunii acoperă nebuloasele slabe, dar discul lunar și planetele strălucesc spectaculos."
+            advice = "Strong moonlight diminishes faint nebulae, but the lunar surface and bright planets shine spectacularly."
         } else if effClouds > 40 {
-            advice = "Plafon de nori parțial. Observațiile pot fi făcute în breșele senine."
+            advice = "Partial cloud cover. Observations are possible through clear sky breaks."
         } else {
-            advice = "Condiții modeste pentru astrofotografie sau cer profund. Recomandat pentru sateliți strălucitori și planete mari."
+            advice = "Moderate observing conditions. Recommended for bright satellites and major planets."
         }
 
         let bestWindow: String? = (finalScore >= 50) ? "21:30 – 01:45" : nil
@@ -383,6 +383,67 @@ public final class AstronomyService: Sendable {
         }
 
         // Conformal stereographic projection
+        let denom = 1.0 + zForward
+        let xs = xCam / denom
+        let ys = yCam / denom
+
+        let fovRad = fovDegrees * (.pi / 180.0)
+        let tanHalfFov = tan(fovRad / 4.0)
+        guard tanHalfFov > 1e-6 else { return nil }
+
+        let scale = (min(viewportWidth, viewportHeight) * 0.5) / tanHalfFov
+        let screenX = (viewportWidth * 0.5) + (xs * scale)
+        let screenY = (viewportHeight * 0.5) - (ys * scale)
+
+        let isVisibleOnScreen = (screenX >= -50 && screenX <= viewportWidth + 50 && screenY >= -50 && screenY <= viewportHeight + 50)
+
+        return (screenX, screenY, isVisibleOnScreen)
+    }
+
+    public func projectHorizontal(
+        azimuthDegrees: Double,
+        altitudeDegrees: Double,
+        cameraAzimuthDegrees: Double,
+        cameraAltitudeDegrees: Double,
+        cameraRollDegrees: Double = 0.0,
+        fovDegrees: Double = 60.0,
+        viewportWidth: Double,
+        viewportHeight: Double
+    ) -> (x: Double, y: Double, isVisible: Bool)? {
+        let azRad = azimuthDegrees * (.pi / 180.0)
+        let altRad = altitudeDegrees * (.pi / 180.0)
+
+        let cosAlt = cos(altRad)
+        let xH = cosAlt * sin(azRad)
+        let yH = cosAlt * cos(azRad)
+        let zH = sin(altRad)
+
+        let camAzRad = cameraAzimuthDegrees * (.pi / 180.0)
+        let camAltRad = cameraAltitudeDegrees * (.pi / 180.0)
+        let camRollRad = cameraRollDegrees * (.pi / 180.0)
+
+        let cosAz = cos(-camAzRad)
+        let sinAz = sin(-camAzRad)
+        let x1 = (xH * cosAz) - (yH * sinAz)
+        let y1 = (xH * sinAz) + (yH * cosAz)
+        let z1 = zH
+
+        let cosAltC = cos(-camAltRad)
+        let sinAltC = sin(-camAltRad)
+        let x2 = x1
+        let y2 = (y1 * cosAltC) - (z1 * sinAltC)
+        let z2 = (y1 * sinAltC) + (z1 * cosAltC)
+
+        let cosRoll = cos(camRollRad)
+        let sinRoll = sin(camRollRad)
+        let xCam = (x2 * cosRoll) + (z2 * sinRoll)
+        let yCam = (-x2 * sinRoll) + (z2 * cosRoll)
+        let zForward = y2
+
+        guard zForward > 0.02 else {
+            return nil
+        }
+
         let denom = 1.0 + zForward
         let xs = xCam / denom
         let ys = yCam / denom

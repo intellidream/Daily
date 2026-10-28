@@ -300,7 +300,7 @@ public sealed partial class MainWindow : Window
         {
             AppTitleBar.Opacity = 1.0;
             AppTitleBar.IsHitTestVisible = true;
-            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
+            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible || _currentTabIndex == 9) ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {
@@ -456,8 +456,8 @@ public sealed partial class MainWindow : Window
             NavCapsule.SetSelectedTab(tab);
             AppSidebar.SetSelectedTab(tab);
 
-            // Capsule is visible when sidebar is collapsed
-            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
+            // Capsule is visible when sidebar is collapsed (except on Cosmos page where HUD has full screen)
+            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible || tab == 9) ? Visibility.Collapsed : Visibility.Visible;
         }
     }
 
@@ -501,7 +501,7 @@ public sealed partial class MainWindow : Window
         if (AppSidebar.Visibility == Visibility.Visible)
         {
             AppSidebar.Visibility = Visibility.Collapsed;
-            NavCapsule.Visibility = Visibility.Visible;
+            NavCapsule.Visibility = (_currentTabIndex == 9) ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {

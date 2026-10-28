@@ -18,7 +18,7 @@
     "id" : "AQL",
     "nameEn" : "Eagle",
     "nameLa" : "Aquila",
-    "nameRo" : "Vulturul",
+    "nameRo" : "Aquila",
     "stars" : [
       "Altair",
       "Tarazed",
@@ -31,7 +31,7 @@
     "id" : "AQR",
     "nameEn" : "Water Bearer",
     "nameLa" : "Aquarius",
-    "nameRo" : "Vărsătorul",
+    "nameRo" : "Aquarius",
     "stars" : [
       "Sadalmelik",
       "Sadalsuud"
@@ -43,7 +43,7 @@
     "id" : "ARI",
     "nameEn" : "Ram",
     "nameLa" : "Aries",
-    "nameRo" : "Berbecul",
+    "nameRo" : "Aries",
     "stars" : [
       "Hamal",
       "Sheratan"
@@ -55,7 +55,7 @@
     "id" : "AUR",
     "nameEn" : "Charioteer",
     "nameLa" : "Auriga",
-    "nameRo" : "Vizitiul",
+    "nameRo" : "Auriga",
     "stars" : [
       "Capella",
       "Menkalinan",
@@ -68,7 +68,7 @@
     "id" : "BOO",
     "nameEn" : "Herdsman",
     "nameLa" : "Boötes",
-    "nameRo" : "Boarul",
+    "nameRo" : "Boötes",
     "stars" : [
       "Arcturus",
       "Izar",
@@ -81,7 +81,7 @@
     "id" : "CMA",
     "nameEn" : "Great Dog",
     "nameLa" : "Canis Major",
-    "nameRo" : "Câinele Mare",
+    "nameRo" : "Canis Major",
     "stars" : [
       "Sirius",
       "Adhara",
@@ -95,7 +95,7 @@
     "id" : "CMI",
     "nameEn" : "Lesser Dog",
     "nameLa" : "Canis Minor",
-    "nameRo" : "Câinele Mic",
+    "nameRo" : "Canis Minor",
     "stars" : [
       "Procyon",
       "Gomeisa"
@@ -107,7 +107,7 @@
     "id" : "CAS",
     "nameEn" : "Cassiopeia",
     "nameLa" : "Cassiopeia",
-    "nameRo" : "Casiopeea",
+    "nameRo" : "Cassiopeia",
     "stars" : [
       "Schedar",
       "Caph",
@@ -122,7 +122,7 @@
     "id" : "CEP",
     "nameEn" : "Cepheus",
     "nameLa" : "Cepheus",
-    "nameRo" : "Cefeu",
+    "nameRo" : "Cepheus",
     "stars" : [
       "Alderamin",
       "Alfirk",
@@ -136,7 +136,7 @@
     "id" : "CYG",
     "nameEn" : "Swan",
     "nameLa" : "Cygnus",
-    "nameRo" : "Lebăda",
+    "nameRo" : "Cygnus",
     "stars" : [
       "Deneb",
       "Sadr",
@@ -150,7 +150,7 @@
     "id" : "GEM",
     "nameEn" : "Twins",
     "nameLa" : "Gemini",
-    "nameRo" : "Gemenii",
+    "nameRo" : "Gemini",
     "stars" : [
       "Castor",
       "Pollux",
@@ -163,7 +163,7 @@
     "id" : "HER",
     "nameEn" : "Hercules",
     "nameLa" : "Hercules",
-    "nameRo" : "Hercule",
+    "nameRo" : "Hercules",
     "stars" : [
       "Kornephoros",
       "Rasalgethi"
@@ -175,7 +175,7 @@
     "id" : "LEO",
     "nameEn" : "Lion",
     "nameLa" : "Leo",
-    "nameRo" : "Leul",
+    "nameRo" : "Leo",
     "stars" : [
       "Regulus",
       "Denebola",
@@ -189,7 +189,7 @@
     "id" : "LYR",
     "nameEn" : "Lyre",
     "nameLa" : "Lyra",
-    "nameRo" : "Lira",
+    "nameRo" : "Lyra",
     "stars" : [
       "Vega",
       "Sheliak",
@@ -219,7 +219,7 @@
     "id" : "PEG",
     "nameEn" : "Winged Horse",
     "nameLa" : "Pegasus",
-    "nameRo" : "Pegas",
+    "nameRo" : "Pegasus",
     "stars" : [
       "Markab",
       "Scheat",
@@ -233,7 +233,7 @@
     "id" : "PER",
     "nameEn" : "Hero",
     "nameLa" : "Perseus",
-    "nameRo" : "Perseu",
+    "nameRo" : "Perseus",
     "stars" : [
       "Mirfak",
       "Algol"
@@ -245,7 +245,7 @@
     "id" : "SCO",
     "nameEn" : "Scorpion",
     "nameLa" : "Scorpius",
-    "nameRo" : "Scorpionul",
+    "nameRo" : "Scorpius",
     "stars" : [
       "Antares",
       "Shaula",
@@ -259,7 +259,7 @@
     "id" : "SGR",
     "nameEn" : "Archer",
     "nameLa" : "Sagittarius",
-    "nameRo" : "Săgetătorul",
+    "nameRo" : "Sagittarius",
     "stars" : [
       "Kaus Australis",
       "Nunki",
@@ -273,7 +273,7 @@
     "id" : "TAU",
     "nameEn" : "Bull",
     "nameLa" : "Taurus",
-    "nameRo" : "Taurul",
+    "nameRo" : "Taurus",
     "stars" : [
       "Aldebaran",
       "Elnath",
@@ -286,7 +286,7 @@
     "id" : "UMA",
     "nameEn" : "Great Bear",
     "nameLa" : "Ursa Major",
-    "nameRo" : "Ursa Mare (Carul Mare)",
+    "nameRo" : "Ursa Major (Big Dipper)",
     "stars" : [
       "Dubhe",
       "Merak",
@@ -303,7 +303,7 @@
     "id" : "UMI",
     "nameEn" : "Lesser Bear",
     "nameLa" : "Ursa Minor",
-    "nameRo" : "Ursa Mică (Carul Mic)",
+    "nameRo" : "Ursa Minor (Little Dipper)",
     "stars" : [
       "Polaris",
       "Kochab",
@@ -316,7 +316,7 @@
     "id" : "VIR",
     "nameEn" : "Maiden",
     "nameLa" : "Virgo",
-    "nameRo" : "Fecioara",
+    "nameRo" : "Virgo",
     "stars" : [
       "Spica",
       "Vindemiatrix",

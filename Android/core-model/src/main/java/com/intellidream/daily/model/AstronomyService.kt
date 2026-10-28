@@ -156,17 +156,17 @@ object AstronomyService {
         // Narrative advice
         val advice = when {
             sunCoords.altitudeDegrees > -6.0 ->
-                "Ziua este luminoasă. Harta cerului arată poziția Soarelui și a corpurilor cerești dincolo de lumina atmosferei."
+                "Daylight conditions. The sky dome displays the Sun and celestial bodies beyond atmospheric glare."
             finalScore >= 80 ->
-                "Condiții excepționale de observare! Cer senin cu transparență excelentă. Recomandat pentru Calea Lactee și obiecte Deep-Sky."
+                "Exceptional stargazing conditions! Clear sky with outstanding transparency. Highly recommended for the Milky Way and Deep-Sky objects."
             finalScore >= 60 ->
-                "Condiții bune pentru observare vizuală. Planetele și constelațiile majore sunt clar vizibile."
+                "Good conditions for visual observation. Major planets and bright constellations are clearly visible."
             moonCoords.isVisible && moon.illuminatedFraction > 0.6 ->
-                "Lumina puternică a Lunii acoperă nebuloasele slabe, dar discul lunar și planetele strălucesc spectaculos."
+                "Strong moonlight diminishes faint nebulae, but the lunar surface and bright planets shine spectacularly."
             effClouds > 40 ->
-                "Plafon de nori parțial. Observațiile pot fi făcute în breșele senine."
+                "Partial cloud cover. Observations are possible through clear breaks."
             else ->
-                "Condiții modeste pentru astrofotografie sau cer profund. Recomandat pentru sateliți strălucitori și planete mari."
+                "Moderate observing conditions. Recommended for bright satellites and major planets."
         }
 
         val bestWindow: String? = if (finalScore >= 50) "21:30 – 01:45" else null

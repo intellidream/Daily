@@ -51,6 +51,16 @@ namespace Daily_WinUI.Views
             InitializeComponent();
             Loaded += CosmosDetailPage_Loaded;
             Unloaded += CosmosDetailPage_Unloaded;
+            KeyDown += CosmosDetailPage_KeyDown;
+        }
+
+        private void CosmosDetailPage_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Escape)
+            {
+                BackButton_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
         }
 
         private async void CosmosDetailPage_Loaded(object sender, RoutedEventArgs e)
@@ -64,7 +74,7 @@ namespace Daily_WinUI.Views
                 {
                     _latitude = coords.Value.Latitude;
                     _longitude = coords.Value.Longitude;
-                    LocationSubtitle.Text = $"Observator Cerul Nopții • {_latitude:F2}°N, {_longitude:F2}°E";
+                    LocationSubtitle.Text = $"Night Sky Observatory • {_latitude:F2}°N, {_longitude:F2}°E";
                 }
             }
             catch { }
@@ -147,30 +157,26 @@ namespace Daily_WinUI.Views
             Canvas.SetTop(horizonCircle, cy - radius);
             SkyCanvas.Children.Add(horizonCircle);
 
-            // 3. Altitude Circles: 30° and 60°
-            double r30 = radius * (60.0 / 90.0);
-            var circle30 = new Ellipse
+            // 3. Dynamic Altitude Circles (scaled by FOV)
+            double[] guideAlts = _fieldOfView <= 45.0 ? new double[] { 80.0, 70.0, 60.0 } : new double[] { 60.0, 30.0 };
+            foreach (var alt in guideAlts)
             {
-                Width = r30 * 2,
-                Height = r30 * 2,
-                Stroke = guideBrush,
-                StrokeThickness = 1
-            };
-            Canvas.SetLeft(circle30, cx - r30);
-            Canvas.SetTop(circle30, cy - r30);
-            SkyCanvas.Children.Add(circle30);
-
-            double r60 = radius * (30.0 / 90.0);
-            var circle60 = new Ellipse
-            {
-                Width = r60 * 2,
-                Height = r60 * 2,
-                Stroke = guideBrush,
-                StrokeThickness = 1
-            };
-            Canvas.SetLeft(circle60, cx - r60);
-            Canvas.SetTop(circle60, cy - r60);
-            SkyCanvas.Children.Add(circle60);
+                double rAlt = radius * ((90.0 - alt) / _fieldOfView);
+                if (rAlt > 5 && rAlt <= radius)
+                {
+                    var circle = new Ellipse
+                    {
+                        Width = rAlt * 2,
+                        Height = rAlt * 2,
+                        Stroke = guideBrush,
+                        StrokeThickness = 1,
+                        StrokeDashArray = new DoubleCollection { 3, 3 }
+                    };
+                    Canvas.SetLeft(circle, cx - rAlt);
+                    Canvas.SetTop(circle, cy - rAlt);
+                    SkyCanvas.Children.Add(circle);
+                }
+            }
 
             // 4. Zenith Cross
             var zLineH = new Line { X1 = cx - 6, Y1 = cy, X2 = cx + 6, Y2 = cy, Stroke = guideBrush, StrokeThickness = 1 };
@@ -178,13 +184,23 @@ namespace Daily_WinUI.Views
             SkyCanvas.Children.Add(zLineH);
             SkyCanvas.Children.Add(zLineV);
 
-            // 5. Cardinal Markers (N, E, S, V)
+            // 5. Celestial Canvas Layer with Strict Circular EllipseGeometry Clipping
+            // This guarantees stars, constellations, DSOs, and planets NEVER spill outside the dome aperture when zooming
+            var celestialLayer = new Canvas
+            {
+                Width = w,
+                Height = h,
+                Clip = new EllipseGeometry { Center = new Point(cx, cy), RadiusX = radius, RadiusY = radius }
+            };
+            SkyCanvas.Children.Add(celestialLayer);
+
+            // 6. Cardinal Markers (N, E, S, W)
             DrawCardinal(cx, cy, radius, 0.0, "N", cardinalBrush);
             DrawCardinal(cx, cy, radius, 90.0, "E", cardinalBrush);
             DrawCardinal(cx, cy, radius, 180.0, "S", cardinalBrush);
-            DrawCardinal(cx, cy, radius, 270.0, "V", cardinalBrush);
+            DrawCardinal(cx, cy, radius, 270.0, "W", cardinalBrush);
 
-            // 6. Draw Constellations (IAU Lines)
+            // 7. Draw Constellations (IAU Lines)
             var starPositions = new Dictionary<string, (double x, double y)>();
 
             foreach (var star in _catalogRepo.Stars)
@@ -222,12 +238,12 @@ namespace Daily_WinUI.Views
                             Stroke = constLineBrush,
                             StrokeThickness = 1.2
                         };
-                        SkyCanvas.Children.Add(line);
+                        celestialLayer.Children.Add(line);
                     }
                 }
             }
 
-            // 7. Draw Stars
+            // 8. Draw Stars
             foreach (var star in _catalogRepo.Stars)
             {
                 if (starPositions.TryGetValue(star.Name, out var pos))
@@ -265,7 +281,7 @@ namespace Daily_WinUI.Views
                     starDisc.PointerPressed += StarDisc_PointerPressed;
                     Canvas.SetLeft(starDisc, pos.x - starSize / 2.0);
                     Canvas.SetTop(starDisc, pos.y - starSize / 2.0);
-                    SkyCanvas.Children.Add(starDisc);
+                    celestialLayer.Children.Add(starDisc);
 
                     // Name labels for brightest stars (mag < 1.0)
                     if (star.Mag < 1.0)
@@ -280,12 +296,12 @@ namespace Daily_WinUI.Views
                         };
                         Canvas.SetLeft(starLabel, pos.x + starSize / 2.0 + 3);
                         Canvas.SetTop(starLabel, pos.y - 7);
-                        SkyCanvas.Children.Add(starLabel);
+                        celestialLayer.Children.Add(starLabel);
                     }
                 }
             }
 
-            // 8. Draw Deep-Sky Objects (Messier)
+            // 9. Draw Deep-Sky Objects (Messier)
             var dsoBrush = _isNightVision
                 ? new SolidColorBrush(Color.FromArgb(160, 255, 24, 36))
                 : new SolidColorBrush(Color.FromArgb(180, 255, 143, 163));
@@ -310,7 +326,7 @@ namespace Daily_WinUI.Views
                         dsoMarker.PointerPressed += DsoMarker_PointerPressed;
                         Canvas.SetLeft(dsoMarker, proj.Value.x - 6);
                         Canvas.SetTop(dsoMarker, proj.Value.y - 6);
-                        SkyCanvas.Children.Add(dsoMarker);
+                        celestialLayer.Children.Add(dsoMarker);
 
                         var dsoText = new TextBlock
                         {
@@ -321,12 +337,12 @@ namespace Daily_WinUI.Views
                         };
                         Canvas.SetLeft(dsoText, proj.Value.x + 8);
                         Canvas.SetTop(dsoText, proj.Value.y - 6);
-                        SkyCanvas.Children.Add(dsoText);
+                        celestialLayer.Children.Add(dsoText);
                     }
                 }
             }
 
-            // 9. Draw Planets & Sun / Moon
+            // 10. Draw Planets & Sun / Moon
             var bodies = _astronomyService.GetAllVisibleBodies(time, _latitude, _longitude);
             UpdatePlanetsCarousel(bodies);
 
@@ -337,20 +353,21 @@ namespace Daily_WinUI.Views
                     var proj = ProjectToViewport(b.Azimuth, b.Altitude, cx, cy, radius);
                     if (proj.HasValue)
                     {
-                        DrawPlanetMarker(b, proj.Value.x, proj.Value.y);
+                        DrawPlanetMarker(celestialLayer, b, proj.Value.x, proj.Value.y);
                     }
                 }
             }
 
-            // 10. Center Crosshair Reticle
+            // 11. Center Crosshair Reticle
             DrawReticle(cx, cy, guideBrush);
         }
 
         private void DrawCardinal(double cx, double cy, double radius, double azimuthDeg, string label, Brush brush)
         {
             double angleRad = (azimuthDeg - _cameraAzimuth) * (Math.PI / 180.0);
-            double x = cx + radius * Math.Sin(angleRad);
-            double y = cy - radius * Math.Cos(angleRad);
+            double markerR = radius - 16;
+            double x = cx + markerR * Math.Sin(angleRad);
+            double y = cy - markerR * Math.Cos(angleRad);
 
             var text = new TextBlock
             {
@@ -365,7 +382,7 @@ namespace Daily_WinUI.Views
             SkyCanvas.Children.Add(text);
         }
 
-        private void DrawPlanetMarker(CelestialCoordinates body, double x, double y)
+        private void DrawPlanetMarker(Canvas layer, CelestialCoordinates body, double x, double y)
         {
             Color color = _isNightVision
                 ? Color.FromArgb(255, 255, 24, 36)
@@ -394,18 +411,18 @@ namespace Daily_WinUI.Views
             planetDisc.PointerPressed += PlanetDisc_PointerPressed;
             Canvas.SetLeft(planetDisc, x - markerSize / 2.0);
             Canvas.SetTop(planetDisc, y - markerSize / 2.0);
-            SkyCanvas.Children.Add(planetDisc);
+            layer.Children.Add(planetDisc);
 
             var nameText = new TextBlock
             {
-                Text = GetBodyRomanianName(body.Body),
+                Text = GetBodyEnglishName(body.Body),
                 FontSize = 10,
                 FontWeight = Microsoft.UI.Text.FontWeights.Bold,
                 Foreground = new SolidColorBrush(color)
             };
             Canvas.SetLeft(nameText, x + markerSize / 2.0 + 4);
             Canvas.SetTop(nameText, y - 7);
-            SkyCanvas.Children.Add(nameText);
+            layer.Children.Add(nameText);
         }
 
         private void DrawReticle(double cx, double cy, Brush brush)
@@ -427,11 +444,15 @@ namespace Daily_WinUI.Views
 
         private (double x, double y)? ProjectToViewport(double azimuthDeg, double altitudeDeg, double cx, double cy, double radius)
         {
-            if (altitudeDeg < -5.0) return null;
+            if (altitudeDeg < -10.0) return null;
 
-            // Stereographic radius: r = (90 - alt) / 90
-            double altFraction = Math.Clamp((90.0 - altitudeDeg) / 90.0, 0.0, 1.0);
-            double r = radius * altFraction * (90.0 / _fieldOfView);
+            // Stereographic projection: Zenith is at center (r=0), FOV edge is at r=radius
+            double altFraction = (90.0 - altitudeDeg) / _fieldOfView;
+            if (altFraction < 0.0) return null;
+            double r = radius * altFraction;
+
+            // Outside 2.5x radius skip
+            if (r > radius * 2.5) return null;
 
             // Relative azimuth to camera orientation
             double relAzRad = (azimuthDeg - _cameraAzimuth) * (Math.PI / 180.0);
@@ -444,11 +465,11 @@ namespace Daily_WinUI.Views
         private void UpdateHUDTelemetry(DateTime time)
         {
             TelemetryAzAlt.Text = $"Az: {_cameraAzimuth:F1}° • Alt: {_cameraAltitude:F1}°";
-            TelemetryFov.Text = $"Câmp vizual (FOV): {_fieldOfView:F0}°";
+            TelemetryFov.Text = $"Field of View (FOV): {_fieldOfView:F0}°";
 
             var moon = _astronomyService.GetMoonPhase(time);
             var stargazing = _astronomyService.EvaluateStargazingQuality(15.0, moon.IlluminatedFraction, 4);
-            TelemetryStargazing.Text = $"Calitate cer: {stargazing.Quality} ({stargazing.Score})";
+            TelemetryStargazing.Text = $"Sky Quality: {stargazing.Quality} ({stargazing.Score})";
 
             if (_timeOffset == TimeSpan.Zero)
             {
@@ -458,9 +479,9 @@ namespace Daily_WinUI.Views
             }
             else
             {
-                SimulationBadgeText.Text = "SIMULARE";
+                SimulationBadgeText.Text = "SIMULATION";
                 SimulationBadge.Background = new SolidColorBrush(Color.FromArgb(40, 255, 209, 102));
-                SimulatedTimeText.Text = $"Timp: {time.ToLocalTime():dd MMM, HH:mm}";
+                SimulatedTimeText.Text = $"Sim: {time.ToLocalTime():dd MMM, HH:mm}";
             }
         }
 
@@ -497,7 +518,7 @@ namespace Daily_WinUI.Views
                 });
                 panel.Children.Add(new TextBlock
                 {
-                    Text = $"{GetBodyRomanianName(b.Body)} ({b.Altitude:+0;-0}°)",
+                    Text = $"{GetBodyEnglishName(b.Body)} ({b.Altitude:+0;-0}°)",
                     FontSize = 11,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     Foreground = b.IsAboveHorizon ? new SolidColorBrush(Colors.White) : new SolidColorBrush(Colors.Gray)
@@ -508,17 +529,17 @@ namespace Daily_WinUI.Views
             }
         }
 
-        private static string GetBodyRomanianName(CelestialBody body) => body switch
+        private static string GetBodyEnglishName(CelestialBody body) => body switch
         {
-            CelestialBody.Sun => "Soare",
-            CelestialBody.Moon => "Lună",
-            CelestialBody.Mercury => "Mercur",
+            CelestialBody.Sun => "Sun",
+            CelestialBody.Moon => "Moon",
+            CelestialBody.Mercury => "Mercury",
             CelestialBody.Venus => "Venus",
-            CelestialBody.Mars => "Marte",
+            CelestialBody.Mars => "Mars",
             CelestialBody.Jupiter => "Jupiter",
             CelestialBody.Saturn => "Saturn",
             CelestialBody.Uranus => "Uranus",
-            CelestialBody.Neptune => "Neptun",
+            CelestialBody.Neptune => "Neptune",
             CelestialBody.Pluto => "Pluto",
             _ => body.ToString()
         };
@@ -560,7 +581,7 @@ namespace Daily_WinUI.Views
             int delta = e.GetCurrentPoint(SkyCanvas).Properties.MouseWheelDelta;
             if (delta > 0)
             {
-                _fieldOfView = Math.Max(30.0, _fieldOfView - 5.0); // Zoom in
+                _fieldOfView = Math.Max(25.0, _fieldOfView - 5.0); // Zoom in
             }
             else if (delta < 0)
             {
@@ -613,37 +634,37 @@ namespace Daily_WinUI.Views
 
             if (target is CelestialCoordinates body)
             {
-                TargetNameText.Text = GetBodyRomanianName(body.Body);
-                TargetTypeText.Text = $"Planetă • Sistemul Solar {(body.IsAboveHorizon ? "• Vizibil acum" : "• Sub orizont")}";
+                TargetNameText.Text = GetBodyEnglishName(body.Body);
+                TargetTypeText.Text = $"Planet • Solar System {(body.IsAboveHorizon ? "• Visible now" : "• Below horizon")}";
                 TargetCoordsText.Text = $"Az: {body.Azimuth:F1}° • Alt: {body.Altitude:F1}°";
                 TargetMagDistText.Text = $"Mag: {body.Magnitude?.ToString("F1") ?? "--"} • Dist: {body.DistanceAu:F2} AU";
                 TargetOpticsText.Text = body.Body switch
                 {
-                    CelestialBody.Moon => "Observabil cu ochiul liber • Cratere spectaculoase prin binoclu sau telescop",
-                    CelestialBody.Jupiter => "4 sateliți galileeni vizibili prin binoclu 10x50 • Benzi noroase prin telescop",
-                    CelestialBody.Saturn => "Inelele magnifice vizibile prin telescop cu apertură minimă de 60mm",
-                    CelestialBody.Venus => "Faze vizibile clar la mărire 20x+",
-                    CelestialBody.Mars => "Disc roșiatic • Calote glaciare polare vizibile în opoziție",
-                    _ => "Urmăriți cu telescop motorizat"
+                    CelestialBody.Moon => "Naked-eye visible • Spectacular craters in binoculars or telescope",
+                    CelestialBody.Jupiter => "4 Galilean moons visible in 10x50 binoculars • Cloud bands in telescope",
+                    CelestialBody.Saturn => "Magnificent rings visible in 60mm+ aperture telescope",
+                    CelestialBody.Venus => "Phases clearly visible at 20x+ magnification",
+                    CelestialBody.Mars => "Reddish disk • Polar ice caps visible during opposition",
+                    _ => "Track with motorized telescope"
                 };
             }
             else if (target is CosmosStar star)
             {
                 TargetNameText.Text = star.Name;
-                TargetTypeText.Text = $"Stea • {star.Bayer ?? ""} în {star.Constellation}";
+                TargetTypeText.Text = $"Star • {star.Bayer ?? ""} in {star.Constellation}";
                 var (az, alt) = _astronomyService.EquatorialToHorizontal(star.RaHours, star.DecDegrees, CurrentSimulationTime, _latitude, _longitude);
                 TargetCoordsText.Text = $"Az: {az:F1}° • Alt: {alt:F1}°";
-                TargetMagDistText.Text = $"Mag: {star.Mag:F1} • Indice B-V: {star.ColorIndexBV:F2}";
-                TargetOpticsText.Text = $"Clasă spectrală corespunzătoare culorii {star.ColorHex} • Vizibilă cu ochiul liber pe cer senin.";
+                TargetMagDistText.Text = $"Mag: {star.Mag:F1} • B-V Index: {star.ColorIndexBV:F2}";
+                TargetOpticsText.Text = $"Spectral class corresponding to color {star.ColorHex} • Visible to naked eye under clear skies.";
             }
             else if (target is CosmosDeepSkyObject dso)
             {
                 TargetNameText.Text = $"{dso.Id} - {dso.Name}";
-                TargetTypeText.Text = $"{dso.Type} • Constelația {dso.Constellation}";
+                TargetTypeText.Text = $"{dso.Type} • Constellation {dso.Constellation}";
                 var (az, alt) = _astronomyService.EquatorialToHorizontal(dso.RaHours, dso.DecDegrees, CurrentSimulationTime, _latitude, _longitude);
                 TargetCoordsText.Text = $"Az: {az:F1}° • Alt: {alt:F1}°";
                 TargetMagDistText.Text = $"Mag: {dso.VisualMag:F1} • {dso.Optics}";
-                TargetOpticsText.Text = $"{dso.DescRo}";
+                TargetOpticsText.Text = string.IsNullOrEmpty(dso.DescEn) ? dso.DescRo : dso.DescEn;
             }
         }
 

@@ -79,13 +79,13 @@ public struct CosmosDashboardCard: View, Equatable {
                 Text("\(cosmosVM.currentMoonPhase.illuminationPercent)%")
                     .font(.system(size: 34, weight: .thin, design: .rounded))
                     .foregroundColor(.white)
-                Text("Luna")
+                Text("Moon")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(ThemeColors.fgMutedDark)
                     .padding(.bottom, 6)
             }
 
-            Text(cosmosVM.currentMoonPhase.quarter.displayNameRo)
+            Text(cosmosVM.currentMoonPhase.quarter.displayName)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.white.opacity(0.9))
                 .lineLimit(1)
@@ -117,7 +117,7 @@ public struct CosmosDashboardCard: View, Equatable {
         VStack(alignment: .leading, spacing: 12) {
             // Card Header
             HStack {
-                Label("Cosmos & Cer Nocturn", systemImage: "moon.stars.fill")
+                Label("Cosmos & Night Sky", systemImage: "moon.stars.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(ThemeColors.accentCyan)
 
@@ -150,7 +150,7 @@ public struct CosmosDashboardCard: View, Equatable {
                         .foregroundColor(scoreColor(cosmosVM.stargazingScore))
                         .lineLimit(1)
 
-                    Text("Faza: \(cosmosVM.currentMoonPhase.quarter.displayNameRo)")
+                    Text("Phase: \(cosmosVM.currentMoonPhase.quarter.displayName)")
                         .font(.system(size: 11, weight: .regular))
                         .foregroundColor(ThemeColors.fgMutedDark)
                         .lineLimit(1)
@@ -169,7 +169,7 @@ public struct CosmosDashboardCard: View, Equatable {
                         Image(systemName: "sparkles")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(ThemeColors.accentCyan)
-                        Text("\(cosmosVM.visiblePlanetsCount) Planete pe cer")
+                        Text("\(cosmosVM.visiblePlanetsCount) Planets in sky")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(.white)
                         Spacer()
@@ -189,7 +189,7 @@ public struct CosmosDashboardCard: View, Equatable {
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
                         } else {
-                            Text("Iluminare Lună: \(cosmosVM.currentMoonPhase.illuminationPercent)%")
+                            Text("Moon Illumination: \(cosmosVM.currentMoonPhase.illuminationPercent)%")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
                         }
@@ -236,13 +236,13 @@ public struct CosmosDashboardCard: View, Equatable {
 
             // Moon Section
             VStack(alignment: .leading, spacing: 4) {
-                Text("LUNA")
+                Text("MOON")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(ThemeColors.fgMutedDark)
-                Text(cosmosVM.currentMoonPhase.quarter.displayNameRo)
+                Text(cosmosVM.currentMoonPhase.quarter.displayName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
-                Text("\(cosmosVM.currentMoonPhase.illuminationPercent)% iluminată")
+                Text("\(cosmosVM.currentMoonPhase.illuminationPercent)% illuminated")
                     .font(.system(size: 11))
                     .foregroundColor(ThemeColors.fgMutedDark)
             }
@@ -255,7 +255,7 @@ public struct CosmosDashboardCard: View, Equatable {
                     Image(systemName: "sparkles")
                         .font(.system(size: 11))
                         .foregroundColor(ThemeColors.accentCyan)
-                    Text("\(cosmosVM.visiblePlanetsCount) Planete vizibile")
+                    Text("\(cosmosVM.visiblePlanetsCount) Planets visible")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white)
                 }
@@ -284,7 +284,7 @@ public struct CosmosDashboardCard: View, Equatable {
         VStack(alignment: .leading, spacing: 14) {
             // Header
             HStack {
-                Label("Cosmos & Observator Nocturn", systemImage: "moon.stars.fill")
+                Label("Cosmos & Night Sky Observer", systemImage: "moon.stars.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(ThemeColors.accentCyan)
                 Spacer()
@@ -302,7 +302,7 @@ public struct CosmosDashboardCard: View, Equatable {
             HStack(spacing: 16) {
                 // Stargazing Index Tile
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("CALITATE OBSERVARE")
+                    Text("STARGAZING QUALITY")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
 
@@ -323,7 +323,7 @@ public struct CosmosDashboardCard: View, Equatable {
 
                 // Moon Phase Tile
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("FAZĂ LUNARĂ")
+                    Text("MOON PHASE")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(ThemeColors.fgMutedDark)
 
@@ -339,10 +339,10 @@ public struct CosmosDashboardCard: View, Equatable {
                             )
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(cosmosVM.currentMoonPhase.quarter.displayNameRo)
+                            Text(cosmosVM.currentMoonPhase.quarter.displayName)
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.white)
-                            Text("\(cosmosVM.currentMoonPhase.illuminationPercent)% iluminată")
+                            Text("\(cosmosVM.currentMoonPhase.illuminationPercent)% illuminated")
                                 .font(.system(size: 11))
                                 .foregroundColor(ThemeColors.fgMutedDark)
                         }
@@ -357,22 +357,22 @@ public struct CosmosDashboardCard: View, Equatable {
             // 3-Column Metrics Grid
             HStack(spacing: 10) {
                 metricCell(
-                    title: "PLANETE",
-                    value: "\(cosmosVM.visiblePlanetsCount) Vizibile",
+                    title: "PLANETS",
+                    value: "\(cosmosVM.visiblePlanetsCount) Visible",
                     icon: "sparkles",
                     tint: ThemeColors.accentCyan
                 )
 
                 metricCell(
-                    title: "SATELIT ISS",
+                    title: "ISS SATELLITE",
                     value: cosmosLive.upcomingIssPasses.first.map { $0.startTime.formatted(date: .omitted, time: .shortened) } ?? "--:--",
                     icon: "satellite.fill",
                     tint: ThemeColors.accentPink
                 )
 
                 metricCell(
-                    title: "AURORĂ (KP)",
-                    value: cosmosLive.spaceWeather.map { "Kp \(String(format: "%.1f", $0.kpIndex))" } ?? "Kp Calm",
+                    title: "AURORA (KP)",
+                    value: cosmosLive.spaceWeather.map { "Kp \(String(format: "%.1f", $0.kpIndex))" } ?? "Kp Quiet",
                     icon: "waveform.path.ecg",
                     tint: ThemeColors.accentGreen
                 )
@@ -382,7 +382,7 @@ public struct CosmosDashboardCard: View, Equatable {
 
             // Footer action indicator
             HStack {
-                Text("Atinge pentru a deschide Observatorul 3D interactiv")
+                Text("Tap to open interactive 3D Observatory")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(ThemeColors.fgMutedDark)
                 Spacer()

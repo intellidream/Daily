@@ -302,7 +302,7 @@ public final class CosmosViewModel: ObservableObject {
         )
 
         self.stargazingScore = conds.score
-        self.stargazingVerdict = conds.quality.displayNameRo
+        self.stargazingVerdict = conds.quality.displayName
 
         // Count visible planets above horizon
         var count = 0
@@ -492,6 +492,72 @@ public final class CosmosViewModel: ObservableObject {
         return (projectedStars, projectedPlanets, projectedDSOs, projectedLines, projectedLabels)
     }
 
+    public func projectHorizon(in size: CGSize) -> (
+        horizonPoints: [CGPoint],
+        cardinals: [(label: String, x: Double, y: Double, isPrimary: Bool)],
+        zenith: (x: Double, y: Double)?
+    ) {
+        let vw = Double(size.width)
+        let vh = Double(size.height)
+        guard vw > 0, vh > 0 else { return ([], [], nil) }
+
+        var hPoints: [CGPoint] = []
+        for step in 0..<72 {
+            let azDeg = Double(step * 5)
+            if let p = astronomyService.projectHorizontal(
+                azimuthDegrees: azDeg,
+                altitudeDegrees: 0.0,
+                cameraAzimuthDegrees: cameraAzimuth,
+                cameraAltitudeDegrees: cameraAltitude,
+                cameraRollDegrees: cameraRoll,
+                fovDegrees: fov,
+                viewportWidth: vw,
+                viewportHeight: vh
+            ) {
+                hPoints.append(CGPoint(x: p.x, y: p.y))
+            }
+        }
+
+        let cardinalList: [(String, Double, Bool)] = [
+            ("N", 0.0, true), ("NE", 45.0, false),
+            ("E", 90.0, true), ("SE", 135.0, false),
+            ("S", 180.0, true), ("SW", 225.0, false),
+            ("W", 270.0, true), ("NW", 315.0, false)
+        ]
+
+        var cards: [(label: String, x: Double, y: Double, isPrimary: Bool)] = []
+        for (lbl, azDeg, isPri) in cardinalList {
+            if let p = astronomyService.projectHorizontal(
+                azimuthDegrees: azDeg,
+                altitudeDegrees: 0.0,
+                cameraAzimuthDegrees: cameraAzimuth,
+                cameraAltitudeDegrees: cameraAltitude,
+                cameraRollDegrees: cameraRoll,
+                fovDegrees: fov,
+                viewportWidth: vw,
+                viewportHeight: vh
+            ) {
+                cards.append((lbl, p.x, p.y, isPri))
+            }
+        }
+
+        var zenithPt: (Double, Double)? = nil
+        if let zp = astronomyService.projectHorizontal(
+            azimuthDegrees: cameraAzimuth,
+            altitudeDegrees: 90.0,
+            cameraAzimuthDegrees: cameraAzimuth,
+            cameraAltitudeDegrees: cameraAltitude,
+            cameraRollDegrees: cameraRoll,
+            fovDegrees: fov,
+            viewportWidth: vw,
+            viewportHeight: vh
+        ) {
+            zenithPt = (zp.x, zp.y)
+        }
+
+        return (hPoints, cards, zenithPt)
+    }
+
     // MARK: - Search Catalog
     public var searchResults: [CosmosTarget] {
         guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
@@ -501,12 +567,12 @@ public final class CosmosViewModel: ObservableObject {
 
         // 1. Match Planets
         let bodies: [(CelestialBody, String, String)] = [
-            (.moon, "Luna", "Satelitul natural al Pământului"),
-            (.jupiter, "Jupiter", "Gigantul gazos cu 4 sateliți galileeni"),
-            (.saturn, "Saturn", "Planeta inelelor spectaculoase"),
-            (.mars, "Marte", "Planeta Roșie"),
-            (.venus, "Venus", "Luceafărul de seară/dimineață"),
-            (.mercury, "Mercur", "Cea mai apropiată planetă de Soare")
+            (.moon, "Moon", "Earth's sole natural satellite"),
+            (.jupiter, "Jupiter", "The gas giant with 4 Galilean moons"),
+            (.saturn, "Saturn", "The jewel of the solar system with iconic rings"),
+            (.mars, "Mars", "The Red Planet with towering volcanoes and polar ice caps"),
+            (.venus, "Venus", "The brilliant morning and evening star"),
+            (.mercury, "Mercury", "The innermost planet closest to the Sun")
         ]
 
         for (body, name, lore) in bodies {
@@ -517,7 +583,7 @@ public final class CosmosViewModel: ObservableObject {
                         id: "body_\(body.rawValue)",
                         name: name,
                         subtitle: "\(body.rawValue.capitalized) · Mag \(String(format: "%.1f", coords.visualMagnitude))",
-                        category: "Planete & Sateliți",
+                        category: "Planets & Moons",
                         iconName: body == .moon ? "moon.fill" : "circle.fill",
                         azimuth: coords.azimuthDegrees,
                         altitude: coords.altitudeDegrees,
@@ -526,7 +592,7 @@ public final class CosmosViewModel: ObservableObject {
                         visualMagnitude: coords.visualMagnitude,
                         distanceDescription: "\(String(format: "%.2f", coords.distanceAU)) AU",
                         lore: lore,
-                        recommendedOptics: body == .jupiter || body == .saturn ? "Telescop / Binoclu" : "Ochi liber"
+                        recommendedOptics: body == .jupiter || body == .saturn ? "Telescope / Binoculars" : "Naked Eye"
                     )
                 )
             }
@@ -539,8 +605,8 @@ public final class CosmosViewModel: ObservableObject {
                     CosmosTarget(
                         id: "star_\(star.name)",
                         name: star.name,
-                        subtitle: "Stea în \(star.constellation) · Mag \(String(format: "%.2f", star.magnitude))",
-                        category: "Stele Strălucitoare",
+                        subtitle: "Star in \(star.constellation) · Mag \(String(format: "%.2f", star.magnitude))",
+                        category: "Bright Stars",
                         iconName: "sparkle",
                         azimuth: 0,
                         altitude: 0,
@@ -548,7 +614,7 @@ public final class CosmosViewModel: ObservableObject {
                         declinationDegrees: star.decDegrees,
                         visualMagnitude: star.magnitude,
                         constellationName: star.constellation,
-                        lore: "Stea de clasă spectrală B-V \(star.colorIndexBV), identificată în catalogul hipparcos.",
+                        lore: "Star with spectral color index B-V \(star.colorIndexBV), cataloged in standard astronomical surveys.",
                         accentColorHex: star.colorHex
                     )
                 )
@@ -562,8 +628,8 @@ public final class CosmosViewModel: ObservableObject {
                     CosmosTarget(
                         id: "dso_\(dso.id)",
                         name: "\(dso.id) - \(dso.name)",
-                        subtitle: "\(dso.type.displayNameRo) · \(dso.constellationCode)",
-                        category: "Obiecte Deep Sky (Messier)",
+                        subtitle: "\(dso.type.displayName) · \(dso.constellationCode)",
+                        category: "Deep Sky Objects (Messier)",
                         iconName: "camera.macro",
                         azimuth: 0,
                         altitude: 0,
@@ -584,46 +650,46 @@ public final class CosmosViewModel: ObservableObject {
     public func target(for body: CelestialBody) -> CosmosTarget {
         let obs = (latitude: observerLatitude, longitude: observerLongitude, elevation: 50.0)
         let coords = astronomyService.coordinates(of: body, for: obs, at: simulationDate)
-        let nameRo: String
+        let name: String
         let lore: String
         switch body {
         case .sun:
-            nameRo = "Soarele"
-            lore = "Steaua centrală a Sistemului Solar, responsabilă pentru lumina și viața pe Pământ."
+            name = "Sun"
+            lore = "The central star of the Solar System, powering light and life on Earth."
         case .moon:
-            nameRo = "Luna"
-            lore = "Singurul satelit natural al Pământului, în faza \(currentMoonPhase.quarter.displayNameRo), iluminată \(currentMoonPhase.illuminationPercent)%."
+            name = "Moon"
+            lore = "Earth's natural satellite, in \(currentMoonPhase.quarter.displayName) phase, illuminated \(currentMoonPhase.illuminationPercent)%."
         case .mercury:
-            nameRo = "Mercur"
-            lore = "Cea mai mică și mai apropiată planetă de Soare, cu variații extreme de temperatură."
+            name = "Mercury"
+            lore = "The smallest planet in the solar system, enduring extreme temperature swings."
         case .venus:
-            nameRo = "Venus"
-            lore = "Cea mai strălucitoare planetă pe cerul nopții, învăluită într-o atmosferă densă de dioxid de carbon."
+            name = "Venus"
+            lore = "The brightest planet in the night sky, shrouded in a dense carbon dioxide atmosphere."
         case .mars:
-            nameRo = "Marte"
-            lore = "Planeta Roșie cu ghețari polari și cel mai înalt vulcan din sistemul solar (Olympus Mons)."
+            name = "Mars"
+            lore = "The Red Planet featuring ancient riverbeds and the towering Olympus Mons volcano."
         case .jupiter:
-            nameRo = "Jupiter"
-            lore = "Marele gigant gazos cu Marea Pată Roșie și cei 4 mari sateliți Io, Europa, Ganymede și Callisto."
+            name = "Jupiter"
+            lore = "The massive gas giant featuring the Great Red Spot and four large Galilean moons."
         case .saturn:
-            nameRo = "Saturn"
-            lore = "Planeta inelelor de gheață și praf, cu satelitul masiv Titan."
+            name = "Saturn"
+            lore = "Famous for its magnificent ice ring system and its massive moon Titan."
         case .uranus:
-            nameRo = "Uranus"
-            lore = "Gigant de gheață ce orbitează înclinat pe o parte la 98 de grade."
+            name = "Uranus"
+            lore = "Ice giant tilted dramatically on its side with a 98-degree axial tilt."
         case .neptune:
-            nameRo = "Neptun"
-            lore = "Cea mai îndepărtată planetă mare din Sistemul Solar, cu vânturi supersonice de peste 2000 km/h."
+            name = "Neptune"
+            lore = "The most distant major planet, driven by supersonic winds exceeding 2,000 km/h."
         case .pluto:
-            nameRo = "Pluto"
-            lore = "Planeta pitică din Centura Kuiper cu inima de azot înghețat (Tombaugh Regio)."
+            name = "Pluto"
+            lore = "Dwarf planet in the Kuiper Belt featuring a nitrogen-ice heart (Tombaugh Regio)."
         }
 
         return CosmosTarget(
             id: "body_\(body.rawValue)",
-            name: nameRo,
+            name: name,
             subtitle: "\(body.rawValue.capitalized) · Mag \(String(format: "%.1f", coords.visualMagnitude))",
-            category: "Planete & Sateliți",
+            category: "Planets & Moons",
             iconName: body == .moon ? "moon.fill" : "circle.fill",
             azimuth: coords.azimuthDegrees,
             altitude: coords.altitudeDegrees,
@@ -632,7 +698,7 @@ public final class CosmosViewModel: ObservableObject {
             visualMagnitude: coords.visualMagnitude,
             distanceDescription: "\(String(format: "%.2f", coords.distanceAU)) AU",
             lore: lore,
-            recommendedOptics: body == .jupiter || body == .saturn ? "Telescop / Binoclu" : "Ochi liber"
+            recommendedOptics: body == .jupiter || body == .saturn ? "Telescope / Binoculars" : "Naked Eye"
         )
     }
 
@@ -640,8 +706,8 @@ public final class CosmosViewModel: ObservableObject {
         return CosmosTarget(
             id: "star_\(star.name)",
             name: star.name,
-            subtitle: "Stea în \(star.constellation) · Mag \(String(format: "%.2f", star.magnitude))",
-            category: "Stele Strălucitoare",
+            subtitle: "Star in \(star.constellation) · Mag \(String(format: "%.2f", star.magnitude))",
+            category: "Bright Stars",
             iconName: "sparkle",
             azimuth: 0,
             altitude: 0,
@@ -649,7 +715,7 @@ public final class CosmosViewModel: ObservableObject {
             declinationDegrees: star.decDegrees,
             visualMagnitude: star.magnitude,
             constellationName: star.constellation,
-            lore: "Stea cu indice de culoare B-V \(star.colorIndexBV), clasificată spectral în catalogul stelar internațional.",
+            lore: "Star with spectral color index B-V \(star.colorIndexBV), cataloged in standard astronomical surveys.",
             accentColorHex: star.colorHex
         )
     }
@@ -658,8 +724,8 @@ public final class CosmosViewModel: ObservableObject {
         return CosmosTarget(
             id: "dso_\(dso.id)",
             name: "\(dso.id) - \(dso.name)",
-            subtitle: "\(dso.type.displayNameRo) · \(dso.constellationCode)",
-            category: "Obiecte Deep Sky (Messier)",
+            subtitle: "\(dso.type.displayName) · \(dso.constellationCode)",
+            category: "Deep Sky Objects (Messier)",
             iconName: "camera.macro",
             azimuth: 0,
             altitude: 0,

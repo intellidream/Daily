@@ -111,11 +111,11 @@ namespace Daily_WinUI.Services.Cosmos
                     {
                         Title = s.Name,
                         Subtitle = $"{s.Bayer ?? ""} • {s.Constellation} (Mag: {s.Mag:F1})",
-                        Category = "Stea",
+                        Category = "Star",
                         RaHours = s.RaHours,
                         DecDegrees = s.DecDegrees,
                         Magnitude = s.Mag,
-                        Details = $"Index B-V: {s.ColorIndexBV:F2} | Culoare: {s.ColorHex}"
+                        Details = $"Color index B-V: {s.ColorIndexBV:F2} | Hex: {s.ColorHex}"
                     });
                 }
             }
@@ -132,7 +132,7 @@ namespace Daily_WinUI.Services.Cosmos
                     {
                         Title = $"{d.Id} - {d.Name}",
                         Subtitle = $"{d.Type} • {d.Constellation} (Mag: {d.VisualMag:F1})",
-                        Category = "Obiect Deep-Sky",
+                        Category = "Deep-Sky Object",
                         RaHours = d.RaHours,
                         DecDegrees = d.DecDegrees,
                         Magnitude = d.VisualMag,
@@ -151,13 +151,13 @@ namespace Daily_WinUI.Services.Cosmos
                 {
                     results.Add(new CosmosSearchResult
                     {
-                        Title = $"{c.NameRo} ({c.NameLa})",
-                        Subtitle = $"Constelație IAU • {c.NameEn}",
-                        Category = "Constelație",
+                        Title = c.NameLa == c.NameEn ? c.NameLa : $"{c.NameLa} ({c.NameEn})",
+                        Subtitle = $"IAU Constellation • {c.Id}",
+                        Category = "Constellation",
                         RaHours = c.CenterRa,
                         DecDegrees = c.CenterDec,
                         Magnitude = null,
-                        Details = $"Stele principale: {string.Join(", ", c.Stars)}"
+                        Details = $"Major stars: {string.Join(", ", c.Stars)}"
                     });
                 }
             }

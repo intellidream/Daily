@@ -110,18 +110,8 @@ public enum MoonPhaseQuarter: String, Codable, CaseIterable, Sendable {
     case thirdQuarter = "Third Quarter"
     case waningCrescent = "Waning Crescent"
 
-    public var displayNameRo: String {
-        switch self {
-        case .newMoon: return "Lună Nouă"
-        case .waxingCrescent: return "Semilună în Creștere"
-        case .firstQuarter: return "Primul Pătrar"
-        case .waxingGibbous: return "Lună Giboasă în Creștere"
-        case .fullMoon: return "Lună Plină"
-        case .waningGibbous: return "Lună Giboasă în Scădere"
-        case .thirdQuarter: return "Ultimul Pătrar"
-        case .waningCrescent: return "Semilună în Scădere"
-        }
-    }
+    public var displayNameRo: String { rawValue }
+    public var displayName: String { rawValue }
 
     public var sfSymbol: String {
         switch self {
@@ -238,14 +228,8 @@ public enum StargazingQuality: String, Codable, Sendable {
     case good = "Good"
     case pristine = "Pristine"
 
-    public var displayNameRo: String {
-        switch self {
-        case .poor: return "Nefavorabil"
-        case .fair: return "Moderat"
-        case .good: return "Bun"
-        case .pristine: return "Excepțional"
-        }
-    }
+    public var displayNameRo: String { rawValue }
+    public var displayName: String { rawValue }
 
     public var colorHex: String {
         switch self {
@@ -400,16 +384,8 @@ public enum DSOType: String, Codable, Sendable {
         }
     }
 
-    public var displayNameRo: String {
-        switch self {
-        case .galaxy: return "Galaxie Spirală"
-        case .emissionNebula: return "Nebuloasă de Emisie"
-        case .planetaryNebula: return "Nebuloasă Planetară"
-        case .globularCluster: return "Roi Globular"
-        case .openCluster: return "Roi Deschis"
-        case .supernovaRemnant: return "Rămășiță de Supernovă"
-        }
-    }
+    public var displayNameRo: String { rawValue }
+    public var displayName: String { rawValue }
 }
 
 public struct DeepSkyObject: Codable, Identifiable, Equatable, Sendable {

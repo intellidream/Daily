@@ -38,7 +38,7 @@
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Înapoi la Dashboard">
+                    ToolTipService.ToolTip="Back to Dashboard">
                     <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
 
@@ -63,7 +63,7 @@
 
                     <TextBlock
                         x:Name="LocationSubtitle"
-                        Text="Observator Cerul Nopții • Coordonate Locale"
+                        Text="Night Sky Observatory • Local Coordinates"
                         FontSize="12"
                         Foreground="{ThemeResource AppFgMutedColorBrush}" />
                 </StackPanel>
@@ -81,10 +81,10 @@
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                     BorderThickness="1"
                     Padding="12,0"
-                    ToolTipService.ToolTip="Comută modul nocturn roșu pentru protejarea vederii scotopice">
+                    ToolTipService.ToolTip="Toggle red night vision mode for scotopic vision preservation">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon x:Name="NightVisionIcon" Glyph="&#xE781;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFFF1824" />
-                        <TextBlock x:Name="NightVisionText" Text="Vedere Nocturnă" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="NightVisionText" Text="Night Vision" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
 
@@ -97,21 +97,21 @@
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Căutare stele, constelații, DSOs">
+                    ToolTipService.ToolTip="Search stars, constellations, DSOs">
                     <FontIcon Glyph="&#xE721;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight">
                             <StackPanel Width="320" Spacing="10">
-                                <TextBlock Text="Căutare Catalog Astronomic" FontWeight="SemiBold" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                                <TextBlock Text="Astronomical Catalog Search" FontWeight="SemiBold" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                                 <AutoSuggestBox
                                     x:Name="CatalogSearchBox"
-                                    PlaceholderText="Ex: Sirius, Orion, Pleiade, M31..."
+                                    PlaceholderText="e.g. Sirius, Orion, Pleiades, M31..."
                                     TextChanged="CatalogSearchBox_TextChanged"
                                     SuggestionChosen="CatalogSearchBox_SuggestionChosen"
                                     QuerySubmitted="CatalogSearchBox_QuerySubmitted"
                                     DisplayMemberPath="Title"
                                     TextMemberPath="Title" />
-                                <TextBlock Text="Selectează un obiect pentru centrare pe bolta cerească." FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="Select an object to center on the celestial vault." FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
@@ -127,7 +127,7 @@
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Resetează orientarea către Zenit (90°)">
+                    ToolTipService.ToolTip="Reset orientation to Zenith (90°)">
                     <FontIcon Glyph="&#xE7AD;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
 
@@ -141,7 +141,7 @@
                     BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Deschide în fereastră separată de observator">
+                    ToolTipService.ToolTip="Open in separate observatory window">
                     <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
                 </Button>
             </StackPanel>
@@ -174,8 +174,8 @@
                 Padding="12,8">
                 <StackPanel Spacing="3">
                     <TextBlock x:Name="TelemetryAzAlt" Text="Az: 180.0° • Alt: 45.0°" FontSize="11" FontWeight="Bold" FontFamily="Consolas, Segoe UI" Foreground="#FF00E5FF" />
-                    <TextBlock x:Name="TelemetryFov" Text="Câmp vizual (FOV): 90°" FontSize="10" FontFamily="Consolas, Segoe UI" Foreground="{ThemeResource AppFgMutedColorBrush}" />
-                    <TextBlock x:Name="TelemetryStargazing" Text="Calitate cer: Excelent (88)" FontSize="10" Foreground="#FF00D09C" />
+                    <TextBlock x:Name="TelemetryFov" Text="Field of View (FOV): 90°" FontSize="10" FontFamily="Consolas, Segoe UI" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                    <TextBlock x:Name="TelemetryStargazing" Text="Sky Quality: Excellent (88)" FontSize="10" Foreground="#FF00D09C" />
                 </StackPanel>
             </Border>
 
@@ -206,7 +206,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock x:Name="TargetNameText" Text="Jupiter" FontSize="16" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
-                            <TextBlock x:Name="TargetTypeText" Text="Planetă • Sistemul Solar" FontSize="11" Foreground="#FF00E5FF" />
+                            <TextBlock x:Name="TargetTypeText" Text="Planet • Solar System" FontSize="11" Foreground="#FF00E5FF" />
                         </StackPanel>
                         <Button Grid.Column="1" Click="CloseTargetCard_Click" Background="Transparent" BorderThickness="0" Padding="4">
                             <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
@@ -219,7 +219,7 @@
                     </StackPanel>
 
                     <Border Grid.Row="2" Margin="0,10,0,0" Background="#15FFFFFF" CornerRadius="8" Padding="10,6">
-                        <TextBlock x:Name="TargetOpticsText" Text="Vizibil cu ochiul liber • Detalii benzi atmosferice prin telescop 70mm+" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="TargetOpticsText" Text="Naked-eye visible • Cloud bands visible in 70mm+ telescope" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap" />
                     </Border>
                 </Grid>
             </Border>

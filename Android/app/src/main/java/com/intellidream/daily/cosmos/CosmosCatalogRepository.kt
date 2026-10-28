@@ -17,17 +17,17 @@ sealed class CosmosSearchResult {
     data class Planet(val body: CelestialBody) : CosmosSearchResult()
 
     val title: String get() = when (this) {
-        is Star -> star.nameRo.ifEmpty { star.nameEn }
-        is Constellation -> "${constellation.romanianName} (${constellation.latinName})"
-        is DSO -> "${dso.catalogNumber} – ${dso.commonNameRo}"
-        is Planet -> "${body.symbol} ${body.displayNameRo}"
+        is Star -> star.nameEn.ifEmpty { star.name }
+        is Constellation -> if (constellation.nameLa == constellation.nameEn) constellation.nameLa else "${constellation.nameLa} (${constellation.nameEn})"
+        is DSO -> "${dso.catalogNumber} – ${dso.name}"
+        is Planet -> "${body.symbol} ${body.displayName}"
     }
 
     val subtitle: String get() = when (this) {
-        is Star -> "Stea mag ${star.visualMag} • ${star.constellationCode}"
-        is Constellation -> "Constelație • ${constellation.code}"
+        is Star -> "Star mag ${star.visualMag} • ${star.constellationCode}"
+        is Constellation -> "Constellation • ${constellation.code}"
         is DSO -> "${dso.objectType} • mag ${dso.visualMag}"
-        is Planet -> "Planetă a Sistemului Solar"
+        is Planet -> "Solar System Planet"
     }
 }
 
@@ -79,7 +79,7 @@ class CosmosCatalogRepository(private val context: Context) {
 
         // Search major planets
         CelestialBody.majorPlanets.forEach { body ->
-            if (body.displayNameRo.lowercase().contains(q) || body.name.lowercase().contains(q)) {
+            if (body.displayName.lowercase().contains(q) || body.name.lowercase().contains(q)) {
                 results.add(CosmosSearchResult.Planet(body))
             }
         }

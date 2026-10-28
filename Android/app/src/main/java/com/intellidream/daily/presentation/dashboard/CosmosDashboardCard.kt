@@ -149,7 +149,7 @@ private fun SmallCosmosContent(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} planete pe cer" else quality.displayNameRo,
+                text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} planets in sky" else quality.displayName,
                 color = qualityColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -221,7 +221,7 @@ private fun WideCosmosContent(
                     .padding(horizontal = 9.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "$score • ${quality.displayNameRo.uppercase()}",
+                    text = "$score • ${quality.displayName.uppercase()}",
                     color = qualityColor,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
@@ -252,7 +252,7 @@ private fun WideCosmosContent(
                     )
                     Column {
                         Text(
-                            text = moon?.quarter?.displayNameRo ?: "Lună",
+                            text = moon?.quarter?.displayName ?: "Moon",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -260,7 +260,7 @@ private fun WideCosmosContent(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${moon?.illuminationPercent ?: 0}% iluminat",
+                            text = "${moon?.illuminationPercent ?: 0}% illuminated",
                             color = Color.White.copy(alpha = 0.60f),
                             fontSize = 10.sp
                         )
@@ -296,14 +296,14 @@ private fun WideCosmosContent(
                     }
                     Column {
                         Text(
-                            text = if (visiblePlanets.isNotEmpty()) visiblePlanets.take(3).joinToString(" ") { it.symbol } else "Planete",
+                            text = if (visiblePlanets.isNotEmpty()) visiblePlanets.take(3).joinToString(" ") { it.symbol } else "Planets",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1
                         )
                         Text(
-                            text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} vizibile acum" else "Nicio planetă",
+                            text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} visible now" else "No planets",
                             color = Color.White.copy(alpha = 0.60f),
                             fontSize = 10.sp
                         )
@@ -314,7 +314,7 @@ private fun WideCosmosContent(
 
         // Bottom Narrative Advice
         Text(
-            text = conditions?.narrativeAdvice ?: "Condiții bune pentru observarea cerului profund.",
+            text = conditions?.narrativeAdvice ?: "Good conditions for deep sky observation.",
             color = Color.White.copy(alpha = 0.65f),
             fontSize = 11.sp,
             maxLines = 1,
@@ -356,7 +356,7 @@ private fun TallCosmosContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Corpuri Vizibile în Seara Asta",
+                        text = "Tonight's Visible Bodies",
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -370,9 +370,9 @@ private fun TallCosmosContent(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CelestialRowItem("Luna", "${moon?.quarter?.symbol} ${moon?.illuminationPercent}%", "În urcare")
-                    CelestialRowItem("Jupiter", "♃ mag -2.4", "Vizibil SE")
-                    CelestialRowItem("Saturn", "♄ mag +0.7", "Inele înclinate")
+                    CelestialRowItem("Moon", "${moon?.quarter?.symbol} ${moon?.illuminationPercent}%", "Rising")
+                    CelestialRowItem("Jupiter", "♃ mag -2.4", "Visible SE")
+                    CelestialRowItem("Saturn", "♄ mag +0.7", "Tilted rings")
                 }
 
                 Row(
@@ -381,7 +381,7 @@ private fun TallCosmosContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Fereastră ideală: ${conditions?.bestWindowDescription ?: "22:00 – 02:00"}",
+                        text = "Optimal window: ${conditions?.bestWindowDescription ?: "22:00 – 02:00"}",
                         color = Color(0xFF00E5FF),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium

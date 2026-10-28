@@ -9,16 +9,18 @@ enum class CelestialBody(
     val symbol: String,
     val colorHex: String
 ) {
-    SUN("Sun", "Soare", "☉", "#FFD700"),
-    MOON("Moon", "Lună", "☽", "#F0F3F4"),
-    MERCURY("Mercury", "Mercur", "☿", "#B0BEC5"),
+    SUN("Sun", "Sun", "☉", "#FFD700"),
+    MOON("Moon", "Moon", "☽", "#F0F3F4"),
+    MERCURY("Mercury", "Mercury", "☿", "#B0BEC5"),
     VENUS("Venus", "Venus", "♀", "#FFE082"),
-    MARS("Mars", "Marte", "♂", "#FF7043"),
+    MARS("Mars", "Mars", "♂", "#FF7043"),
     JUPITER("Jupiter", "Jupiter", "♃", "#FFA726"),
     SATURN("Saturn", "Saturn", "♄", "#FFE082"),
     URANUS("Uranus", "Uranus", "♅", "#80DEEA"),
-    NEPTUNE("Neptune", "Neptun", "♆", "#42A5F5"),
+    NEPTUNE("Neptune", "Neptune", "♆", "#42A5F5"),
     PLUTO("Pluto", "Pluto", "♇", "#BCAAA4");
+
+    val displayName: String get() = displayNameRo
 
     companion object {
         val majorPlanets = listOf(MERCURY, VENUS, MARS, JUPITER, SATURN, URANUS, NEPTUNE)
@@ -40,14 +42,16 @@ data class CelestialCoordinates(
 
 @Serializable
 enum class MoonPhaseQuarter(val displayNameRo: String, val symbol: String) {
-    NEW_MOON("Lună Nouă", "🌑"),
-    WAXING_CRESCENT("Semilună în Creștere", "🌒"),
-    FIRST_QUARTER("Primul Pătrar", "🌓"),
-    WAXING_GIBBOUS("Gibooasă în Creștere", "🌔"),
-    FULL_MOON("Lună Plină", "🌕"),
-    WANING_GIBBOUS("Gibooasă în Scădere", "🌖"),
-    THIRD_QUARTER("Ultimul Pătrar", "🌗"),
-    WANING_CRESCENT("Semilună în Scădere", "🌘")
+    NEW_MOON("New Moon", "🌑"),
+    WAXING_CRESCENT("Waxing Crescent", "🌒"),
+    FIRST_QUARTER("First Quarter", "🌓"),
+    WAXING_GIBBOUS("Waxing Gibbous", "🌔"),
+    FULL_MOON("Full Moon", "🌕"),
+    WANING_GIBBOUS("Waning Gibbous", "🌖"),
+    THIRD_QUARTER("Third Quarter", "🌗"),
+    WANING_CRESCENT("Waning Crescent", "🌘");
+
+    val displayName: String get() = displayNameRo
 }
 
 @Serializable
@@ -77,10 +81,12 @@ data class SunTimes(
 
 @Serializable
 enum class StargazingQuality(val displayNameRo: String, val colorHex: String) {
-    PRISTINE("Excepțional", "#00E676"),
-    GOOD("Bun", "#00E5FF"),
-    FAIR("Moderat", "#FFD600"),
-    POOR("Nefavorabil", "#FF5252")
+    PRISTINE("Pristine", "#00E676"),
+    GOOD("Good", "#00E5FF"),
+    FAIR("Fair", "#FFD600"),
+    POOR("Poor", "#FF5252");
+
+    val displayName: String get() = displayNameRo
 }
 
 @Serializable

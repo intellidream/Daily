@@ -340,24 +340,42 @@ private fun SkyDomeCanvas(
             drawLine(reticleColor, Offset(center.x, center.y - 14f), Offset(center.x, center.y + 14f), strokeWidth = 1.5f)
             drawCircle(reticleColor, radius = 6f, center = center, style = Stroke(width = 1.2f))
 
-            // 2. Cardinal Horizon Markers
+            // 2. Horizon Line / Circular Sky Vault (alt = 0°)
+            val horizonPoints = mutableListOf<Offset>()
+            for (step in 0 until 72) {
+                val azDeg = step * 5.0
+                val hp = projectHorizontalDirect(
+                    azimuth = azDeg, altitude = 0.0,
+                    cameraAzimuth = state.cameraAzimuth,
+                    cameraAltitude = state.cameraAltitude,
+                    cameraRoll = state.cameraRoll,
+                    fovDegrees = state.fovDegrees,
+                    viewportWidth = width, viewportHeight = height
+                )
+                if (hp != null && hp.third) {
+                    horizonPoints.add(Offset(hp.first.toFloat(), hp.second.toFloat()))
+                }
+            }
+            if (horizonPoints.size > 1) {
+                val hColor = if (isRed) nightRed.copy(alpha = 0.35f) else Color(0xFF00E5FF).copy(alpha = 0.30f)
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(horizonPoints[0].x, horizonPoints[0].y)
+                    for (i in 1 until horizonPoints.size) {
+                        lineTo(horizonPoints[i].x, horizonPoints[i].y)
+                    }
+                    if (state.cameraAltitude > 65.0 && horizonPoints.size > 30) {
+                        close()
+                    }
+                }
+                drawPath(path, color = hColor, style = Stroke(width = 1.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))))
+            }
+
+            // 3. Prominent Cardinal Horizon Markers (N, NE, E, SE, S, SW, W, NW)
             val cardinals = listOf(
                 Pair(0.0, "N"), Pair(45.0, "NE"), Pair(90.0, "E"), Pair(135.0, "SE"),
                 Pair(180.0, "S"), Pair(225.0, "SW"), Pair(270.0, "W"), Pair(315.0, "NW")
             )
             cardinals.forEach { (az, label) ->
-                val p = AstronomyService.projectStereographic(
-                    raHours = 0.0, decDegrees = 0.0,
-                    observerLatitudeDegrees = state.observerLatitude,
-                    observerLongitudeDegrees = state.observerLongitude,
-                    millis = state.effectiveTimestamp,
-                    cameraAzimuthDegrees = state.cameraAzimuth,
-                    cameraAltitudeDegrees = state.cameraAltitude,
-                    cameraRollDegrees = state.cameraRoll,
-                    fovDegrees = state.fovDegrees,
-                    viewportWidth = width, viewportHeight = height
-                )
-                // Project cardinal along horizon (altitude = 0)
                 val cardProj = projectHorizontalDirect(
                     azimuth = az, altitude = 0.0,
                     cameraAzimuth = state.cameraAzimuth,
@@ -369,14 +387,21 @@ private fun SkyDomeCanvas(
                 if (cardProj != null) {
                     val (cx, cy, isVis) = cardProj
                     if (isVis) {
-                        val cColor = if (isRed) nightRed.copy(alpha = 0.8f) else Color(0xFFFFD54F)
-                        drawCircle(cColor, radius = 3.5f, center = Offset(cx.toFloat(), cy.toFloat()))
+                        val isPrimary = label.length == 1
+                        val badgeRadius = if (isPrimary) 14f else 10f
+                        val badgeColor = if (isRed) nightRed.copy(alpha = 0.25f) else Color(0xFF00E5FF).copy(alpha = 0.20f)
+                        val strokeColor = if (isRed) nightRed else Color(0xFF00E5FF)
+
+                        // Circular badge background and border
+                        drawCircle(badgeColor, radius = badgeRadius, center = Offset(cx.toFloat(), cy.toFloat()))
+                        drawCircle(strokeColor, radius = badgeRadius, center = Offset(cx.toFloat(), cy.toFloat()), style = Stroke(width = if (isPrimary) 1.8f else 1.0f))
+
                         drawContext.canvas.nativeCanvas.drawText(
                             label,
-                            cx.toFloat(), cy.toFloat() - 8f,
+                            cx.toFloat(), cy.toFloat() + if (isPrimary) 5f else 4f,
                             android.graphics.Paint().apply {
-                                color = if (isRed) 0xFFFF1824.toInt() else 0xFFFFD54F.toInt()
-                                textSize = 28f
+                                color = if (isRed) 0xFFFF1824.toInt() else 0xFFFFFFFF.toInt()
+                                textSize = if (isPrimary) 22f else 16f
                                 textAlign = android.graphics.Paint.Align.CENTER
                                 isFakeBoldText = true
                             }
@@ -498,7 +523,7 @@ private fun SkyDomeCanvas(
 
                     // Planet label & symbol
                     drawContext.canvas.nativeCanvas.drawText(
-                        "${body.symbol} ${body.displayNameRo}",
+                        "${body.symbol} ${body.displayName}",
                         px.toFloat(), py.toFloat() - 14f,
                         android.graphics.Paint().apply {
                             color = if (isRed) 0xFFFF1824.toInt() else 0xFFFFFFFF.toInt()
@@ -880,10 +905,10 @@ private fun TargetInspectorCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TargetMetricItem("Calitate Cer", "${state.conditions?.score ?: 80}/100")
-                TargetMetricItem("Stadiu Lună", "${state.moon?.quarter?.symbol} ${state.moon?.illuminationPercent}%")
-                TargetMetricItem("Altitudine", "${state.cameraAltitude.toInt()}°")
-                TargetMetricItem("Azimut", "${state.cameraAzimuth.toInt()}°")
+                TargetMetricItem("Sky Quality", "${state.conditions?.score ?: 80}/100")
+                TargetMetricItem("Moon Phase", "${state.moon?.quarter?.symbol} ${state.moon?.illuminationPercent}%")
+                TargetMetricItem("Altitude", "${state.cameraAltitude.toInt()}°")
+                TargetMetricItem("Azimuth", "${state.cameraAzimuth.toInt()}°")
             }
         }
     }
@@ -933,7 +958,7 @@ private fun QuickPlanetsBar(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(text = body.symbol, color = pColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(text = body.displayNameRo, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(text = body.displayName, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     if (isVis) {
                         Box(
                             modifier = Modifier
@@ -981,13 +1006,13 @@ private fun FlexControlDeck(
         ) {
             Column {
                 Text(
-                    text = "Consolă Observator",
+                    text = "Observer Console",
                     color = if (isRed) nightRed else Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Orientare: Az ${state.cameraAzimuth.toInt()}° • Alt ${state.cameraAltitude.toInt()}°",
+                    text = "Orientation: Az ${state.cameraAzimuth.toInt()}° • Alt ${state.cameraAltitude.toInt()}°",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 11.sp
                 )
@@ -1025,12 +1050,12 @@ private fun FlexControlDeck(
             ) {
                 Column {
                     Text(
-                        text = "Scor Cer Nocturn",
+                        text = "Night Sky Score",
                         color = Color.White.copy(alpha = 0.6f),
                         fontSize = 11.sp
                     )
                     Text(
-                        text = "${state.conditions?.score ?: 80} • ${state.conditions?.quality?.displayNameRo ?: "Bun"}",
+                        text = "${state.conditions?.score ?: 80} • ${state.conditions?.quality?.displayName ?: "Good"}",
                         color = parseHexColor(state.conditions?.quality?.colorHex ?: "#00E5FF"),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
@@ -1039,13 +1064,13 @@ private fun FlexControlDeck(
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "Lună ${state.moon?.illuminationPercent ?: 0}%",
+                        text = "Moon ${state.moon?.illuminationPercent ?: 0}%",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = state.moon?.quarter?.displayNameRo ?: "",
+                        text = state.moon?.quarter?.displayName ?: "",
                         color = Color.White.copy(alpha = 0.6f),
                         fontSize = 11.sp
                     )
@@ -1058,15 +1083,15 @@ private fun FlexControlDeck(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(modifier = Modifier.weight(1f)) { ScrubberPill("-1 oră") { onShiftTime(-1.0) } }
-            Box(modifier = Modifier.weight(1f)) { ScrubberPill("ACUM", isPrimary = state.isLiveTime) { onResetLiveTime() } }
-            Box(modifier = Modifier.weight(1f)) { ScrubberPill("+1 oră") { onShiftTime(1.0) } }
-            Box(modifier = Modifier.weight(1f)) { ScrubberPill("+24 ore") { onShiftTime(24.0) } }
+            Box(modifier = Modifier.weight(1f)) { ScrubberPill("-1h") { onShiftTime(-1.0) } }
+            Box(modifier = Modifier.weight(1f)) { ScrubberPill("NOW", isPrimary = state.isLiveTime) { onResetLiveTime() } }
+            Box(modifier = Modifier.weight(1f)) { ScrubberPill("+1h") { onShiftTime(1.0) } }
+            Box(modifier = Modifier.weight(1f)) { ScrubberPill("+24h") { onShiftTime(24.0) } }
         }
 
         // Planets Carousel
         Text(
-            text = "Selectare Rapidă Țintă",
+            text = "Quick Target Selection",
             color = Color.White,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
@@ -1131,7 +1156,7 @@ private fun CosmosSearchDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Caută în Cosmos",
+                        text = "Search Cosmos",
                         color = if (isRed) nightRed else Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
@@ -1150,7 +1175,7 @@ private fun CosmosSearchDialog(
                 TextField(
                     value = query,
                     onValueChange = onQueryChanged,
-                    placeholder = { Text("Stea, constelație, planetă, Messier...") },
+                    placeholder = { Text("Star, constellation, planet, Messier...") },
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.White.copy(alpha = 0.08f),
@@ -1172,7 +1197,7 @@ private fun CosmosSearchDialog(
                 ) {
                     if (results.isEmpty() && query.isNotEmpty()) {
                         Text(
-                            text = "Niciun corp ceresc găsit pentru \"$query\"",
+                            text = "No celestial body found for \"$query\"",
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(top = 16.dp)
