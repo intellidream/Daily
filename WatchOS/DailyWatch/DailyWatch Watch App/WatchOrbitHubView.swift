@@ -279,7 +279,10 @@ struct WatchOrbitHubView: View {
                         .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
 
-                // 5. Market Watchlist Ticker
+                // 5. Smart Ledger Quick Glance & Adjust
+                WatchSmartLedgerCard()
+
+                // 6. Market Watchlist Ticker
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("MARKETS & ASSETS")

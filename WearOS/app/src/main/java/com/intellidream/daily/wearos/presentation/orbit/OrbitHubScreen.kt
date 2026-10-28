@@ -408,7 +408,12 @@ fun OrbitHubScreen(
                 }
             }
 
-            // 5. Market Watchlist Card
+            // 5. Smart Ledger Quick Glance & Adjust
+            item {
+                SmartLedgerCard()
+            }
+
+            // 6. Market Watchlist Card
             item {
                 Column(
                     modifier = Modifier
