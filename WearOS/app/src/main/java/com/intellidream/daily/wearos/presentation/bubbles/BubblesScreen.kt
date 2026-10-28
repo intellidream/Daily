@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +60,8 @@ import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import com.intellidream.daily.wearos.domain.util.HabitDateParser
+import com.intellidream.daily.wearos.presentation.components.CustomWaterDialog
+import com.intellidream.daily.wearos.presentation.components.GoalEditDialog
 import com.intellidream.daily.wearos.presentation.components.QuickAddChip
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
 import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
@@ -121,6 +124,8 @@ fun BubblesScreen(
     var todayTotal by remember { mutableIntStateOf(todayWater + todayCoffee) }
     var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showCustomDialog by remember { mutableStateOf(false) }
+    var showGoalDialog by remember { mutableStateOf(false) }
 
     val formattedDateTitle = remember(dayOffset) {
         when (dayOffset) {
@@ -306,7 +311,14 @@ fun BubblesScreen(
                             text = "/ $dailyGoal ml",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.55f)
+                            color = Color.White.copy(alpha = 0.55f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    SoundAndHapticFeedback.playClick(context, view)
+                                    showGoalDialog = true
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -337,6 +349,18 @@ fun BubblesScreen(
                     title = "+100 ml Coffee",
                     accentColor = DailyWearColors.CoffeeOrange,
                     onClick = { logWater(100, "Coffee") }
+                )
+            }
+            item {
+                Spacer(Modifier.height(4.dp))
+                QuickAddChip(
+                    icon = Icons.Filled.Tune,
+                    title = "+ Custom / Multiplier",
+                    accentColor = Color(0xFF64B5F6),
+                    onClick = {
+                        SoundAndHapticFeedback.playClick(context, view)
+                        showCustomDialog = true
+                    }
                 )
             }
 
@@ -406,6 +430,15 @@ fun BubblesScreen(
                         )
                     }
                 }
+            }
+
+            // 7-Day Trend Section
+            item {
+                Spacer(Modifier.height(8.dp))
+                Bubbles7DaysInlineCard(
+                    sessionManager = sessionManager,
+                    isPageActive = isPageActive
+                )
             }
 
             // In-Flow Logs Section
@@ -549,5 +582,29 @@ fun BubblesScreen(
                 }
             )
         }
+    }
+
+    if (showCustomDialog) {
+        CustomWaterDialog(
+            show = showCustomDialog,
+            onDismiss = { showCustomDialog = false },
+            onLog = { amount, type ->
+                logWater(amount, type)
+                showCustomDialog = false
+            }
+        )
+    }
+
+    if (showGoalDialog) {
+        GoalEditDialog(
+            show = showGoalDialog,
+            isWater = true,
+            currentValue = dailyGoal,
+            onDismiss = { showGoalDialog = false },
+            onSave = { newGoal ->
+                sessionManager.updateBubblesGoal(newGoal)
+                showGoalDialog = false
+            }
+        )
     }
 }

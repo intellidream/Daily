@@ -79,6 +79,50 @@ public class WatchHabitStore: ObservableObject {
     @Published public var isSyncing: Bool = false
     @Published public var lastSyncDate: Date? = nil
     
+    // MARK: - Smokes Craving & Financial Metrics (Computed Locally in O(1))
+    
+    public var lastSmokeDate: Date? {
+        guard let first = todaySmokesLogs.first else { return nil }
+        return HabitDateParser.parse(first.logged_at)
+    }
+    
+    public var timeSinceLastSmoke: TimeInterval? {
+        guard let lsd = lastSmokeDate else { return nil }
+        return max(0, Date().timeIntervalSince(lsd))
+    }
+    
+    public var formattedTimeSinceLastSmoke: String {
+        guard let interval = timeSinceLastSmoke else {
+            return "Niciun fum azi"
+        }
+        let mins = Int(interval / 60)
+        let hours = mins / 60
+        let remMins = mins % 60
+        if hours > 0 {
+            return "\(hours)h \(remMins)m de la ultimul"
+        } else if mins > 0 {
+            return "\(mins)m de la ultimul"
+        } else {
+            return "Chiar acum"
+        }
+    }
+    
+    public var isCravingWarning: Bool {
+        guard let interval = timeSinceLastSmoke else { return false }
+        return interval < 45 * 60 // Less than 45 minutes
+    }
+    
+    public var moneySpentTodayLei: Double {
+        let costPerCig = 26.50 / 20.0 // Canonical 1.325 Lei/cig
+        return Double(smokesTotalToday) * costPerCig
+    }
+    
+    public var moneySavedTodayLei: Double {
+        let costPerCig = 26.50 / 20.0
+        let avoided = max(0, smokesBaseline - smokesTotalToday)
+        return Double(avoided) * costPerCig
+    }
+    
     private let groupSuiteName = "group.com.intellidream.daily"
     private var isRefreshing = false
     
@@ -330,6 +374,48 @@ public class WatchHabitStore: ObservableObject {
             await OfflineSyncManager.shared.enqueueInsert(newLog)
             await OfflineSyncManager.shared.processQueue()
             WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+    
+    // MARK: - Direct Goal & Baseline Adjustments
+    
+    public func updateWaterGoal(_ newGoal: Int) {
+        guard newGoal >= 500 && newGoal <= 6000 else { return }
+        WKInterfaceDevice.current().play(.click)
+        self.waterGoal = newGoal
+        saveToAppGroup()
+        WidgetCenter.shared.reloadAllTimelines()
+        
+        Task {
+            guard let pClient = WatchSessionManager.shared.supabaseClient,
+                  let userId = WatchSessionManager.shared.currentUserId else { return }
+            struct WaterPref: Encodable {
+                let id: String
+                let water_goal: Int
+            }
+            _ = try? await pClient.from("user_preferences")
+                .upsert(WaterPref(id: userId.uuidString, water_goal: newGoal))
+                .execute()
+        }
+    }
+    
+    public func updateSmokesBaseline(_ newBaseline: Int) {
+        guard newBaseline >= 1 && newBaseline <= 100 else { return }
+        WKInterfaceDevice.current().play(.click)
+        self.smokesBaseline = newBaseline
+        saveToAppGroup()
+        WidgetCenter.shared.reloadAllTimelines()
+        
+        Task {
+            guard let pClient = WatchSessionManager.shared.supabaseClient,
+                  let userId = WatchSessionManager.shared.currentUserId else { return }
+            struct SmokesPref: Encodable {
+                let id: String
+                let smokes_baseline: Int
+            }
+            _ = try? await pClient.from("user_preferences")
+                .upsert(SmokesPref(id: userId.uuidString, smokes_baseline: newBaseline))
+                .execute()
         }
     }
     

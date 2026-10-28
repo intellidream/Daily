@@ -16,22 +16,25 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                 }
             } else if sessionManager.isAuthenticated {
-                // 5-Page Horizontal Swiper (Zepp OS Parity)
+                // Horizontal Core Pager
                 TabView(selection: $selectedTab) {
                     BubblesView()
                         .tag(0)
                     
-                    Bubbles7DaysView()
+                    SmokesView()
                         .tag(1)
                     
-                    SmokesView()
+                    WatchTagdosView()
                         .tag(2)
                     
-                    Smokes7DaysView()
+                    WatchPulseView()
                         .tag(3)
+
+                    WatchOrbitHubView()
+                        .tag(4)
                     
                     AboutView()
-                        .tag(4)
+                        .tag(5)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
             } else {

@@ -70,6 +70,7 @@ class WatchSessionManager private constructor(private val context: Context) {
         const val KEY_BUBBLES_WEEK_CACHE = "bubbles_week_cache"
         const val KEY_SMOKES_WEEK_CACHE = "smokes_week_cache"
         const val KEY_LAST_HABITS_SYNC = "last_habits_sync_time"
+        const val KEY_LAST_SMOKE_TIMESTAMP = "last_smoke_timestamp"
 
         @Volatile
         private var instance: WatchSessionManager? = null
@@ -412,6 +413,7 @@ class WatchSessionManager private constructor(private val context: Context) {
             val totalHeat = updated.filter { it.metadata?.contains("Heated") == true }.sumOf { maxOf(1, it.value.toInt()) }
             persistSmokesTotal(totalCig + totalHeat)
             updateSmokesWeekToday(isHeated = isHeat, delta = 1.0)
+            prefs.edit().putLong(KEY_LAST_SMOKE_TIMESTAMP, targetCal.timeInMillis).apply()
         }
 
         offlineSyncManager.enqueueInsert(newLog)
@@ -422,6 +424,77 @@ class WatchSessionManager private constructor(private val context: Context) {
 
         _dataRefreshTrigger.value++
         return newLog
+    }
+
+    fun getFormattedTimeSinceLastSmoke(): String {
+        val t = prefs.getLong(KEY_LAST_SMOKE_TIMESTAMP, -1L)
+        if (t <= 0L) return "Niciun fum azi"
+        val diffSec = maxOf(0L, (System.currentTimeMillis() - t) / 1000L)
+        val mins = diffSec / 60L
+        val hours = mins / 60L
+        val remMins = mins % 60L
+        return if (hours > 0L) "${hours}h ${remMins}m de la ultimul"
+        else if (mins > 0L) "${mins}m de la ultimul"
+        else "Chiar acum"
+    }
+
+    fun isCravingWarning(): Boolean {
+        val t = prefs.getLong(KEY_LAST_SMOKE_TIMESTAMP, -1L)
+        if (t <= 0L) return false
+        val diffSec = (System.currentTimeMillis() - t) / 1000L
+        return diffSec < 45 * 60
+    }
+
+    fun getMoneySpentTodayLei(): Double {
+        val total = prefs.getString(KEY_SMOKES_TOTAL, "0")?.toIntOrNull() ?: 0
+        return total * (26.50 / 20.0)
+    }
+
+    fun getMoneySavedTodayLei(): Double {
+        val total = prefs.getString(KEY_SMOKES_TOTAL, "0")?.toIntOrNull() ?: 0
+        val baseline = _smokesGoal.value
+        val avoided = maxOf(0, baseline - total)
+        return avoided * (26.50 / 20.0)
+    }
+
+    fun updateBubblesGoal(newGoal: Int) {
+        if (newGoal in 500..6000) {
+            setBubblesGoal(newGoal)
+            scope.launch {
+                val userId = _currentUserId.value ?: return@launch
+                try {
+                    val client = supabaseClient ?: return@launch
+                    client.postgrest["user_preferences"].upsert(
+                        buildJsonObject {
+                            put("id", userId)
+                            put("water_goal", newGoal)
+                        }
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("WatchSessionManager", "Failed to sync water_goal: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun updateSmokesGoal(newGoal: Int) {
+        if (newGoal in 1..100) {
+            setSmokesGoal(newGoal)
+            scope.launch {
+                val userId = _currentUserId.value ?: return@launch
+                try {
+                    val client = supabaseClient ?: return@launch
+                    client.postgrest["user_preferences"].upsert(
+                        buildJsonObject {
+                            put("id", userId)
+                            put("smokes_baseline", newGoal)
+                        }
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("WatchSessionManager", "Failed to sync smokes_baseline: ${e.message}")
+                }
+            }
+        }
     }
 
     fun deleteHabitLog(log: HabitLog, dayOffset: Int = 0) {

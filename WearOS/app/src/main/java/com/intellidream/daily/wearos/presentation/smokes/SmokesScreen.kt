@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,8 +60,12 @@ import com.intellidream.daily.wearos.data.OfflineSyncManager
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.domain.model.HabitLog
 import com.intellidream.daily.wearos.domain.util.HabitDateParser
+import com.intellidream.daily.wearos.presentation.components.CravingPacingCard
+import com.intellidream.daily.wearos.presentation.components.CustomSmokeDialog
+import com.intellidream.daily.wearos.presentation.components.GoalEditDialog
 import com.intellidream.daily.wearos.presentation.components.QuickAddChip
 import com.intellidream.daily.wearos.presentation.components.TemporalNavHeader
+import com.intellidream.daily.wearos.presentation.smokes.Smokes7DaysInlineCard
 import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
 import com.intellidream.daily.wearos.util.SoundAndHapticFeedback
 import io.github.jan.supabase.postgrest.postgrest
@@ -121,6 +126,8 @@ fun SmokesScreen(
     var todayTotal by remember { mutableIntStateOf(todayCig + todayHeat) }
     var logToDelete by remember { mutableStateOf<HabitLog?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showCustomDialog by remember { mutableStateOf(false) }
+    var showGoalDialog by remember { mutableStateOf(false) }
 
     val formattedDateTitle = remember(dayOffset) {
         when (dayOffset) {
@@ -299,9 +306,24 @@ fun SmokesScreen(
                             text = "/ $dailyGoal max",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.55f)
+                            color = Color.White.copy(alpha = 0.55f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    SoundAndHapticFeedback.playClick(context, view)
+                                    showGoalDialog = true
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
+                }
+            }
+
+            // Live Craving Pacing Timer & Sigh Shortcut (Today only)
+            if (dayOffset == 0) {
+                item {
+                    CravingPacingCard(sessionManager = sessionManager)
+                    Spacer(Modifier.height(4.dp))
                 }
             }
 
@@ -321,6 +343,18 @@ fun SmokesScreen(
                     title = "+1 Heated",
                     accentColor = DailyWearColors.HeatIndigo,
                     onClick = { logSmoke("Heated Tobacco") }
+                )
+            }
+            item {
+                Spacer(Modifier.height(4.dp))
+                QuickAddChip(
+                    icon = Icons.Filled.Tune,
+                    title = "+ Custom / Retroactive",
+                    accentColor = Color(0xFFFFB74D),
+                    onClick = {
+                        SoundAndHapticFeedback.playClick(context, view)
+                        showCustomDialog = true
+                    }
                 )
             }
 
@@ -390,6 +424,15 @@ fun SmokesScreen(
                         )
                     }
                 }
+            }
+
+            // 7-Day Trend Section
+            item {
+                Spacer(Modifier.height(8.dp))
+                Smokes7DaysInlineCard(
+                    sessionManager = sessionManager,
+                    isPageActive = isPageActive
+                )
             }
 
             // In-Flow Logs Section
@@ -534,5 +577,31 @@ fun SmokesScreen(
                 }
             )
         }
+    }
+
+    if (showCustomDialog) {
+        CustomSmokeDialog(
+            show = showCustomDialog,
+            onDismiss = { showCustomDialog = false },
+            onLog = { type, offsetMinutes ->
+                SoundAndHapticFeedback.playLogAdded(context, view)
+                sessionManager.logSmoke(type, dayOffset)
+                loadCachedDate(targetDateStr)
+                showCustomDialog = false
+            }
+        )
+    }
+
+    if (showGoalDialog) {
+        GoalEditDialog(
+            show = showGoalDialog,
+            isWater = false,
+            currentValue = dailyGoal,
+            onDismiss = { showGoalDialog = false },
+            onSave = { newGoal ->
+                sessionManager.updateSmokesGoal(newGoal)
+                showGoalDialog = false
+            }
+        )
     }
 }

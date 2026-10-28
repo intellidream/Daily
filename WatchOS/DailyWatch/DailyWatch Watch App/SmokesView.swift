@@ -17,6 +17,8 @@ struct SmokesView: View {
     
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
+    @State private var showCustomSheet: Bool = false
+    @State private var showEditGoalSheet: Bool = false
     @Environment(\.scenePhase) private var scenePhase
     
     private var isToday: Bool { dayOffset == 0 }
@@ -107,13 +109,30 @@ struct SmokesView: View {
                             .foregroundColor(displayTotal > store.smokesBaseline ? .red : .primary)
                             .contentTransition(.numericText())
                         
-                        Text("/ \(store.smokesBaseline)")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                        Button(action: {
+                            WKInterfaceDevice.current().play(.click)
+                            showEditGoalSheet = true
+                        }) {
+                            HStack(spacing: 2) {
+                                Text("/ \(store.smokesBaseline)")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(.secondary.opacity(0.6))
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .frame(width: 122, height: 122)
                 .padding(.vertical, 4)
+                
+                // 3.5 Craving & Pacing Timer (Live on Wrist)
+                if isToday {
+                    CravingPacingBadge()
+                        .padding(.vertical, 2)
+                }
                 
                 // 4. Breakdown Summary Ticker
                 HStack(spacing: 8) {
@@ -157,8 +176,23 @@ struct SmokesView: View {
                     ) {
                         logSmoke(type: "Heated Tobacco")
                     }
+                    
+                    QuickAddActionChip(
+                        icon: "slider.horizontal.3",
+                        title: "+ Custom / Retroactive",
+                        color: .orange
+                    ) {
+                        WKInterfaceDevice.current().play(.click)
+                        showCustomSheet = true
+                    }
                 }
                 .padding(.top, 4)
+                
+                // 6. 7-Day Trend Section (Integrated Vertically)
+                if isToday {
+                    Smokes7DaysInlineSection()
+                        .padding(.top, 4)
+                }
                 
                 // 6. Logs Section
                 if !displayLogs.isEmpty {
@@ -228,6 +262,12 @@ struct SmokesView: View {
             Button("Cancel", role: .cancel) {}
         } message: { log in
             Text("Delete \(log.displaySmokeName) entry?")
+        }
+        .sheet(isPresented: $showCustomSheet) {
+            WatchCustomSmokeSheet()
+        }
+        .sheet(isPresented: $showEditGoalSheet) {
+            WatchEditGoalSheet(isWater: false)
         }
         .onAppear {
             if isToday {

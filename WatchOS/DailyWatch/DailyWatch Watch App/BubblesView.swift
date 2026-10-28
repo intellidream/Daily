@@ -17,6 +17,8 @@ struct BubblesView: View {
     
     @State private var selectedLog: HabitLog?
     @State private var showDeleteConfirm: Bool = false
+    @State private var showCustomSheet: Bool = false
+    @State private var showEditGoalSheet: Bool = false
     @Environment(\.scenePhase) private var scenePhase
     
     private var isToday: Bool { dayOffset == 0 }
@@ -105,9 +107,20 @@ struct BubblesView: View {
                             .foregroundColor(.primary)
                             .contentTransition(.numericText())
                         
-                        Text("/ \(store.waterGoal) ml")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                        Button(action: {
+                            WKInterfaceDevice.current().play(.click)
+                            showEditGoalSheet = true
+                        }) {
+                            HStack(spacing: 2) {
+                                Text("/ \(store.waterGoal) ml")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(.secondary.opacity(0.6))
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .frame(width: 122, height: 122)
@@ -163,8 +176,23 @@ struct BubblesView: View {
                     ) {
                         logWater(amount: 100, type: "Coffee")
                     }
+                    
+                    QuickAddActionChip(
+                        icon: "slider.horizontal.3",
+                        title: "+ Custom / Multiplier",
+                        color: .mint
+                    ) {
+                        WKInterfaceDevice.current().play(.click)
+                        showCustomSheet = true
+                    }
                 }
                 .padding(.top, 4)
+                
+                // 6. 7-Day Trend Section (Integrated Vertically)
+                if isToday {
+                    Bubbles7DaysInlineSection()
+                        .padding(.top, 4)
+                }
                 
                 // 6. Logs Section
                 if !displayLogs.isEmpty {
@@ -234,6 +262,12 @@ struct BubblesView: View {
             Button("Cancel", role: .cancel) {}
         } message: { log in
             Text("Delete \(Int(log.value)) \(log.unit) \(log.displayDrinkName)?")
+        }
+        .sheet(isPresented: $showCustomSheet) {
+            WatchCustomWaterSheet()
+        }
+        .sheet(isPresented: $showEditGoalSheet) {
+            WatchEditGoalSheet(isWater: true)
         }
         .onAppear {
             if isToday {
