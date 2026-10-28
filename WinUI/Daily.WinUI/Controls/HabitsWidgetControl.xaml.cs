@@ -702,18 +702,31 @@ public sealed partial class HabitsWidgetControl : UserControl, INotifyPropertyCh
         }
     }
 
-    /// <summary>Called by the dashboard refresh button: runs full sync (push + pull), then reloads the UI.</summary>
+    /// <summary>Called by the dashboard refresh button: loads local SQLite immediately (0ms), then performs background sync.</summary>
     public async Task RefreshAsync()
     {
-        try
-        {
-            await _syncService.SyncAsync(SyncScope.Habits);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HabitsWidgetControl] Sync failed on refresh: {ex.Message}");
-        }
+        // 1. Immediately reload local SQLite data for 0ms instantaneous UI update
         await LoadDataAsync();
+
+        // 2. Perform background delta sync without blocking the UI transition
+        if (_syncService != null)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _syncService.SyncAsync(SyncScope.Habits);
+                    DispatcherQueue?.TryEnqueue(async () =>
+                    {
+                        await LoadDataAsync();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[HabitsWidgetControl] Background sync failed: {ex.Message}");
+                }
+            });
+        }
     }
 
     private async Task LoadDataAsync()

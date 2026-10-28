@@ -93,18 +93,28 @@ namespace Daily_WinUI.Controls
 
         public async Task RefreshAsync()
         {
+            // 1. Load local SQLite data immediately for 0ms instantaneous UI presentation
+            await LoadDataAsync();
+
+            // 2. Perform remote pull in background without blocking UI
             if (_healthHubService != null)
             {
-                try
+                _ = Task.Run(async () =>
                 {
-                    await _healthHubService.PullDeltasAsync();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[HealthWidgetControl] Sync/Pull deltas failed: {ex.Message}");
-                }
+                    try
+                    {
+                        await _healthHubService.PullDeltasAsync();
+                        DispatcherQueue?.TryEnqueue(async () =>
+                        {
+                            await LoadDataAsync();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[HealthWidgetControl] Background pull deltas failed: {ex.Message}");
+                    }
+                });
             }
-            await LoadDataAsync();
         }
 
         public async Task LoadDataAsync()

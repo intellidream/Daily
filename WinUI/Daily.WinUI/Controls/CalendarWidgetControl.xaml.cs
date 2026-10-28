@@ -14,7 +14,7 @@ using Daily.Models;
 
 namespace Daily_WinUI.Controls
 {
-    public class CalendarWidgetItem : INotifyPropertyChanged
+    public class CalendarWidgetItem : INotifyPropertyChanged, IEquatable<CalendarWidgetItem>
     {
         public string Id { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
@@ -38,6 +38,22 @@ namespace Daily_WinUI.Controls
         }
         
         public string IconGlyph { get; set; } = string.Empty;
+
+        public bool Equals(CalendarWidgetItem? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Id == other.Id &&
+                   Title == other.Title &&
+                   Details == other.Details &&
+                   Color == other.Color &&
+                   IsTodo == other.IsTodo &&
+                   IsCompleted == other.IsCompleted;
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as CalendarWidgetItem);
+
+        public override int GetHashCode() => HashCode.Combine(Id, Title, Details, Color, IsTodo, IsCompleted);
  
         public Microsoft.UI.Xaml.Media.Brush ColorBrush
         {
@@ -325,23 +341,9 @@ namespace Daily_WinUI.Controls
                 // Sort by date. Items with max value sort dates (no due date tasks) go last. Limit to top 15.
                 var sorted = combinedList.OrderBy(x => x.SortDate).Take(15).ToList();
 
-                UpcomingItems.Clear();
-                foreach (var item in sorted)
-                {
-                    UpcomingItems.Add(item);
-                }
-
-                SmallItems.Clear();
-                foreach (var item in sorted.Take(2))
-                {
-                    SmallItems.Add(item);
-                }
-
-                NormalItems.Clear();
-                foreach (var item in sorted.Take(2))
-                {
-                    NormalItems.Add(item);
-                }
+                UpdateObservableCollection(UpcomingItems, sorted);
+                UpdateObservableCollection(SmallItems, sorted.Take(2).ToList());
+                UpdateObservableCollection(NormalItems, sorted.Take(2).ToList());
 
                 HasSmallItems = SmallItems.Count > 0;
                 HasNormalItems = NormalItems.Count > 0;
@@ -358,6 +360,31 @@ namespace Daily_WinUI.Controls
                     IsLoading = false;
                 }
                 _loadLock.Release();
+            }
+        }
+
+        private static void UpdateObservableCollection<T>(ObservableCollection<T> collection, IList<T> newItems)
+        {
+            if (collection.SequenceEqual(newItems)) return;
+
+            for (int i = 0; i < newItems.Count; i++)
+            {
+                if (i < collection.Count)
+                {
+                    if (!EqualityComparer<T>.Default.Equals(collection[i], newItems[i]))
+                    {
+                        collection[i] = newItems[i];
+                    }
+                }
+                else
+                {
+                    collection.Add(newItems[i]);
+                }
+            }
+
+            while (collection.Count > newItems.Count)
+            {
+                collection.RemoveAt(collection.Count - 1);
             }
         }
 

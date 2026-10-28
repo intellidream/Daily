@@ -17,8 +17,25 @@ using System.Threading.Tasks;
 
 namespace Daily_WinUI.Controls;
 
+public sealed class FinancesSnapshot
+{
+    public decimal NetWorth { get; init; }
+    public decimal Cash { get; init; }
+    public decimal Investments { get; init; }
+    public List<MacroIndicator> MacroIndicators { get; init; } = new();
+    public List<CountryEconomicData> HeatmapData { get; init; } = new();
+    public List<LocalFinanceAccount> Accounts { get; init; } = new();
+    public List<StockQuote> TopStocks { get; init; } = new();
+    public List<StockQuote> ExtendedStocks { get; init; } = new();
+    public DateTime RetrievedAtUtc { get; init; } = DateTime.UtcNow;
+}
+
 public sealed partial class FinancesWidgetControl : UserControl, INotifyPropertyChanged
 {
+    private static FinancesSnapshot? _sharedSnapshot;
+    public static FinancesSnapshot? SharedSnapshot => _sharedSnapshot;
+    public static void UpdateSharedSnapshot(FinancesSnapshot snapshot) => _sharedSnapshot = snapshot;
+
     private IFinancesService _financesService;
     private IMacroService _macroService;
     private IHeatmapService _heatmapService;
@@ -206,6 +223,12 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         await _loadLock.WaitAsync();
         try
         {
+            // 0. Instant in-memory snapshot hydration
+            if (_sharedSnapshot != null && !TopStocks.Any() && !MacroIndicators.Any())
+            {
+                ApplySnapshot(_sharedSnapshot);
+            }
+
             if (showLoadingSpinner && !MacroIndicators.Any() && !TopStocks.Any())
             {
                 IsLoading = true;
@@ -236,12 +259,14 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             var cryptoDefaults = await _financesService.GetStockQuotesAsync(_cryptoSymbols);
             var extended = cryptoDefaults.Take(10).ToList();
 
-            // Populate collections
-            MacroIndicators.Clear();
-            foreach (var m in macros.Take(4)) MacroIndicators.Add(m);
+            // Populate collections with in-place diff to avoid UI flicker
+            var topMacros = macros.Take(4).ToList();
+            var topHeatmap = heatmap.Take(8).ToList();
+            var topAccounts = accounts.Take(5).ToList();
+            var topStocks = stocksToDisplay.Take(4).ToList();
 
-            HeatmapData.Clear();
-            foreach (var h in heatmap.Take(8)) HeatmapData.Add(h);
+            UpdateObservableCollection(MacroIndicators, topMacros, AreMacroIndicatorsEqual);
+            UpdateObservableCollection(HeatmapData, topHeatmap, AreHeatmapsEqual);
             HasHeatmapData = HeatmapData.Any();
 
             NetWorthDisplay = nw.ToString("C0");
@@ -249,19 +274,29 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             decimal cash = accounts.Sum(a => a.CurrentBalance);
             CashDisplay = cash.ToString("C0");
             
-            Accounts.Clear();
-            foreach (var a in accounts.Take(5)) Accounts.Add(a);
+            UpdateObservableCollection(Accounts, topAccounts, AreAccountsEqual);
             HasAccounts = Accounts.Any();
 
             decimal investments = portfolio.OfType<PortfolioItem>().Sum(p => p.TotalValue);
             InvestmentsDisplay = investments.ToString("C0");
 
-            TopStocks.Clear();
-            foreach (var s in stocksToDisplay.Take(4)) TopStocks.Add(s);
-
-            ExtendedStocks.Clear();
-            foreach (var s in extended) ExtendedStocks.Add(s);
+            UpdateObservableCollection(TopStocks, topStocks, AreStockQuotesEqual);
+            UpdateObservableCollection(ExtendedStocks, extended, AreStockQuotesEqual);
             HasStocks = TopStocks.Any();
+
+            // Cache snapshot for 0ms return from Hubs
+            _sharedSnapshot = new FinancesSnapshot
+            {
+                NetWorth = nw,
+                Cash = cash,
+                Investments = investments,
+                MacroIndicators = topMacros,
+                HeatmapData = topHeatmap,
+                Accounts = topAccounts,
+                TopStocks = topStocks,
+                ExtendedStocks = extended,
+                RetrievedAtUtc = DateTime.UtcNow
+            };
         }
         catch (Exception ex)
         {
@@ -274,6 +309,97 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
                 IsLoading = false;
             }
             _loadLock.Release();
+        }
+    }
+
+    private void ApplySnapshot(FinancesSnapshot s)
+    {
+        NetWorthDisplay = s.NetWorth.ToString("C0");
+        CashDisplay = s.Cash.ToString("C0");
+        InvestmentsDisplay = s.Investments.ToString("C0");
+
+        UpdateObservableCollection(MacroIndicators, s.MacroIndicators, AreMacroIndicatorsEqual);
+        UpdateObservableCollection(HeatmapData, s.HeatmapData, AreHeatmapsEqual);
+        HasHeatmapData = HeatmapData.Any();
+
+        UpdateObservableCollection(Accounts, s.Accounts, AreAccountsEqual);
+        HasAccounts = Accounts.Any();
+
+        UpdateObservableCollection(TopStocks, s.TopStocks, AreStockQuotesEqual);
+        UpdateObservableCollection(ExtendedStocks, s.ExtendedStocks, AreStockQuotesEqual);
+        HasStocks = TopStocks.Any();
+    }
+
+    private static bool AreStockQuotesEqual(StockQuote a, StockQuote b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return false;
+        return a.Symbol == b.Symbol &&
+               a.CurrentPrice == b.CurrentPrice &&
+               a.PercentChange == b.PercentChange &&
+               a.CompanyName == b.CompanyName;
+    }
+
+    private static bool AreAccountsEqual(LocalFinanceAccount a, LocalFinanceAccount b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return false;
+        return a.Id == b.Id &&
+               a.Name == b.Name &&
+               a.CurrentBalance == b.CurrentBalance;
+    }
+
+    private static bool AreMacroIndicatorsEqual(MacroIndicator a, MacroIndicator b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return false;
+        return a.IndicatorKey == b.IndicatorKey &&
+               a.Value == b.Value &&
+               a.FormattedValue == b.FormattedValue;
+    }
+
+    private static bool AreHeatmapsEqual(CountryEconomicData a, CountryEconomicData b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return false;
+        return a.CountryCode == b.CountryCode &&
+               a.RealRate == b.RealRate;
+    }
+
+    private static void UpdateObservableCollection<T>(ObservableCollection<T> collection, IList<T> newItems, Func<T, T, bool> areEqual)
+    {
+        bool isIdentical = collection.Count == newItems.Count;
+        if (isIdentical)
+        {
+            for (int i = 0; i < collection.Count; i++)
+            {
+                if (!areEqual(collection[i], newItems[i]))
+                {
+                    isIdentical = false;
+                    break;
+                }
+            }
+        }
+        if (isIdentical) return;
+
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            if (i < collection.Count)
+            {
+                if (!areEqual(collection[i], newItems[i]))
+                {
+                    collection[i] = newItems[i];
+                }
+            }
+            else
+            {
+                collection.Add(newItems[i]);
+            }
+        }
+
+        while (collection.Count > newItems.Count)
+        {
+            collection.RemoveAt(collection.Count - 1);
         }
     }
 

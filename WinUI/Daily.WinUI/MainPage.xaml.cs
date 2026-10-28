@@ -265,10 +265,10 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         _pregeneratedBriefingTask = null; // Reset cached task
-        await LoadWidgetsAsync();
+        RefreshLiveWidgets();
 
         // Re-trigger pre-generation in the background since data is refreshed
         var settingsForRefresh = SettingsService.Load();
