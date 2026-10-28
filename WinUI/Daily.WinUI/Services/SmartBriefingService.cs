@@ -103,13 +103,22 @@ namespace Daily_WinUI.Services
         public List<LocalCalendarTodo> ActiveTodos { get; set; } = new();
         public List<string> TopNewsHeadlines { get; set; } = new();
 
+        // TagDoS Streams & Quick Notes
+        public int TagdoStreamsCount { get; set; }
+        public List<string> TagdoDrivingPills { get; set; } = new();
+        public List<string> TagdoUrgentPills { get; set; } = new();
+        public int TagdoQuickNotesCount { get; set; }
+        public string TagdoBriefing { get; set; } = string.Empty;
+
         // Weather Details
         public string WeatherHourlyDetails { get; set; } = string.Empty;
         public string WeatherFiveDayDetails { get; set; } = string.Empty;
 
-        // Caching metadata
+        // Caching & Provenance metadata
         public bool WasRegenerated { get; set; }
         public string RawContext { get; set; } = string.Empty;
+        public string AiSource { get; set; } = "Deterministic Local Synthesis";
+        public bool IsAiEnhanced { get; set; } = false;
     }
 
     public sealed class UserData
@@ -128,6 +137,7 @@ namespace Daily_WinUI.Services
         private readonly IRssFeedService? _rssFeedService;
         private readonly IRssArticleService? _rssArticleService;
         private readonly ICalendarService? _calendarService;
+        private readonly ITagdosService? _tagdosService;
         private readonly ISmartIntelligenceService _smartService;
         private readonly IBehaviorService _behaviorService;
 
@@ -146,6 +156,7 @@ namespace Daily_WinUI.Services
                 _rssFeedService = App.Current.Services.GetService(typeof(IRssFeedService)) as IRssFeedService;
                 _rssArticleService = App.Current.Services.GetService(typeof(IRssArticleService)) as IRssArticleService;
                 _calendarService = App.Current.Services.GetService(typeof(ICalendarService)) as ICalendarService;
+                _tagdosService = App.Current.Services.GetService(typeof(ITagdosService)) as ITagdosService;
             }
             catch (Exception ex)
             {
@@ -605,6 +616,41 @@ namespace Daily_WinUI.Services
             }
 
 
+            // 5.2 TagDoS Streams & Quick Notes Aggregation
+            if (_tagdosService != null)
+            {
+                try
+                {
+                    var streams = await _tagdosService.GetStreamsAsync();
+                    var notes = await _tagdosService.GetQuickNotesAsync();
+                    if (streams != null)
+                    {
+                        data.TagdoStreamsCount = streams.Count;
+                        data.TagdoDrivingPills = streams
+                            .Select(s => s.DrivingPill?.Text)
+                            .Where(t => !string.IsNullOrWhiteSpace(t))
+                            .Select(t => t!)
+                            .Take(5)
+                            .ToList();
+                        data.TagdoUrgentPills = streams
+                            .SelectMany(s => s.AllPills)
+                            .Where(p => p.Type == TagDoPillType.Urgent && !p.IsCompleted)
+                            .Select(p => p.Text)
+                            .Distinct()
+                            .Take(5)
+                            .ToList();
+                    }
+                    if (notes != null)
+                    {
+                        data.TagdoQuickNotesCount = notes.Count;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SmartBriefingService] TagDoS Load Error: {ex.Message}");
+                }
+            }
+
             // 6. News AI Recommendations with Source Diversity & Interest Matching
             if (!onlyLocal && _rssFeedService != null && _rssFeedService.Feeds != null && _rssFeedService.Feeds.Count > 0)
             {
@@ -851,30 +897,10 @@ namespace Daily_WinUI.Services
             return data;
         }
 
-        public async Task<SmartBriefingData> GenerateSmartBriefingAsync(UserData data)
+        public SmartBriefingData BuildDeterministicBriefing(SmartBriefingData metrics, string userName)
         {
-            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (metrics == null) return new SmartBriefingData();
 
-            LlmDebugLogger.Clear();
-
-            var metrics = data.Metrics;
-            string userName = data.UserName;
-
-            bool useAi = false;
-            try
-            {
-                useAi = await _smartService.IsModelReadyAsync();
-                if (useAi)
-                {
-                    await _smartService.InitializeAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SmartBriefingService] AI initialization error: {ex.Message}");
-            }
-
-            // Fallback generation logic (used if AI is disabled or fails)
             string weatherFallback = string.IsNullOrEmpty(metrics.WeatherSummary) ? "Weather information is currently unavailable." : metrics.WeatherSummary;
             if (metrics.WeatherTemp == 0 && string.IsNullOrEmpty(metrics.WeatherCondition)) weatherFallback = "Weather information is currently unavailable.";
             
@@ -893,6 +919,30 @@ namespace Daily_WinUI.Services
             {
                 var titles = upcomingTodos.Take(5).Select(t => t.Title).ToList();
                 todosFallback = $"You have {upcomingTodos.Count} active tasks on your agenda: {string.Join(", ", titles)}" + (upcomingTodos.Count > 5 ? $" and {upcomingTodos.Count - 5} more." : "");
+            }
+
+            string tagdoFallback = "";
+            if (metrics.TagdoStreamsCount > 0 || metrics.TagdoQuickNotesCount > 0)
+            {
+                var tagdoParts = new List<string>();
+                if (metrics.TagdoStreamsCount > 0)
+                {
+                    string streamStr = $"{metrics.TagdoStreamsCount} stream(s)";
+                    if (metrics.TagdoDrivingPills.Count > 0)
+                    {
+                        streamStr += $" driven by [{string.Join(", ", metrics.TagdoDrivingPills.Take(3))}]";
+                    }
+                    tagdoParts.Add(streamStr);
+                }
+                if (metrics.TagdoUrgentPills.Count > 0)
+                {
+                    tagdoParts.Add($"Urgent tags: {string.Join(", ", metrics.TagdoUrgentPills)}");
+                }
+                if (metrics.TagdoQuickNotesCount > 0)
+                {
+                    tagdoParts.Add($"{metrics.TagdoQuickNotesCount} quick note(s)");
+                }
+                tagdoFallback = string.Join(". ", tagdoParts) + ".";
             }
 
             string healthFallback = (metrics.HealthSteps == 0 && metrics.HealthSleepHours == 0) ? "Keep moving and stay active today!" : $"You've taken {metrics.HealthSteps:N0} steps, slept {metrics.HealthSleepHours:F1} hours.";
@@ -914,16 +964,106 @@ namespace Daily_WinUI.Services
                 newsFallback = "Your top headlines today: " + string.Join("; ", top5.Select(h => h.TrimStart('-', ' '))) + ".";
             }
 
-            string wBrief = weatherFallback;
-            string cBrief = calendarFallback;
-            string tBrief = todosFallback;
-            string hBrief = healthFallback;
-            string hbBrief = habitsFallback;
-            string fBrief = financeFallback;
-            string nBrief = newsFallback;
+            metrics.WeatherBriefing = $"\uE706  {weatherFallback}";
+            metrics.FinanceBriefing = $"\uE8C7  {financeFallback}";
+            metrics.HealthBriefing = $"\uEC92  {healthFallback}";
+            metrics.HabitsBriefing = $"\uE1A5  {habitsFallback}";
+            metrics.CalendarBriefing = $"\uE787  {calendarFallback}";
+            metrics.TodosBriefing = $"\uE73A  {todosFallback}";
+            if (!string.IsNullOrEmpty(tagdoFallback))
+            {
+                metrics.TagdoBriefing = $"\uE7C5  {tagdoFallback}";
+            }
+
+            string indentedNews = newsFallback.Replace("\n", "\n    ");
+            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    _\"{indentedNews}\"_";
+
+            if (metrics.WeatherCondition.Contains("rain", StringComparison.OrdinalIgnoreCase) || metrics.WeatherCondition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
+                metrics.WeatherAdvice = "Rain expected today, keep an umbrella handy.";
+            else if (metrics.WeatherTemp < 10)
+                metrics.WeatherAdvice = "It's cold today, dress in warm layers.";
+            else
+                metrics.WeatherAdvice = "Weather looks pleasant for outdoor activities.";
+
+            if (metrics.HealthSteps < 4000)
+                metrics.HealthAdvice = "You are behind on steps today. Let's aim to reach your target baseline!";
+            else if (metrics.HealthSleepHours < 7 && metrics.HealthSleepHours > 0)
+                metrics.HealthAdvice = "You got less than 7 hours of sleep. Prioritize rest and recovery.";
+            else
+                metrics.HealthAdvice = "Vitals are looking good. Keep up the active baseline!";
+
+            if (!metrics.HasLedgerData)
+                metrics.FinanceAdvice = "Your ledger is empty. Tap the widget to configure your accounts!";
+            else
+                metrics.FinanceAdvice = "Watchlist is active. Markets are showing movements.";
+
+            if (metrics.HabitsWaterProgress < metrics.HabitsWaterGoal)
+                metrics.HabitsAdvice = $"Hydration: you need {(metrics.HabitsWaterGoal - metrics.HabitsWaterProgress):F0} ml more water today.";
+            else if (metrics.HabitsSmokesProgress > metrics.HabitsSmokesGoal && metrics.HabitsSmokesGoal > 0)
+                metrics.HabitsAdvice = "Smokes limit exceeded! Try to resist logging any more units today.";
+
+            var sections = new List<string>
+            {
+                metrics.WeatherBriefing,
+                metrics.FinanceBriefing,
+                metrics.HealthBriefing,
+                metrics.HabitsBriefing,
+                metrics.CalendarBriefing,
+                metrics.TodosBriefing
+            };
+            if (!string.IsNullOrEmpty(metrics.TagdoBriefing))
+            {
+                sections.Add(metrics.TagdoBriefing);
+            }
+            sections.Add(metrics.NewsBriefing);
+
+            metrics.BriefingText = string.Join("\n\n", sections);
+            metrics.IntroText = "";
+            metrics.OutroText = "Have a highly productive day!";
+            metrics.AiSource = "Deterministic Local Synthesis";
+            metrics.IsAiEnhanced = false;
+
+            return metrics;
+        }
+
+        public async Task<SmartBriefingData> GenerateSmartBriefingAsync(UserData data)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
+            LlmDebugLogger.Clear();
+
+            var metrics = data.Metrics;
+            string userName = data.UserName;
+
+            // 1. Build deterministic briefing immediately (guarantees 100% facts & zero-latency baseline)
+            BuildDeterministicBriefing(metrics, userName);
+
+            bool useAi = false;
+            try
+            {
+                useAi = await _smartService.IsModelReadyAsync();
+                if (useAi)
+                {
+                    await _smartService.InitializeAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartBriefingService] AI initialization error: {ex.Message}");
+            }
 
             if (useAi)
             {
+                var now = DateTime.Now;
+                var upcomingEvents = metrics.CalendarEventsToday
+                    .Where(e => e.IsAllDay || e.End.ToLocalTime() >= now)
+                    .Where(e => e.Start.ToLocalTime() <= now.AddDays(7))
+                    .OrderBy(e => e.IsAllDay ? 0 : 1).ThenBy(e => e.Start).ToList();
+
+                var upcomingTodos = metrics.ActiveTodos
+                    .Where(t => !t.DueDate.HasValue || (t.DueDate.Value.ToLocalTime() >= now && t.DueDate.Value.ToLocalTime() <= now.AddDays(7)))
+                    .OrderByDescending(t => t.Importance?.ToLower() == "high").ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
+
                 // Trimming Strategy: Cap events, todos, and news text lengths.
                 var sbEvents = new StringBuilder();
                 foreach (var ev in upcomingEvents.Take(5)) // Max 5 events
@@ -976,7 +1116,6 @@ Expect a rainy afternoon with temperatures dropping to 15°C, so grab an umbrell
 
                 metrics.RawContext = userPrompt;
 
-                // Fallback to safety trim if total length is absurdly high (unlikely, but safe)
                 if (userPrompt.Length > 10000)
                 {
                     userPrompt = userPrompt.Substring(0, 10000) + "... (truncated)";
@@ -984,70 +1123,32 @@ Expect a rainy afternoon with temperatures dropping to 15°C, so grab an umbrell
 
                 try
                 {
+                    // Strict 3.5s timeout for AI enhancement so briefing NEVER stalls
+                    using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(3500));
                     var sw = System.Diagnostics.Stopwatch.StartNew();
-                    string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt);
+                    string result = await _smartService.GenerateResponseAsync(systemPrompt, userPrompt, cts.Token);
                     sw.Stop();
                     System.Diagnostics.Debug.WriteLine($"[SmartBriefing-DEBUG] CONSOLIDATED Task | Duration: {sw.ElapsedMilliseconds} ms | SysPrompt Len: {systemPrompt.Length} | UserPrompt Len: {userPrompt.Length}");
 
                     if (!string.IsNullOrWhiteSpace(result))
                     {
                         metrics.BriefingText = result.Trim();
+                        metrics.AiSource = _smartService.ActiveEngineName;
+                        metrics.IsAiEnhanced = true;
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    System.Diagnostics.Debug.WriteLine("[SmartBriefingService] AI enhancement timed out at 3.5s threshold. Using deterministic local synthesis.");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SmartBriefingService] Consolidated AI Prompt Error: {ex.Message}");
+                    Console.WriteLine($"[SmartBriefingService] Consolidated AI Prompt Error: {ex.Message}. Using deterministic local synthesis.");
                 }
             }
 
-            metrics.WeatherBriefing = $"\uE706  {wBrief}";
-            metrics.FinanceBriefing = $"\uE8C7  {fBrief}";
-            metrics.HealthBriefing = $"\uEC92  {hBrief}";
-            metrics.HabitsBriefing = $"\uE1A5  {hbBrief}";
-            metrics.CalendarBriefing = $"\uE787  {cBrief}";
-            metrics.TodosBriefing = $"\uE73A  {tBrief}";
-            
-            string indentedNews = nBrief.Replace("\n", "\n    ");
-            metrics.NewsBriefing = $"\uE7C3  Headlines Summary:\n    _\"{indentedNews}\"_";
-
-            // Concatenate all parts in the requested order: Weather, Finances, Vitals, Habits, Calendar, Todos, News
-            if (string.IsNullOrEmpty(metrics.BriefingText))
-            {
-                metrics.BriefingText = $"{metrics.WeatherBriefing}\n\n{metrics.FinanceBriefing}\n\n{metrics.HealthBriefing}\n\n{metrics.HabitsBriefing}\n\n{metrics.CalendarBriefing}\n\n{metrics.TodosBriefing}\n\n{metrics.NewsBriefing}";
-            }
-
-            metrics.IntroText = "";
-            metrics.OutroText = "Have a highly productive day!";
-
-            // Maintain advice using rule-based fallbacks since they are extremely reliable
-            string weatherAdvice = string.Empty;
-            string healthAdvice = string.Empty;
-            string financeAdvice = string.Empty;
-            string habitsAdvice = string.Empty;
-
-            if (metrics.WeatherCondition.Contains("rain", StringComparison.OrdinalIgnoreCase) || metrics.WeatherCondition.Contains("drizzle", StringComparison.OrdinalIgnoreCase))
-                weatherAdvice = "Rain expected today, keep an umbrella handy.";
-            else if (metrics.WeatherTemp < 10)
-                weatherAdvice = "It's cold today, dress in warm layers.";
-            else
-                weatherAdvice = "Weather looks pleasant for outdoor activities.";
-
-            if (metrics.HealthSteps < 4000)
-                healthAdvice = "You are behind on steps today. Let's aim to reach your target baseline!";
-            else if (metrics.HealthSleepHours < 7 && metrics.HealthSleepHours > 0)
-                healthAdvice = "You got less than 7 hours of sleep. Prioritize rest and recovery.";
-            else
-                healthAdvice = "Vitals are looking good. Keep up the active baseline!";
-
-            if (!metrics.HasLedgerData)
-                financeAdvice = "Your ledger is empty. Tap the widget to configure your accounts!";
-            else
-                financeAdvice = "Watchlist is active. Markets are showing movements.";
-
-            if (metrics.HabitsWaterProgress < metrics.HabitsWaterGoal)
-                habitsAdvice = $"Hydration: you need {(metrics.HabitsWaterGoal - metrics.HabitsWaterProgress):F0} ml more water today.";
-            else if (metrics.HabitsSmokesProgress > metrics.HabitsSmokesGoal && metrics.HabitsSmokesGoal > 0)
-                habitsAdvice = "Smokes limit exceeded! Try to resist logging any more units today.";
+            return metrics;
+        }
             else
                 habitsAdvice = "Habits are on track today. Stay consistent!";
 

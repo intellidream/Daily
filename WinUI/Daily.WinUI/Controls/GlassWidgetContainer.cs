@@ -77,12 +77,27 @@ public sealed class GlassWidgetContainer : ContentControl
 
         _lastRefreshedTime = DateTime.Now;
 
-        // Hook up the aging timer
+        // Hook up the aging timer with proper lifecycle management (A15)
         _agingTimer = new DispatcherTimer();
         _agingTimer.Interval = TimeSpan.FromSeconds(1); // Check every second for smooth updates
         _agingTimer.Tick += AgingTimer_Tick;
-        _agingTimer.Start();
-        LogToFile("Aging timer started.");
+
+        this.Loaded += (s, e) =>
+        {
+            var settings = SettingsService.Load();
+            if (settings.WidgetAgingEnabled && !_agingTimer.IsEnabled)
+            {
+                _agingTimer.Start();
+            }
+        };
+
+        this.Unloaded += (s, e) =>
+        {
+            if (_agingTimer.IsEnabled)
+            {
+                _agingTimer.Stop();
+            }
+        };
     }
 
     protected override void OnApplyTemplate()
@@ -151,9 +166,8 @@ public sealed class GlassWidgetContainer : ContentControl
 
     private void AgingTimer_Tick(object? sender, object e)
     {
-        if (_dirtOverlay == null)
+        if (this.Visibility != Visibility.Visible || _dirtOverlay == null)
         {
-            LogToFile("Timer tick ignored: _dirtOverlay is null.");
             return;
         }
 
@@ -165,6 +179,7 @@ public sealed class GlassWidgetContainer : ContentControl
             {
                 _noiseOverlay.Opacity = 0.0;
             }
+            _agingTimer.Stop();
             return;
         }
 

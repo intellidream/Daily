@@ -211,18 +211,21 @@ public sealed partial class MainPage : Page
                 }
             });
 
-            // Pre-generate Smart Briefing data in background as soon as data loading is complete
+            // Pre-generate Smart Briefing data in background only if enabled (prevents unnecessary idle work)
             var settingsForPreGen = SettingsService.Load();
-            _pregeneratedAccelerator = settingsForPreGen.SelectedAiAccelerator ?? "Auto";
-            _pregeneratedModelId = settingsForPreGen.SelectedLocalAiModel ?? "llama32_1b";
-            string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
-            var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
-            _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(currentUserName);
-
-            // Show Smart Briefing if enabled on startup (trigger check before window loading overlay fades out)
-            if (settingsForPreGen.EnableSmartBriefing && isInitialBoot)
+            if (settingsForPreGen.EnableSmartBriefing)
             {
-                ShowSmartBriefing(isAutomatic: true);
+                _pregeneratedAccelerator = settingsForPreGen.SelectedAiAccelerator ?? "Auto";
+                _pregeneratedModelId = settingsForPreGen.SelectedLocalAiModel ?? "llama32_1b";
+                string currentUserName = _authService.CurrentUserDisplayName ?? "Explorer";
+                var cacheMgr = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
+                _pregeneratedBriefingTask = cacheMgr.GetOrGenerateBriefingAsync(currentUserName);
+
+                // Show Smart Briefing if enabled on startup
+                if (isInitialBoot)
+                {
+                    ShowSmartBriefing(isAutomatic: true);
+                }
             }
 
             if (isInitialBoot && mainWindow != null)
@@ -806,50 +809,99 @@ public sealed partial class MainPage : Page
             _pregeneratedBriefingTask = null;
         }
 
-        // Show loading panel immediately, and hide the grid
-        BriefingLoadingPanel.Visibility = Visibility.Visible;
-        RotatingLoadingIconStoryboard.Begin();
-        BriefingGrid.Visibility = Visibility.Collapsed;
-        
         // Hide and clear previous chat history
         BriefingChatPanel.Visibility = Visibility.Collapsed;
         BriefingChatHistory.Children.Clear();
         _briefingChatHistory.Clear();
 
-        try
+        var briefingService = App.Current.Services.GetRequiredService<SmartBriefingService>();
+
+        // 1. Check if pregenerated briefing already completed successfully
+        if (_pregeneratedBriefingTask != null && _pregeneratedBriefingTask.IsCompletedSuccessfully)
         {
-            if (_pregeneratedBriefingTask != null)
+            try
             {
-                data = await _pregeneratedBriefingTask;
-                _pregeneratedBriefingTask = null;
+                data = _pregeneratedBriefingTask.Result;
             }
-            else
-            {
-                data = await cacheManager.GetOrGenerateBriefingAsync(userName);
-            }
-        }
-        catch (System.Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[MainPage] Briefing generation failed: {ex.Message}");
-            CloseBriefing_Click(this, new RoutedEventArgs());
-            return;
+            catch { }
+            _pregeneratedBriefingTask = null;
         }
 
-        // For automatic show, double check that it was actually regenerated.
-        // If for some reason it wasn't, dismiss the overlay.
-        if (isAutomatic && (data == null || !data.WasRegenerated))
+        // 2. If not ready, load 0ms local metrics immediately (0ms stall, zero spinner)
+        if (data == null)
         {
-            System.Diagnostics.Debug.WriteLine("[MainPage] Skipping automatic smart briefing after load: Cached narrative was unchanged.");
-            CloseBriefing_Click(this, new RoutedEventArgs());
-            return;
+            try
+            {
+                var localMetrics = await briefingService.LoadBriefingMetricsAsync(userName, onlyLocal: true);
+                data = briefingService.BuildDeterministicBriefing(localMetrics, userName);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Local metrics load error: {ex.Message}");
+                data = new SmartBriefingData { Greeting = $"Hello, {userName}!", BriefingText = "Welcome to your DayOne dashboard." };
+            }
         }
 
         if (!_isBriefingActive) return;
 
-        // Hide loading panel and show briefing content grid
+        // Hide loading panel and show briefing content grid immediately (0ms stall)
         BriefingLoadingPanel.Visibility = Visibility.Collapsed;
         RotatingLoadingIconStoryboard.Stop();
         BriefingGrid.Visibility = Visibility.Visible;
+        BriefingSkipButton.Visibility = Visibility.Visible;
+
+        // Bind all data & visual cards
+        BindBriefingData(data);
+
+        // Async Moment 2: Non-blocking background AI enhancement
+        if (!data.IsAiEnhanced && settings.EnableSmartBriefing)
+        {
+            BriefingDisclaimerText.Text = "✦ DayOne local synthesis. Refining with AI in background...";
+            BriefingDisclaimerText.Opacity = 0.6;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var enhanced = await cacheManager.GetOrGenerateBriefingAsync(userName);
+                    if (enhanced != null && enhanced.IsAiEnhanced && _isBriefingActive)
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (!_isBriefingActive) return;
+                            BriefingDisclaimerText.Text = $"✦ DayOne AI Briefing ({enhanced.AiSource})";
+                            if (!string.IsNullOrWhiteSpace(enhanced.BriefingText) && enhanced.BriefingText != _fullBriefingText)
+                            {
+                                _fullBriefingText = enhanced.BriefingText;
+                                _briefingWords = _fullBriefingText.Split(' ');
+                                FinishTypewriterImmediately();
+                            }
+                        });
+                    }
+                    else if (_isBriefingActive)
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (!_isBriefingActive) return;
+                            BriefingDisclaimerText.Text = "✦ DayOne Local Synthesis (Deterministic)";
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainPage] Async AI enhancement failed: {ex.Message}");
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (!_isBriefingActive) return;
+                        BriefingDisclaimerText.Text = "✦ DayOne Local Synthesis (Deterministic)";
+                    });
+                }
+            });
+        }
+    }
+
+    private void BindBriefingData(SmartBriefingData data)
+    {
 
         // Bind Weather Card
         if (!string.IsNullOrEmpty(data.WeatherCondition))
@@ -1089,7 +1141,36 @@ public sealed partial class MainPage : Page
                 .Take(5)
                 .ToList();
 
-            if (upcomingTodos.Count == 0)
+            // TagDoS urgent tags badge
+            if (data.TagdoUrgentPills != null && data.TagdoUrgentPills.Count > 0)
+            {
+                var urgentStack = new Microsoft.UI.Xaml.Controls.StackPanel
+                {
+                    Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                    Spacing = 4,
+                    Margin = new Thickness(0, 0, 0, 4)
+                };
+                foreach (var tag in data.TagdoUrgentPills.Take(3))
+                {
+                    var pillBorder = new Microsoft.UI.Xaml.Controls.Border
+                    {
+                        Background = redBgBrush,
+                        CornerRadius = new CornerRadius(4),
+                        Padding = new Thickness(6, 2, 6, 2)
+                    };
+                    pillBorder.Child = new Microsoft.UI.Xaml.Controls.TextBlock
+                    {
+                        Text = $"⚡ {tag}",
+                        FontSize = 10,
+                        Foreground = redBrush,
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                    };
+                    urgentStack.Children.Add(pillBorder);
+                }
+                BriefingTodosListPanel.Children.Add(urgentStack);
+            }
+
+            if (upcomingTodos.Count == 0 && data.TagdoStreamsCount == 0)
             {
                 var noTodosTxt = new Microsoft.UI.Xaml.Controls.TextBlock
                 {
@@ -1268,74 +1349,104 @@ public sealed partial class MainPage : Page
             }
             else
             {
-                _typewriterTimer.Stop();
-
-                // Reset AI Icon scale to resting state
-                try
-                {
-                    IconScale.ScaleX = 1.0;
-                    IconScale.ScaleY = 1.0;
-                    GlowScale.ScaleX = 1.0;
-                    GlowScale.ScaleY = 1.0;
-                    AIIconGlow.Opacity = 0.4;
-                }
-                catch { }
-
-                // Fade in sign-off text at the end
-                try
-                {
-                    var fadeAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
-                    {
-                        From = 0.0,
-                        To = 0.75, // Muted opacity
-                        Duration = new Duration(TimeSpan.FromSeconds(0.8))
-                    };
-                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation, BriefingOutroText);
-                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
-                    var fadeAnimation2 = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
-                    {
-                        From = 0.0,
-                        To = 0.75, // Muted opacity
-                        Duration = new Duration(TimeSpan.FromSeconds(0.8))
-                    };
-                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation2, BriefingDisclaimerText);
-                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation2, "Opacity");
-                    
-                    var outroStoryboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
-                    outroStoryboard.Children.Add(fadeAnimation);
-                    outroStoryboard.Children.Add(fadeAnimation2);
-                    outroStoryboard.Begin();
-                }
-                catch
-                {
-                    BriefingOutroText.Opacity = 0.75;
-                    BriefingDisclaimerText.Opacity = 0.75;
-                }
-
-                // Ensure all visual cards are shown
-                if (BriefingWeatherCard.Opacity == 0) FadeInWeatherStoryboard.Begin();
-                if (BriefingHealthCard.Opacity == 0) FadeInHealthStoryboard.Begin();
-                if (BriefingFinancesCard.Opacity == 0) FadeInFinancesStoryboard.Begin();
-                if (BriefingHabitsCard.Opacity == 0) FadeInHabitsStoryboard.Begin();
-                if (BriefingCalendarCard.Opacity == 0) FadeInCalendarStoryboard.Begin();
-                if (BriefingTodosCard.Opacity == 0) FadeInTodosStoryboard.Begin();
-                if (BriefingNewsCard.Opacity == 0) FadeInNewsStoryboard.Begin();
-
-                // Show chat panel at the end of typewriter
-                try
-                {
-                    _briefingChatHistory.Clear();
-                    BriefingChatHistory.Children.Clear();
-                    BriefingChatInput.Text = string.Empty;
-                    BriefingChatInput.IsEnabled = true;
-                    BriefingChatSendButton.IsEnabled = true;
-                    BriefingChatProgressBar.Visibility = Visibility.Collapsed;
-                    BriefingChatPanel.Visibility = Visibility.Visible;
-                }
-                catch { }
+                FinishTypewriterImmediately();
             }
         };
         _typewriterTimer.Start();
+    }
+
+    private void BriefingSkipButton_Click(object sender, RoutedEventArgs e)
+    {
+        SkipTypewriter();
+    }
+
+    private void BriefingText_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    {
+        SkipTypewriter();
+    }
+
+    private void SkipTypewriter()
+    {
+        if (_typewriterTimer != null && _typewriterTimer.IsEnabled)
+        {
+            _typewriterTimer.Stop();
+            FinishTypewriterImmediately();
+        }
+    }
+
+    private void FinishTypewriterImmediately()
+    {
+        _typewriterTimer?.Stop();
+        if (BriefingSkipButton != null)
+        {
+            BriefingSkipButton.Visibility = Visibility.Collapsed;
+        }
+
+        // Render full formatted text immediately
+        if (_briefingWords != null && _briefingWords.Length > 0)
+        {
+            BriefingTypedText.Inlines.Clear();
+            _currentRun = null;
+            _isItalicState = false;
+
+            foreach (var rawWord in _briefingWords)
+            {
+                var (cleanWord, starts, ends) = ParseFormatting(rawWord);
+                if (starts) _isItalicState = true;
+
+                var run = new Microsoft.UI.Xaml.Documents.Run
+                {
+                    Text = cleanWord + " ",
+                    FontStyle = _isItalicState ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal
+                };
+                BriefingTypedText.Inlines.Add(run);
+
+                if (ends) _isItalicState = false;
+            }
+        }
+
+        // Ensure all visual cards are immediately visible
+        BriefingWeatherCard.Opacity = 1;
+        WeatherCardTransform.Y = 0;
+        BriefingHealthCard.Opacity = 1;
+        HealthCardTransform.Y = 0;
+        BriefingFinancesCard.Opacity = 1;
+        FinancesCardTransform.Y = 0;
+        BriefingHabitsCard.Opacity = 1;
+        HabitsCardTransform.Y = 0;
+        BriefingCalendarCard.Opacity = 1;
+        CalendarCardTransform.Y = 0;
+        BriefingTodosCard.Opacity = 1;
+        TodosCardTransform.Y = 0;
+        BriefingNewsCard.Opacity = 1;
+        NewsCardTransform.Y = 0;
+
+        // Reset AI Icon scale to resting state
+        try
+        {
+            IconScale.ScaleX = 1.0;
+            IconScale.ScaleY = 1.0;
+            GlowScale.ScaleX = 1.0;
+            GlowScale.ScaleY = 1.0;
+            AIIconGlow.Opacity = 0.4;
+        }
+        catch { }
+
+        BriefingOutroText.Opacity = 0.75;
+        BriefingDisclaimerText.Opacity = 0.6;
+
+        // Show chat panel
+        try
+        {
+            _briefingChatHistory.Clear();
+            BriefingChatHistory.Children.Clear();
+            BriefingChatInput.Text = string.Empty;
+            BriefingChatInput.IsEnabled = true;
+            BriefingChatSendButton.IsEnabled = true;
+            BriefingChatProgressBar.Visibility = Visibility.Collapsed;
+            BriefingChatPanel.Visibility = Visibility.Visible;
+        }
+        catch { }
     }
 
     private Microsoft.UI.Xaml.Media.Brush GetThemeBrush(string resourceKey)

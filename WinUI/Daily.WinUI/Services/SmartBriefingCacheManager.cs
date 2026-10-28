@@ -99,9 +99,10 @@ namespace Daily_WinUI.Services
             // Check if we can use the cached version directly (Age < 15 minutes)
             if (!forceRefresh && cachedData != null && cacheTime.HasValue && (now - cacheTime.Value).TotalMinutes < 15)
             {
-                if (GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
+                bool isSameDay = cacheTime.Value.ToLocalTime().Date == now.ToLocalTime().Date;
+                if (!isSameDay || GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
                 {
-                    Debug.WriteLine("[SmartBriefingCacheManager] Day time slot changed since cache generation. Resetting cache for new context.");
+                    Debug.WriteLine("[SmartBriefingCacheManager] Date or day time slot changed since cache generation. Resetting cache for new day/slot.");
                     forceRefresh = true;
                 }
                 else
@@ -148,9 +149,10 @@ namespace Daily_WinUI.Services
             // 2. Perform Telemetry Change Check (if cache exists but is older than 15 mins)
             if (!forceRefresh && cachedData != null)
             {
-                if (cacheTime.HasValue && GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
+                bool isSameDay = cacheTime.HasValue && cacheTime.Value.ToLocalTime().Date == now.ToLocalTime().Date;
+                if (!isSameDay || (cacheTime.HasValue && GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now)))
                 {
-                    Debug.WriteLine("[SmartBriefingCacheManager] Day time slot changed since cache generation (past 15 mins). Resetting cache for new context.");
+                    Debug.WriteLine("[SmartBriefingCacheManager] Date or day time slot changed since cache generation (past 15 mins). Resetting cache for new context.");
                     forceRefresh = true;
                 }
                 else
@@ -235,8 +237,9 @@ namespace Daily_WinUI.Services
 
             DateTime now = DateTime.UtcNow;
 
-            // 1. Time slot changed
-            if (GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
+            // 1. New day or time slot changed
+            bool isSameDay = cacheTime.Value.ToLocalTime().Date == now.ToLocalTime().Date;
+            if (!isSameDay || GetDayTimeSlot(cacheTime.Value) != GetDayTimeSlot(now))
             {
                 return true;
             }
@@ -414,26 +417,26 @@ namespace Daily_WinUI.Services
                 return true;
             }
 
-            // 3.1 Water progress increased by 10% or more of the goal relative to the last cached value
-            if (current.HabitsWaterProgress > cached.HabitsWaterProgress && cached.HabitsWaterGoal > 0)
+            // 3.1 Water progress delta by 10% or more of the goal (bidirectional: logs and corrections)
+            if (cached.HabitsWaterGoal > 0)
             {
-                double waterIncrease = current.HabitsWaterProgress - cached.HabitsWaterProgress;
+                double waterDelta = Math.Abs(current.HabitsWaterProgress - cached.HabitsWaterProgress);
                 double threshold = 0.10 * cached.HabitsWaterGoal;
-                if (waterIncrease >= threshold)
+                if (waterDelta >= threshold)
                 {
-                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Water progress increased by {waterIncrease:F0} ml (>= 10% of goal: {threshold:F0} ml)");
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Water progress changed by {waterDelta:F0} ml (>= 10% of goal: {threshold:F0} ml)");
                     return true;
                 }
             }
 
-            // 3.2 Smokes progress increased by 10% or more of the goal (baseline limit) relative to the last cached value
-            if (current.HabitsSmokesProgress > cached.HabitsSmokesProgress && cached.HabitsSmokesGoal > 0)
+            // 3.2 Smokes progress delta by 10% or more of the goal/baseline (bidirectional)
+            if (cached.HabitsSmokesGoal > 0)
             {
-                double smokesIncrease = current.HabitsSmokesProgress - cached.HabitsSmokesProgress;
+                double smokesDelta = Math.Abs(current.HabitsSmokesProgress - cached.HabitsSmokesProgress);
                 double threshold = 0.10 * cached.HabitsSmokesGoal;
-                if (smokesIncrease >= threshold)
+                if (smokesDelta >= threshold)
                 {
-                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Smokes progress increased by {smokesIncrease:F1} (>= 10% of goal/baseline: {threshold:F1})");
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Smokes progress changed by {smokesDelta:F1} (>= 10% of goal/baseline: {threshold:F1})");
                     return true;
                 }
             }
@@ -477,6 +480,26 @@ namespace Daily_WinUI.Services
                         Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Active todo details changed");
                         return true;
                     }
+                }
+            }
+
+            // 3.5 TagDoS streams and urgent tags change
+            if (cached.TagdoStreamsCount != current.TagdoStreamsCount ||
+                cached.TagdoQuickNotesCount != current.TagdoQuickNotesCount ||
+                !cached.TagdoUrgentPills.SequenceEqual(current.TagdoUrgentPills))
+            {
+                Debug.WriteLine("[SmartBriefingCacheManager] Regenerating: TagDoS streams or urgent tags changed");
+                return true;
+            }
+
+            // 3.6 Financial net worth delta >= 2%
+            if (cached.HasLedgerData && current.HasLedgerData && cached.NetWorth > 0)
+            {
+                decimal netWorthDelta = Math.Abs(current.NetWorth - cached.NetWorth);
+                if (netWorthDelta / cached.NetWorth >= 0.02m)
+                {
+                    Debug.WriteLine($"[SmartBriefingCacheManager] Regenerating: Net worth changed by >= 2% ({cached.NetWorth:C0} -> {current.NetWorth:C0})");
+                    return true;
                 }
             }
 

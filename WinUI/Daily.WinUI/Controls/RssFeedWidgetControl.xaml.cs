@@ -96,6 +96,10 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
     private void RssFeedWidgetControl_Unloaded(object sender, RoutedEventArgs e)
     {
+        _feedCts?.Cancel();
+        _feedCts?.Dispose();
+        _feedCts = null;
+
         _rssService.OnFeedChanged -= RssService_OnFeedChanged;
         _rssService.OnItemsUpdated -= RssService_OnItemsUpdated;
         _articleService.OnItemsChanged -= ArticleService_OnItemsChanged;
@@ -355,6 +359,8 @@ public sealed partial class RssFeedWidgetControl : UserControl
         await SelectFeedAsync(nextFeed);
     }
 
+    private System.Threading.CancellationTokenSource? _feedCts;
+
     private async Task SelectFeedAsync(FeedSource feed)
     {
         if (feed == null) return;
@@ -363,20 +369,38 @@ public sealed partial class RssFeedWidgetControl : UserControl
 
         if (_rssService.CurrentFeed == null || feed.Url != _rssService.CurrentFeed.Url)
         {
+            _feedCts?.Cancel();
+            _feedCts?.Dispose();
+            _feedCts = new System.Threading.CancellationTokenSource();
+            var ct = _feedCts.Token;
+
             LoadingPanel.Visibility = Visibility.Visible;
             ArticlesListView.Visibility = Visibility.Collapsed;
             _rssService.SelectFeed(feed);
-            if (feed.Url == "medium_reading_list")
+
+            try
             {
-                await LoadMediumReadingListAsync();
+                if (feed.Url == "medium_reading_list")
+                {
+                    await LoadMediumReadingListAsync();
+                }
+                else if (feed.Url == "all_news")
+                {
+                    await LoadAllNewsFeedAsync();
+                }
+                else
+                {
+                    await _rssService.LoadFeedAsync(feed);
+                }
             }
-            else if (feed.Url == "all_news")
+            catch (OperationCanceledException)
             {
-                await LoadAllNewsFeedAsync();
+                return;
             }
-            else
+
+            if (ct.IsCancellationRequested || _rssService.CurrentFeed?.Url != feed.Url)
             {
-                await _rssService.LoadFeedAsync(feed);
+                return;
             }
         }
     }

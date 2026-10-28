@@ -317,7 +317,9 @@
                                            Foreground="{ThemeResource AppFgColorBrush}" 
                                            TextWrapping="Wrap" 
                                            LineHeight="26"
-                                           Opacity="1.0"/>
+                                           Opacity="1.0"
+                                           IsTextSelectionEnabled="True"
+                                           Tapped="BriefingText_Tapped"/>
                                            
                                 <!-- Sign-off / Outro Text (Muted, shown at the end) -->
                                 <TextBlock x:Name="BriefingOutroText" 
@@ -368,7 +370,8 @@
                         </ScrollViewer>
                         
                         <!-- Actions / Close (Centered Layout) -->
-                        <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="8" Margin="0,8,0,0">
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12" Margin="0,8,0,0">
+                            <Button x:Name="BriefingSkipButton" Content="Show All" Click="BriefingSkipButton_Click" Visibility="Collapsed" Padding="20,10" CornerRadius="8" FontSize="14" HorizontalAlignment="Center"/>
                             <Button Content="Start My Day" Click="CloseBriefing_Click" Style="{ThemeResource AccentButtonStyle}" Padding="32,10" CornerRadius="8" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Grid>
