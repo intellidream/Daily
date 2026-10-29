@@ -201,6 +201,9 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             _financesService.OnQuotesUpdated += OnQuotesUpdated;
             _financesService.OnSmartLedgerUpdated -= OnSmartLedgerUpdated;
             _financesService.OnSmartLedgerUpdated += OnSmartLedgerUpdated;
+            _financesService.OnViewTypeChanged -= SyncFlipViewToServiceViewType;
+            _financesService.OnViewTypeChanged += SyncFlipViewToServiceViewType;
+            SyncFlipViewToServiceViewType();
         }
         if (_syncService != null)
         {
@@ -223,10 +226,39 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         {
             _financesService.OnQuotesUpdated -= OnQuotesUpdated;
             _financesService.OnSmartLedgerUpdated -= OnSmartLedgerUpdated;
+            _financesService.OnViewTypeChanged -= SyncFlipViewToServiceViewType;
         }
         if (_syncService != null)
         {
             _syncService.OnFinancesPulled -= OnSmartLedgerUpdated;
+        }
+    }
+
+    private bool _suppressFlipViewSync;
+    private void SyncFlipViewToServiceViewType()
+    {
+        if (_financesService == null || FinancesFlipView == null)
+            return;
+
+        int targetIdx = _financesService.CurrentViewType switch
+        {
+            "Stocks" => 1,
+            "Money" => 2,
+            _ => 0
+        };
+
+        CurrentViewLabel = _financesService.CurrentViewType;
+        if (FinancesFlipView.SelectedIndex != targetIdx)
+        {
+            _suppressFlipViewSync = true;
+            try
+            {
+                FinancesFlipView.SelectedIndex = targetIdx;
+            }
+            finally
+            {
+                _suppressFlipViewSync = false;
+            }
         }
     }
 
@@ -544,6 +576,9 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
 
     private void FlipView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_suppressFlipViewSync || !ReferenceEquals(sender, FinancesFlipView))
+            return;
+
         if (FinancesFlipView.SelectedIndex == 0) CurrentViewLabel = "World";
         else if (FinancesFlipView.SelectedIndex == 1) CurrentViewLabel = "Stocks";
         else if (FinancesFlipView.SelectedIndex == 2) CurrentViewLabel = "Money";

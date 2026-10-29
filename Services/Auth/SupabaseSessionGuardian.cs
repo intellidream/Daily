@@ -513,8 +513,7 @@ namespace Daily.Services.Auth
                 Func<System.Collections.Generic.Dictionary<string, string>> handshakeHeaders = () =>
                     new System.Collections.Generic.Dictionary<string, string>
                     {
-                        { "apikey", Daily.Configuration.Secrets.SupabaseKey },
-                        { "X-Client-Info", "daily-csharp" }
+                        { "apikey", Daily.Configuration.Secrets.SupabaseKey }
                     };
 
                 if (_supabase.Realtime != null)

@@ -24,6 +24,7 @@ namespace Daily.Services.Finances
 
         private RealtimeChannel? _ledgerRealtimeChannel;
         private string? _realtimeUserId;
+        private bool _smartLedgerRealtimeUnsupported;
         private readonly IGotrueClient<User, Session>.AuthEventHandler? _authListener;
 
         public event Action OnViewTypeChanged;
@@ -942,6 +943,9 @@ namespace Daily.Services.Finances
 
         private async Task SetupSmartLedgerRealtimeAsync(bool forceRecreate)
         {
+            if (_smartLedgerRealtimeUnsupported)
+                return;
+
             var userId = _supabaseClient.Auth.CurrentUser?.Id;
             if (string.IsNullOrEmpty(userId)) return;
 
@@ -980,6 +984,12 @@ namespace Daily.Services.Finances
             }
             catch (Exception ex)
             {
+                if (ex.Message != null && ex.Message.Contains("Unable to subscribe to changes", StringComparison.OrdinalIgnoreCase))
+                {
+                    // smart_ledgers is not part of supabase_realtime publication on server; SyncService handles pulls cleanly.
+                    _smartLedgerRealtimeUnsupported = true;
+                    return;
+                }
                 SupabaseSessionGuardian.LogGuardian($"[FinancesService] Realtime setup warning: {ex.Message}");
             }
         }

@@ -193,8 +193,7 @@ namespace Daily
                 var client = new Supabase.Client(supabaseUrl, supabaseKey, options);
                 client.Realtime.GetHeaders = () => new System.Collections.Generic.Dictionary<string, string>
                 {
-                    { "apikey", supabaseKey },
-                    { "X-Client-Info", "daily-maui" }
+                    { "apikey", supabaseKey }
                 };
                 
                 client.Auth.AddStateChangedListener((sender, state) =>

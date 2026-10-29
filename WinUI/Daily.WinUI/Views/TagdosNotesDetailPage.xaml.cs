@@ -111,9 +111,14 @@ namespace Daily_WinUI.Views
                 };
 
                 var contentStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                var displayTitle = stream.DisplayTitle ?? string.Empty;
+                var streamPrefix = $"Stream {i + 1}";
+                var tabTitle = displayTitle.StartsWith(streamPrefix, StringComparison.OrdinalIgnoreCase)
+                    ? displayTitle
+                    : $"{streamPrefix}: {displayTitle}";
                 contentStack.Children.Add(new TextBlock
                 {
-                    Text = $"Stream {i + 1}: {stream.DisplayTitle}",
+                    Text = tabTitle,
                     FontSize = 12,
                     FontWeight = isSelected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
                     Foreground = isSelected ? new SolidColorBrush(Microsoft.UI.Colors.White) : new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))

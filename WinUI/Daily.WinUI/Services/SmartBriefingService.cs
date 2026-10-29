@@ -78,6 +78,7 @@ namespace Daily_WinUI.Services
 
         // Finances
         public decimal NetWorth { get; set; }
+        public string FormattedNetWorth { get; set; } = string.Empty;
         public bool HasLedgerData { get; set; }
         public List<StockBriefingData> WatchlistStocks { get; set; } = new();
 
@@ -441,6 +442,7 @@ namespace Daily_WinUI.Services
 
             // 4. Finances Aggregation
             decimal netWorth = 0;
+            string formattedNetWorth = "";
             bool hasLedgerData = false;
             string financeSentence = "";
             try
@@ -448,9 +450,24 @@ namespace Daily_WinUI.Services
                 await Task.WhenAll(netWorthTask, symbolsTask);
                 netWorth = netWorthTask.Result;
 
-                var accounts = _financesService != null ? await _financesService.GetAccountsAsync() : null;
-                var holdings = _financesService != null ? await _financesService.GetHoldingsWithQuotesAsync() : null;
-                hasLedgerData = (accounts != null && accounts.Count > 0) || (holdings != null && holdings.Count > 0);
+                var smartLedger = _financesService != null ? await _financesService.GetSmartLedgerAsync() : null;
+                if (smartLedger != null && !string.IsNullOrWhiteSpace(smartLedger.LedgerText))
+                {
+                    var parsed = SmartLedgerParser.Parse(smartLedger.LedgerText);
+                    if (parsed.NetWorthLei != 0 || parsed.TotalDepositsLei != 0 || parsed.Sections.Count > 0)
+                    {
+                        hasLedgerData = true;
+                        netWorth = parsed.NetWorthLei;
+                        formattedNetWorth = $"{SmartLedgerParser.FormatDisplayValue(parsed.NetWorthLei)} Lei";
+                    }
+                }
+
+                if (!hasLedgerData)
+                {
+                    var accounts = _financesService != null ? await _financesService.GetAccountsAsync() : null;
+                    var holdings = _financesService != null ? await _financesService.GetHoldingsWithQuotesAsync() : null;
+                    hasLedgerData = (accounts != null && accounts.Count > 0) || (holdings != null && holdings.Count > 0);
+                }
 
                 if (!hasLedgerData)
                 {
@@ -458,6 +475,7 @@ namespace Daily_WinUI.Services
                 }
 
                 data.NetWorth = netWorth;
+                data.FormattedNetWorth = formattedNetWorth;
                 data.HasLedgerData = hasLedgerData;
 
                 var symbols = symbolsTask.Result;
@@ -488,13 +506,14 @@ namespace Daily_WinUI.Services
 
             if (hasLedgerData)
             {
+                var nwLabel = !string.IsNullOrEmpty(formattedNetWorth) ? formattedNetWorth : netWorth.ToString("C0");
                 if (data.WatchlistStocks.Count > 0)
                 {
-                    financeSentence = $"Your ledger net worth is looking healthy at {netWorth:C0}. Markets are showing active movements: {data.WatchlistStocks[0].Symbol} is at {data.WatchlistStocks[0].Price:C2} ({data.WatchlistStocks[0].FormattedChange}).";
+                    financeSentence = $"Your ledger net worth is looking healthy at {nwLabel}. Markets are showing active movements: {data.WatchlistStocks[0].Symbol} is at {data.WatchlistStocks[0].Price:C2} ({data.WatchlistStocks[0].FormattedChange}).";
                 }
                 else
                 {
-                    financeSentence = $"Your ledger net worth is looking healthy at {netWorth:C0}.";
+                    financeSentence = $"Your ledger net worth is looking healthy at {nwLabel}.";
                 }
             }
             else

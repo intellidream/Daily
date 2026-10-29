@@ -1027,7 +1027,9 @@ public sealed partial class MainPage : Page
         BriefingHeartRateText.Text = $"{data.HealthAvgHr} bpm";
 
         // Bind Finances Card
-        BriefingNetWorthText.Text = data.HasLedgerData ? data.NetWorth.ToString("C0") : "--";
+        BriefingNetWorthText.Text = data.HasLedgerData
+            ? (!string.IsNullOrEmpty(data.FormattedNetWorth) ? data.FormattedNetWorth : data.NetWorth.ToString("C0"))
+            : "--";
         var greenBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 76, 175, 80));
         var redBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 244, 67, 54));
         var greenBgBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(51, 76, 175, 80));

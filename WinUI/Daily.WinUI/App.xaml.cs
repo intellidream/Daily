@@ -379,8 +379,7 @@ public partial class App : Application
         SupabaseClient = new Supabase.Client(Secrets.SupabaseUrl, Secrets.SupabaseKey, options);
         SupabaseClient.Realtime.GetHeaders = () => new System.Collections.Generic.Dictionary<string, string>
         {
-            { "apikey", Secrets.SupabaseKey },
-            { "X-Client-Info", "daily-winui" }
+            { "apikey", Secrets.SupabaseKey }
         };
 
         // Keep central listener alive to propagate token refreshes and prevent garbage collection

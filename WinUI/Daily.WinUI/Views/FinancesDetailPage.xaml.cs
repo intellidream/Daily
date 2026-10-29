@@ -179,9 +179,28 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         await LoadDataAsync();
         
         // Auto-select tab based on FinancesService state
-        if (_financesService.CurrentViewType == "Stocks") MainPivot.SelectedIndex = 1;
-        else if (_financesService.CurrentViewType == "Money") MainPivot.SelectedIndex = 2;
-        else MainPivot.SelectedIndex = 0;
+        _suppressPivotSync = true;
+        try
+        {
+            if (_financesService.CurrentViewType == "Stocks") MainPivot.SelectedIndex = 1;
+            else if (_financesService.CurrentViewType == "Money") MainPivot.SelectedIndex = 2;
+            else MainPivot.SelectedIndex = 0;
+        }
+        finally
+        {
+            _suppressPivotSync = false;
+        }
+    }
+
+    private bool _suppressPivotSync;
+    private void MainPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressPivotSync || _financesService == null || !ReferenceEquals(sender, MainPivot))
+            return;
+
+        if (MainPivot.SelectedIndex == 0) _financesService.CurrentViewType = "World";
+        else if (MainPivot.SelectedIndex == 1) _financesService.CurrentViewType = "Stocks";
+        else if (MainPivot.SelectedIndex == 2) _financesService.CurrentViewType = "Money";
     }
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
