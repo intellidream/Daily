@@ -562,13 +562,22 @@ namespace Daily_WinUI.Services.Cosmos
                 {
                     try
                     {
-                        var delQuery = App.SupabaseClient.From<CosmosBookmarkRecord>();
+                        var table = App.SupabaseClient.From<CosmosBookmarkRecord>();
                         if (!string.IsNullOrEmpty(uid))
-                            delQuery = delQuery.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid);
-                        await delQuery
-                            .Filter("object_id", Supabase.Postgrest.Constants.Operator.Equals, existing.ObjectId)
-                            .Delete()
-                            .ConfigureAwait(false);
+                        {
+                            await table
+                                .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
+                                .Filter("object_id", Supabase.Postgrest.Constants.Operator.Equals, existing.ObjectId)
+                                .Delete()
+                                .ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await table
+                                .Filter("object_id", Supabase.Postgrest.Constants.Operator.Equals, existing.ObjectId)
+                                .Delete()
+                                .ConfigureAwait(false);
+                        }
                     }
                     catch { }
                 }
@@ -726,11 +735,20 @@ namespace Daily_WinUI.Services.Cosmos
             {
                 try
                 {
-                    var delQuery = App.SupabaseClient.From<CosmosObservationRecord>()
-                        .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, id);
+                    var table = App.SupabaseClient.From<CosmosObservationRecord>();
                     if (!string.IsNullOrEmpty(uid))
-                        delQuery = delQuery.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid);
-                    await delQuery.Delete().ConfigureAwait(false);
+                    {
+                        await table
+                            .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, id)
+                            .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
+                            .Delete().ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await table
+                            .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, id)
+                            .Delete().ConfigureAwait(false);
+                    }
                 }
                 catch { }
             }
