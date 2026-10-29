@@ -115,26 +115,21 @@ fun DashboardView(
     val smokesTotal by habitsRepository.smokesTotalToday.collectAsState()
     val smokesSettings by habitsRepository.smokesSettings.collectAsState()
 
-    // Real-time Cosmos calculations for dashboard card
-    val cosmosData = remember(weather) {
+    // Real-time Cosmos calculations for dashboard card using canonical live telemetry & Bortle grid
+    val cosmosLiveRepo = remember { com.intellidream.daily.DailyApp.instance.cosmosLiveRepository }
+    val liveConditions by cosmosLiveRepo.stargazingConditions.collectAsState()
+
+    // Trigger initial or location-driven Cosmos telemetry refresh
+    LaunchedEffect(weather?.coord?.lat, weather?.coord?.lon) {
         val lat = weather?.coord?.lat ?: 44.4323
         val lon = weather?.coord?.lon ?: 26.1063
-        val clouds = weather?.clouds?.all
-        val prov = if (clouds != null) {
-            com.intellidream.daily.model.TelemetryProvenance.live("Live Weather")
-        } else {
-            com.intellidream.daily.model.TelemetryProvenance.offlineCalculated("Offline Ephemeris")
-        }
-        val conditions = AstronomyService.evaluateStargazingConditions(
-            latitude = lat,
-            longitude = lon,
-            cloudCoverTotal = clouds,
-            cloudCoverLow = clouds?.let { (it * 0.35).toInt() },
-            cloudCoverMid = clouds?.let { (it * 0.35).toInt() },
-            cloudCoverHigh = clouds?.let { (it * 0.30).toInt() },
-            bortleClass = 5,
-            provenance = prov
-        )
+        cosmosLiveRepo.refreshCosmosData(lat, lon, force = false)
+    }
+
+    val cosmosData = remember(weather, liveConditions) {
+        val lat = weather?.coord?.lat ?: 44.4323
+        val lon = weather?.coord?.lon ?: 26.1063
+        val conditions = liveConditions ?: cosmosLiveRepo.computeConditions(lat, lon, weather)
         val moon = AstronomyService.moonPhase(observerLatitude = lat, observerLongitude = lon)
         val planets = CelestialBody.majorPlanets.filter {
             AstronomyService.coordinates(it, lat, lon).isVisible
@@ -151,6 +146,9 @@ fun DashboardView(
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             coroutineScope.launch {
                 onRefreshWeather()
+                val lat = weather?.coord?.lat ?: 44.4323
+                val lon = weather?.coord?.lon ?: 26.1063
+                cosmosLiveRepo.refreshCosmosData(lat, lon, force = true)
                 habitsRepository.syncLogs(habitsRepository.currentUserId)
                 healthRepository.loadDataForSelectedDate(forceRefresh = true)
                 tagdosRepository.syncWithSupabase()

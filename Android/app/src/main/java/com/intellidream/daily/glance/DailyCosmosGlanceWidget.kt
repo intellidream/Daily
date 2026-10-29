@@ -60,17 +60,8 @@ class DailyCosmosGlanceWidget : GlanceAppWidget() {
         val nowMs = System.currentTimeMillis()
         val time = AstronomyService.makeTime(nowMs)
         val moon = AstronomyService.moonPhase(time, lat, lon)
-        val bortle = runCatching { CosmosCatalogRepository(context).bortleClass(lat, lon) }.getOrDefault(5)
-        val conditions = AstronomyService.evaluateStargazingConditions(
-            latitude = lat,
-            longitude = lon,
-            millis = nowMs,
-            cloudCoverTotal = cloudPct,
-            cloudCoverLow = null,
-            cloudCoverMid = null,
-            cloudCoverHigh = null,
-            bortleClass = bortle
-        )
+        val liveRepo = com.intellidream.daily.cosmos.CosmosLiveRepository.getInstance(context)
+        val conditions = liveRepo.computeConditions(lat, lon, weather, millis = nowMs)
 
         val visiblePlanets = CelestialBody.majorPlanets.filter { body ->
             AstronomyService.coordinates(body, lat, lon, 0.0, time).altitudeDegrees > 0.0

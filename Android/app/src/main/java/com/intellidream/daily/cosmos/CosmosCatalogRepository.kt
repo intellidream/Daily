@@ -101,6 +101,17 @@ sealed class CosmosSearchResult {
 }
 
 class CosmosCatalogRepository(private val context: Context) {
+    companion object {
+        @Volatile
+        private var instance: CosmosCatalogRepository? = null
+
+        fun getInstance(context: Context): CosmosCatalogRepository {
+            return instance ?: synchronized(this) {
+                instance ?: CosmosCatalogRepository(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
     private val loadMutex = Mutex()
     private val thumbnailCache = ConcurrentHashMap<String, ImageBitmap>()

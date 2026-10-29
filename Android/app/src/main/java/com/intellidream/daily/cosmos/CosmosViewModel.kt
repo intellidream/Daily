@@ -140,8 +140,8 @@ data class CosmosViewState(
 )
 
 class CosmosViewModel(application: Application) : AndroidViewModel(application) {
-    val catalogRepository = CosmosCatalogRepository(application)
-    val liveRepository = CosmosLiveRepository(application)
+    val catalogRepository = CosmosCatalogRepository.getInstance(application)
+    val liveRepository = CosmosLiveRepository.getInstance(application)
     val motionManager = CosmosMotionManager(application)
 
     private val _cameraState = MutableStateFlow(CosmosCameraState())
@@ -327,30 +327,26 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshLiveTelemetry() {
         viewModelScope.launch {
             val s = _state.value
-            val settings = DailyApp.instance.settingsRepository.getLatest()
-            val bundle = liveRepository.fetchLiveBundle(
+            liveRepository.refreshCosmosData(
                 latitude = s.observerLatitude,
                 longitude = s.observerLongitude,
                 elevationMeters = s.observerElevationMeters,
-                settings = settings
+                force = true
             )
-            cachedIssOmm = bundle.issOmm
-            _state.value = _state.value.copy(
-                weatherOverlay = bundle.weatherOverlay,
-                spaceWeather = bundle.spaceWeather,
-                apod = bundle.apod,
-                apodProvenance = bundle.apodProvenance,
-                issLivePosition = bundle.issLivePosition,
-                issPasses = bundle.issPasses,
-                issProvenance = bundle.issProvenance
-            )
+            val bundle = liveRepository.liveBundle.value
+            if (bundle != null) {
+                cachedIssOmm = bundle.issOmm
+                _state.value = _state.value.copy(
+                    weatherOverlay = bundle.weatherOverlay,
+                    spaceWeather = bundle.spaceWeather,
+                    apod = bundle.apod,
+                    apodProvenance = bundle.apodProvenance,
+                    issLivePosition = bundle.issLivePosition,
+                    issPasses = bundle.issPasses,
+                    issProvenance = bundle.issProvenance
+                )
+            }
             refreshCosmosCalculations()
-            liveRepository.evaluateOptInNotifications(
-                settings = settings,
-                conditions = _state.value.conditions,
-                spaceWeather = bundle.spaceWeather,
-                nextIssPass = bundle.issPasses.firstOrNull()
-            )
         }
     }
 

@@ -66,3 +66,20 @@ Existing user configurations persisted in `daily_settings` DataStore lacking `Da
 - Automatically injects `DashboardWidgetType.Cosmos` directly below `Weather` into the user's widget layout on initial load without wiping user preferences or resetting reordered cards.
 - [`CustomizeDashboardScreen.kt`](../../Android/app/src/main/java/com/intellidream/daily/presentation/dashboard/CustomizeDashboardScreen.kt) fully exposes `Cosmos & Observatory` with real-time drag reordering, visibility toggling, and 1-tap dimension switching across `1×1 Small`, `2×1 Wide`, `1×2 Tall`, and `2×2 Large`.
 
+---
+
+## 6. Unified Reactive Telemetry & Live Stargazing Score Architecture
+
+To eliminate fabricated or isolated calculations and ensure complete 1:1 parity between the Hub (`CosmosScreen` / `CosmosViewModel`) and the Dashboard widget (`CosmosDashboardCard` / `DashboardView` / `DailyCosmosGlanceWidget`):
+
+- **Singleton `CosmosLiveRepository` with StateFlows:**
+  - `DailyApp.instance.cosmosLiveRepository` manages a reactive `stargazingConditions: StateFlow<StargazingConditions?>` alongside `weatherOverlay`, `spaceWeather`, and `issPasses`.
+  - Disk-backed SharedPreferences caching (`KEY_CONDITIONS_JSON`) ensures instant non-destructive score rendering on cold start without waiting for network I/O.
+- **True Environmental Modeling:**
+  - Evaluates actual `bortleClass(lat, lon)` from `bortle_world_grid.bin` (e.g. Bortle 9 / NELM 3.6 for central metropolitan regions like Bucharest) rather than hardcoded Bortle 5.
+  - Multi-tier cloud layers (`low/mid/high %`) and astronomical seeing from Open-Meteo UTC + 7Timer! ASTRO are consumed identically by both the Hub and the Dashboard.
+- **Reactive Dashboard & Pull-to-Refresh Sync:**
+  - `DashboardView` observes `cosmosLiveRepo.stargazingConditions.collectAsState()` and launches non-blocking telemetry refreshes whenever observer coordinates change.
+  - Pull-to-refresh (`pullRefreshState`) triggers `cosmosLiveRepo.refreshCosmosData(lat, lon, force = true)` concurrently with weather and health sync, keeping the Stargazing Score 100% synchronized in real time.
+
+

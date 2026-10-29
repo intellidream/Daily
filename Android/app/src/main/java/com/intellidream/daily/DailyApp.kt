@@ -41,6 +41,10 @@ class DailyApp : Application() {
         private set
     lateinit var smartBriefingRepository: com.intellidream.daily.briefing.SmartBriefingRepository
         private set
+    lateinit var cosmosLiveRepository: com.intellidream.daily.cosmos.CosmosLiveRepository
+        private set
+    lateinit var cosmosCatalogRepository: com.intellidream.daily.cosmos.CosmosCatalogRepository
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
@@ -94,6 +98,8 @@ class DailyApp : Application() {
         }
         newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao(), syncHandler = newsHandler)
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)
+        cosmosCatalogRepository = com.intellidream.daily.cosmos.CosmosCatalogRepository.getInstance(this)
+        cosmosLiveRepository = com.intellidream.daily.cosmos.CosmosLiveRepository.getInstance(this)
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
@@ -136,6 +142,11 @@ class DailyApp : Application() {
                     lat = cached.lat,
                     lon = cached.lon
                 )
+                val cLat = cached.lat
+                val cLon = cached.lon
+                if (cLat != null && cLon != null) {
+                    cosmosLiveRepository.refreshCosmosData(cLat, cLon, force = false)
+                }
             }
 
             val currentSettings = settingsRepository.settings.firstOrNull()
@@ -160,6 +171,7 @@ class DailyApp : Application() {
                 onSuccess = { w, f, city, lat, lon ->
                     appScope.launch {
                         weatherCacheRepository.saveCache(w, f, city, lat, lon)
+                        cosmosLiveRepository.refreshCosmosData(lat, lon, force = true)
                     }
                 }
             )

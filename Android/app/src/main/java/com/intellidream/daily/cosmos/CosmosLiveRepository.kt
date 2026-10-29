@@ -27,6 +27,9 @@ import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -81,6 +84,15 @@ class CosmosLiveRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("cosmos_live_cache_v2", Context.MODE_PRIVATE)
 
     companion object {
+        @Volatile
+        private var instance: CosmosLiveRepository? = null
+
+        fun getInstance(context: Context): CosmosLiveRepository {
+            return instance ?: synchronized(this) {
+                instance ?: CosmosLiveRepository(context.applicationContext).also { instance = it }
+            }
+        }
+
         private const val KEY_ISS_OMM = "iss_omm_json"
         private const val KEY_ISS_OMM_TS = "iss_omm_ts"
         private const val KEY_APOD_JSON = "apod_json"
@@ -89,9 +101,148 @@ class CosmosLiveRepository(private val context: Context) {
         private const val KEY_SPACE_TS = "space_weather_ts"
         private const val KEY_WEATHER_JSON = "sky_weather_json"
         private const val KEY_WEATHER_TS = "sky_weather_ts"
+        private const val KEY_CONDITIONS_JSON = "stargazing_conditions_json"
+        private const val KEY_CONDITIONS_TS = "stargazing_conditions_ts"
         private const val KEY_BOOKMARKS = "cosmos_bookmarks_json"
         private const val KEY_OBSERVATIONS = "cosmos_observations_json"
         private const val CHANNEL_ID = "daily_cosmos_alerts"
+    }
+
+    private val _stargazingConditions = MutableStateFlow<StargazingConditions?>(null)
+    val stargazingConditions: StateFlow<StargazingConditions?> = _stargazingConditions.asStateFlow()
+
+    private val _weatherOverlay = MutableStateFlow<CosmosWeatherOverlay?>(null)
+    val weatherOverlay: StateFlow<CosmosWeatherOverlay?> = _weatherOverlay.asStateFlow()
+
+    private val _liveBundle = MutableStateFlow<CosmosLiveBundle?>(null)
+    val liveBundle: StateFlow<CosmosLiveBundle?> = _liveBundle.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    init {
+        restoreCachedTelemetry()
+    }
+
+    private fun restoreCachedTelemetry() {
+        // Restore cached weather overlay if valid
+        val cachedRaw = prefs.getString(KEY_WEATHER_JSON, null)
+        val cachedTs = prefs.getLong(KEY_WEATHER_TS, 0L)
+        if (!cachedRaw.isNullOrBlank() && cachedTs > 0L) {
+            val c = runCatching { json.decodeFromString<CachedWeatherOverlay>(cachedRaw) }.getOrNull()
+            if (c != null) {
+                val ageSec = ((System.currentTimeMillis() - cachedTs) / 1000L).coerceAtLeast(1L)
+                _weatherOverlay.value = CosmosWeatherOverlay(
+                    cloudTotalPercent = c.cloudTotalPercent,
+                    cloudLowPercent = c.cloudLowPercent,
+                    cloudMidPercent = c.cloudMidPercent,
+                    cloudHighPercent = c.cloudHighPercent,
+                    visibilityKm = c.visibilityKm,
+                    temperatureCelsius = c.temperatureCelsius,
+                    dewPointCelsius = c.dewPointCelsius,
+                    seeingArcseconds = c.seeingArcseconds,
+                    transparencyLabel = c.transparencyLabel,
+                    provenance = TelemetryProvenance.cached(ageSec, "Open-Meteo + 7Timer")
+                )
+            }
+        }
+
+        // Restore cached conditions if valid
+        val condRaw = prefs.getString(KEY_CONDITIONS_JSON, null)
+        if (!condRaw.isNullOrBlank()) {
+            val cond = runCatching { json.decodeFromString<StargazingConditions>(condRaw) }.getOrNull()
+            if (cond != null) {
+                _stargazingConditions.value = cond
+            }
+        }
+    }
+
+    fun computeConditions(
+        latitude: Double,
+        longitude: Double,
+        weather: com.intellidream.daily.model.WeatherResponse? = null,
+        weatherOverlay: CosmosWeatherOverlay? = _weatherOverlay.value,
+        millis: Long = System.currentTimeMillis()
+    ): StargazingConditions {
+        val currentLive = _stargazingConditions.value
+        if (currentLive != null && weatherOverlay == null) {
+            return currentLive
+        }
+
+        val bortle = CosmosCatalogRepository.getInstance(context).bortleClass(latitude, longitude)
+        val fallbackClouds = weather?.clouds?.all
+        val fallbackTempC = weather?.main?.temp
+        val tempC = weatherOverlay?.temperatureCelsius ?: fallbackTempC
+        val dewDepression = if (tempC != null && weatherOverlay?.dewPointCelsius != null) {
+            tempC - weatherOverlay.dewPointCelsius
+        } else null
+
+        val conditions = com.intellidream.daily.model.AstronomyService.evaluateStargazingConditions(
+            latitude = latitude,
+            longitude = longitude,
+            millis = millis,
+            cloudCoverTotal = weatherOverlay?.cloudTotalPercent ?: fallbackClouds,
+            cloudCoverLow = weatherOverlay?.cloudLowPercent,
+            cloudCoverMid = weatherOverlay?.cloudMidPercent,
+            cloudCoverHigh = weatherOverlay?.cloudHighPercent,
+            bortleClass = bortle,
+            seeingArcseconds = weatherOverlay?.seeingArcseconds,
+            transparencyLabel = weatherOverlay?.transparencyLabel,
+            dewPointDepression = dewDepression,
+            provenance = weatherOverlay?.provenance ?: if (fallbackClouds != null) {
+                TelemetryProvenance.live("OpenWeather Forecast")
+            } else {
+                TelemetryProvenance.offlineCalculated("Offline Ephemeris + Bortle Grid")
+            }
+        )
+        return conditions
+    }
+
+    suspend fun refreshCosmosData(
+        latitude: Double,
+        longitude: Double,
+        elevationMeters: Double = 0.0,
+        force: Boolean = false
+    ): StargazingConditions = withContext(Dispatchers.IO) {
+        if (_isRefreshing.value && !force) {
+            return@withContext _stargazingConditions.value ?: computeConditions(latitude, longitude)
+        }
+        _isRefreshing.value = true
+        try {
+            val settings = DailyApp.instance.settingsRepository.getLatest()
+            val bundle = fetchLiveBundle(latitude, longitude, elevationMeters, settings)
+            _liveBundle.value = bundle
+            _weatherOverlay.value = bundle.weatherOverlay
+
+            val fallbackWeather = DailyApp.instance.weatherRepository.currentWeather.value
+            val cond = computeConditions(
+                latitude = latitude,
+                longitude = longitude,
+                weather = fallbackWeather,
+                weatherOverlay = bundle.weatherOverlay
+            )
+            _stargazingConditions.value = cond
+
+            prefs.edit()
+                .putString(KEY_CONDITIONS_JSON, json.encodeToString(cond))
+                .putLong(KEY_CONDITIONS_TS, System.currentTimeMillis())
+                .apply()
+
+            evaluateOptInNotifications(
+                settings = settings,
+                conditions = cond,
+                spaceWeather = bundle.spaceWeather,
+                nextIssPass = bundle.issPasses.firstOrNull()
+            )
+
+            cond
+        } catch (e: Exception) {
+            val fallback = _stargazingConditions.value ?: computeConditions(latitude, longitude)
+            _stargazingConditions.value = fallback
+            fallback
+        } finally {
+            _isRefreshing.value = false
+        }
     }
 
     // MARK: - Full Live Telemetry Refresh (Parallel & Resilient)
