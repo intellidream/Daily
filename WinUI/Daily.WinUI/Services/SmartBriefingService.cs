@@ -983,6 +983,18 @@ namespace Daily_WinUI.Services
                 newsFallback = "Your top headlines today: " + string.Join("; ", top5.Select(h => h.TrimStart('-', ' '))) + ".";
             }
 
+            if (now.Hour >= 17 || now.Hour < 5)
+            {
+                try
+                {
+                    var utcNow = DateTime.UtcNow;
+                    var moon = Daily_WinUI.Services.Cosmos.AstronomyService.Shared.GetMoonPhase(utcNow, 44.4268, 26.1025);
+                    var sky = Daily_WinUI.Services.Cosmos.AstronomyService.Shared.EvaluateStargazingConditions(44.4268, 26.1025, utcNow);
+                    weatherFallback += $" Tonight's Sky Score is {sky.Score}/100 ({sky.Quality}) with {moon.Description} ({moon.IlluminationPercent}% lit).";
+                }
+                catch { }
+            }
+
             metrics.WeatherBriefing = $"\uE706  {weatherFallback}";
             metrics.FinanceBriefing = $"\uE8C7  {financeFallback}";
             metrics.HealthBriefing = $"\uEC92  {healthFallback}";

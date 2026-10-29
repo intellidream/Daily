@@ -118,17 +118,23 @@ fun DashboardView(
     val cosmosData = remember(weather) {
         val lat = weather?.coord?.lat ?: 44.4323
         val lon = weather?.coord?.lon ?: 26.1063
-        val clouds = weather?.clouds?.all ?: 15
+        val clouds = weather?.clouds?.all
+        val prov = if (clouds != null) {
+            com.intellidream.daily.model.TelemetryProvenance.live("Live Weather")
+        } else {
+            com.intellidream.daily.model.TelemetryProvenance.offlineCalculated("Offline Ephemeris")
+        }
         val conditions = AstronomyService.evaluateStargazingConditions(
             latitude = lat,
             longitude = lon,
             cloudCoverTotal = clouds,
-            cloudCoverLow = (clouds * 0.3).toInt(),
-            cloudCoverMid = (clouds * 0.4).toInt(),
-            cloudCoverHigh = (clouds * 0.3).toInt(),
-            bortleClass = 4
+            cloudCoverLow = clouds?.let { (it * 0.35).toInt() },
+            cloudCoverMid = clouds?.let { (it * 0.35).toInt() },
+            cloudCoverHigh = clouds?.let { (it * 0.30).toInt() },
+            bortleClass = 5,
+            provenance = prov
         )
-        val moon = AstronomyService.moonPhase()
+        val moon = AstronomyService.moonPhase(observerLatitude = lat, observerLongitude = lon)
         val planets = CelestialBody.majorPlanets.filter {
             AstronomyService.coordinates(it, lat, lon).isVisible
         }
@@ -689,6 +695,8 @@ private fun DashboardWidgetRenderer(
                 moon = cosmosMoon,
                 visiblePlanets = cosmosVisiblePlanets,
                 settings = settings,
+                latitude = weather?.coord?.lat ?: 44.4323,
+                longitude = weather?.coord?.lon ?: 26.1063,
                 onTap = onNavigateToCosmos,
                 onLongClick = onLongClick
             )

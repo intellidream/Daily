@@ -3,286 +3,664 @@
     x:Class="Daily_WinUI.Views.CosmosDetailPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    AutomationProperties.Name="Cosmos Night Sky Observatory">
 
-    <Page.Resources>
-        <SolidColorBrush x:Key="AccentCyanBrush" Color="#FF00E5FF" />
-        <SolidColorBrush x:Key="NightVisionRedBrush" Color="#FFFF1824" />
-        <SolidColorBrush x:Key="PanelGlassBrush" Color="#200B1121" />
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#33FFFFFF" />
-    </Page.Resources>
-
-    <Grid x:Name="RootLayout" Background="#FF050811">
+    <Grid x:Name="RootLayout" Background="#FF050811" SizeChanged="RootLayout_SizeChanged">
         <Grid.RowDefinitions>
-            <RowDefinition Height="84" /> <!-- Top Bar -->
-            <RowDefinition Height="*" />  <!-- Main Sky Dome & HUD -->
+            <RowDefinition Height="76" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- ── Top Bar ────────────────────────────────────────────── -->
-        <Grid Grid.Row="0" Padding="24,0" VerticalAlignment="Center">
+        <!-- ── Top Observatory Header Bar ─────────────────────────────── -->
+        <Grid x:Name="HeaderBar" Grid.Row="0" Padding="20,0" BorderBrush="#22FFFFFF" BorderThickness="0,0,0,1" Background="#CC060A14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left: Back Button, Icon, Title, Location & Mode Badge -->
+            <!-- Left: Back, Emblem, Title, Live Provenance & Observer Location -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <Button
                     x:Name="BackButton"
                     Click="BackButton_Click"
-                    Width="38" Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    Width="36" Height="36"
+                    CornerRadius="18"
+                    Background="#1FFFFFFF"
+                    BorderBrush="#33FFFFFF"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Back to Dashboard">
-                    <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                    AutomationProperties.Name="Back to Dashboard"
+                    ToolTipService.ToolTip="Back to Dashboard (Esc)">
+                    <FontIcon x:Name="BackIcon" Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFFFFFFF" />
                 </Button>
 
-                <Border Width="40" Height="40" CornerRadius="20" Background="#2600E5FF" BorderBrush="#4D00E5FF" BorderThickness="1" VerticalAlignment="Center">
-                    <FontIcon x:Name="HeaderIcon" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border x:Name="HeaderEmblemBorder" Width="38" Height="38" CornerRadius="19" Background="#2400E5FF" BorderBrush="#5500E5FF" BorderThickness="1" VerticalAlignment="Center">
+                    <FontIcon x:Name="HeaderIcon" Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
 
-                <StackPanel Orientation="Vertical" VerticalAlignment="Center" Spacing="2">
-                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <TextBlock
                             x:Name="TitleText"
-                            Text="Cosmos"
+                            Text="Cosmos Observatory"
                             FontFamily="Segoe UI Variable Display"
-                            FontSize="26"
+                            FontSize="21"
                             FontWeight="Bold"
-                            Foreground="{ThemeResource AppFgColorBrush}" />
-                        
-                        <Border x:Name="SimulationBadge" Background="#2600E5FF" BorderBrush="#4D00E5FF" BorderThickness="1" CornerRadius="8" Padding="6,2" VerticalAlignment="Center">
+                            Foreground="#FFFFFFFF" />
+
+                        <Border x:Name="SimulationBadge" Background="#2600E5FF" BorderBrush="#5500E5FF" BorderThickness="1" CornerRadius="8" Padding="7,2" VerticalAlignment="Center">
                             <TextBlock x:Name="SimulationBadgeText" Text="LIVE" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF" />
+                        </Border>
+
+                        <Border x:Name="ProvenanceBadge" Background="#1AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="8" Padding="7,2" VerticalAlignment="Center">
+                            <TextBlock x:Name="ProvenanceBadgeText" Text="EPHEMERIS" FontSize="10" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
                         </Border>
                     </StackPanel>
 
                     <TextBlock
                         x:Name="LocationSubtitle"
-                        Text="Night Sky Observatory • Local Coordinates"
-                        FontSize="12"
-                        Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                        Text="Resolving observer coordinates • Bortle 5"
+                        FontSize="11.5"
+                        Foreground="#AAFFFFFF" />
                 </StackPanel>
             </StackPanel>
 
-            <!-- Right: Action Buttons -->
+            <!-- Right: Search, Layer Quick Toggles, Zenith Lock, Night Vision, Split/Full-Bleed, Detach -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <!-- Red Night-Vision Toggle -->
+                <AutoSuggestBox
+                    x:Name="CatalogSearchBox"
+                    Width="230"
+                    PlaceholderText="Search stars, Messier, planets, ISS..."
+                    QueryIcon="Find"
+                    TextChanged="CatalogSearchBox_TextChanged"
+                    SuggestionChosen="CatalogSearchBox_SuggestionChosen"
+                    QuerySubmitted="CatalogSearchBox_QuerySubmitted"
+                    DisplayMemberPath="Title"
+                    TextMemberPath="Title"
+                    AutomationProperties.Name="Search Astronomical Catalog" />
+
                 <Button
-                    x:Name="NightVisionButton"
-                    Click="NightVisionButton_Click"
-                    Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    x:Name="ZenithLockButton"
+                    Click="ZenithLockButton_Click"
+                    Height="36"
+                    CornerRadius="18"
+                    Background="#1FFFFFFF"
+                    BorderBrush="#33FFFFFF"
                     BorderThickness="1"
                     Padding="12,0"
-                    ToolTipService.ToolTip="Toggle red night vision mode for scotopic vision preservation">
+                    AutomationProperties.Name="Toggle Zenith Planisphere Lock"
+                    ToolTipService.ToolTip="Toggle 360° Zenith Planisphere Ring vs Horizon Dome (Z)">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon x:Name="NightVisionIcon" Glyph="&#xE781;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFFF1824" />
-                        <TextBlock x:Name="NightVisionText" Text="Night Vision" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                        <FontIcon x:Name="ZenithLockIcon" Glyph="&#xE81D;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                        <TextBlock x:Name="ZenithLockText" Text="Horizon Dome" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
                     </StackPanel>
                 </Button>
 
-                <!-- Search Catalog Button with Flyout -->
                 <Button
-                    x:Name="SearchButton"
-                    Width="38" Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    x:Name="NightVisionButton"
+                    Click="NightVisionButton_Click"
+                    Height="36"
+                    CornerRadius="18"
+                    Background="#1FFFFFFF"
+                    BorderBrush="#33FFFFFF"
                     BorderThickness="1"
-                    Padding="0"
-                    ToolTipService.ToolTip="Search stars, constellations, DSOs">
-                    <FontIcon Glyph="&#xE721;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
-                    <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedRight">
-                            <StackPanel Width="320" Spacing="10">
-                                <TextBlock Text="Astronomical Catalog Search" FontWeight="SemiBold" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
-                                <AutoSuggestBox
-                                    x:Name="CatalogSearchBox"
-                                    PlaceholderText="e.g. Sirius, Orion, Pleiades, M31..."
-                                    TextChanged="CatalogSearchBox_TextChanged"
-                                    SuggestionChosen="CatalogSearchBox_SuggestionChosen"
-                                    QuerySubmitted="CatalogSearchBox_QuerySubmitted"
-                                    DisplayMemberPath="Title"
-                                    TextMemberPath="Title" />
-                                <TextBlock Text="Select an object to center on the celestial vault." FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Flyout>
-                    </Button.Flyout>
+                    Padding="12,0"
+                    AutomationProperties.Name="Toggle Red Night Vision"
+                    ToolTipService.ToolTip="Strict #FF1824 scotopic red night-vision mode (N)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="NightVisionIcon" Glyph="&#xE781;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FFFF1824" />
+                        <TextBlock x:Name="NightVisionText" Text="Night Vision" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    </StackPanel>
                 </Button>
 
-                <!-- Reset Camera Orientation Button -->
+                <Button
+                    x:Name="DeckToggleButton"
+                    Click="DeckToggleButton_Click"
+                    Height="36"
+                    CornerRadius="18"
+                    Background="#2400E5FF"
+                    BorderBrush="#5500E5FF"
+                    BorderThickness="1"
+                    Padding="12,0"
+                    AutomationProperties.Name="Toggle Observatory Telemetry Deck"
+                    ToolTipService.ToolTip="Toggle Full-Bleed Sky vs 58/42 Observatory Split Deck">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="DeckToggleIcon" Glyph="&#xE89F;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                        <TextBlock x:Name="DeckToggleText" Text="Observatory Deck" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    </StackPanel>
+                </Button>
+
                 <Button
                     x:Name="ResetCameraButton"
                     Click="ResetCameraButton_Click"
-                    Width="38" Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    Width="36" Height="36"
+                    CornerRadius="18"
+                    Background="#1FFFFFFF"
+                    BorderBrush="#33FFFFFF"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Reset orientation to Zenith (90°)">
-                    <FontIcon Glyph="&#xE7AD;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                    AutomationProperties.Name="Reset Camera View"
+                    ToolTipService.ToolTip="Reset camera orientation (South 35°)">
+                    <FontIcon x:Name="ResetCameraIcon" Glyph="&#xE7AD;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFFFFFFF" />
                 </Button>
 
-                <!-- Detach Window Button -->
                 <Button
                     x:Name="PopOutButton"
                     Click="PopOutButton_Click"
-                    Width="38" Height="38"
-                    CornerRadius="19"
-                    Background="{ThemeResource AppGlassColorBrush}"
-                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    Width="36" Height="36"
+                    CornerRadius="18"
+                    Background="#1FFFFFFF"
+                    BorderBrush="#33FFFFFF"
                     BorderThickness="1"
                     Padding="0"
-                    ToolTipService.ToolTip="Open in separate observatory window">
-                    <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}" />
+                    AutomationProperties.Name="Open Detached Observatory Window"
+                    ToolTipService.ToolTip="Open in dedicated Observatory window">
+                    <FontIcon x:Name="PopOutIcon" Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FFFFFFFF" />
                 </Button>
             </StackPanel>
         </Grid>
 
-        <!-- ── Main Sky Dome & HUD Overlay ───────────────────────── -->
-        <Grid Grid.Row="1" x:Name="ViewportContainer">
-            <!-- Sky Canvas (Interactive Drawing Surface) -->
-            <Canvas
-                x:Name="SkyCanvas"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                Background="Transparent"
-                PointerPressed="SkyCanvas_PointerPressed"
-                PointerMoved="SkyCanvas_PointerMoved"
-                PointerReleased="SkyCanvas_PointerReleased"
-                PointerWheelChanged="SkyCanvas_PointerWheelChanged"
-                SizeChanged="SkyCanvas_SizeChanged" />
+        <!-- ── Main Observatory Workspace: 58% Win2D Sky Dome | 42% Telemetry Deck ── -->
+        <Grid Grid.Row="1" x:Name="WorkspaceGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SkyColumn" Width="58*" />
+                <ColumnDefinition x:Name="DeckColumn" Width="42*" />
+            </Grid.ColumnDefinitions>
 
-            <!-- Reticle Crosshair & Viewport Telemetry (Top Right) -->
-            <Border
-                x:Name="TelemetryCard"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                Margin="0,16,24,0"
-                Background="#26000000"
-                BorderBrush="#33FFFFFF"
-                BorderThickness="1"
-                CornerRadius="12"
-                Padding="12,8">
-                <StackPanel Spacing="3">
-                    <TextBlock x:Name="TelemetryAzAlt" Text="Az: 180.0° • Alt: 45.0°" FontSize="11" FontWeight="Bold" FontFamily="Consolas, Segoe UI" Foreground="#FF00E5FF" />
-                    <TextBlock x:Name="TelemetryFov" Text="Field of View (FOV): 90°" FontSize="10" FontFamily="Consolas, Segoe UI" Foreground="{ThemeResource AppFgMutedColorBrush}" />
-                    <TextBlock x:Name="TelemetryStargazing" Text="Sky Quality: Excellent (88)" FontSize="10" Foreground="#FF00D09C" />
-                </StackPanel>
-            </Border>
+            <!-- ── LEFT / FULL-BLEED: GPU Direct2D Win2D Sky Dome ─────── -->
+            <Grid Grid.Column="0" x:Name="ViewportContainer">
+                <canvas:CanvasControl
+                    x:Name="SkyCanvas"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    ClearColor="#FF03060E"
+                    CreateResources="SkyCanvas_CreateResources"
+                    Draw="SkyCanvas_Draw"
+                    PointerPressed="SkyCanvas_PointerPressed"
+                    PointerMoved="SkyCanvas_PointerMoved"
+                    PointerReleased="SkyCanvas_PointerReleased"
+                    PointerExited="SkyCanvas_PointerExited"
+                    PointerWheelChanged="SkyCanvas_PointerWheelChanged"
+                    DoubleTapped="SkyCanvas_DoubleTapped"
+                    AutomationProperties.Name="Interactive Night Sky Planetarium Canvas" />
 
-            <!-- Target Inspector Floating Card (Top Left) -->
-            <Border
-                x:Name="TargetInspectorCard"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Top"
-                Margin="24,16,0,0"
-                Width="280"
-                Background="#E6070D1A"
-                BorderBrush="#4D00E5FF"
-                BorderThickness="1"
-                CornerRadius="16"
-                Padding="16"
-                Visibility="Collapsed">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock x:Name="TargetNameText" Text="Jupiter" FontSize="16" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
-                            <TextBlock x:Name="TargetTypeText" Text="Planet • Solar System" FontSize="11" Foreground="#FF00E5FF" />
-                        </StackPanel>
-                        <Button Grid.Column="1" Click="CloseTargetCard_Click" Background="Transparent" BorderThickness="0" Padding="4">
-                            <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
-                        </Button>
-                    </Grid>
-
-                    <StackPanel Grid.Row="1" Margin="0,10,0,0" Spacing="4">
-                        <TextBlock x:Name="TargetCoordsText" Text="Az: 142.3° • Alt: +38.5°" FontSize="12" FontFamily="Consolas, Segoe UI" Foreground="{ThemeResource AppFgColorBrush}" />
-                        <TextBlock x:Name="TargetMagDistText" Text="Mag: -2.4 • Dist: 4.82 AU" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
-                    </StackPanel>
-
-                    <Border Grid.Row="2" Margin="0,10,0,0" Background="#15FFFFFF" CornerRadius="8" Padding="10,6">
-                        <TextBlock x:Name="TargetOpticsText" Text="Naked-eye visible • Cloud bands visible in 70mm+ telescope" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap" />
-                    </Border>
-                </Grid>
-            </Border>
-
-            <!-- Bottom Control Deck: Time Machine Scrubber & Quick Planets Bar -->
-            <StackPanel
-                x:Name="BottomControlDeck"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                Margin="0,0,0,24"
-                Spacing="12">
-
-                <!-- Quick Planets Status Carousel -->
+                <!-- Top-Left Camera & Sky Telemetry Pill -->
                 <Border
-                    x:Name="PlanetsDeckBorder"
-                    Background="#D9070D1A"
+                    x:Name="TelemetryCard"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Margin="16,14,0,0"
+                    Background="#CC050914"
                     BorderBrush="#33FFFFFF"
                     BorderThickness="1"
-                    CornerRadius="20"
-                    Padding="12,6">
-                    <StackPanel x:Name="PlanetsStack" Orientation="Horizontal" Spacing="8">
-                        <!-- Populated programmatically in code-behind -->
+                    CornerRadius="12"
+                    Padding="12,8"
+                    IsHitTestVisible="False">
+                    <StackPanel Spacing="2">
+                        <TextBlock x:Name="TelemetryAzAlt" Text="Az 180.0° (S) • Alt +35.0°" FontSize="11.5" FontWeight="Bold" FontFamily="Consolas, Segoe UI" Foreground="#FF00E5FF" />
+                        <TextBlock x:Name="TelemetryFov" Text="FOV 75.0° • Naked Eye • NELM 5.8" FontSize="10.5" FontFamily="Consolas, Segoe UI" Foreground="#BBFFFFFF" />
+                        <TextBlock x:Name="TelemetryStargazing" Text="Sky Score 82/100 (Excellent)" FontSize="10.5" FontWeight="SemiBold" Foreground="#FF38E8B0" />
                     </StackPanel>
                 </Border>
 
-                <!-- Time Machine Scrubber -->
-                <Border
-                    x:Name="TimeScrubberBorder"
-                    Background="#E6070D1A"
-                    BorderBrush="#33FFFFFF"
-                    BorderThickness="1"
-                    CornerRadius="22"
-                    Padding="16,8">
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <Button Click="TimeTravel_Minus1h" Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="12">
-                            <TextBlock Text="-1h" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
-                        </Button>
-                        <Button Click="TimeTravel_Minus15m" Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="12">
-                            <TextBlock Text="-15m" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
-                        </Button>
+                <!-- Top-Right Layer Pills -->
+                <StackPanel
+                    x:Name="LayerPillsBar"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,14,16,0">
+                    <Button x:Name="ConstellationsToggleBtn" Click="ConstellationsToggle_Click" Height="28" CornerRadius="14" Padding="10,0" Background="#2800E5FF" BorderBrush="#5500E5FF" BorderThickness="1" ToolTipService.ToolTip="Toggle IAU Constellations &amp; Lore (C)">
+                        <TextBlock x:Name="ConstellationsToggleText" Text="Constellations" FontSize="10.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    </Button>
+                    <Button x:Name="DsoToggleBtn" Click="DsoToggle_Click" Height="28" CornerRadius="14" Padding="10,0" Background="#2800E5FF" BorderBrush="#5500E5FF" BorderThickness="1" ToolTipService.ToolTip="Toggle Messier &amp; Caldwell Deep-Sky Objects">
+                        <TextBlock x:Name="DsoToggleText" Text="DSOs" FontSize="10.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    </Button>
+                    <Button x:Name="GridToggleBtn" Click="GridToggle_Click" Height="28" CornerRadius="14" Padding="10,0" Background="#1AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" ToolTipService.ToolTip="Cycle Coordinate Grid: Off / Alt-Az / Equatorial (G)">
+                        <TextBlock x:Name="GridToggleText" Text="Grid: Off" FontSize="10.5" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
+                    </Button>
+                    <Button x:Name="AtmosphereToggleBtn" Click="AtmosphereToggle_Click" Height="28" CornerRadius="14" Padding="10,0" Background="#2800E5FF" BorderBrush="#5500E5FF" BorderThickness="1" ToolTipService.ToolTip="Toggle Rayleigh Daylight/Twilight Atmosphere (A)">
+                        <TextBlock x:Name="AtmosphereToggleText" Text="Atmosphere" FontSize="10.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    </Button>
+                </StackPanel>
 
-                        <Border Background="#2600E5FF" BorderBrush="#4D00E5FF" BorderThickness="1" CornerRadius="14" Padding="14,6">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" />
-                                <TextBlock x:Name="SimulatedTimeText" Text="LIVE: 28 Oct, 21:00" FontSize="12" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                <!-- Hover Object Reticle Tooltip -->
+                <Border
+                    x:Name="HoverTooltipBorder"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Background="#E6060B16"
+                    BorderBrush="#6600E5FF"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="10,5"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                    <StackPanel Spacing="1">
+                        <TextBlock x:Name="HoverTitleText" Text="Sirius" FontSize="11.5" FontWeight="Bold" Foreground="#FFFFFFFF" />
+                        <TextBlock x:Name="HoverSubtitleText" Text="Star • mag -1.46 • Alt +28.4°" FontSize="10" Foreground="#BBFFFFFF" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Action Toast Banner -->
+                <Border
+                    x:Name="ToastBanner"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Margin="0,58,0,0"
+                    Background="#EE081224"
+                    BorderBrush="#6600E5FF"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="14,7"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                    <TextBlock x:Name="ToastBannerText" Text="Saved to Sky Bookmarks" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                </Border>
+
+                <!-- Bottom Observatory Control Console (Never overlapped by Dashboard NavCapsule) -->
+                <StackPanel
+                    x:Name="BottomControlDeck"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="16,0,16,16"
+                    Spacing="8"
+                    MaxWidth="780">
+
+                    <!-- Row 1: Quick Solar System & Optical Zoom Presets -->
+                    <Grid HorizontalAlignment="Center" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            x:Name="PlanetsDeckBorder"
+                            Grid.Column="0"
+                            Background="#D9060B16"
+                            BorderBrush="#2EFFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="18"
+                            Padding="8,4">
+                            <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled" MaxWidth="460">
+                                <StackPanel x:Name="PlanetsStack" Orientation="Horizontal" Spacing="5" />
+                            </ScrollViewer>
+                        </Border>
+
+                        <Border
+                            x:Name="ZoomPresetsBorder"
+                            Grid.Column="1"
+                            Background="#D9060B16"
+                            BorderBrush="#2EFFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="18"
+                            Padding="6,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <Button x:Name="ZoomWideBtn" Click="ZoomWide_Click" Height="26" CornerRadius="13" Padding="8,0" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Wide Horizon Dome (110° FOV)">
+                                    <TextBlock x:Name="ZoomWideText" Text="110° Wide" FontSize="10.5" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
+                                </Button>
+                                <Button x:Name="ZoomEyeBtn" Click="ZoomEye_Click" Height="26" CornerRadius="13" Padding="8,0" Background="#2800E5FF" BorderThickness="0" ToolTipService.ToolTip="Natural Naked-Eye View (65° FOV)">
+                                    <TextBlock x:Name="ZoomEyeText" Text="65° Eye" FontSize="10.5" FontWeight="Bold" Foreground="#FF00E5FF" />
+                                </Button>
+                                <Button x:Name="ZoomBinoBtn" Click="ZoomBino_Click" Height="26" CornerRadius="13" Padding="8,0" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="7x50 Binocular Field (8° FOV)">
+                                    <TextBlock x:Name="ZoomBinoText" Text="8° 7x50" FontSize="10.5" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
+                                </Button>
+                                <Button x:Name="ZoomScopeBtn" Click="ZoomScope_Click" Height="26" CornerRadius="13" Padding="8,0" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Planetary Telescope Eyepiece (1.5° FOV — Galilean Moons)">
+                                    <TextBlock x:Name="ZoomScopeText" Text="1.5° Scope" FontSize="10.5" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Row 2: Continuous Time Machine Slider + 1900–2100 Date Jump + Play Rate -->
+                    <Border
+                        x:Name="TimeScrubberBorder"
+                        Background="#EB060B16"
+                        BorderBrush="#33FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="20"
+                        Padding="14,8">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="210" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Play / Speed Rate -->
+                            <Button
+                                x:Name="PlayRateButton"
+                                Grid.Column="0"
+                                Click="PlayRateButton_Click"
+                                Height="30"
+                                CornerRadius="15"
+                                Padding="10,0"
+                                Background="#1FFFFFFF"
+                                BorderBrush="#33FFFFFF"
+                                BorderThickness="1"
+                                ToolTipService.ToolTip="Cycle Time Rate: Real-Time (1x) / 60x / 600x / Pause (Space)">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <FontIcon x:Name="PlayRateIcon" Glyph="&#xE768;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
+                                    <TextBlock x:Name="PlayRateText" Text="1x" FontSize="11" FontWeight="Bold" Foreground="#FFFFFFFF" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Step -1h -->
+                            <Button Grid.Column="1" Click="TimeTravel_Minus1h" Height="30" CornerRadius="15" Padding="9,0" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Step back 1 hour ([)">
+                                <TextBlock x:Name="Minus1hText" Text="-1h" FontSize="11" FontWeight="SemiBold" Foreground="#DDFFFFFF" />
+                            </Button>
+
+                            <!-- Continuous ±12h Fine Scrubber -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="0">
+                                <Slider
+                                    x:Name="TimeScrubberSlider"
+                                    Minimum="-720"
+                                    Maximum="720"
+                                    StepFrequency="5"
+                                    Value="0"
+                                    ValueChanged="TimeScrubberSlider_ValueChanged"
+                                    AutomationProperties.Name="Time Machine Offset Minutes" />
+                            </StackPanel>
+
+                            <!-- Step +1h -->
+                            <Button Grid.Column="3" Click="TimeTravel_Plus1h" Height="30" CornerRadius="15" Padding="9,0" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Step forward 1 hour (])">
+                                <TextBlock x:Name="Plus1hText" Text="+1h" FontSize="11" FontWeight="SemiBold" Foreground="#DDFFFFFF" />
+                            </Button>
+
+                            <!-- Epoch Date Readout + 1900-2100 Date Picker Flyout -->
+                            <Button
+                                x:Name="EpochPickerButton"
+                                Grid.Column="4"
+                                Height="30"
+                                CornerRadius="15"
+                                Padding="11,0"
+                                Background="#2400E5FF"
+                                BorderBrush="#4D00E5FF"
+                                BorderThickness="1"
+                                ToolTipService.ToolTip="Jump to any historical or future date (1900–2100)">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon x:Name="EpochClockIcon" Glyph="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF00E5FF" />
+                                    <TextBlock x:Name="SimulatedTimeText" Text="LIVE • 21:00:00" FontSize="11" FontWeight="Bold" FontFamily="Consolas, Segoe UI" Foreground="#FFFFFFFF" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <Flyout Placement="Top">
+                                        <StackPanel Spacing="10" Width="260">
+                                            <TextBlock Text="Astronomical Epoch Jump (1900–2100)" FontSize="13" FontWeight="SemiBold" />
+                                            <CalendarDatePicker
+                                                x:Name="EpochDatePicker"
+                                                HorizontalAlignment="Stretch"
+                                                DateChanged="EpochDatePicker_DateChanged" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Content="-24h" Click="TimeTravel_Minus24h" HorizontalAlignment="Stretch" />
+                                                <Button Content="+24h" Click="TimeTravel_Plus24h" HorizontalAlignment="Stretch" />
+                                                <Button Content="Tonight 22:00" Click="TimeTravel_TonightDark" HorizontalAlignment="Stretch" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+
+                            <!-- Reset LIVE -->
+                            <Button
+                                x:Name="LiveResetButton"
+                                Grid.Column="5"
+                                Click="TimeTravel_ResetLive"
+                                Height="30"
+                                CornerRadius="15"
+                                Padding="10,0"
+                                Background="#20FFFFFF"
+                                BorderThickness="0"
+                                ToolTipService.ToolTip="Return to real-time live sky (L)">
+                                <TextBlock x:Name="LiveResetText" Text="LIVE" FontSize="10.5" FontWeight="Bold" Foreground="#FF00E5FF" />
+                            </Button>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- ── RIGHT: 42% Observatory Telemetry & Target Inspector Deck ── -->
+            <Border
+                x:Name="ObservatoryDeckPane"
+                Grid.Column="1"
+                Background="#F2070C18"
+                BorderBrush="#24FFFFFF"
+                BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,16,18,24">
+                    <StackPanel Spacing="14">
+
+                        <!-- 1. Selected Target Inspector Card -->
+                        <Border
+                            x:Name="TargetInspectorCard"
+                            Background="#14FFFFFF"
+                            BorderBrush="#4400E5FF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16">
+                            <StackPanel Spacing="10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock x:Name="TargetCategoryBadge" Text="SELECTED CELESTIAL OBJECT" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF" />
+                                        <TextBlock x:Name="TargetNameText" Text="Moon" FontSize="18" FontWeight="Bold" Foreground="#FFFFFFFF" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="TargetTypeText" Text="Earth's Natural Satellite • Solar System" FontSize="11.5" Foreground="#BBFFFFFF" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                                        <Button x:Name="CenterTargetBtn" Click="CenterTargetBtn_Click" Width="32" Height="32" CornerRadius="16" Padding="0" Background="#1FFFFFFF" BorderThickness="0" ToolTipService.ToolTip="Center camera on target">
+                                            <FontIcon Glyph="&#xE81D;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                                        </Button>
+                                        <Button x:Name="BookmarkTargetBtn" Click="BookmarkTargetBtn_Click" Width="32" Height="32" CornerRadius="16" Padding="0" Background="#1FFFFFFF" BorderThickness="0" ToolTipService.ToolTip="Save/remove Sky Bookmark (Supabase synced)">
+                                            <FontIcon x:Name="BookmarkTargetIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FFFFD166" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Optional NASA/Hubble Public-Domain Thumbnail Plate for Showcase DSOs -->
+                                <Border x:Name="TargetThumbnailBorder" CornerRadius="12" Height="136" Visibility="Collapsed" BorderBrush="#26FFFFFF" BorderThickness="1">
+                                    <Grid>
+                                        <Image x:Name="TargetThumbnailImage" Stretch="UniformToFill" />
+                                        <Border VerticalAlignment="Bottom" Background="#B3000000" Padding="8,4">
+                                            <TextBlock Text="NASA / ESA Public-Domain Reference Plate" FontSize="9.5" Foreground="#CCFFFFFF" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <Grid ColumnSpacing="10" RowSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#12FFFFFF" CornerRadius="10" Padding="10,7">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="HORIZONTAL (LIVE)" FontSize="9.5" FontWeight="Bold" Foreground="#99FFFFFF" />
+                                            <TextBlock x:Name="TargetCoordsText" Text="Az 180.0° • Alt +42.0°" FontSize="11.5" FontFamily="Consolas, Segoe UI" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1" Background="#12FFFFFF" CornerRadius="10" Padding="10,7">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="EQUATORIAL (J2000)" FontSize="9.5" FontWeight="Bold" Foreground="#99FFFFFF" />
+                                            <TextBlock x:Name="TargetEqText" Text="RA 05h 35m • Dec -05.4°" FontSize="11.5" FontFamily="Consolas, Segoe UI" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <TextBlock x:Name="TargetMagDistText" Text="Mag -10.8 • Distance 384,400 km" FontSize="11.5" Foreground="#DDFFFFFF" TextWrapping="Wrap" />
+                                <TextBlock x:Name="TargetRiseSetText" Text="Rise 19:14 • Transit 00:42 • Set 06:18" FontSize="11" FontFamily="Consolas, Segoe UI" Foreground="#AAFFFFFF" />
+
+                                <Border Background="#12FFFFFF" CornerRadius="10" Padding="10,8">
+                                    <TextBlock x:Name="TargetOpticsText" Text="Naked-eye visible • Spectacular terminator relief in binoculars or small telescope." FontSize="11.5" Foreground="#DDFFFFFF" TextWrapping="Wrap" />
+                                </Border>
+
+                                <!-- Ecosystem Action Buttons: Log Sighting (#sky TagDoS) & Schedule Observation (Calendar) -->
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button
+                                        x:Name="LogSightingBtn"
+                                        Grid.Column="0"
+                                        Click="LogSightingBtn_Click"
+                                        HorizontalAlignment="Stretch"
+                                        CornerRadius="12"
+                                        Background="#2400E5FF"
+                                        BorderBrush="#5500E5FF"
+                                        BorderThickness="1"
+                                        Padding="10,7">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                            <FontIcon Glyph="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF00E5FF" />
+                                            <TextBlock x:Name="LogSightingBtnText" Text="Log Sighting (#sky)" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                                        </StackPanel>
+                                    </Button>
+
+                                    <Button
+                                        x:Name="ScheduleObsBtn"
+                                        Grid.Column="1"
+                                        Click="ScheduleObsBtn_Click"
+                                        HorizontalAlignment="Stretch"
+                                        CornerRadius="12"
+                                        Background="#1FFFFFFF"
+                                        BorderBrush="#33FFFFFF"
+                                        BorderThickness="1"
+                                        Padding="10,7">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                            <FontIcon Glyph="&#xE787;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFFFD166" />
+                                            <TextBlock x:Name="ScheduleObsBtnText" Text="Schedule in Calendar" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
                             </StackPanel>
                         </Border>
 
-                        <Button Click="TimeTravel_Plus15m" Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="12">
-                            <TextBlock Text="+15m" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
-                        </Button>
-                        <Button Click="TimeTravel_Plus1h" Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="12">
-                            <TextBlock Text="+1h" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
-                        </Button>
-                        <Button Click="TimeTravel_Plus24h" Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="12">
-                            <TextBlock Text="+24h" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
-                        </Button>
-                        <Button Click="TimeTravel_ResetLive" Background="#20FFFFFF" BorderThickness="0" Padding="10,4" CornerRadius="12">
-                            <TextBlock Text="LIVE" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF" />
-                        </Button>
+                        <!-- 2. Tonight's Stargazing Score, Atmospheric Seeing & Circadian Context -->
+                        <Border
+                            x:Name="StargazingDeckCard"
+                            Background="#10FFFFFF"
+                            BorderBrush="#24FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="STARGAZING &amp; ATMOSPHERIC SEEING" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                    <TextBlock x:Name="DeckSkyProvenanceText" Grid.Column="1" Text="EPHEMERIS" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <TextBlock x:Name="DeckScoreValueText" Text="84" FontSize="32" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="#FF38E8B0" />
+                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock x:Name="DeckScoreQualityText" Text="Excellent Dark-Sky Window" FontSize="13.5" FontWeight="Bold" Foreground="#FFFFFFFF" />
+                                        <TextBlock x:Name="DeckBestWindowText" Text="Best Dark Window: 22:15 – 03:45" FontSize="11.5" Foreground="#BBFFFFFF" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <TextBlock x:Name="DeckCloudBreakdownText" Text="Clouds: Low 0% • Mid 0% • High 0% • Bortle 5 (NELM 5.8)" FontSize="11" FontFamily="Consolas, Segoe UI" Foreground="#CCFFFFFF" TextWrapping="Wrap" />
+                                <TextBlock x:Name="DeckSeeingDewText" Text="Seeing: 1.2&quot; • Transparency: Clear • Dew Spread: +6.0°C" FontSize="11" Foreground="#AAFFFFFF" TextWrapping="Wrap" />
+                                <TextBlock x:Name="DeckCircadianText" Text="Astronomical twilight &amp; natural lunar illuminance" FontSize="11" Foreground="#99FFFFFF" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 3. Real SGP4 ISS Visible Passes -->
+                        <Border
+                            x:Name="IssDeckCard"
+                            Background="#10FFFFFF"
+                            BorderBrush="#24FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="ISS (ZARYA) • NATIVE SGP4 ORBIT" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                    <TextBlock x:Name="IssProvenanceText" Grid.Column="1" Text="SGP4" FontSize="10" FontWeight="Bold" Foreground="#FFFFD166" />
+                                </Grid>
+                                <TextBlock x:Name="IssLiveStatusText" Text="Refreshing CelesTrak GP orbital elements..." FontSize="11.5" FontFamily="Consolas, Segoe UI" Foreground="#DDFFFFFF" TextWrapping="Wrap" />
+                                <StackPanel x:Name="IssPassesStack" Spacing="6" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 4. NOAA SWPC Space Weather & Aurora -->
+                        <Border
+                            x:Name="SpaceWeatherDeckCard"
+                            Background="#10FFFFFF"
+                            BorderBrush="#24FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16">
+                            <StackPanel Spacing="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="NOAA SWPC SPACE WEATHER" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                    <TextBlock x:Name="SpaceWeatherProvenanceText" Grid.Column="1" Text="OFFLINE" FontSize="10" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                </Grid>
+                                <TextBlock x:Name="SpaceWeatherMetricsText" Text="Planetary Kp -- • IMF Bz -- nT • Solar Wind -- km/s" FontSize="12" FontWeight="SemiBold" FontFamily="Consolas, Segoe UI" Foreground="#FFFFFFFF" TextWrapping="Wrap" />
+                                <TextBlock x:Name="SpaceWeatherStatusText" Text="Fetching live NOAA DSCOVR &amp; Planetary-K telemetry..." FontSize="11" Foreground="#BBFFFFFF" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 5. Synced Sky Bookmarks -->
+                        <Border
+                            x:Name="BookmarksDeckCard"
+                            Background="#10FFFFFF"
+                            BorderBrush="#24FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="SAVED SKY BOOKMARKS" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                <StackPanel x:Name="BookmarksStack" Spacing="6" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 6. NASA Astronomy Picture of the Day (APOD) -->
+                        <Border
+                            x:Name="ApodDeckCard"
+                            Background="#10FFFFFF"
+                            BorderBrush="#24FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16"
+                            Visibility="Collapsed">
+                            <StackPanel Spacing="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="NASA PICTURE OF THE DAY" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                    <TextBlock x:Name="ApodProvenanceText" Grid.Column="1" Text="LIVE" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF" />
+                                </Grid>
+                                <Border CornerRadius="10" Height="150" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                    <Image x:Name="ApodImage" Stretch="UniformToFill" />
+                                </Border>
+                                <TextBlock x:Name="ApodTitleText" Text="" FontSize="13" FontWeight="Bold" Foreground="#FFFFFFFF" TextWrapping="Wrap" />
+                                <TextBlock x:Name="ApodExplanationText" Text="" FontSize="11" Foreground="#BBFFFFFF" MaxLines="4" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
                     </StackPanel>
-                </Border>
-            </StackPanel>
+                </ScrollViewer>
+            </Border>
         </Grid>
     </Grid>
 </Page>

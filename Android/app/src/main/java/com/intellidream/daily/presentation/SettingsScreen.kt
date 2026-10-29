@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Newspaper
@@ -191,7 +192,15 @@ fun SettingsScreen(
                     )
                 }
 
-                // 8. About Section
+                // 8. Cosmos & Night Sky Observatory Section
+                item {
+                    CosmosSettingsCard(
+                        settings = settings,
+                        onUpdateSettings = onUpdateSettings
+                    )
+                }
+
+                // 9. About Section
                 item {
                     AboutSettingsCard()
                 }
@@ -1161,6 +1170,194 @@ private fun NewsSettingsCard(
             },
             containerColor = Color(0xFF0F1A2E)
         )
+    }
+}
+
+@Composable
+private fun CosmosSettingsCard(
+    settings: AppSettings,
+    onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
+) {
+    var nasaKeyInput by remember(settings.nasaApiKey) { mutableStateOf(settings.nasaApiKey ?: "") }
+    var weatherEndpointInput by remember(settings.cosmosWeatherEndpoint) { mutableStateOf(settings.cosmosWeatherEndpoint ?: "") }
+    var weatherKeyInput by remember(settings.cosmosWeatherApiKey) { mutableStateOf(settings.cosmosWeatherApiKey ?: "") }
+    var savedFeedback by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp,
+        padding = 18.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionHeader(icon = Icons.Filled.Star, title = "Cosmos & Night Sky Observatory")
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Bright ISS Visible Pass Alerts", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Notify 15 minutes before sunlit passes above 40° altitude", color = ThemeColors.textMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = settings.cosmosNotifyIssPasses,
+                    onCheckedChange = { onUpdateSettings { s -> s.copy(cosmosNotifyIssPasses = it) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ThemeColors.accentBlue
+                    )
+                )
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Geomagnetic Storm & Aurora Alerts", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Notify when NOAA SWPC planetary Kp reaches 5.0+ (G1+ storm)", color = ThemeColors.textMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = settings.cosmosNotifyAurora,
+                    onCheckedChange = { onUpdateSettings { s -> s.copy(cosmosNotifyAurora = it) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ThemeColors.accentBlue
+                    )
+                )
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Pristine Dark-Sky Window Alerts", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Notify when tonight's Sky Score exceeds 85/100 under clear skies", color = ThemeColors.textMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = settings.cosmosNotifyPristineSky,
+                    onCheckedChange = { onUpdateSettings { s -> s.copy(cosmosNotifyPristineSky = it) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ThemeColors.accentBlue
+                    )
+                )
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "NASA APOD API Key (Optional — Free at api.nasa.gov)",
+                    color = ThemeColors.accentCyan,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                OutlinedTextField(
+                    value = nasaKeyInput,
+                    onValueChange = { nasaKeyInput = it },
+                    placeholder = { Text("DEMO_KEY (or paste personal NASA key)", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ThemeColors.accentCyan,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Text(
+                    text = "Custom Forecast Endpoint & Key (Optional — Open-Meteo UTC + 7Timer ASTRO)",
+                    color = ThemeColors.textSecondary,
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value = weatherEndpointInput,
+                    onValueChange = { weatherEndpointInput = it },
+                    placeholder = { Text("https://api.open-meteo.com/v1/forecast", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ThemeColors.accentCyan,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = weatherKeyInput,
+                    onValueChange = { weatherKeyInput = it },
+                    placeholder = { Text("Optional commercial forecast API key", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ThemeColors.accentCyan,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Catalogs: ESA Hipparcos (I/239), Yale Bright Star (V/50), IAU WGSN, d3-celestial (BSD-3), NASA/Hubble PD.",
+                        color = ThemeColors.textMuted,
+                        fontSize = 10.5.sp,
+                        modifier = Modifier.weight(1f).padding(end = 10.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (savedFeedback) Color(0xFF34C759) else ThemeColors.accentCyan)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onUpdateSettings { s ->
+                                    val nk = nasaKeyInput.trim().ifEmpty { null }
+                                    val we = weatherEndpointInput.trim().ifEmpty { null }
+                                    val wk = weatherKeyInput.trim().ifEmpty { null }
+                                    s.copy(
+                                        nasaApiKey = nk,
+                                        cosmosWeatherEndpoint = we,
+                                        cosmosWeatherApiKey = wk
+                                    )
+                                }
+                                savedFeedback = true
+                                coroutineScope.launch {
+                                    delay(2000)
+                                    savedFeedback = false
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (savedFeedback) "Saved ✓" else "Save Keys",
+                            color = Color.Black,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

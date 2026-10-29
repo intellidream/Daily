@@ -1,0 +1,301 @@
+{
+  "schemaVersion": 1,
+  "cameraProjectionCases": [
+    {
+      "name": "center_north",
+      "camAz": 0,
+      "camAlt": 45,
+      "fov": 60,
+      "targetAz": 0,
+      "targetAlt": 45,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 500.0,
+        "y": 400.0,
+        "cz": 1.0
+      }
+    },
+    {
+      "name": "center_east",
+      "camAz": 90,
+      "camAlt": 45,
+      "fov": 60,
+      "targetAz": 90,
+      "targetAlt": 45,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 500.0,
+        "y": 400.0,
+        "cz": 1.0
+      }
+    },
+    {
+      "name": "center_south",
+      "camAz": 180,
+      "camAlt": 45,
+      "fov": 60,
+      "targetAz": 180,
+      "targetAlt": 45,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 500.0,
+        "y": 400.0,
+        "cz": 1.0
+      }
+    },
+    {
+      "name": "center_west",
+      "camAz": 270,
+      "camAlt": 45,
+      "fov": 60,
+      "targetAz": 270,
+      "targetAlt": 45,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 500.0,
+        "y": 400.0,
+        "cz": 1.0
+      }
+    },
+    {
+      "name": "center_zenith",
+      "camAz": 180,
+      "camAlt": 90,
+      "fov": 60,
+      "targetAz": 0,
+      "targetAlt": 90,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 500.0,
+        "y": 400.0,
+        "cz": 1.0
+      }
+    },
+    {
+      "name": "offset_right_from_east",
+      "camAz": 90,
+      "camAlt": 30,
+      "fov": 60,
+      "targetAz": 100,
+      "targetAlt": 30,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 612.8911,
+        "y": 395.0617,
+        "cz": 0.988606
+      }
+    },
+    {
+      "name": "offset_up_from_east",
+      "camAz": 90,
+      "camAlt": 30,
+      "fov": 60,
+      "targetAz": 90,
+      "targetAlt": 40,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 500.0,
+        "y": 269.3951,
+        "cz": 0.984808
+      }
+    },
+    {
+      "name": "wrap_359_to_1",
+      "camAz": 355,
+      "camAlt": 20,
+      "fov": 60,
+      "targetAz": 5,
+      "targetAlt": 20,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": {
+        "x": 622.6186,
+        "y": 396.3309,
+        "cz": 0.986585
+      }
+    },
+    {
+      "name": "behind_camera_opposite",
+      "camAz": 90,
+      "camAlt": 0,
+      "fov": 60,
+      "targetAz": 270,
+      "targetAlt": 0,
+      "width": 1000.0,
+      "height": 800.0,
+      "expected": null
+    }
+  ],
+  "starEqjToHorCases": [
+    {
+      "name": "polaris_bucharest",
+      "utc": "2026-10-29T21:00:00Z",
+      "lat": 44.4323,
+      "lon": 26.1063,
+      "hip": 11767,
+      "raHours": 2.530301,
+      "decDeg": 89.264109,
+      "expectedAzDeg": 0.4053,
+      "expectedAltDeg": 45.0017,
+      "expectedHorNWZ": [
+        0.707276,
+        -0.005004,
+        0.706919
+      ]
+    },
+    {
+      "name": "vega_bucharest",
+      "utc": "2026-10-29T21:00:00Z",
+      "lat": 44.4323,
+      "lon": 26.1063,
+      "hip": 91262,
+      "raHours": 18.615649,
+      "decDeg": 38.783689,
+      "expectedAzDeg": 305.1611,
+      "expectedAltDeg": 20.1372,
+      "expectedHorNWZ": [
+        0.540832,
+        0.767784,
+        0.343524
+      ]
+    },
+    {
+      "name": "sirius_sydney",
+      "utc": "2026-10-29T21:00:00Z",
+      "lat": -33.8688,
+      "lon": 151.2093,
+      "hip": 32349,
+      "raHours": 6.752481,
+      "decDeg": -16.716116,
+      "expectedAzDeg": 283.1595,
+      "expectedAltDeg": 48.0632,
+      "expectedHorNWZ": [
+        0.152194,
+        0.650952,
+        0.743706
+      ]
+    }
+  ],
+  "moonMetricsCase": {
+    "utc": "2026-10-29T21:00:00Z",
+    "lat": 44.4323,
+    "lon": 26.1063,
+    "expectedGeoDistanceKm": 365164.83,
+    "expectedTopoDistanceKm": 361568.19,
+    "expectedPhaseFraction": 0.81819,
+    "expectedBrightLimbDeg": -138.317
+  },
+  "jupiterGalileanMoonsCase": {
+    "utc": "2026-10-29T21:00:00Z",
+    "lat": 44.4323,
+    "lon": 26.1063,
+    "moons": [
+      {
+        "name": "Io",
+        "offsetRightRadii": -2.4055,
+        "offsetUpRadii": -3.7841,
+        "depthRadii": 3.8709
+      },
+      {
+        "name": "Europa",
+        "offsetRightRadii": -3.6698,
+        "offsetUpRadii": -5.6091,
+        "depthRadii": -6.5829
+      },
+      {
+        "name": "Ganymede",
+        "offsetRightRadii": 8.0028,
+        "offsetUpRadii": 12.5911,
+        "depthRadii": -1.0865
+      },
+      {
+        "name": "Callisto",
+        "offsetRightRadii": 5.6503,
+        "offsetUpRadii": 8.5877,
+        "depthRadii": 24.319
+      }
+    ]
+  },
+  "sgp4IssCase": {
+    "omm": {
+      "OBJECT_NAME": "ISS (ZARYA)",
+      "OBJECT_ID": "1998-067A",
+      "NORAD_CAT_ID": 25544,
+      "EPOCH": "2026-10-29T12:00:00.000000",
+      "MEAN_MOTION": 15.50103472,
+      "ECCENTRICITY": 0.0004821,
+      "INCLINATION": 51.6412,
+      "RA_OF_ASC_NODE": 142.315,
+      "ARG_OF_PERICENTER": 84.125,
+      "MEAN_ANOMALY": 276.042,
+      "BSTAR": 0.0001452
+    },
+    "temeAtEpochKm": [
+      -5386.8966,
+      4141.5845,
+      19.6151
+    ],
+    "temePlus45MinKm": [
+      5100.8177,
+      -4462.7686,
+      499.0485
+    ],
+    "topocentricPlus45Min": {
+      "utc": "2026-10-29T12:45:00Z",
+      "lat": 44.4323,
+      "lon": 26.1063,
+      "elevM": 85.0,
+      "azDeg": 105.9259,
+      "altDeg": -31.485,
+      "rangeKm": 7402.641
+    }
+  },
+  "stargazingScoreCases": [
+    {
+      "name": "pristine_dark_site",
+      "cloudLow": 0.0,
+      "cloudMid": 0.0,
+      "cloudHigh": 5.0,
+      "moonIllum": 0.05,
+      "moonAltDeg": -15.0,
+      "bortle": 2,
+      "seeingArcsec": 1.0,
+      "tempC": 12.0,
+      "dewPointC": 6.0,
+      "expectedScore": 97
+    },
+    {
+      "name": "suburban_clear_gibbous_moon",
+      "cloudLow": 5.0,
+      "cloudMid": 10.0,
+      "cloudHigh": 15.0,
+      "moonIllum": 0.78,
+      "moonAltDeg": 38.0,
+      "bortle": 5,
+      "seeingArcsec": 1.8,
+      "tempC": 9.0,
+      "dewPointC": 7.5,
+      "expectedScore": 65
+    },
+    {
+      "name": "overcast_urban",
+      "cloudLow": 95.0,
+      "cloudMid": 90.0,
+      "cloudHigh": 80.0,
+      "moonIllum": 0.95,
+      "moonAltDeg": 50.0,
+      "bortle": 8,
+      "seeingArcsec": 3.2,
+      "tempC": 5.0,
+      "dewPointC": 4.5,
+      "expectedScore": 0
+    }
+  ]
+}

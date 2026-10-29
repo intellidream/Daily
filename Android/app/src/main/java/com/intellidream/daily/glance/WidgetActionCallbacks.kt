@@ -91,6 +91,7 @@ object WidgetUpdateHelper {
         runCatching { DailyStressGlanceWidget().updateAll(context) }
         runCatching { DailyMoneyGlanceWidget().updateAll(context) }
         runCatching { DailyTagdosGlanceWidget().updateAll(context) }
+        runCatching { DailyCosmosGlanceWidget().updateAll(context) }
         runCatching { DailyCombinedGlanceWidget().updateAll(context) }
     }
 }

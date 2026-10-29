@@ -12,6 +12,7 @@ public sealed partial class SettingsPage : Page
         { "Features",      typeof(FeaturesPage) },
         { "Appearance",    typeof(AppearanceSettingsPage) },
         { "Notifications", typeof(AboutPage) },
+        { "Cosmos",        typeof(CosmosSettingsPage) },
         { "Account",       typeof(AboutPage) },
         { "Data",          typeof(AboutPage) },
         { "Debug",         typeof(DebugSettingsPage) },

@@ -318,14 +318,17 @@ public final class TagdosStore: ObservableObject {
 
     // MARK: - Quick Notes Mutations
 
-    public func createQuickNote(title: String = "", content: String = "") {
+    @discardableResult
+    public func createQuickNote(title: String = "", content: String = "", tags: [String] = []) -> TagDoQuickNote {
         let note = TagDoQuickNote(
             userId: getEffectiveUserId(),
             title: title,
-            content: content
+            content: content,
+            tags: tags
         )
         quickNotes.insert(note, at: 0)
         save()
+        return note
     }
 
     public func updateQuickNote(id: UUID, title: String, content: String) {

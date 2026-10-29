@@ -15,4 +15,6 @@
     <string name="widget_money_description">Financial net worth, monthly cash flow, and spending ledger</string>
     <string name="widget_tagdos_title">TagDoS Notes &amp; Tasks</string>
     <string name="widget_tagdos_description">Active task pills, mental streams, and quick memos</string>
+    <string name="widget_cosmos_title">Cosmos &amp; Night Sky</string>
+    <string name="widget_cosmos_description">Live Stargazing Score, Moon phase, Bortle class, and visible planets</string>
 </resources>

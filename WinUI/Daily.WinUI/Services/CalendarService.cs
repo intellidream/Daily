@@ -1270,6 +1270,70 @@ namespace Daily_WinUI.Services
             return "Outlook"; // default fallback for microsoft/office365
         }
 
+        public async Task<LocalCalendarEvent> ScheduleObservationEventAsync(
+            string title,
+            string description,
+            DateTime startLocal,
+            DateTime endLocal,
+            string location)
+        {
+            await _databaseService.InitializeAsync();
+            const string cosmosAccountId = "cosmos-observatory";
+            var existingAccount = await _databaseService.Connection
+                .Table<LocalCalendarAccount>()
+                .Where(x => x.Id == cosmosAccountId)
+                .FirstOrDefaultAsync();
+
+            if (existingAccount == null)
+            {
+                var cosmosAcc = new LocalCalendarAccount
+                {
+                    Id = cosmosAccountId,
+                    UserId = "local",
+                    AccountType = "Local",
+                    Email = "cosmos@daily.local",
+                    CustomName = "Cosmos Observatory",
+                    IdentifiedName = "Cosmos Observatory",
+                    Color = "#FF00E5FF",
+                    DisplayOrder = 99,
+                    IsActive = true,
+                    TokenExpiresAt = DateTime.UtcNow.AddYears(50),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    SyncedAt = DateTime.UtcNow,
+                    IsDeleted = false
+                };
+                await _databaseService.Connection.InsertOrReplaceAsync(cosmosAcc);
+            }
+            else if (!existingAccount.IsActive || existingAccount.IsDeleted)
+            {
+                existingAccount.IsActive = true;
+                existingAccount.IsDeleted = false;
+                existingAccount.UpdatedAt = DateTime.UtcNow;
+                existingAccount.SyncedAt = DateTime.UtcNow;
+                await _databaseService.Connection.UpdateAsync(existingAccount);
+            }
+
+            var ev = new LocalCalendarEvent
+            {
+                Id = Guid.NewGuid().ToString(),
+                AccountId = cosmosAccountId,
+                UserId = "local",
+                ProviderEventId = $"cosmos-{Guid.NewGuid():N}",
+                Title = title,
+                Description = description,
+                Start = startLocal,
+                End = endLocal > startLocal ? endLocal : startLocal.AddMinutes(45),
+                IsAllDay = false,
+                Location = location,
+                Color = "#FF00E5FF",
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _databaseService.Connection.InsertOrReplaceAsync(ev);
+            OnCalendarDataChanged?.Invoke();
+            return ev;
+        }
+
         private void Log(string message)
         {
             Console.WriteLine(message);

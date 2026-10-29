@@ -384,6 +384,7 @@ class MainActivity : ComponentActivity() {
                     "stress" -> com.intellidream.daily.glance.DailyStressGlanceReceiver::class.java
                     "money" -> com.intellidream.daily.glance.DailyMoneyGlanceReceiver::class.java
                     "tagdos" -> com.intellidream.daily.glance.DailyTagdosGlanceReceiver::class.java
+                    "cosmos" -> com.intellidream.daily.glance.DailyCosmosGlanceReceiver::class.java
                     else -> com.intellidream.daily.glance.DailyCombinedGlanceReceiver::class.java
                 }
                 val provider = android.content.ComponentName(this, receiverClass)
@@ -567,7 +568,16 @@ fun DailyRootScreen(
             .fillMaxSize()
             .background(brush = ThemeColors.backgroundGradient)
     ) {
-        if (isFoldable) {
+        if (isFoldable && selectedTab == NavigationTab.Cosmos && !showCustomize && !showSettings) {
+            // =========================================================================
+            // FULL-SURFACE OBSERVATORY ON UNFOLDED DISPLAYS (58% Sky Dome / 42% Deck + Tabletop Flex)
+            // =========================================================================
+            com.intellidream.daily.cosmos.CosmosScreen(
+                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (isFoldable) {
             // =========================================================================
             // ADAPTIVE DUAL-PANE FOLDABLE / TABLET ARCHITECTURE (Galaxy Z Fold 8 & Foldables)
             // =========================================================================
@@ -854,6 +864,13 @@ fun DailyRootScreen(
                     onDismiss = { showFoldableBriefing = false }
                 )
             }
+        } else if (selectedTab == NavigationTab.Cosmos) {
+            // Edge-to-edge 120Hz Sky Observatory on compact phones & folded cover screen
+            com.intellidream.daily.cosmos.CosmosScreen(
+                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
             // =========================================================================
             // STANDARD COMPACT PHONE ARCHITECTURE (< 600dp, e.g. Pixel 9 Pro or Folded Cover Screen)
@@ -954,7 +971,8 @@ fun DailyRootScreen(
                         }
                         NavigationTab.Cosmos -> {
                             com.intellidream.daily.cosmos.CosmosScreen(
-                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                onNavigateToWeather = { onSelectTab(NavigationTab.Weather) }
                             )
                         }
                         else -> {

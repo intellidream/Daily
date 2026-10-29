@@ -195,6 +195,22 @@ struct DailyMacOSApp: App {
                     Text("♥\(Int(round(bpm)))")
                 }
             }
+        case MenuBarDisplayMode.iconAndCosmos.rawValue:
+            let lat = weatherService.currentWeather?.coord?.lat ?? 44.4323
+            let lon = weatherService.currentWeather?.coord?.lon ?? 26.1063
+            let moon = AstronomyService.shared.moonPhase(observer: (lat, lon))
+            let cond = AstronomyService.shared.evaluateStargazingConditions(
+                observer: (lat, lon),
+                cloudCoverTotal: weatherService.currentWeather?.clouds?.all,
+                cloudCoverLow: nil,
+                cloudCoverMid: nil,
+                cloudCoverHigh: nil,
+                bortleClass: CosmosCatalogService.shared.bortleClass(latitude: lat, longitude: lon)
+            )
+            HStack(spacing: 3) {
+                Image(systemName: moon.quarter.sfSymbol)
+                Text("\(cond.score)")
+            }
         case MenuBarDisplayMode.iconAndWeather.rawValue, _:
             HStack(spacing: 3) {
                 Image(systemName: "sparkles")

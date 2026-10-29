@@ -19,7 +19,7 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
         <NoWarn>$(NoWarn);NU1510</NoWarn>
-        <DefaultItemExcludes>$(DefaultItemExcludes);WinUI\**;scratch\**</DefaultItemExcludes>
+        <DefaultItemExcludes>$(DefaultItemExcludes);WinUI\**;scratch\**;Tests\**</DefaultItemExcludes>
 
         <!-- Display name -->
         <ApplicationTitle>Daily</ApplicationTitle>
@@ -137,6 +137,12 @@
         <MauiAsset Remove="scratch\**\*.*" />
         <MauiXaml Remove="scratch\**\*.xaml" />
         <Page Remove="scratch\**\*.xaml" />
+
+        <!-- Ignore Tests sub-projects completely -->
+        <Compile Remove="Tests\**\*.cs" />
+        <EmbeddedResource Remove="Tests\**\*.*" />
+        <None Remove="Tests\**\*.*" />
+        <MauiAsset Remove="Tests\**\*.*" />
 
         <!-- Prevent MAUI Apple targets from crashing on unexpanded literal wildcards -->
         <Content Remove="**/*.config" />

@@ -138,6 +138,15 @@ private enum class CoPilotPrefabTopic(
         targetTab = NavigationTab.Habits,
         portalButtonTitle = "Open Habits & Hydration Hub"
     ),
+    TONIGHTS_SKY(
+        id = "tonights_sky",
+        chipLabel = "Tonight's Sky",
+        fullQuestion = "What can I observe in tonight's sky, and what is my Stargazing Score?",
+        icon = Icons.Rounded.NightsStay,
+        accentColor = Color(0xFF38BDF8),
+        targetTab = NavigationTab.Cosmos,
+        portalButtonTitle = "Open Cosmos Observatory"
+    ),
     URGENT_FOCUS(
         id = "urgent_focus",
         chipLabel = "Urgent Focus",
@@ -350,6 +359,8 @@ fun DailyFoldableCompanionPane(
 
         val q = trimmed.lowercase()
         val matchedTopic: CoPilotPrefabTopic? = when {
+            q.contains("sky") || q.contains("star") || q.contains("cosmos") || q.contains("planet") || q.contains("moon") || q.contains("iss") || q.contains("aurora") ->
+                CoPilotPrefabTopic.TONIGHTS_SKY
             q.contains("sleep") || q.contains("somn") || q.contains("rem") || q.contains("deep") || q.contains("obosit") ->
                 CoPilotPrefabTopic.SLEEP_RECOVERY
             q.contains("water") || q.contains("apa") || q.contains("apă") || q.contains("hidr") || q.contains("fum") || q.contains("tig") || q.contains("crav") ->
@@ -1701,6 +1712,46 @@ private fun buildInlineTurn(
                         "Monthly Balance: Outflow exceeds inflow by ${abs(netFlow).roundToInt()}k Lei — review discretionary items."
                     },
                     "EUR Portfolio Value: ${parsedLedger.formattedNetWorthEUR} across liquid & deposit assets."
+                ),
+                targetTab = topic.targetTab,
+                portalTitle = topic.portalButtonTitle,
+                accentColor = topic.accentColor
+            )
+        }
+
+        CoPilotPrefabTopic.TONIGHTS_SKY -> {
+            val nowMs = System.currentTimeMillis()
+            val lat = 44.4268
+            val lon = 26.1025
+            val time = com.intellidream.daily.model.AstronomyService.makeTime(nowMs)
+            val moon = com.intellidream.daily.model.AstronomyService.moonPhase(time, lat, lon)
+            val cond = com.intellidream.daily.model.AstronomyService.evaluateStargazingConditions(
+                latitude = lat,
+                longitude = lon,
+                millis = nowMs,
+                cloudCoverTotal = null,
+                cloudCoverLow = null,
+                cloudCoverMid = null,
+                cloudCoverHigh = null,
+                bortleClass = 5
+            )
+            val visiblePlanets = com.intellidream.daily.model.CelestialBody.majorPlanets.filter {
+                com.intellidream.daily.model.AstronomyService.coordinates(it, lat, lon, 0.0, time).altitudeDegrees > 0.0
+            }.map { it.displayName }
+
+            val planetsLine = if (visiblePlanets.isEmpty()) {
+                "Solar System planets are currently below the local horizon — scrub the Time Machine to tonight's dark window."
+            } else {
+                "Above horizon now: ${visiblePlanets.joinToString(", ")}."
+            }
+
+            CoPilotInlineTurn(
+                question = topic.fullQuestion,
+                headline = "Sky Score ${cond.score}/100 (${cond.quality.displayName}) • Bortle ${cond.bortleClass}",
+                body = "${cond.narrativeAdvice} Moon is in ${moon.quarter.displayName} (${moon.illuminationPercent}% illuminated).",
+                highlights = listOf(
+                    planetsLine,
+                    "Best Dark Window: ${cond.bestWindowDescription ?: "Calculated at astronomical dusk"} (NELM ${String.format(java.util.Locale.US, "%.1f", cond.limitingMagnitude)})."
                 ),
                 targetTab = topic.targetTab,
                 portalTitle = topic.portalButtonTitle,

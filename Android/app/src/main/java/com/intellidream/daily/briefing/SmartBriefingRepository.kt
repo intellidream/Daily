@@ -462,8 +462,8 @@ class SmartBriefingRepository(
             when (slot) {
                 BriefingTimeSlot.MORNING -> "Conditions show $condition at $tempString. Great weather to plan your day."
                 BriefingTimeSlot.INTRADAY -> "Weather holds steady with $condition around $tempString."
-                BriefingTimeSlot.EVENING -> "The evening winds down peacefully with $condition at $tempString."
-                BriefingTimeSlot.NIGHTLY -> "Night air is calm around $tempString."
+                BriefingTimeSlot.EVENING -> "The evening winds down peacefully with $condition at $tempString. ${synthesizeEveningCosmosNote()}"
+                BriefingTimeSlot.NIGHTLY -> "Night air is calm around $tempString. ${synthesizeEveningCosmosNote()}"
             }
         }
 
@@ -585,6 +585,32 @@ class SmartBriefingRepository(
             closingWish = closingWish,
             closingIcon = closingIcon
         )
+    }
+
+    private fun synthesizeEveningCosmosNote(): String {
+        return try {
+            val nowMs = System.currentTimeMillis()
+            val lat = 44.4268
+            val lon = 26.1025
+            val time = com.intellidream.daily.model.AstronomyService.makeTime(nowMs)
+            val moon = com.intellidream.daily.model.AstronomyService.moonPhase(time, lat, lon)
+            val cond = com.intellidream.daily.model.AstronomyService.evaluateStargazingConditions(
+                latitude = lat,
+                longitude = lon,
+                millis = nowMs,
+                cloudCoverTotal = null,
+                cloudCoverLow = null,
+                cloudCoverMid = null,
+                cloudCoverHigh = null
+            )
+            val planets = com.intellidream.daily.model.CelestialBody.majorPlanets.filter {
+                com.intellidream.daily.model.AstronomyService.coordinates(it, lat, lon, 0.0, time).altitudeDegrees > 0.0
+            }.map { it.displayName }
+            val pNote = if (planets.isNotEmpty()) " (${planets.take(3).joinToString(", ")} above horizon)" else ""
+            "Tonight's Sky Score is ${cond.score}/100 (${cond.quality.displayName}) under a ${moon.quarter.displayName} (${moon.illuminationPercent}%)$pNote."
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     fun buildCardItems(record: SmartBriefingRecord): List<BriefingCardItem> {

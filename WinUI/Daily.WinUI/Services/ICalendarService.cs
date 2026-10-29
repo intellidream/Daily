@@ -18,6 +18,7 @@ namespace Daily_WinUI.Services
         Task UpdateAccountCustomNameAsync(string accountId, string customName);
         Task UpdateAccountsOrderAsync(List<string> accountIds);
         Task CompleteTodoAsync(string todoId);
+        Task<LocalCalendarEvent> ScheduleObservationEventAsync(string title, string description, DateTime startLocal, DateTime endLocal, string location);
         event Action OnCalendarDataChanged;
     }
 }

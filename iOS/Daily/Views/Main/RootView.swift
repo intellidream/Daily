@@ -5,10 +5,13 @@ public struct RootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
+    @State private var isCosmosNavExpanded: Bool = false
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
-        if args.contains("-startTabNews") {
+        if args.contains("-startTabCosmos") {
+            self._selectedTab = State(initialValue: .cosmos)
+        } else if args.contains("-startTabNews") {
             self._selectedTab = State(initialValue: .news)
         } else if args.contains("-startTabSettings") {
             self._selectedTab = State(initialValue: .settings)
@@ -149,10 +152,19 @@ public struct RootView: View {
                         let isFoldable = horizontalSizeClass == .regular || geometry.size.width >= 600
                         
                         if isFoldable {
-                            foldableDualPaneView
+                            if selectedTab == .cosmos {
+                                fullSurfaceCosmosView
+                            } else {
+                                foldableDualPaneView
+                            }
                         } else {
                             standardCompactPhoneView
                         }
+                    }
+                }
+                .onChange(of: selectedTab) { _, newTab in
+                    if newTab != .cosmos {
+                        isCosmosNavExpanded = false
                     }
                 }
                 .transition(.asymmetric(
@@ -297,7 +309,7 @@ public struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .applyIf(selectedTab != .dashboard) { view in
+            .applyIf(selectedTab != .dashboard && selectedTab != .cosmos) { view in
                 view.simultaneousGesture(
                     DragGesture(minimumDistance: 20, coordinateSpace: .global)
                         .onEnded { value in
@@ -316,9 +328,82 @@ public struct RootView: View {
                 )
             }
             
-            // Floating Liquid Glass Navigation Capsule
-            FloatingGlassCapsule(selectedTab: $selectedTab)
-                .padding(.bottom, 24)
+            // Floating Liquid Glass Navigation Capsule (auto-retracted into corner bubble in Cosmos Observatory)
+            if selectedTab == .cosmos {
+                cosmosNavigationOverlay
+            } else {
+                FloatingGlassCapsule(selectedTab: $selectedTab)
+                    .padding(.bottom, 24)
+            }
+        }
+    }
+    
+    // MARK: - Full-Surface Unfolded / Tablet Cosmos Observatory (58% Sky Dome / 42% Observatory Deck)
+    @ViewBuilder
+    private var fullSurfaceCosmosView: some View {
+        ZStack(alignment: .bottom) {
+            CosmosDetailView(
+                onNavigateBack: navigateToDashboard,
+                onNavigateToWeather: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        selectedTab = .weather
+                    }
+                },
+                allowSplitDeckByDefault: true
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            cosmosNavigationOverlay
+        }
+    }
+    
+    @ViewBuilder
+    private var cosmosNavigationOverlay: some View {
+        if isCosmosNavExpanded {
+            HStack(spacing: 8) {
+                FloatingGlassCapsule(selectedTab: $selectedTab)
+                
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isCosmosNavExpanded = false
+                    }
+                } label: {
+                    Image(systemName: "chevron.right.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color.black.opacity(0.65)))
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.bottom, 22)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else {
+            Button {
+                #if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                #endif
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    isCosmosNavExpanded = true
+                }
+            } label: {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(width: 42, height: 40)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.72))
+                            .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.38), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Expand Navigation Bar")
+            .frame(maxWidth: .infinity, alignment: .bottomTrailing)
+            .padding(.trailing, 16)
+            .padding(.bottom, 22)
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
         }
     }
     

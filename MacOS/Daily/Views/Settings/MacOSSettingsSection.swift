@@ -7,12 +7,13 @@ public enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
     case heartRate = "heart_rate"
     case iconAndWeather = "icon_and_weather"
     case iconAndVitals = "icon_and_vitals"
+    case iconAndCosmos = "icon_and_cosmos"
     case iconOnly = "icon_only" // Legacy fallback alias
     
     public var id: String { rawValue }
     
     public static var allCases: [MenuBarDisplayMode] {
-        [.monochrome, .weather, .heartRate, .iconAndWeather, .iconAndVitals]
+        [.monochrome, .weather, .heartRate, .iconAndWeather, .iconAndVitals, .iconAndCosmos]
     }
     
     public var displayName: String {
@@ -22,6 +23,7 @@ public enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
         case .heartRate: return "Heart Rate"
         case .iconAndWeather: return "Icon + Weather"
         case .iconAndVitals: return "Icon + Heart Rate"
+        case .iconAndCosmos: return "Icon & Night Sky"
         }
     }
     
@@ -32,6 +34,7 @@ public enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
         case .heartRate: return "heart.fill"
         case .iconAndWeather: return "sun.max.fill"
         case .iconAndVitals: return "heart.text.square.fill"
+        case .iconAndCosmos: return "moon.stars.fill"
         }
     }
     
@@ -47,6 +50,8 @@ public enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
             return "DayOne sparkles icon accompanied by live outdoor temperature."
         case .iconAndVitals:
             return "DayOne sparkles icon accompanied by live biometric heart rate."
+        case .iconAndCosmos:
+            return "Night sky moon phase symbol and live stargazing quality score."
         }
     }
 }
@@ -241,7 +246,8 @@ public struct MacOSSettingsSection: View {
                         .foregroundColor(.white)
                     
                     VStack(spacing: 6) {
-                        shortcutRow(keys: "⌘ 1 – 7", description: "Switch Hubs (Dashboard to News)")
+                        shortcutRow(keys: "⌘ 1 – 8", description: "Switch Hubs (Dashboard to Cosmos Observatory)")
+                        shortcutRow(keys: "⌘ ⌥ 8", description: "Open Detached Cosmos Observatory Window")
                         shortcutRow(keys: "⌘ 0", description: "Open DayOne Glance Companion")
                         shortcutRow(keys: "⌘ D", description: "Toggle Dual-Pane Workspace (Wide/Compact)")
                         shortcutRow(keys: "Esc", description: "Return to Co-Pilot Overview in Detail Pane")

@@ -1,145 +1,336 @@
 import Foundation
 
-/// Fast offline catalog loader for stars, IAU constellations, Messier DSOs, and meteor showers.
+/// High-throughput canonical sky catalog loader for Daily's Night Sky Observatory.
+/// Loads 15,544 Hipparcos stars (`stars_mag70.bin`), 515+ IAU proper star names (`star_names_iau.json`),
+/// 88 official IAU constellations with branched HIP segment pairs (`constellations_iau88.json`),
+/// 257 IAU constellation boundary arcs (`constellation_borders.json`), 14 famous asterisms (`asterisms.json`),
+/// 219 Messier + Caldwell Deep-Sky Objects (`dso_catalog.json`), 22 IAU meteor showers (`meteor_showers_iau.json`),
+/// 5-layer Milky Way isophotes (`milky_way_isophotes.json`), and a global 0.5° offline Bortle grid (`bortle_world_grid.bin`).
 public final class CosmosCatalogService: Sendable {
     public static let shared = CosmosCatalogService()
 
-    public let constellations: [ConstellationRecord]
-    public let messierObjects: [DeepSkyObject]
+    public let stars: [PackedStar]
+    public let starIndexByHip: [Int: Int]
+    public let starDesignationsByHip: [Int: StarDesignation]
     public let brightStars: [BrightStarRecord]
+    public let constellations: [ConstellationRecord]
+    public let constellationBorders: [ConstellationBorderArc]
+    public let asterisms: [AsterismRecord]
+    public let deepSkyObjects: [DeepSkyObject]
+    public var messierObjects: [DeepSkyObject] { deepSkyObjects }
     public let meteorShowers: [MeteorShowerRecord]
+    public let milkyWayLayers: [MilkyWayIsophoteLayer]
+    private let bortleGridData: Data?
 
     public init() {
-        self.constellations = Self.loadDefaultConstellations()
-        self.messierObjects = Self.loadDefaultDSOs()
-        self.brightStars = Self.loadDefaultStars()
-        self.meteorShowers = Self.loadDefaultMeteorShowers()
+        let loadedStars = Self.loadBinaryStars()
+        self.stars = loadedStars
+
+        var hipIdx: [Int: Int] = [:]
+        hipIdx.reserveCapacity(loadedStars.count)
+        for (i, s) in loadedStars.enumerated() {
+            hipIdx[s.hip] = i
+        }
+        self.starIndexByHip = hipIdx
+
+        let designations = Self.loadStarDesignations()
+        self.starDesignationsByHip = designations
+
+        let loadedConstellations = Self.loadConstellations()
+        self.constellations = loadedConstellations
+
+        var constCodeByIndex: [UInt16: String] = [:]
+        for c in loadedConstellations {
+            constCodeByIndex[UInt16(clamping: c.index)] = c.id
+        }
+
+        // Build named / bright star index for Search, Target Inspector, and Accessibility
+        var bright: [BrightStarRecord] = []
+        bright.reserveCapacity(560)
+        for star in loadedStars {
+            let desig = designations[star.hip]
+            if let properName = desig?.name, !properName.isEmpty {
+                let constId = desig?.constellation?.uppercased() ?? constCodeByIndex[star.constellationIndex] ?? "SKY"
+                let subLabel: String? = {
+                    if let b = desig?.bayer, !b.isEmpty, let c = desig?.constellation {
+                        return "\(b) \(c)"
+                    }
+                    return nil
+                }()
+                bright.append(
+                    BrightStarRecord(
+                        hip: star.hip,
+                        name: properName,
+                        designation: subLabel,
+                        constellation: constId,
+                        raHours: Double(star.raHours),
+                        decDegrees: Double(star.decDegrees),
+                        magnitude: Double(star.vMag),
+                        colorIndexBV: Double(star.bv)
+                    )
+                )
+            } else if star.vMag <= 3.0 {
+                let constId = desig?.constellation?.uppercased() ?? constCodeByIndex[star.constellationIndex] ?? "SKY"
+                let label = desig?.primaryLabel ?? "HIP \(star.hip)"
+                bright.append(
+                    BrightStarRecord(
+                        hip: star.hip,
+                        name: label,
+                        designation: nil,
+                        constellation: constId,
+                        raHours: Double(star.raHours),
+                        decDegrees: Double(star.decDegrees),
+                        magnitude: Double(star.vMag),
+                        colorIndexBV: Double(star.bv)
+                    )
+                )
+            }
+        }
+        bright.sort { $0.magnitude < $1.magnitude }
+        self.brightStars = bright
+
+        self.constellationBorders = Self.loadConstellationBorders()
+        self.asterisms = Self.loadAsterisms()
+        self.deepSkyObjects = Self.loadDeepSkyObjects()
+        self.meteorShowers = Self.loadMeteorShowers()
+        self.milkyWayLayers = Self.loadMilkyWayLayers()
+        self.bortleGridData = Self.loadResourceData(name: "bortle_world_grid", ext: "bin")
     }
 
-    // MARK: - In-Memory Embedded Fallback Records
+    // MARK: - Fast Lookups
 
-    private static func loadDefaultConstellations() -> [ConstellationRecord] {
-        [
-            ConstellationRecord(id: "ORI", nameEn: "Orion", nameRo: "Orion", centerRa: 5.6, centerDec: 5.6, stars: ["Betelgeuse", "Rigel", "Bellatrix", "Alnilam", "Alnitak", "Mintaka", "Saiph"]),
-            ConstellationRecord(id: "UMA", nameEn: "Ursa Major", nameRo: "Ursa Major (Big Dipper)", centerRa: 11.3, centerDec: 55.6, stars: ["Dubhe", "Merak", "Phecda", "Megrez", "Alioth", "Mizar", "Alkaid"]),
-            ConstellationRecord(id: "UMI", nameEn: "Ursa Minor", nameRo: "Ursa Minor (Little Dipper)", centerRa: 15.0, centerDec: 77.7, stars: ["Polaris", "Kochab", "Pherkad"]),
-            ConstellationRecord(id: "CAS", nameEn: "Cassiopeia", nameRo: "Cassiopeia", centerRa: 1.3, centerDec: 62.2, stars: ["Schedar", "Caph", "Tsih", "Ruchbah", "Segin"]),
-            ConstellationRecord(id: "CYG", nameEn: "Cygnus", nameRo: "Cygnus", centerRa: 20.6, centerDec: 44.5, stars: ["Deneb", "Sadr", "Gienah", "Albireo"]),
-            ConstellationRecord(id: "LYR", nameEn: "Lyra", nameRo: "Lyra", centerRa: 18.9, centerDec: 36.7, stars: ["Vega", "Sheliak", "Sulafat"]),
-            ConstellationRecord(id: "AQL", nameEn: "Aquila", nameRo: "Aquila", centerRa: 19.8, centerDec: 3.4, stars: ["Altair", "Tarazed", "Alshain"]),
-            ConstellationRecord(id: "TAU", nameEn: "Taurus", nameRo: "Taurus", centerRa: 4.7, centerDec: 19.0, stars: ["Aldebaran", "Elnath", "Alcyone"]),
-            ConstellationRecord(id: "SCO", nameEn: "Scorpius", nameRo: "Scorpius", centerRa: 16.9, centerDec: -27.0, stars: ["Antares", "Shaula", "Sargas"]),
-            ConstellationRecord(id: "CMA", nameEn: "Canis Major", nameRo: "Canis Major", centerRa: 6.8, centerDec: -22.1, stars: ["Sirius", "Adhara", "Wezen", "Mirzam"]),
-            ConstellationRecord(id: "BOO", nameEn: "Boötes", nameRo: "Boötes", centerRa: 14.7, centerDec: 31.2, stars: ["Arcturus", "Izar", "Muphrid"]),
-            ConstellationRecord(id: "AND", nameEn: "Andromeda", nameRo: "Andromeda", centerRa: 0.8, centerDec: 37.4, stars: ["Alpheratz", "Mirach", "Almach"])
-        ]
+    @inline(__always)
+    public func star(forHip hip: Int) -> PackedStar? {
+        guard let idx = starIndexByHip[hip] else { return nil }
+        return stars[idx]
     }
 
-    private static func loadDefaultDSOs() -> [DeepSkyObject] {
-        [
-            DeepSkyObject(id: "M31", name: "Andromeda Galaxy", type: .galaxy, rightAscensionHours: 0.71, declinationDegrees: 41.27, visualMagnitude: 3.4, constellationCode: "AND", descriptionRo: "The nearest major spiral galaxy to the Milky Way, visible to the naked eye as a soft elliptical glow.", recommendedOptics: "Naked Eye / Binoculars"),
-            DeepSkyObject(id: "M42", name: "Orion Nebula", type: .emissionNebula, rightAscensionHours: 5.59, declinationDegrees: -5.39, visualMagnitude: 4.0, constellationCode: "ORI", descriptionRo: "The most spectacular stellar nursery in the night sky, visible beneath Orion's Belt.", recommendedOptics: "Naked Eye / Binoculars / Telescope"),
-            DeepSkyObject(id: "M45", name: "Pleiades (Seven Sisters)", type: .openCluster, rightAscensionHours: 3.79, declinationDegrees: 24.11, visualMagnitude: 1.6, constellationCode: "TAU", descriptionRo: "Famous open star cluster in Taurus wrapped in blue reflection nebulosity.", recommendedOptics: "Naked Eye / Binoculars"),
-            DeepSkyObject(id: "M13", name: "Great Hercules Cluster", type: .globularCluster, rightAscensionHours: 16.69, declinationDegrees: 36.46, visualMagnitude: 5.8, constellationCode: "HER", descriptionRo: "Over 300,000 ancient stars concentrated in a dense gravitational sphere.", recommendedOptics: "Binoculars / Telescope"),
-            DeepSkyObject(id: "M57", name: "Ring Nebula", type: .planetaryNebula, rightAscensionHours: 18.89, declinationDegrees: 33.03, visualMagnitude: 8.8, constellationCode: "LYR", descriptionRo: "Luminous glowing ring of gas expelled by a dying red giant star.", recommendedOptics: "Telescope"),
-            DeepSkyObject(id: "M8", name: "Lagoon Nebula", type: .emissionNebula, rightAscensionHours: 18.06, declinationDegrees: -24.38, visualMagnitude: 6.0, constellationCode: "SGR", descriptionRo: "Luminous ionized hydrogen cloud in the Sagittarius galactic arm.", recommendedOptics: "Binoculars / Telescope")
-        ]
+    public func starName(forHip hip: Int) -> String? {
+        starDesignationsByHip[hip]?.primaryLabel
     }
 
-    private static func loadDefaultStars() -> [BrightStarRecord] {
-        [
-            BrightStarRecord(name: "Sirius", constellation: "CMA", raHours: 6.75, decDegrees: -16.72, magnitude: -1.46, colorIndexBV: 0.00, colorHex: "#FFFFFF"),
-            BrightStarRecord(name: "Canopus", constellation: "CAR", raHours: 6.40, decDegrees: -52.70, magnitude: -0.74, colorIndexBV: 0.15, colorHex: "#F8F9FA"),
-            BrightStarRecord(name: "Arcturus", constellation: "BOO", raHours: 14.26, decDegrees: 19.18, magnitude: -0.05, colorIndexBV: 1.23, colorHex: "#FFB347"),
-            BrightStarRecord(name: "Vega", constellation: "LYR", raHours: 18.62, decDegrees: 38.78, magnitude: 0.03, colorIndexBV: 0.00, colorHex: "#E6F0FA"),
-            BrightStarRecord(name: "Capella", constellation: "AUR", raHours: 5.28, decDegrees: 46.00, magnitude: 0.08, colorIndexBV: 0.80, colorHex: "#FFF3A8"),
-            BrightStarRecord(name: "Rigel", constellation: "ORI", raHours: 5.24, decDegrees: -8.20, magnitude: 0.13, colorIndexBV: -0.03, colorHex: "#BBDEFB"),
-            BrightStarRecord(name: "Procyon", constellation: "CMI", raHours: 7.65, decDegrees: 5.22, magnitude: 0.38, colorIndexBV: 0.42, colorHex: "#FFF9E6"),
-            BrightStarRecord(name: "Betelgeuse", constellation: "ORI", raHours: 5.92, decDegrees: 7.41, magnitude: 0.50, colorIndexBV: 1.85, colorHex: "#FF6F00"),
-            BrightStarRecord(name: "Altair", constellation: "AQL", raHours: 19.85, decDegrees: 8.87, magnitude: 0.77, colorIndexBV: 0.22, colorHex: "#F4F6F9"),
-            BrightStarRecord(name: "Aldebaran", constellation: "TAU", raHours: 4.60, decDegrees: 16.51, magnitude: 0.85, colorIndexBV: 1.54, colorHex: "#FF8C00"),
-            BrightStarRecord(name: "Antares", constellation: "SCO", raHours: 16.49, decDegrees: -26.43, magnitude: 0.96, colorIndexBV: 1.83, colorHex: "#FF3D00"),
-            BrightStarRecord(name: "Spica", constellation: "VIR", raHours: 13.42, decDegrees: -11.16, magnitude: 0.98, colorIndexBV: -0.23, colorHex: "#90CAF9"),
-            BrightStarRecord(name: "Pollux", constellation: "GEM", raHours: 7.76, decDegrees: 28.03, magnitude: 1.14, colorIndexBV: 1.00, colorHex: "#FFD54F"),
-            BrightStarRecord(name: "Deneb", constellation: "CYG", raHours: 20.69, decDegrees: 45.28, magnitude: 1.25, colorIndexBV: 0.09, colorHex: "#E3F2FD"),
-            BrightStarRecord(name: "Regulus", constellation: "LEO", raHours: 10.14, decDegrees: 11.97, magnitude: 1.36, colorIndexBV: -0.11, colorHex: "#BBDEFB"),
-            BrightStarRecord(name: "Castor", constellation: "GEM", raHours: 7.58, decDegrees: 31.89, magnitude: 1.58, colorIndexBV: 0.03, colorHex: "#E8EAF6"),
-            BrightStarRecord(name: "Polaris", constellation: "UMI", raHours: 2.53, decDegrees: 89.26, magnitude: 1.97, colorIndexBV: 0.60, colorHex: "#FFFDE7")
-        ]
+    /// Global O(1) offline Bortle Dark-Sky Scale lookup (1 = pristine dark site ... 9 = inner-city core).
+    public func bortleClass(latitude: Double, longitude: Double) -> Int {
+        guard let data = bortleGridData, data.count >= 16 + 129_600 else {
+            return 5
+        }
+        let y = min(359, max(0, Int(floor((latitude + 90.0) * 2.0))))
+        let normLon = ((longitude + 180.0).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+        let x = min(719, max(0, Int(floor(normLon * 2.0))))
+        let cellIdx = y * 720 + x
+        let byteIdx = 16 + (cellIdx >> 1)
+        let packed = data[byteIdx]
+        let val = (cellIdx & 1) == 0 ? Int(packed >> 4) : Int(packed & 0x0F)
+        return max(1, min(9, val))
     }
 
-    private static func loadDefaultMeteorShowers() -> [MeteorShowerRecord] {
-        [
-            MeteorShowerRecord(id: "PER", nameRo: "Perseids", nameEn: "Perseids", peakDateRange: "August 12-13", radiantRa: 3.1, radiantDec: 58.0, zhr: 100, velocityKmS: 59.0),
-            MeteorShowerRecord(id: "GEM", nameRo: "Geminids", nameEn: "Geminids", peakDateRange: "December 13-14", radiantRa: 7.5, radiantDec: 33.0, zhr: 150, velocityKmS: 35.0),
-            MeteorShowerRecord(id: "QUA", nameRo: "Quadrantids", nameEn: "Quadrantids", peakDateRange: "January 3-4", radiantRa: 15.3, radiantDec: 49.0, zhr: 110, velocityKmS: 41.0),
-            MeteorShowerRecord(id: "LYR", nameRo: "Lyrids", nameEn: "Lyrids", peakDateRange: "April 21-22", radiantRa: 18.1, radiantDec: 34.0, zhr: 18, velocityKmS: 49.0),
-            MeteorShowerRecord(id: "ETA", nameRo: "Eta Aquariids", nameEn: "Eta Aquariids", peakDateRange: "May 5-6", radiantRa: 22.5, radiantDec: -1.0, zhr: 50, velocityKmS: 66.0),
-            MeteorShowerRecord(id: "ORI", nameRo: "Orionids", nameEn: "Orionids", peakDateRange: "October 21-22", radiantRa: 6.3, radiantDec: 16.0, zhr: 25, velocityKmS: 66.0),
-            MeteorShowerRecord(id: "LEO", nameRo: "Leonids", nameEn: "Leonids", peakDateRange: "November 17-18", radiantRa: 10.2, radiantDec: 22.0, zhr: 15, velocityKmS: 71.0)
-        ]
+    public static func limitingMagnitude(forBortle bortle: Int, moonIlluminatedFraction: Double = 0.0, isMoonAboveHorizon: Bool = false) -> Double {
+        let baseTable: [Double] = [7.8, 7.8, 7.3, 6.8, 6.3, 5.8, 5.2, 4.6, 4.1, 3.6]
+        let clamped = max(1, min(9, bortle))
+        var nelm = baseTable[clamped]
+        if isMoonAboveHorizon {
+            nelm -= moonIlluminatedFraction * 1.45
+        }
+        return max(2.5, min(7.8, nelm))
     }
-}
 
-// MARK: - Supporting Record Types
+    public func thumbnailURL(for relativePath: String?) -> URL? {
+        guard let rel = relativePath, !rel.isEmpty else { return nil }
+        let fileName = (rel as NSString).lastPathComponent
+        let stem = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension.isEmpty ? "png" : (fileName as NSString).pathExtension
 
-public struct ConstellationRecord: Codable, Identifiable, Equatable, Sendable {
-    public let id: String
-    public let nameEn: String
-    public let nameRo: String
-    public let centerRa: Double
-    public let centerDec: Double
-    public let stars: [String]
-
-    public init(id: String, nameEn: String, nameRo: String, centerRa: Double, centerDec: Double, stars: [String]) {
-        self.id = id
-        self.nameEn = nameEn
-        self.nameRo = nameRo
-        self.centerRa = centerRa
-        self.centerDec = centerDec
-        self.stars = stars
+        return Bundle.module.url(forResource: stem, withExtension: ext, subdirectory: "Cosmos/thumbs")
+            ?? Bundle.module.url(forResource: stem, withExtension: ext, subdirectory: "thumbs")
+            ?? Bundle.module.url(forResource: stem, withExtension: ext)
     }
-}
 
-public struct BrightStarRecord: Codable, Identifiable, Equatable, Sendable {
-    public var id: String { name }
-    public let name: String
-    public let constellation: String
-    public let raHours: Double
-    public let decDegrees: Double
-    public let magnitude: Double
-    public let colorIndexBV: Double
-    public let colorHex: String
+    // MARK: - Resource Resolution (Handles SwiftPM Flattened & Subdirectory Bundles)
 
-    public init(name: String, constellation: String, raHours: Double, decDegrees: Double, magnitude: Double, colorIndexBV: Double, colorHex: String) {
-        self.name = name
-        self.constellation = constellation
-        self.raHours = raHours
-        self.decDegrees = decDegrees
-        self.magnitude = magnitude
-        self.colorIndexBV = colorIndexBV
-        self.colorHex = colorHex
+    private static func resolveResourceURL(name: String, ext: String) -> URL? {
+        Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Cosmos")
+            ?? Bundle.module.url(forResource: name, withExtension: ext)
     }
-}
 
-public struct MeteorShowerRecord: Codable, Identifiable, Equatable, Sendable {
-    public let id: String
-    public let nameRo: String
-    let nameEn: String
-    public let peakDateRange: String
-    public let radiantRa: Double
-    public let radiantDec: Double
-    public let zhr: Int
-    public let velocityKmS: Double
+    private static func loadResourceData(name: String, ext: String) -> Data? {
+        guard let url = resolveResourceURL(name: name, ext: ext) else { return nil }
+        return try? Data(contentsOf: url, options: [.mappedIfSafe])
+    }
 
-    public init(id: String, nameRo: String, nameEn: String, peakDateRange: String, radiantRa: Double, radiantDec: Double, zhr: Int, velocityKmS: Double) {
-        self.id = id
-        self.nameRo = nameRo
-        self.nameEn = nameEn
-        self.peakDateRange = peakDateRange
-        self.radiantRa = radiantRa
-        self.radiantDec = radiantDec
-        self.zhr = zhr
-        self.velocityKmS = velocityKmS
+    // MARK: - Binary & JSON Decoders
+
+    private static func loadBinaryStars() -> [PackedStar] {
+        guard let data = loadResourceData(name: "stars_mag70", ext: "bin"), data.count >= 16 else {
+            return []
+        }
+
+        return data.withUnsafeBytes { rawBuf -> [PackedStar] in
+            guard let base = rawBuf.baseAddress else { return [] }
+            let m0 = base.load(fromByteOffset: 0, as: UInt8.self)
+            let m1 = base.load(fromByteOffset: 1, as: UInt8.self)
+            let m2 = base.load(fromByteOffset: 2, as: UInt8.self)
+            let m3 = base.load(fromByteOffset: 3, as: UInt8.self)
+            guard m0 == 0x44, m1 == 0x43, m2 == 0x53, m3 == 0x54 else { return [] } // "DCST"
+
+            let count = Int(UInt32(littleEndian: base.loadUnaligned(fromByteOffset: 8, as: UInt32.self)))
+            let expectedBytes = 16 + count * 32
+            guard rawBuf.count >= expectedBytes else { return [] }
+
+            var result: [PackedStar] = []
+            result.reserveCapacity(count)
+
+            for i in 0..<count {
+                let off = 16 + i * 32
+                let hip = Int(UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off, as: UInt32.self)))
+                let ux = Float(bitPattern: UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off + 4, as: UInt32.self)))
+                let uy = Float(bitPattern: UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off + 8, as: UInt32.self)))
+                let uz = Float(bitPattern: UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off + 12, as: UInt32.self)))
+                let raH = Float(bitPattern: UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off + 16, as: UInt32.self)))
+                let decD = Float(bitPattern: UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off + 20, as: UInt32.self)))
+                let vMag = Float(bitPattern: UInt32(littleEndian: base.loadUnaligned(fromByteOffset: off + 24, as: UInt32.self)))
+                let bvMillis = Int16(littleEndian: base.loadUnaligned(fromByteOffset: off + 28, as: Int16.self))
+                let constIdx = UInt16(littleEndian: base.loadUnaligned(fromByteOffset: off + 30, as: UInt16.self))
+
+                result.append(
+                    PackedStar(
+                        hip: hip,
+                        ux: ux,
+                        uy: uy,
+                        uz: uz,
+                        raHours: raH,
+                        decDegrees: decD,
+                        vMag: vMag,
+                        bv: Float(bvMillis) / 1000.0,
+                        constellationIndex: constIdx
+                    )
+                )
+            }
+            return result
+        }
+    }
+
+    private static func loadStarDesignations() -> [Int: StarDesignation] {
+        guard let data = loadResourceData(name: "star_names_iau", ext: "json"),
+              let list = try? JSONDecoder().decode([StarDesignation].self, from: data) else {
+            return [:]
+        }
+        var map: [Int: StarDesignation] = [:]
+        map.reserveCapacity(list.count)
+        for item in list {
+            map[item.hip] = item
+        }
+        return map
+    }
+
+    private static func loadConstellations() -> [ConstellationRecord] {
+        guard let data = loadResourceData(name: "constellations_iau88", ext: "json"),
+              let list = try? JSONDecoder().decode([ConstellationRecord].self, from: data) else {
+            return []
+        }
+        return list
+    }
+
+    private static func loadConstellationBorders() -> [ConstellationBorderArc] {
+        guard let data = loadResourceData(name: "constellation_borders", ext: "json"),
+              let list = try? JSONDecoder().decode([ConstellationBorderArc].self, from: data) else {
+            return []
+        }
+        return list
+    }
+
+    private static func loadAsterisms() -> [AsterismRecord] {
+        guard let data = loadResourceData(name: "asterisms", ext: "json"),
+              let list = try? JSONDecoder().decode([AsterismRecord].self, from: data) else {
+            return []
+        }
+        return list
+    }
+
+    private static func loadDeepSkyObjects() -> [DeepSkyObject] {
+        struct RawDSO: Decodable {
+            let id: String
+            let catalog: String
+            let ngcIc: String?
+            let name: String
+            let constellation: String
+            let type: String
+            let typeCode: String?
+            let raHours: Double
+            let decDeg: Double
+            let visualMag: Double
+            let surfaceBrightness: Double?
+            let majorAxisArcmin: Double
+            let minorAxisArcmin: Double
+            let positionAngleDeg: Double?
+            let distanceLy: Double?
+            let recommendedOptics: String
+            let thumbnail: String?
+            let description: String
+        }
+
+        guard let data = loadResourceData(name: "dso_catalog", ext: "json"),
+              let rawList = try? JSONDecoder().decode([RawDSO].self, from: data) else {
+            return []
+        }
+
+        return rawList.map { r in
+            let cleanNgc = (r.ngcIc?.isEmpty == false) ? r.ngcIc : nil
+            let cleanThumb = (r.thumbnail?.isEmpty == false) ? r.thumbnail : nil
+            return DeepSkyObject(
+                id: r.id,
+                catalog: r.catalog,
+                name: r.name,
+                ngc: cleanNgc,
+                type: DSOType.fromCatalogCategory(r.type, typeCode: r.typeCode),
+                morphType: r.type,
+                constellationCode: r.constellation,
+                rightAscensionHours: r.raHours,
+                declinationDegrees: r.decDeg,
+                visualMagnitude: r.visualMag,
+                surfaceBrightness: r.surfaceBrightness,
+                majorAxisArcmin: r.majorAxisArcmin,
+                minorAxisArcmin: r.minorAxisArcmin,
+                positionAngleDeg: r.positionAngleDeg ?? 0.0,
+                distanceLightYears: r.distanceLy,
+                recommendedOptics: r.recommendedOptics,
+                thumbnail: cleanThumb,
+                description: r.description
+            )
+        }
+    }
+
+    private static func loadMeteorShowers() -> [MeteorShowerRecord] {
+        guard let data = loadResourceData(name: "meteor_showers_iau", ext: "json"),
+              let list = try? JSONDecoder().decode([MeteorShowerRecord].self, from: data) else {
+            return []
+        }
+        return list
+    }
+
+    private static func loadMilkyWayLayers() -> [MilkyWayIsophoteLayer] {
+        struct RawLayer: Decodable {
+            let level: Int
+            let rings: [[[Double]]]
+        }
+        guard let data = loadResourceData(name: "milky_way_isophotes", ext: "json"),
+              let raw = try? JSONDecoder().decode([RawLayer].self, from: data) else {
+            return []
+        }
+
+        let deg2rad = Double.pi / 180.0
+        return raw.map { layer in
+            let convertedRings: [[SkyUnitVec3]] = layer.rings.map { ring in
+                ring.compactMap { pt in
+                    guard pt.count >= 2 else { return nil }
+                    let raRad = pt[0] * 15.0 * deg2rad
+                    let decRad = pt[1] * deg2rad
+                    let ux = Float(cos(decRad) * cos(raRad))
+                    let uy = Float(cos(decRad) * sin(raRad))
+                    let uz = Float(sin(decRad))
+                    return SkyUnitVec3(ux, uy, uz)
+                }
+            }
+            return MilkyWayIsophoteLayer(level: layer.level, rings: convertedRings)
+        }
     }
 }

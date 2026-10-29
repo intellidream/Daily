@@ -39,7 +39,7 @@ enum class DashboardWidgetType(val id: String, val title: String) {
     Habits("habits", "Habits & Cravings"),
     Finances("finances", "Finances & Markets"),
     TagdosNotes("tagdos_notes", "Tagdos & Notes"),
-    Cosmos("cosmos", "Cosmos & Observator")
+    Cosmos("cosmos", "Cosmos & Observatory")
 }
 
 @Serializable
@@ -100,6 +100,14 @@ data class AppSettings(
     val smartBriefingEnabled: Boolean = true,
     val smartBriefingAutoMorning: Boolean = true,
     val geminiApiKey: String? = null,
+
+    // Cosmos & Night Sky Observatory
+    val nasaApiKey: String? = null,
+    val cosmosWeatherEndpoint: String? = null,
+    val cosmosWeatherApiKey: String? = null,
+    val cosmosNotifyIssPasses: Boolean = false,
+    val cosmosNotifyAurora: Boolean = false,
+    val cosmosNotifyPristineSky: Boolean = false,
 
     // Dashboard Layout
     val dashboardWidgets: List<DashboardWidgetConfig> = DashboardWidgetConfig.defaultLayout

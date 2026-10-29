@@ -15,7 +15,9 @@ public struct RootView: View {
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
-        if args.contains("-startTabNews") {
+        if args.contains("-startTabCosmos") {
+            self._selectedTab = State(initialValue: .cosmos)
+        } else if args.contains("-startTabNews") {
             self._selectedTab = State(initialValue: .news)
         } else if args.contains("-startTabSettings") {
             self._selectedTab = State(initialValue: .settings)
@@ -64,8 +66,8 @@ public struct RootView: View {
                                 .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                         
-                        // Main Workspace Area (Dual-Pane or Single-Column)
-                        if isDualPaneEnabled {
+                        // Main Workspace Area (Full-surface Observatory when Cosmos is active, otherwise Dual-Pane or Single-Column)
+                        if isDualPaneEnabled && selectedTab != .cosmos {
                             dualPaneWorkspaceView
                         } else {
                             singleColumnView

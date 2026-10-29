@@ -41,6 +41,12 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
+            <NavigationViewItem Tag="Cosmos" Content="Cosmos &amp; Sky">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
             <!-- ── Application ─────────────────────────── -->
             <NavigationViewItemHeader Content="Application" />
 

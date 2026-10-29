@@ -11,5 +11,6 @@ struct DailyWidgetsBundle: WidgetBundle {
         SleepWidget()
         TagdosWidget()
         StressWidget()
+        CosmosWidget()
     }
 }

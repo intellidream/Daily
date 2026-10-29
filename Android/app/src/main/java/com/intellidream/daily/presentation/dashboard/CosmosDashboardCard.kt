@@ -1,6 +1,6 @@
 package com.intellidream.daily.presentation.dashboard
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,37 +13,65 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.NightsStay
-import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.GlassIntensity
-import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.AppSettings
+import com.intellidream.daily.model.AstronomyService
 import com.intellidream.daily.model.CelestialBody
 import com.intellidream.daily.model.DashboardWidgetSize
 import com.intellidream.daily.model.MoonPhaseInfo
+import com.intellidream.daily.model.SGP4Propagator
 import com.intellidream.daily.model.StargazingConditions
 import com.intellidream.daily.model.StargazingQuality
+import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.tan
+
+private data class MiniBrightStar(val raHours: Double, val decDeg: Double, val mag: Float)
+
+private val MiniReferenceStars = listOf(
+    MiniBrightStar(6.7525, -16.7161, -1.46f), // Sirius
+    MiniBrightStar(14.2610, 19.1825, -0.05f), // Arcturus
+    MiniBrightStar(18.6156, 38.7837, 0.03f),  // Vega
+    MiniBrightStar(5.2782, 45.9980, 0.08f),   // Capella
+    MiniBrightStar(5.2423, -8.2016, 0.13f),   // Rigel
+    MiniBrightStar(7.6550, 5.2250, 0.34f),    // Procyon
+    MiniBrightStar(5.9195, 7.4071, 0.42f),    // Betelgeuse
+    MiniBrightStar(19.8464, 8.8683, 0.76f),   // Altair
+    MiniBrightStar(4.5987, 16.5093, 0.86f),   // Aldebaran
+    MiniBrightStar(16.4901, -26.4320, 0.96f), // Antares
+    MiniBrightStar(13.4199, -11.1613, 0.97f), // Spica
+    MiniBrightStar(7.7553, 28.0262, 1.14f),   // Pollux
+    MiniBrightStar(22.9608, -29.6222, 1.16f), // Fomalhaut
+    MiniBrightStar(20.6905, 45.2803, 1.25f),  // Deneb
+    MiniBrightStar(10.1395, 11.9672, 1.36f),  // Regulus
+    MiniBrightStar(2.5303, 89.2641, 1.98f)    // Polaris
+)
 
 @Composable
 fun CosmosDashboardCard(
@@ -52,6 +80,8 @@ fun CosmosDashboardCard(
     moon: MoonPhaseInfo?,
     visiblePlanets: List<CelestialBody>,
     settings: AppSettings,
+    latitude: Double = 44.4323,
+    longitude: Double = 26.1063,
     onTap: () -> Unit,
     onLongClick: (() -> Unit)? = null
 ) {
@@ -67,6 +97,9 @@ fun CosmosDashboardCard(
         com.intellidream.daily.model.GlassIntensity.Prominent -> GlassIntensity.Prominent
     }
 
+    val lat = latitude
+    val lon = longitude
+
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -78,10 +111,87 @@ fun CosmosDashboardCard(
         onLongClick = onLongClick
     ) {
         when (size) {
-            DashboardWidgetSize.Small -> SmallCosmosContent(conditions, moon, visiblePlanets)
-            DashboardWidgetSize.Wide -> WideCosmosContent(conditions, moon, visiblePlanets)
-            DashboardWidgetSize.Tall -> TallCosmosContent(conditions, moon, visiblePlanets)
-            DashboardWidgetSize.Large -> LargeCosmosContent(conditions, moon, visiblePlanets)
+            DashboardWidgetSize.Small -> SmallCosmosContent(conditions, moon, visiblePlanets, lat, lon)
+            DashboardWidgetSize.Wide -> WideCosmosContent(conditions, moon, visiblePlanets, lat, lon)
+            DashboardWidgetSize.Tall -> TallCosmosContent(conditions, moon, visiblePlanets, lat, lon)
+            DashboardWidgetSize.Large -> TallCosmosContent(conditions, moon, visiblePlanets, lat, lon)
+        }
+    }
+}
+
+@Composable
+private fun MiniZenithSkyDomeCanvas(
+    latitude: Double,
+    longitude: Double,
+    diameter: Dp,
+    modifier: Modifier = Modifier
+) {
+    val nowMs = remember { System.currentTimeMillis() }
+    val bodies: List<Pair<CelestialBody, com.intellidream.daily.model.CelestialCoordinates>> = remember(latitude, longitude, nowMs / 60_000L) {
+        val t = AstronomyService.makeTime(nowMs)
+        listOf(
+            CelestialBody.MOON,
+            CelestialBody.MERCURY,
+            CelestialBody.VENUS,
+            CelestialBody.MARS,
+            CelestialBody.JUPITER,
+            CelestialBody.SATURN
+        ).map { body ->
+            body to AstronomyService.coordinates(body, latitude, longitude, 0.0, t)
+        }.filter { it.second.isVisible }
+    }
+
+    Canvas(modifier = modifier.size(diameter)) {
+        val cx = size.width * 0.5f
+        val cy = size.height * 0.5f
+        val r = min(cx, cy) - 2.dp.toPx()
+
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF0A142B), Color(0xFF03060F)),
+                center = Offset(cx, cy),
+                radius = r
+            ),
+            radius = r,
+            center = Offset(cx, cy)
+        )
+        drawCircle(
+            color = Color(0xFF00E5FF).copy(alpha = 0.35f),
+            radius = r,
+            center = Offset(cx, cy),
+            style = Stroke(width = 1.1.dp.toPx())
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.10f),
+            radius = r * 0.5f,
+            center = Offset(cx, cy),
+            style = Stroke(width = 0.7.dp.toPx())
+        )
+
+        val astroTime = AstronomyService.makeTime(nowMs)
+        // Bright Reference Stars (Stereographic Zenith Planisphere: N up, E left / W right sky dome)
+        for (star in MiniReferenceStars) {
+            val hor = AstronomyService.starHorizontalCoordinates(star.raHours, star.decDeg, latitude, longitude, 0.0, astroTime)
+            if (hor.altitudeDegrees <= 0.0) continue
+            val zRad = (90.0 - hor.altitudeDegrees) * (PI / 180.0)
+            val rho = (r * tan(zRad * 0.5)).toFloat()
+            val azRad = hor.azimuthDegrees * (PI / 180.0)
+            val sx = cx - (rho * sin(azRad)).toFloat()
+            val sy = cy - (rho * cos(azRad)).toFloat()
+            val sr = if (star.mag < 0.2f) 2.0f else 1.35f
+            drawCircle(Color.White.copy(alpha = 0.85f), radius = sr, center = Offset(sx, sy))
+        }
+
+        // Live Solar System Bodies Above Horizon
+        for ((body, coords) in bodies) {
+            val zRad = (90.0 - coords.altitudeDegrees) * (PI / 180.0)
+            val rho = (r * tan(zRad * 0.5)).toFloat()
+            val azRad = coords.azimuthDegrees * (PI / 180.0)
+            val sx = cx - (rho * sin(azRad)).toFloat()
+            val sy = cy - (rho * cos(azRad)).toFloat()
+            val col = if (body == CelestialBody.MOON) Color(0xFFFFE599) else Color(0xFF00E5FF)
+            val br = if (body == CelestialBody.MOON) 3.4f else 2.5f
+            drawCircle(col, radius = br, center = Offset(sx, sy))
         }
     }
 }
@@ -90,7 +200,9 @@ fun CosmosDashboardCard(
 private fun SmallCosmosContent(
     conditions: StargazingConditions?,
     moon: MoonPhaseInfo?,
-    visiblePlanets: List<CelestialBody>
+    visiblePlanets: List<CelestialBody>,
+    lat: Double,
+    lon: Double
 ) {
     val score = conditions?.score ?: 75
     val quality = conditions?.quality ?: StargazingQuality.GOOD
@@ -105,20 +217,7 @@ private fun SmallCosmosContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF7C4DFF).copy(alpha = 0.22f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.NightsStay,
-                    contentDescription = null,
-                    tint = Color(0xFFB388FF),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            MiniZenithSkyDomeCanvas(latitude = lat, longitude = lon, diameter = 40.dp)
 
             Box(
                 modifier = Modifier
@@ -137,19 +236,19 @@ private fun SmallCosmosContent(
 
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = "Cosmos",
-                color = Color.White.copy(alpha = 0.70f),
-                fontSize = 12.sp,
+                text = "Cosmos Observatory",
+                color = Color.White.copy(alpha = 0.72f),
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = "${moon?.quarter?.symbol ?: "🌓"} ${moon?.illuminationPercent ?: 50}%",
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} planets in sky" else quality.displayName,
+                text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} planets above horizon" else quality.displayName,
                 color = qualityColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -164,162 +263,80 @@ private fun SmallCosmosContent(
 private fun WideCosmosContent(
     conditions: StargazingConditions?,
     moon: MoonPhaseInfo?,
-    visiblePlanets: List<CelestialBody>
+    visiblePlanets: List<CelestialBody>,
+    lat: Double,
+    lon: Double
 ) {
     val score = conditions?.score ?: 80
-    val quality = conditions?.quality ?: StargazingQuality.PRISTINE
+    val quality = conditions?.quality ?: StargazingQuality.GOOD
     val qualityColor = parseHexColor(quality.colorHex)
 
-    Column(
+    Row(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Header Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        MiniZenithSkyDomeCanvas(latitude = lat, longitude = lon, diameter = 92.dp)
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF7C4DFF).copy(alpha = 0.22f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.NightsStay,
-                        contentDescription = null,
-                        tint = Color(0xFFB388FF),
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
                 Column {
                     Text(
-                        text = "Observator & Cerul Nopții",
+                        text = "Night Sky Observatory",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Bortle ${conditions?.bortleClass ?: 4} • NELM ${String.format("%.1f", conditions?.limitingMagnitude ?: 6.2)}m",
-                        color = Color.White.copy(alpha = 0.60f),
-                        fontSize = 11.sp
+                        text = "Bortle ${conditions?.bortleClass ?: 5} • NELM ${String.format(Locale.US, "%.1f", conditions?.limitingMagnitude ?: 5.8)} • ${conditions?.provenance?.badgeLabel ?: "EPHEMERIS"}",
+                        color = Color.White.copy(alpha = 0.62f),
+                        fontSize = 10.5.sp
                     )
                 }
-            }
 
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(qualityColor.copy(alpha = 0.18f))
-                    .border(1.dp, qualityColor.copy(alpha = 0.35f), CircleShape)
-                    .padding(horizontal = 9.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "$score • ${quality.displayName.uppercase()}",
-                    color = qualityColor,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        // Center Info Cards
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Moon Status Box
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
-                    .padding(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(qualityColor.copy(alpha = 0.18f))
+                        .border(1.dp, qualityColor.copy(alpha = 0.35f), CircleShape)
+                        .padding(horizontal = 9.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = moon?.quarter?.symbol ?: "🌖",
-                        fontSize = 24.sp
+                        text = "$score • ${quality.displayName.uppercase(Locale.US)}",
+                        color = qualityColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Column {
-                        Text(
-                            text = moon?.quarter?.displayName ?: "Moon",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${moon?.illuminationPercent ?: 0}% illuminated",
-                            color = Color.White.copy(alpha = 0.60f),
-                            fontSize = 10.sp
-                        )
-                    }
                 }
             }
 
-            // Visible Planets Box
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
-                    .padding(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.18f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Visibility,
-                            contentDescription = null,
-                            tint = Color(0xFF00E5FF),
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = if (visiblePlanets.isNotEmpty()) visiblePlanets.take(3).joinToString(" ") { it.symbol } else "Planets",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = if (visiblePlanets.isNotEmpty()) "${visiblePlanets.size} visible now" else "No planets",
-                            color = Color.White.copy(alpha = 0.60f),
-                            fontSize = 10.sp
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "${moon?.quarter?.symbol ?: "🌓"} ${moon?.quarter?.displayName ?: "Moon"} (${moon?.illuminationPercent ?: 0}%) • " +
+                    if (visiblePlanets.isNotEmpty()) visiblePlanets.take(3).joinToString(", ") { it.displayName } else "Deep-sky window",
+                color = Color.White.copy(alpha = 0.88f),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = conditions?.bestWindowDescription ?: conditions?.narrativeAdvice ?: "Tap to open interactive 120Hz sky chart",
+                color = Color(0xFF00E5FF),
+                fontSize = 10.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-
-        // Bottom Narrative Advice
-        Text(
-            text = conditions?.narrativeAdvice ?: "Good conditions for deep sky observation.",
-            color = Color.White.copy(alpha = 0.65f),
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
@@ -327,17 +344,35 @@ private fun WideCosmosContent(
 private fun TallCosmosContent(
     conditions: StargazingConditions?,
     moon: MoonPhaseInfo?,
-    visiblePlanets: List<CelestialBody>
+    visiblePlanets: List<CelestialBody>,
+    lat: Double,
+    lon: Double
 ) {
+    val nowMs = remember { System.currentTimeMillis() }
+    val liveRows: List<Pair<CelestialBody, com.intellidream.daily.model.CelestialCoordinates>> = remember(lat, lon, nowMs / 60_000L) {
+        val t = AstronomyService.makeTime(nowMs)
+        listOf(
+            CelestialBody.MOON,
+            CelestialBody.MERCURY,
+            CelestialBody.VENUS,
+            CelestialBody.MARS,
+            CelestialBody.JUPITER,
+            CelestialBody.SATURN
+        ).map { body ->
+            body to AstronomyService.coordinates(body, lat, lon, 0.0, t)
+        }.filter { it.second.isVisible }
+            .sortedByDescending { it.second.altitudeDegrees }
+            .take(3)
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        WideCosmosContent(conditions, moon, visiblePlanets)
+        Box(modifier = Modifier.height(118.dp)) {
+            WideCosmosContent(conditions, moon, visiblePlanets, lat, lon)
+        }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Extra Tall Section
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -356,7 +391,7 @@ private fun TallCosmosContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Tonight's Visible Bodies",
+                        text = "Currently Above Local Horizon",
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -370,9 +405,27 @@ private fun TallCosmosContent(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CelestialRowItem("Moon", "${moon?.quarter?.symbol} ${moon?.illuminationPercent}%", "Rising")
-                    CelestialRowItem("Jupiter", "♃ mag -2.4", "Visible SE")
-                    CelestialRowItem("Saturn", "♄ mag +0.7", "Tilted rings")
+                    if (liveRows.isEmpty()) {
+                        Text(
+                            text = "No bright planets above the horizon right now — explore 15,544 stars & 219 deep-sky objects.",
+                            color = Color.White.copy(alpha = 0.72f),
+                            fontSize = 11.sp
+                        )
+                    } else {
+                        for ((body, coords) in liveRows) {
+                            val detail = if (body == CelestialBody.MOON) {
+                                "${moon?.quarter?.symbol ?: "☽"} ${moon?.illuminationPercent ?: 0}% lit"
+                            } else {
+                                "${body.symbol} mag ${String.format(Locale.US, "%.1f", coords.visualMagnitude)}"
+                            }
+                            val dir = coords.compassDirection
+                            CelestialRowItem(
+                                name = body.displayName,
+                                detail = detail,
+                                status = "Alt ${String.format(Locale.US, "%+.0f°", coords.altitudeDegrees)} $dir"
+                            )
+                        }
+                    }
                 }
 
                 Row(
@@ -381,10 +434,12 @@ private fun TallCosmosContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Optimal window: ${conditions?.bestWindowDescription ?: "22:00 – 02:00"}",
+                        text = conditions?.bestWindowDescription ?: "Open Observatory for SGP4 ISS passes & telescope zoom",
                         color = Color(0xFF00E5FF),
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
@@ -396,15 +451,6 @@ private fun TallCosmosContent(
             }
         }
     }
-}
-
-@Composable
-private fun LargeCosmosContent(
-    conditions: StargazingConditions?,
-    moon: MoonPhaseInfo?,
-    visiblePlanets: List<CelestialBody>
-) {
-    TallCosmosContent(conditions, moon, visiblePlanets)
 }
 
 @Composable
@@ -438,7 +484,7 @@ private fun CelestialRowItem(name: String, detail: String, status: String) {
         )
         Text(
             text = status,
-            color = Color.White.copy(alpha = 0.50f),
+            color = Color.White.copy(alpha = 0.58f),
             fontSize = 10.sp
         )
     }

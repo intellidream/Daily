@@ -7,6 +7,7 @@ import AppKit
 public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
     case sleepRecovery = "sleep_recovery"
     case circadianHydration = "circadian_hydration"
+    case tonightsSky = "tonights_sky"
     case urgentFocus = "urgent_focus"
     case stressReset = "stress_reset"
     case wealthPulse = "wealth_pulse"
@@ -17,6 +18,7 @@ public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
         switch self {
         case .sleepRecovery: return "Sleep & Readiness"
         case .circadianHydration: return "Circadian Hydration"
+        case .tonightsSky: return "Tonight's Sky"
         case .urgentFocus: return "Urgent Focus"
         case .stressReset: return "Stress & Breathing"
         case .wealthPulse: return "Cashflow Pulse"
@@ -27,6 +29,7 @@ public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
         switch self {
         case .sleepRecovery: return "How did my sleep architecture & recovery look last night?"
         case .circadianHydration: return "What is my optimal circadian hydration & craving protocol right now?"
+        case .tonightsSky: return "What can I observe in tonight's sky, and what is my Stargazing Score?"
         case .urgentFocus: return "What are my top priorities and active memos in Tagdos?"
         case .stressReset: return "How is my autonomic stress balance? Guide me through a quick reset."
         case .wealthPulse: return "How does my monthly inflow vs. outflow & net worth look?"
@@ -37,6 +40,7 @@ public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
         switch self {
         case .sleepRecovery: return "bed.double.fill"
         case .circadianHydration: return "drop.fill"
+        case .tonightsSky: return "moon.stars.fill"
         case .urgentFocus: return "target"
         case .stressReset: return "wind"
         case .wealthPulse: return "chart.line.uptrend.xyaxis"
@@ -47,6 +51,7 @@ public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
         switch self {
         case .sleepRecovery: return Color(hex: "#A855F7")
         case .circadianHydration: return Color(hex: "#00E5FF")
+        case .tonightsSky: return Color(hex: "#38BDF8")
         case .urgentFocus: return Color(hex: "#FFB300")
         case .stressReset: return Color(hex: "#00E676")
         case .wealthPulse: return Color(hex: "#10B981")
@@ -57,6 +62,7 @@ public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
         switch self {
         case .sleepRecovery: return .health
         case .circadianHydration: return .habits
+        case .tonightsSky: return .cosmos
         case .urgentFocus: return .tagdos
         case .stressReset: return .health
         case .wealthPulse: return .finances
@@ -67,6 +73,7 @@ public enum CoPilotPrefabTopic: String, CaseIterable, Identifiable {
         switch self {
         case .sleepRecovery: return "Open Sleep & Health Hub"
         case .circadianHydration: return "Open Habits & Hydration Hub"
+        case .tonightsSky: return "Open Cosmos Observatory"
         case .urgentFocus: return "Open Tagdos & Notes Hub"
         case .stressReset: return "Open Stress & Vitals Hub"
         case .wealthPulse: return "Open Smart Ledger Hub"
@@ -1215,6 +1222,47 @@ public struct DailyFoldableCompanionPane: View {
                 portalTitle: topic.portalButtonTitle,
                 accentColor: topic.accentColor
             )
+
+        case .tonightsSky:
+            let now = Date()
+            let lat = weatherService.currentWeather?.coord?.lat ?? 44.4268
+            let lon = weatherService.currentWeather?.coord?.lon ?? 26.1025
+            let obs = (latitude: lat, longitude: lon)
+            let obs3 = (latitude: lat, longitude: lon, elevation: 50.0)
+            let moon = AstronomyService.shared.moonPhase(at: now, observer: obs)
+            let bortle = CosmosCatalogService.shared.bortleClass(latitude: lat, longitude: lon)
+            let cond = CosmosLiveService.shared.stargazingConditions ?? AstronomyService.shared.evaluateStargazingConditions(
+                observer: obs,
+                date: now,
+                cloudCoverTotal: weatherService.currentWeather?.clouds?.all,
+                cloudCoverLow: nil,
+                cloudCoverMid: nil,
+                cloudCoverHigh: nil,
+                bortleClass: bortle
+            )
+            let visiblePlanets = [CelestialBody.venus, .jupiter, .saturn, .mars, .mercury, .uranus, .neptune]
+                .filter { AstronomyService.shared.coordinates(of: $0, for: obs3, at: now).altitudeDegrees > 0.0 }
+                .map(\.displayName)
+            let planetsLine = visiblePlanets.isEmpty
+                ? "Solar System planets are currently below the local horizon — scrub the Time Machine to tonight's dark window."
+                : "Above horizon now: \(visiblePlanets.joined(separator: ", "))."
+            let issLine: String = {
+                if let pass = CosmosLiveService.shared.upcomingIssPasses.first {
+                    let f = DateFormatter()
+                    f.dateFormat = "HH:mm"
+                    return "Next sunlit ISS pass: \(f.string(from: pass.startTime)) peaking at \(Int(pass.maxAltitudeDegrees.rounded()))°."
+                }
+                return "Best Dark Window: \(cond.bestWindowDescription ?? "Calculated at astronomical dusk") (NELM \(String(format: "%.1f", cond.limitingMagnitude)))."
+            }()
+            return CoPilotInlineTurn(
+                question: topic.fullQuestion,
+                headline: "Sky Score \(cond.score)/100 (\(cond.quality.displayName)) • Bortle \(cond.bortleClass)",
+                body: "\(cond.narrativeAdvice) Moon is in \(moon.quarter.displayName) (\(Int((moon.illuminatedFraction * 100.0).rounded()))% illuminated).",
+                highlights: [planetsLine, issLine],
+                targetTab: .cosmos,
+                portalTitle: topic.portalButtonTitle,
+                accentColor: topic.accentColor
+            )
         }
     }
     
@@ -1226,7 +1274,19 @@ public struct DailyFoldableCompanionPane: View {
         
         let q = trimmed.lowercased()
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            if q.contains("sleep") || q.contains("somn") || q.contains("rem") || q.contains("deep") || q.contains("obosit") {
+            if q.contains("sky") || q.contains("star") || q.contains("cosmos") || q.contains("planet") || q.contains("moon") || q.contains("iss") || q.contains("aurora") {
+                selectedPrefab = .tonightsSky
+                let turn = buildTurn(for: .tonightsSky)
+                activeTurn = CoPilotInlineTurn(
+                    question: trimmed,
+                    headline: turn.headline,
+                    body: turn.body,
+                    highlights: turn.highlights,
+                    targetTab: turn.targetTab,
+                    portalTitle: turn.portalTitle,
+                    accentColor: turn.accentColor
+                )
+            } else if q.contains("sleep") || q.contains("somn") || q.contains("rem") || q.contains("deep") || q.contains("obosit") {
                 selectedPrefab = .sleepRecovery
                 let turn = buildTurn(for: .sleepRecovery)
                 activeTurn = CoPilotInlineTurn(

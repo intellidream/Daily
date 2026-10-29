@@ -487,6 +487,56 @@ public struct StressWidgetSnapshot: Sendable, Codable {
     }
 }
 
+/// Snapshot model for Cosmos & Night Sky Observatory Widget
+public struct CosmosWidgetSnapshot: Sendable, Codable {
+    public let stargazingScore: Int
+    public let stargazingVerdict: String
+    public let qualityHexColor: String
+    public let moonPhaseName: String
+    public let moonIlluminationPercent: Int
+    public let moonSymbol: String
+    public let visiblePlanetsCount: Int
+    public let topPlanetsSummary: String
+    public let bestWindowLabel: String
+    public let nextIssPassSummary: String?
+    public let kpIndex: Double?
+    public let bortleClass: Int
+    public let provenanceBadge: String
+    public let lastUpdated: Date
+
+    public init(
+        stargazingScore: Int,
+        stargazingVerdict: String,
+        qualityHexColor: String,
+        moonPhaseName: String,
+        moonIlluminationPercent: Int,
+        moonSymbol: String,
+        visiblePlanetsCount: Int,
+        topPlanetsSummary: String,
+        bestWindowLabel: String,
+        nextIssPassSummary: String? = nil,
+        kpIndex: Double? = nil,
+        bortleClass: Int = 5,
+        provenanceBadge: String = "Offline Ephemeris",
+        lastUpdated: Date = Date()
+    ) {
+        self.stargazingScore = stargazingScore
+        self.stargazingVerdict = stargazingVerdict
+        self.qualityHexColor = qualityHexColor
+        self.moonPhaseName = moonPhaseName
+        self.moonIlluminationPercent = moonIlluminationPercent
+        self.moonSymbol = moonSymbol
+        self.visiblePlanetsCount = visiblePlanetsCount
+        self.topPlanetsSummary = topPlanetsSummary
+        self.bestWindowLabel = bestWindowLabel
+        self.nextIssPassSummary = nextIssPassSummary
+        self.kpIndex = kpIndex
+        self.bortleClass = bortleClass
+        self.provenanceBadge = provenanceBadge
+        self.lastUpdated = lastUpdated
+    }
+}
+
 /// Central data coordinator managing 0ms read/write between the Main App and WidgetKit Extension.
 public final class WidgetDataCoordinator: @unchecked Sendable {
     public static let shared = WidgetDataCoordinator()
@@ -1014,6 +1064,120 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             return snapshot
         }
         return StressWidgetSnapshot.empty
+    }
+
+    // MARK: - Cosmos & Night Sky Observatory
+
+    private let cosmosSnapshotKey = "daily_cosmos_widget_snapshot_v1"
+
+    public func updateCosmosSnapshot(
+        latitude: Double,
+        longitude: Double,
+        stargazing: StargazingConditions?,
+        nextIssPass: SatellitePass?,
+        spaceWeather: SpaceWeatherReport?
+    ) {
+        let now = Date()
+        let obs = (latitude: latitude, longitude: longitude)
+        let obs3 = (latitude: latitude, longitude: longitude, elevation: 50.0)
+        let moon = AstronomyService.shared.moonPhase(at: now, observer: obs)
+        let cond = stargazing ?? AstronomyService.shared.evaluateStargazingConditions(
+            observer: obs,
+            date: now,
+            cloudCoverTotal: nil,
+            cloudCoverLow: nil,
+            cloudCoverMid: nil,
+            cloudCoverHigh: nil
+        )
+
+        var visibleNames: [String] = []
+        for p in [CelestialBody.venus, .jupiter, .saturn, .mars, .mercury, .uranus, .neptune] {
+            if AstronomyService.shared.coordinates(of: p, for: obs3, at: now).altitudeDegrees > 0.0 {
+                visibleNames.append(p.displayName)
+            }
+        }
+        let topSummary = visibleNames.isEmpty ? "Solar bodies below horizon" : visibleNames.prefix(3).joined(separator: " · ")
+
+        let issText: String? = nextIssPass.map { pass in
+            let fmt = DateFormatter()
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            fmt.dateFormat = "HH:mm"
+            return "ISS \(fmt.string(from: pass.startTime)) (\(Int(pass.maxAltitudeDegrees.rounded()))°)"
+        }
+
+        let snapshot = CosmosWidgetSnapshot(
+            stargazingScore: cond.score,
+            stargazingVerdict: cond.quality.displayName,
+            qualityHexColor: cond.quality.colorHex,
+            moonPhaseName: moon.quarter.displayName,
+            moonIlluminationPercent: Int((moon.illuminatedFraction * 100.0).rounded()),
+            moonSymbol: moon.quarter.sfSymbol,
+            visiblePlanetsCount: visibleNames.count,
+            topPlanetsSummary: topSummary,
+            bestWindowLabel: cond.bestWindowDescription ?? "Calculated at dusk",
+            nextIssPassSummary: issText,
+            kpIndex: spaceWeather?.kpIndex,
+            bortleClass: cond.bortleClass,
+            provenanceBadge: cond.provenance.badgeLabel,
+            lastUpdated: now
+        )
+
+        if let data = try? JSONEncoder().encode(snapshot) {
+            groupDefaults.set(data, forKey: cosmosSnapshotKey)
+            UserDefaults.standard.set(data, forKey: cosmosSnapshotKey)
+        }
+
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+
+    public func fetchCosmosSnapshot() -> CosmosWidgetSnapshot {
+        if let data = groupDefaults.data(forKey: cosmosSnapshotKey),
+           let snapshot = try? JSONDecoder().decode(CosmosWidgetSnapshot.self, from: data),
+           abs(Date().timeIntervalSince(snapshot.lastUpdated)) < 5400 {
+            return snapshot
+        }
+
+        // Deterministic live astronomical calculation when cache is cold
+        let now = Date()
+        let lat = groupDefaults.object(forKey: "weather_cached_lat") as? Double ?? 44.4268
+        let lon = groupDefaults.object(forKey: "weather_cached_lon") as? Double ?? 26.1025
+        let obs = (latitude: lat, longitude: lon)
+        let obs3 = (latitude: lat, longitude: lon, elevation: 50.0)
+        let moon = AstronomyService.shared.moonPhase(at: now, observer: obs)
+        let bortle = CosmosCatalogService.shared.bortleClass(latitude: lat, longitude: lon)
+        let cond = AstronomyService.shared.evaluateStargazingConditions(
+            observer: obs,
+            date: now,
+            cloudCoverTotal: nil,
+            cloudCoverLow: nil,
+            cloudCoverMid: nil,
+            cloudCoverHigh: nil,
+            bortleClass: bortle
+        )
+        var visibleNames: [String] = []
+        for p in [CelestialBody.venus, .jupiter, .saturn, .mars, .mercury, .uranus, .neptune] {
+            if AstronomyService.shared.coordinates(of: p, for: obs3, at: now).altitudeDegrees > 0.0 {
+                visibleNames.append(p.displayName)
+            }
+        }
+        return CosmosWidgetSnapshot(
+            stargazingScore: cond.score,
+            stargazingVerdict: cond.quality.displayName,
+            qualityHexColor: cond.quality.colorHex,
+            moonPhaseName: moon.quarter.displayName,
+            moonIlluminationPercent: Int((moon.illuminatedFraction * 100.0).rounded()),
+            moonSymbol: moon.quarter.sfSymbol,
+            visiblePlanetsCount: visibleNames.count,
+            topPlanetsSummary: visibleNames.isEmpty ? "Solar bodies below horizon" : visibleNames.prefix(3).joined(separator: " · "),
+            bestWindowLabel: cond.bestWindowDescription ?? "Calculated at dusk",
+            nextIssPassSummary: nil,
+            kpIndex: nil,
+            bortleClass: cond.bortleClass,
+            provenanceBadge: cond.provenance.badgeLabel,
+            lastUpdated: now
+        )
     }
 
     // MARK: - Combined Executive Snapshot (5 Core Pillars + Briefing)

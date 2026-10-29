@@ -351,9 +351,9 @@ public final class SmartBriefingService: ObservableObject {
             case .intraday:
                 weatherAdvice = "Weather holds steady with \(condition) around \(tempString)."
             case .evening:
-                weatherAdvice = "The evening winds down peacefully with \(condition) at \(tempString)."
+                weatherAdvice = "The evening winds down peacefully with \(condition) at \(tempString). \(synthesizeEveningCosmosNote())"
             case .nightly:
-                weatherAdvice = "Night air is calm around \(tempString)."
+                weatherAdvice = "Night air is calm around \(tempString). \(synthesizeEveningCosmosNote())"
             }
         }
 
@@ -504,6 +504,38 @@ public final class SmartBriefingService: ObservableObject {
             closingWish: closingWish,
             closingIcon: closingIcon
         )
+    }
+
+    private func synthesizeEveningCosmosNote() -> String {
+        let now = Date()
+        let lat = WeatherService.shared.currentWeather?.coord?.lat ?? 44.4268
+        let lon = WeatherService.shared.currentWeather?.coord?.lon ?? 26.1025
+        let obs = (latitude: lat, longitude: lon)
+        let obs3 = (latitude: lat, longitude: lon, elevation: 50.0)
+        let moon = AstronomyService.shared.moonPhase(at: now, observer: obs)
+        let cond = CosmosLiveService.shared.stargazingConditions ?? AstronomyService.shared.evaluateStargazingConditions(
+            observer: obs,
+            date: now,
+            cloudCoverTotal: WeatherService.shared.currentWeather?.clouds?.all,
+            cloudCoverLow: nil,
+            cloudCoverMid: nil,
+            cloudCoverHigh: nil
+        )
+        let planets = [CelestialBody.venus, .jupiter, .saturn, .mars]
+            .filter { AstronomyService.shared.coordinates(of: $0, for: obs3, at: now).altitudeDegrees > 0.0 }
+            .map(\.displayName)
+        let pNote = planets.isEmpty ? "" : " (\(planets.joined(separator: ", ")) above horizon)"
+        if let pass = CosmosLiveService.shared.upcomingIssPasses.first,
+           pass.startTime.timeIntervalSince(now) > 0,
+           pass.startTime.timeIntervalSince(now) < 6 * 3600 {
+            let f = DateFormatter()
+            f.dateFormat = "HH:mm"
+            return "Tonight's Sky Score is \(cond.score)/100 (\(cond.quality.displayName)) with a sunlit ISS pass at \(f.string(from: pass.startTime))\(pNote)."
+        }
+        if let kp = CosmosLiveService.shared.spaceWeather?.kpIndex, kp >= 5.0 {
+            return String(format: "Tonight's Sky Score is %d/100 (%@) with active geomagnetic storm conditions (Kp %.1f)%@.", cond.score, cond.quality.displayName, kp, pNote)
+        }
+        return "Tonight's Sky Score is \(cond.score)/100 (\(cond.quality.displayName)) under a \(moon.quarter.displayName) (\(Int((moon.illuminatedFraction * 100.0).rounded()))%)\(pNote)."
     }
 
     // MARK: - Supabase Synchronization

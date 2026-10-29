@@ -376,14 +376,20 @@ class TagdosRepository(
     // MARK: - Quick Notes Mutations
 
     fun createQuickNote(title: String = "", content: String = "") {
+        createQuickNoteReturningId(title, content)
+    }
+
+    fun createQuickNoteReturningId(title: String = "", content: String = ""): String {
+        val noteId = UUID.randomUUID().toString()
         scope.launch(ioDispatcher) {
+            val now = System.currentTimeMillis()
             val note = TagDoQuickNote(
-                id = UUID.randomUUID().toString(),
+                id = noteId,
                 title = title,
                 content = content,
                 isPinned = false,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
+                createdAt = now,
+                updatedAt = now
             )
             tagdosDao.upsertNote(
                 TagdoQuickNoteEntity(
@@ -398,6 +404,7 @@ class TagdosRepository(
                 )
             )
         }
+        return noteId
     }
 
     fun updateQuickNote(id: String, title: String, content: String) {

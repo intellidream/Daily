@@ -115,6 +115,9 @@ public struct MenuBarCompanionView: View {
                         // 1. Weather & Vitals Quick Row
                         weatherAndVitalsRow
                         
+                        // 1b. Cosmos Night Sky Quick Glance
+                        cosmosGlanceRow
+                        
                         // 2. Hydration Tracker Quick Log (Bubbles)
                         waterIntakeCard
                         
@@ -544,15 +547,70 @@ public struct MenuBarCompanionView: View {
         }
     }
     
+    // MARK: - 1b. Cosmos Night Sky Glance Row
+    @ViewBuilder
+    private var cosmosGlanceRow: some View {
+        let lat = weatherService.currentWeather?.coord?.lat ?? 44.4323
+        let lon = weatherService.currentWeather?.coord?.lon ?? 26.1063
+        let moon = AstronomyService.shared.moonPhase(observer: (lat, lon))
+        let bortle = CosmosCatalogService.shared.bortleClass(latitude: lat, longitude: lon)
+        let cond = AstronomyService.shared.evaluateStargazingConditions(
+            observer: (lat, lon),
+            cloudCoverTotal: weatherService.currentWeather?.clouds?.all,
+            cloudCoverLow: nil,
+            cloudCoverMid: nil,
+            cloudCoverHigh: nil,
+            bortleClass: bortle
+        )
+        let visibleCount = [CelestialBody.mercury, .venus, .mars, .jupiter, .saturn].filter {
+            AstronomyService.shared.coordinates(of: $0, for: (lat, lon, 0.0)).isVisible
+        }.count
+
+        Button {
+            openFullApp(.cosmos)
+        } label: {
+            GlassCard(cornerRadius: 14, padding: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: moon.quarter.sfSymbol)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(ThemeColors.accentCyan)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Cosmos • Night Sky")
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("\(moon.quarter.displayName) (\(moon.illuminationPercent)%) • \(visibleCount) planets up")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Text("\(cond.score)/100")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(ThemeColors.accentCyan.opacity(0.14), in: Capsule())
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .help("Open Cosmos Observatory (⌘8)")
+    }
+
     // MARK: - 5. Quick Jump Navigation Grid
     @ViewBuilder
     private var quickNavigationGrid: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             quickNavButton(title: "Money", icon: "wallet.bifold.fill", color: ThemeColors.accentGreen, tab: .finances)
             quickNavButton(title: "Health", icon: "heart.fill", color: ThemeColors.accentPink, tab: .health)
             quickNavButton(title: "Habits", icon: "drop.fill", color: ThemeColors.accentCyan, tab: .habits)
             quickNavButton(title: "TagDoS", icon: "checklist", color: ThemeColors.accentOrange, tab: .tagdos)
             quickNavButton(title: "News", icon: "newspaper.fill", color: ThemeColors.accentBlue, tab: .news)
+            quickNavButton(title: "Cosmos", icon: "moon.stars.fill", color: Color(hex: "#B388FF"), tab: .cosmos)
         }
         .padding(.top, 4)
     }

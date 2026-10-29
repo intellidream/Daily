@@ -39,6 +39,15 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var smartBriefingEnabled: Bool = true
     public var smartBriefingAutoMorning: Bool = true
     public var geminiApiKey: String? = nil
+
+    // MARK: - Cosmos & Night Sky Observatory
+    public var nasaApiKey: String? = nil
+    public var cosmosWeatherEndpoint: String? = nil
+    public var cosmosWeatherApiKey: String? = nil
+    public var cosmosNotifyIssPasses: Bool = false
+    public var cosmosNotifyAurora: Bool = false
+    public var cosmosNotifyPristineSky: Bool = false
+    public var macMenuBarShowNightSky: Bool = false
     
     // MARK: - Dashboard Layout
     public var dashboardWidgets: [DashboardWidgetConfig] = DashboardWidgetConfig.defaultLayout
@@ -53,6 +62,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case newsAutoRefreshOnStartup, newsShowImages, newsMediumUsername, newsMediumReadingListUrl
         case cloudSyncEnabled, lastSyncTimestamp, watchSyncFrequency
         case smartBriefingEnabled, smartBriefingAutoMorning, geminiApiKey
+        case nasaApiKey, cosmosWeatherEndpoint, cosmosWeatherApiKey
+        case cosmosNotifyIssPasses, cosmosNotifyAurora, cosmosNotifyPristineSky, macMenuBarShowNightSky
         case dashboardWidgets
     }
     
@@ -81,6 +92,13 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.smartBriefingEnabled = try c.decodeIfPresent(Bool.self, forKey: .smartBriefingEnabled) ?? true
         self.smartBriefingAutoMorning = try c.decodeIfPresent(Bool.self, forKey: .smartBriefingAutoMorning) ?? true
         self.geminiApiKey = try c.decodeIfPresent(String.self, forKey: .geminiApiKey)
+        self.nasaApiKey = try c.decodeIfPresent(String.self, forKey: .nasaApiKey)
+        self.cosmosWeatherEndpoint = try c.decodeIfPresent(String.self, forKey: .cosmosWeatherEndpoint)
+        self.cosmosWeatherApiKey = try c.decodeIfPresent(String.self, forKey: .cosmosWeatherApiKey)
+        self.cosmosNotifyIssPasses = try c.decodeIfPresent(Bool.self, forKey: .cosmosNotifyIssPasses) ?? false
+        self.cosmosNotifyAurora = try c.decodeIfPresent(Bool.self, forKey: .cosmosNotifyAurora) ?? false
+        self.cosmosNotifyPristineSky = try c.decodeIfPresent(Bool.self, forKey: .cosmosNotifyPristineSky) ?? false
+        self.macMenuBarShowNightSky = try c.decodeIfPresent(Bool.self, forKey: .macMenuBarShowNightSky) ?? false
         
         let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
         if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
@@ -121,6 +139,13 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encode(smartBriefingEnabled, forKey: .smartBriefingEnabled)
         try c.encode(smartBriefingAutoMorning, forKey: .smartBriefingAutoMorning)
         try c.encodeIfPresent(geminiApiKey, forKey: .geminiApiKey)
+        try c.encodeIfPresent(nasaApiKey, forKey: .nasaApiKey)
+        try c.encodeIfPresent(cosmosWeatherEndpoint, forKey: .cosmosWeatherEndpoint)
+        try c.encodeIfPresent(cosmosWeatherApiKey, forKey: .cosmosWeatherApiKey)
+        try c.encode(cosmosNotifyIssPasses, forKey: .cosmosNotifyIssPasses)
+        try c.encode(cosmosNotifyAurora, forKey: .cosmosNotifyAurora)
+        try c.encode(cosmosNotifyPristineSky, forKey: .cosmosNotifyPristineSky)
+        try c.encode(macMenuBarShowNightSky, forKey: .macMenuBarShowNightSky)
         try c.encode(dashboardWidgets, forKey: .dashboardWidgets)
     }
 }

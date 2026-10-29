@@ -72,8 +72,11 @@ namespace Daily_WinUI.Controls
         {
             try
             {
-                // 1. Weather Telemetry
+                // 1. Weather & Cosmos Ephemeris Telemetry
                 var coords = await _locationService.GetCurrentCoordinatesAsync();
+                double obsLat = coords?.Latitude ?? SettingsService.Load().LastLatitude ?? 44.4323;
+                double obsLon = coords?.Longitude ?? SettingsService.Load().LastLongitude ?? 26.1063;
+                int? liveClouds = null;
                 if (coords.HasValue)
                 {
                     var snapshot = await _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, "metric");
@@ -81,8 +84,25 @@ namespace Daily_WinUI.Controls
                     {
                         WeatherTempText.Text = $"{Math.Round(snapshot.Temperature):F0}°C";
                         WeatherLocationText.Text = string.IsNullOrWhiteSpace(snapshot.LocationName) ? "Weather" : snapshot.LocationName;
+                        liveClouds = snapshot.Clouds;
                     }
                 }
+
+                try
+                {
+                    var astro = Daily_WinUI.Services.Cosmos.AstronomyService.Shared;
+                    var cat = Daily_WinUI.Services.Cosmos.CosmosCatalogRepository.Shared;
+                    await cat.EnsureLoadedAsync();
+                    int bortle = cat.GetBortleClass(obsLat, obsLon);
+                    var moon = astro.GetMoonPhase(DateTime.UtcNow, obsLat, obsLon);
+                    var cond = astro.EvaluateStargazingConditions(obsLat, obsLon, DateTime.UtcNow, liveClouds, null, null, null, bortle);
+                    int upCount = astro.GetAllVisibleBodies(DateTime.UtcNow, obsLat, obsLon)
+                        .FindAll(b => b.Body != CelestialBody.Sun && b.Body != CelestialBody.Moon && b.IsAboveHorizon)
+                        .Count;
+                    CosmosSubtitleText.Text = $"{moon.Description} ({moon.IlluminationPercent}%) • {upCount} planets above horizon";
+                    CosmosScoreBadgeText.Text = $"{cond.Score}/100";
+                }
+                catch { }
 
                 // 2. Health Vitals (Heart Rate + Steps)
                 if (_healthService != null)

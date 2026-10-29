@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "counts": {
+    "stars": 15544,
+    "namedOrDesignatedStars": 3463,
+    "iauProperNames": 515,
+    "constellations": 88,
+    "constellationSegments": 743,
+    "constellationBorderArcs": 257,
+    "asterisms": 14,
+    "deepSkyObjects": 219,
+    "messierObjects": 110,
+    "caldwellObjects": 109,
+    "dsoThumbnails": 20,
+    "meteorShowers": 22,
+    "milkyWayIsophoteLayers": 5,
+    "bortleGridDimensions": "720x360 (0.5 deg)"
+  },
+  "licenses": [
+    "ESA Hipparcos Main Catalog (I/239) & Yale Bright Star Catalog (V/50) \u2014 Public Academic Catalog Data",
+    "d3-celestial sky compilation \u2014 BSD-3-Clause, Copyright (c) 2015 Olaf Frohn",
+    "IAU Working Group on Star Names (WGSN), IAU 88 Constellations, IAU Meteor Data Center \u2014 Public Scientific Standards",
+    "Davenhall & Leggett (1989) Constellation Boundaries (VizieR VI/49) \u2014 Public Academic Data",
+    "Jose R. Vieira Milky Way Outline Catalog & Saguaro Astronomy Club v8.1 \u2014 Permissive / Public Astronomical Data"
+  ],
+  "files": {
+    "stars_mag70.bin": {
+      "bytes": 497424,
+      "sha256": "549f3877d96f0dae2961f353ea5c775f118dcabfb7318d75225b051b80074c9d"
+    },
+    "bortle_world_grid.bin": {
+      "bytes": 129616,
+      "sha256": "c0883e2a8c74dd49c2672eb73e33043c2a7eda2ce56c5a768864085baadc6e86"
+    },
+    "star_names_iau.json": {
+      "bytes": 301916,
+      "sha256": "f84c62ec2c7357e8dc3a8bb76f4620f3bb9c4427da4b34da2278e0ebb9b732b3"
+    },
+    "constellations_iau88.json": {
+      "bytes": 35743,
+      "sha256": "9a3a0d234a48fa33b86f56d235d8e1f2b3a0ebc4052bf03a6363665c46ffa8f5"
+    },
+    "constellation_borders.json": {
+      "bytes": 26944,
+      "sha256": "8f68c9554e3037107a8685f203a03d4015ffb68977b2b75a7a02b8868adc99bd"
+    },
+    "asterisms.json": {
+      "bytes": 4477,
+      "sha256": "43875bb7404c06da49aba5fe50b5fc33ff928654d238e9ac1d3b459174c23949"
+    },
+    "dso_catalog.json": {
+      "bytes": 102270,
+      "sha256": "9f5f08acc28199f345c6a6deb9877663d24ea146f5f4511f82d7b4f66d93ec9c"
+    },
+    "meteor_showers_iau.json": {
+      "bytes": 9471,
+      "sha256": "e6b0bfa3f7e2cb4d5f9149f7ed19a9cd75ef0e58f9ce453b725bc69c82fe54ac"
+    },
+    "milky_way_isophotes.json": {
+      "bytes": 44911,
+      "sha256": "0aa7e45c7f2299bac0c7838dc0040e4827e5046556795e141de68b8215d47e3b"
+    }
+  }
+}
