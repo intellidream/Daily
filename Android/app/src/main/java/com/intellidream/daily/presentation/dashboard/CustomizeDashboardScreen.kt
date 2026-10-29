@@ -58,6 +58,7 @@ import com.intellidream.daily.model.AppSettings
 import com.intellidream.daily.model.DashboardWidgetConfig
 import com.intellidream.daily.model.DashboardWidgetSize
 import com.intellidream.daily.model.DashboardWidgetType
+import com.intellidream.daily.model.ensureCanonicalWidgets
 
 @Composable
 fun CustomizeDashboardScreen(
@@ -67,7 +68,7 @@ fun CustomizeDashboardScreen(
     horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp,
     applyStatusBarsPadding: Boolean = true
 ) {
-    val widgets = settings.dashboardWidgets
+    val widgets = settings.ensureCanonicalWidgets().dashboardWidgets
 
     Box(
         modifier = Modifier
@@ -157,39 +158,53 @@ fun CustomizeDashboardScreen(
                         totalCount = widgets.size,
                         config = config,
                         onMoveUp = {
-                            if (index > 0) {
-                                onUpdateSettings { current ->
-                                    val list = current.dashboardWidgets.toMutableList()
-                                    val item = list.removeAt(index)
-                                    list.add(index - 1, item)
+                            onUpdateSettings { current ->
+                                val list = current.ensureCanonicalWidgets().dashboardWidgets.toMutableList()
+                                val idx = list.indexOfFirst { it.id == config.id }
+                                if (idx > 0) {
+                                    val item = list.removeAt(idx)
+                                    list.add(idx - 1, item)
                                     current.copy(dashboardWidgets = list)
+                                } else {
+                                    current
                                 }
                             }
                         },
                         onMoveDown = {
-                            if (index < widgets.size - 1) {
-                                onUpdateSettings { current ->
-                                    val list = current.dashboardWidgets.toMutableList()
-                                    val item = list.removeAt(index)
-                                    list.add(index + 1, item)
+                            onUpdateSettings { current ->
+                                val list = current.ensureCanonicalWidgets().dashboardWidgets.toMutableList()
+                                val idx = list.indexOfFirst { it.id == config.id }
+                                if (idx in 0 until list.size - 1) {
+                                    val item = list.removeAt(idx)
+                                    list.add(idx + 1, item)
                                     current.copy(dashboardWidgets = list)
+                                } else {
+                                    current
                                 }
                             }
                         },
                         onSelectSize = { newSize ->
                             onUpdateSettings { current ->
-                                val list = current.dashboardWidgets.toMutableList()
-                                val old = list[index]
-                                list[index] = old.copy(size = newSize)
-                                current.copy(dashboardWidgets = list)
+                                val list = current.ensureCanonicalWidgets().dashboardWidgets.toMutableList()
+                                val idx = list.indexOfFirst { it.id == config.id }
+                                if (idx != -1) {
+                                    list[idx] = list[idx].copy(size = newSize)
+                                    current.copy(dashboardWidgets = list)
+                                } else {
+                                    current
+                                }
                             }
                         },
                         onToggleVisibility = { isVisible ->
                             onUpdateSettings { current ->
-                                val list = current.dashboardWidgets.toMutableList()
-                                val old = list[index]
-                                list[index] = old.copy(isVisible = isVisible)
-                                current.copy(dashboardWidgets = list)
+                                val list = current.ensureCanonicalWidgets().dashboardWidgets.toMutableList()
+                                val idx = list.indexOfFirst { it.id == config.id }
+                                if (idx != -1) {
+                                    list[idx] = list[idx].copy(isVisible = isVisible)
+                                    current.copy(dashboardWidgets = list)
+                                } else {
+                                    current
+                                }
                             }
                         }
                     )
@@ -250,6 +265,7 @@ private fun WidgetConfigItemCard(
 ) {
     val widgetType = when (config.id) {
         DashboardWidgetType.Weather.id -> DashboardWidgetType.Weather
+        DashboardWidgetType.Cosmos.id -> DashboardWidgetType.Cosmos
         DashboardWidgetType.News.id -> DashboardWidgetType.News
         DashboardWidgetType.Health.id -> DashboardWidgetType.Health
         DashboardWidgetType.Habits.id -> DashboardWidgetType.Habits

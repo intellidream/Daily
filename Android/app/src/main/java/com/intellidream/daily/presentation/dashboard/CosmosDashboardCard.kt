@@ -114,7 +114,7 @@ fun CosmosDashboardCard(
             DashboardWidgetSize.Small -> SmallCosmosContent(conditions, moon, visiblePlanets, lat, lon)
             DashboardWidgetSize.Wide -> WideCosmosContent(conditions, moon, visiblePlanets, lat, lon)
             DashboardWidgetSize.Tall -> TallCosmosContent(conditions, moon, visiblePlanets, lat, lon)
-            DashboardWidgetSize.Large -> TallCosmosContent(conditions, moon, visiblePlanets, lat, lon)
+            DashboardWidgetSize.Large -> LargeCosmosContent(conditions, moon, visiblePlanets, lat, lon)
         }
     }
 }
@@ -449,6 +449,194 @@ private fun TallCosmosContent(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LargeCosmosContent(
+    conditions: StargazingConditions?,
+    moon: MoonPhaseInfo?,
+    visiblePlanets: List<CelestialBody>,
+    lat: Double,
+    lon: Double
+) {
+    val score = conditions?.score ?: 80
+    val quality = conditions?.quality ?: StargazingQuality.GOOD
+    val qualityColor = parseHexColor(quality.colorHex)
+
+    val nowMs = remember { System.currentTimeMillis() }
+    val liveBodies: List<Pair<CelestialBody, com.intellidream.daily.model.CelestialCoordinates>> = remember(lat, lon, nowMs / 60_000L) {
+        val t = AstronomyService.makeTime(nowMs)
+        listOf(
+            CelestialBody.MOON,
+            CelestialBody.MERCURY,
+            CelestialBody.VENUS,
+            CelestialBody.MARS,
+            CelestialBody.JUPITER,
+            CelestialBody.SATURN
+        ).map { body ->
+            body to AstronomyService.coordinates(body, lat, lon, 0.0, t)
+        }.filter { it.second.isVisible }
+            .sortedByDescending { it.second.altitudeDegrees }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Top row: Header with score badge + Mini Sky Dome + Moon & Sky context
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MiniZenithSkyDomeCanvas(latitude = lat, longitude = lon, diameter = 96.dp)
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Cosmos Observatory",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(qualityColor.copy(alpha = 0.18f))
+                            .border(1.dp, qualityColor.copy(alpha = 0.35f), CircleShape)
+                            .padding(horizontal = 9.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "$score • ${quality.displayName.uppercase(Locale.US)}",
+                            color = qualityColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Bortle ${conditions?.bortleClass ?: 5} • NELM ${String.format(Locale.US, "%.1f", conditions?.limitingMagnitude ?: 5.8)} • ${conditions?.provenance?.badgeLabel ?: "EPHEMERIS"}",
+                    color = Color.White.copy(alpha = 0.62f),
+                    fontSize = 11.sp
+                )
+
+                Text(
+                    text = "${moon?.quarter?.symbol ?: "🌓"} ${moon?.quarter?.displayName ?: "Moon"} • ${moon?.illuminationPercent ?: 0}% lit",
+                    color = Color.White.copy(alpha = 0.90f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Text(
+                    text = conditions?.bestWindowDescription ?: conditions?.narrativeAdvice ?: "Ideal dark window calculation active",
+                    color = Color(0xFF00E5FF),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // Middle container: Active Sky Bodies & Planetary Positions
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF0B1426))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Visible in Night Sky Dome",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${liveBodies.size} bodies above horizon",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 10.5.sp
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    if (liveBodies.isEmpty()) {
+                        Text(
+                            text = "No major planets above the horizon right now. 15,544 Hipparcos stars & 219 DSOs available in sky chart.",
+                            color = Color.White.copy(alpha = 0.70f),
+                            fontSize = 11.sp
+                        )
+                    } else {
+                        for ((body, coords) in liveBodies.take(4)) {
+                            val detail = if (body == CelestialBody.MOON) {
+                                "${moon?.quarter?.symbol ?: "☽"} ${moon?.illuminationPercent ?: 0}% illuminated"
+                            } else {
+                                "${body.symbol} mag ${String.format(Locale.US, "%.1f", coords.visualMagnitude)}"
+                            }
+                            val dir = coords.compassDirection
+                            CelestialRowItem(
+                                name = body.displayName,
+                                detail = detail,
+                                status = "Alt ${String.format(Locale.US, "%+.0f°", coords.altitudeDegrees)} $dir"
+                            )
+                        }
+                    }
+                }
+
+                // Cloud & Seeing Telemetry strip
+                val cLow = conditions?.cloudCoverLowPercent ?: 0
+                val cMid = conditions?.cloudCoverMidPercent ?: 0
+                val cHigh = conditions?.cloudCoverHighPercent ?: 0
+                val seeing = conditions?.seeingArcseconds?.let { String.format(Locale.US, "%.1f\" FWHM", it) } ?: "1.1\" FWHM"
+                Text(
+                    text = "Clouds: L $cLow% · M $cMid% · H $cHigh% • Seeing: $seeing",
+                    color = Color.White.copy(alpha = 0.50f),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // Bottom CTA
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Tap to launch interactive 120Hz Sky Dome & SGP4 ISS passes",
+                color = Color(0xFF00E5FF),
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(14.dp)
+            )
         }
     }
 }

@@ -66,6 +66,7 @@ import com.intellidream.daily.model.DashboardRowBuilder
 import com.intellidream.daily.model.DashboardWidgetConfig
 import com.intellidream.daily.model.DashboardWidgetSize
 import com.intellidream.daily.model.DashboardWidgetType
+import com.intellidream.daily.model.ensureCanonicalWidgets
 import com.intellidream.daily.model.ForecastItem
 import com.intellidream.daily.model.ForecastResponse
 import com.intellidream.daily.model.UserProfile
@@ -104,7 +105,7 @@ fun DashboardView(
     onBriefingClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val visibleWidgets = settings.dashboardWidgets.filter { it.isVisible }
+    val visibleWidgets = settings.ensureCanonicalWidgets().dashboardWidgets.filter { it.isVisible }
     val rows = DashboardRowBuilder.buildRows(visibleWidgets)
 
     var showBriefingSheet by remember { mutableStateOf(false) }

@@ -49,3 +49,20 @@ Additionally, [`DailyFoldableCompanionPane.kt`](../../Android/app/src/main/java/
 - **TalkBack & Screen-Reader Semantics:** Dynamic `contentDescription` on the Sky Dome summarizes current lunar phase/illumination, Stargazing Score, and visible above-horizon planets with cardinal directions, alongside labeled HUD controls (`Toggle Night Vision Mode`, `Toggle AR Sky Gyroscope`, `Toggle Continuous Time Machine`).
 - **Jetpack Glance Home Screen Widget (`DailyCosmosGlanceWidget`):** Displays live Stargazing Score (`0–100`), Bortle class from `bortle_world_grid.bin`, lunar phase & illumination, and visible planet summary, launching directly into `daily://cosmos`.
 - **Settings, SmartBriefing, TagDoS & Calendar:** Full **Cosmos & Night Sky** configuration card in [`SettingsScreen.kt`](../../Android/app/src/main/java/com/intellidream/daily/presentation/SettingsScreen.kt) (NASA API key, custom weather endpoint/key, ISS/Aurora/Pristine-Sky alerts), live briefing bullets in [`SmartBriefingRepository.kt`](../../Android/app/src/main/java/com/intellidream/daily/briefing/SmartBriefingRepository.kt), 1-tap Calendar scheduling, and 1-tap TagDoS `#sky` sighting logging synced via Supabase.
+
+---
+
+## 5. Modular In-App Dashboard Widget (All 4 Dimensions & Canonical Backfill)
+
+The Cosmos module is directly embedded into the user's customizable daily grid via [`CosmosDashboardCard.kt`](../../Android/app/src/main/java/com/intellidream/daily/presentation/dashboard/CosmosDashboardCard.kt) across all 4 supported dimensions:
+
+1. **`1×1 Small`:** Compact square tile featuring an interactive `MiniZenithSkyDomeCanvas` reticle, Stargazing Score badge (e.g. `71/100`), lunar phase symbol & illumination (`🌔 84%`), and count of above-horizon visible planets in green. Pairs seamlessly beside Weather or habits.
+2. **`2×1 Wide` (Default):** Two-column card presenting the stereographic mini planisphere dome on the left and the Observatory score badge, Bortle class + NELM, lunar phase, next dark window, and visible bodies summary on the right.
+3. **`1×2 Tall`:** Vertical column card presenting the mini sky dome at the top, Bortle telemetry, an elevated `Currently Above Local Horizon` sub-container with real-time target altitudes, magnitudes, and compass directions, and the dark sky window footer.
+4. **`2×2 Large`:** Expansive quadrant card featuring an enlarged `96 dp` `MiniZenithSkyDomeCanvas`, Stargazing Score + quality pill, Bortle + NELM + provenance badge, lunar illumination, full visible planetary roster (sorted by altitude with IAU symbols and Alt/Az coordinates), multi-tier cloud coverage (`L / M / H %`), astronomical seeing (`arcsec FWHM`), and 1-tap navigation to the interactive 120Hz Sky Dome.
+
+### Canonical Auto-Backfill Migration
+Existing user configurations persisted in `daily_settings` DataStore lacking `DashboardWidgetType.Cosmos.id` are non-destructively migrated via `AppSettings.ensureCanonicalWidgets()`:
+- Automatically injects `DashboardWidgetType.Cosmos` directly below `Weather` into the user's widget layout on initial load without wiping user preferences or resetting reordered cards.
+- [`CustomizeDashboardScreen.kt`](../../Android/app/src/main/java/com/intellidream/daily/presentation/dashboard/CustomizeDashboardScreen.kt) fully exposes `Cosmos & Observatory` with real-time drag reordering, visibility toggling, and 1-tap dimension switching across `1×1 Small`, `2×1 Wide`, `1×2 Tall`, and `2×2 Large`.
+

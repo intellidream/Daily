@@ -112,3 +112,20 @@ data class AppSettings(
     // Dashboard Layout
     val dashboardWidgets: List<DashboardWidgetConfig> = DashboardWidgetConfig.defaultLayout
 )
+
+fun AppSettings.ensureCanonicalWidgets(): AppSettings {
+    val existingIds = dashboardWidgets.map { it.id }.toSet()
+    val missing = DashboardWidgetConfig.defaultLayout.filter { it.id !in existingIds }
+    if (missing.isEmpty()) return this
+
+    val list = dashboardWidgets.toMutableList()
+    val weatherIdx = list.indexOfFirst { it.id == DashboardWidgetType.Weather.id }
+    missing.forEach { cfg ->
+        if (cfg.id == DashboardWidgetType.Cosmos.id && weatherIdx >= 0) {
+            list.add(weatherIdx + 1, cfg)
+        } else {
+            list.add(cfg)
+        }
+    }
+    return copy(dashboardWidgets = list)
+}

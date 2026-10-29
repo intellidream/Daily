@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.intellidream.daily.model.AppSettings
+import com.intellidream.daily.model.ensureCanonicalWidgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,7 +43,16 @@ class SettingsRepository(
                     val rawJson = prefs[settingsKey]
                     if (!rawJson.isNullOrEmpty()) {
                         try {
-                            json.decodeFromString<AppSettings>(rawJson)
+                            val loaded = json.decodeFromString<AppSettings>(rawJson)
+                            val normalized = loaded.ensureCanonicalWidgets()
+                            if (normalized != loaded) {
+                                coroutineScope.launch {
+                                    context.settingsDataStore.edit { p ->
+                                        p[settingsKey] = json.encodeToString(normalized)
+                                    }
+                                }
+                            }
+                            normalized
                         } catch (e: Exception) {
                             AppSettings()
                         }
@@ -69,7 +79,8 @@ class SettingsRepository(
         val raw = context.settingsDataStore.data.first()[settingsKey]
         return if (!raw.isNullOrEmpty()) {
             try {
-                json.decodeFromString(raw)
+                val decoded = json.decodeFromString<AppSettings>(raw)
+                decoded.ensureCanonicalWidgets()
             } catch (e: Exception) {
                 AppSettings()
             }
