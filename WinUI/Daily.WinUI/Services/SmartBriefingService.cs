@@ -454,11 +454,11 @@ namespace Daily_WinUI.Services
                 if (smartLedger != null && !string.IsNullOrWhiteSpace(smartLedger.LedgerText))
                 {
                     var parsed = SmartLedgerParser.Parse(smartLedger.LedgerText);
-                    if (parsed.NetWorthLei != 0 || parsed.TotalDepositsLei != 0 || parsed.Sections.Count > 0)
+                    if (parsed.NetWorth != 0 || parsed.DepositTotal != 0 || parsed.Sections.Count > 0)
                     {
                         hasLedgerData = true;
-                        netWorth = parsed.NetWorthLei;
-                        formattedNetWorth = $"{SmartLedgerParser.FormatDisplayValue(parsed.NetWorthLei)} Lei";
+                        netWorth = parsed.NetWorth;
+                        formattedNetWorth = parsed.FormattedNetWorth;
                     }
                 }
 
