@@ -92,6 +92,7 @@ namespace Daily_WinUI.Views
         private CosmosLiveBundle? _liveBundle;
         private LiveSatellitePosition? _issLivePos;
         private List<CosmosBookmarkRecord> _bookmarks = new();
+        private List<CosmosObservationRecord> _observations = new();
 
         // Pointer & Selection State
         private bool _isDragging;
@@ -246,21 +247,25 @@ namespace Daily_WinUI.Views
 
             _bortleClass = _catalogRepo.GetBortleClass(_latitude, _longitude);
             var bookmarksTask = _liveService.LoadBookmarksAsync();
+            var observationsTask = _liveService.LoadObservationsAsync();
             var bundleTask = _liveService.FetchLiveBundleAsync(_latitude, _longitude, _elevationMeters);
 
-            await Task.WhenAll(bookmarksTask, bundleTask);
+            await Task.WhenAll(bookmarksTask, observationsTask, bundleTask);
 
             var bookmarks = await bookmarksTask;
+            var observations = await observationsTask;
             var bundle = await bundleTask;
 
             DispatcherQueue.TryEnqueue(() =>
             {
                 _bookmarks = bookmarks;
+                _observations = observations;
                 _liveBundle = bundle;
                 RefreshEphemerisSnapshot();
                 RenderIssDeck();
                 RenderSpaceWeatherDeck();
                 RenderBookmarksDeck();
+                RenderObservationsDeck();
                 RenderApodDeck();
                 SkyCanvas.Invalidate();
             });
@@ -2094,6 +2099,7 @@ namespace Daily_WinUI.Views
         private void RenderBookmarksDeck()
         {
             BookmarksStack.Children.Clear();
+            BookmarksHeaderLabel.Text = $"SAVED SKY BOOKMARKS ({_bookmarks.Count})";
             if (_bookmarks.Count == 0)
             {
                 BookmarksStack.Children.Add(new TextBlock
@@ -2108,6 +2114,10 @@ namespace Daily_WinUI.Views
 
             foreach (var bm in _bookmarks.Take(8))
             {
+                var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
                 var btn = new Button
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -2134,7 +2144,118 @@ namespace Daily_WinUI.Views
                         SkyCanvas.Invalidate();
                     }
                 };
-                BookmarksStack.Children.Add(btn);
+                Grid.SetColumn(btn, 0);
+                grid.Children.Add(btn);
+
+                var delBtn = new Button
+                {
+                    Width = 28,
+                    Height = 28,
+                    CornerRadius = new CornerRadius(14),
+                    Padding = new Thickness(0),
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                    Margin = new Thickness(4, 0, 0, 0)
+                };
+                delBtn.Content = new FontIcon
+                {
+                    Glyph = "\uE74D",
+                    FontFamily = new FontFamily("Segoe Fluent Icons"),
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.FromArgb(140, 255, 255, 255))
+                };
+                delBtn.Click += async (_, _) =>
+                {
+                    _bookmarks = await _liveService.ToggleBookmarkAsync(bm.ObjectId, bm.ObjectName, bm.Category);
+                    RenderBookmarksDeck();
+                    ShowToast($"Removed {bm.ObjectName} from Bookmarks");
+                };
+                Grid.SetColumn(delBtn, 1);
+                grid.Children.Add(delBtn);
+
+                BookmarksStack.Children.Add(grid);
+            }
+        }
+
+        private void RenderObservationsDeck()
+        {
+            ObservationsStack.Children.Clear();
+            ObservationsHeaderLabel.Text = $"OBSERVATIONS & LOGGED SIGHTINGS ({_observations.Count})";
+            if (_observations.Count == 0)
+            {
+                ObservationsStack.Children.Add(new TextBlock
+                {
+                    Text = "No sky sightings recorded yet. Select any celestial target and click 'Log Sighting (#sky)' to record observations.",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(_isNightVision ? Color.FromArgb(180, 255, 24, 36) : Color.FromArgb(165, 255, 255, 255)),
+                    TextWrapping = TextWrapping.Wrap
+                });
+                return;
+            }
+
+            foreach (var obs in _observations.Take(6))
+            {
+                var card = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(10, 8, 10, 8),
+                    Margin = new Thickness(0, 2, 0, 2)
+                };
+                var sp = new StackPanel { Spacing = 3 };
+
+                var row1 = new Grid();
+                row1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row1.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var titleStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                titleStack.Children.Add(new FontIcon { Glyph = "\uE73E", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 12, Foreground = new SolidColorBrush(Color.FromArgb(255, 6, 214, 160)) });
+                titleStack.Children.Add(new TextBlock { Text = obs.ObjectName, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = new SolidColorBrush(_isNightVision ? Color.FromArgb(255, 255, 24, 36) : Colors.White) });
+                Grid.SetColumn(titleStack, 0);
+                row1.Children.Add(titleStack);
+
+                var delBtn = new Button
+                {
+                    Width = 24,
+                    Height = 24,
+                    CornerRadius = new CornerRadius(12),
+                    Padding = new Thickness(0),
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    BorderThickness = new Thickness(0)
+                };
+                delBtn.Content = new FontIcon { Glyph = "\uE74D", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 10, Foreground = new SolidColorBrush(Color.FromArgb(140, 255, 255, 255)) };
+                delBtn.Click += async (_, _) =>
+                {
+                    await _liveService.DeleteObservationAsync(obs.Id);
+                    _observations.RemoveAll(x => x.Id == obs.Id);
+                    RenderObservationsDeck();
+                    ShowToast("Observation deleted");
+                };
+                Grid.SetColumn(delBtn, 1);
+                row1.Children.Add(delBtn);
+                sp.Children.Add(row1);
+
+                sp.Children.Add(new TextBlock
+                {
+                    Text = $"{obs.ObservedAt.ToLocalTime():yyyy-MM-dd HH:mm} • {obs.Optics} • Bortle {obs.BortleClass} (Score {obs.StargazingScore}/100)",
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.FromArgb(170, 255, 255, 255))
+                });
+
+                if (!string.IsNullOrWhiteSpace(obs.Notes))
+                {
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text = obs.Notes,
+                        FontSize = 10.5,
+                        Foreground = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)),
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxLines = 2
+                    });
+                }
+
+                card.Child = sp;
+                ObservationsStack.Children.Add(card);
             }
         }
 
@@ -2256,6 +2377,8 @@ namespace Daily_WinUI.Views
                 _bortleClass,
                 _stargazing.Score,
                 optics);
+            _observations = await _liveService.LoadObservationsAsync();
+            RenderObservationsDeck();
             ShowToast($"Logged {meta.Value.Name} sighting & created #sky TagDoS Quick Note");
         }
 

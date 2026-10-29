@@ -146,6 +146,18 @@ public struct CosmosDashboardCard: View, Equatable {
         lhs.size == rhs.size
     }
 
+    private var effectiveScore: Int {
+        cosmosLive.stargazingConditions?.score ?? cosmosVM.stargazingScore
+    }
+
+    private var effectiveVerdict: String {
+        cosmosLive.stargazingConditions?.quality.displayName ?? cosmosVM.stargazingVerdict
+    }
+
+    private var effectiveConditions: StargazingConditions {
+        cosmosLive.stargazingConditions ?? cosmosVM.stargazingConditions
+    }
+
     public var body: some View {
         Button(action: onTap) {
             GlassCard(cornerRadius: 20, padding: size == .small ? 14 : 18) {
@@ -164,9 +176,13 @@ public struct CosmosDashboardCard: View, Equatable {
         }
         .buttonStyle(.plain)
         .task {
+            let lat = cosmosVM.observerLatitude
+            let lon = cosmosVM.observerLongitude
+            UserDefaults(suiteName: GroupDefaults.suiteName)?.set(lat, forKey: "weather_cached_lat")
+            UserDefaults(suiteName: GroupDefaults.suiteName)?.set(lon, forKey: "weather_cached_lon")
             await cosmosLive.refreshCosmosData(
-                latitude: cosmosVM.observerLatitude,
-                longitude: cosmosVM.observerLongitude
+                latitude: lat,
+                longitude: lon
             )
         }
     }
@@ -190,9 +206,9 @@ public struct CosmosDashboardCard: View, Equatable {
 
                 HStack(spacing: 3) {
                     Circle()
-                        .fill(scoreColor(cosmosVM.stargazingScore))
+                        .fill(scoreColor(effectiveScore))
                         .frame(width: 6, height: 6)
-                    Text("\(cosmosVM.stargazingScore)")
+                    Text("\(effectiveScore)")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                 }
@@ -220,9 +236,9 @@ public struct CosmosDashboardCard: View, Equatable {
                 .lineLimit(1)
 
             HStack(spacing: 4) {
-                Text(cosmosVM.stargazingVerdict)
+                Text(effectiveVerdict)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(scoreColor(cosmosVM.stargazingScore))
+                    .foregroundColor(scoreColor(effectiveScore))
                     .lineLimit(1)
                 Spacer()
                 if cosmosVM.visiblePlanetsCount > 0 {
@@ -266,7 +282,7 @@ public struct CosmosDashboardCard: View, Equatable {
                 // Left: Stargazing Score + Best Dark Window / Moon
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(cosmosVM.stargazingScore)")
+                        Text("\(effectiveScore)")
                             .font(.system(size: 36, weight: .light, design: .rounded))
                             .foregroundColor(.white)
                         Text("/100")
@@ -274,9 +290,9 @@ public struct CosmosDashboardCard: View, Equatable {
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
 
-                    Text(cosmosVM.stargazingVerdict)
+                    Text(effectiveVerdict)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(scoreColor(cosmosVM.stargazingScore))
+                        .foregroundColor(scoreColor(effectiveScore))
                         .lineLimit(1)
 
                     Text("\(cosmosVM.currentMoonPhase.quarter.displayName) · \(cosmosVM.currentMoonPhase.illuminationPercent)%")
@@ -320,7 +336,7 @@ public struct CosmosDashboardCard: View, Equatable {
                                 .foregroundColor(.white.opacity(0.92))
                                 .lineLimit(1)
                         } else {
-                            Text("Bortle \(cosmosVM.stargazingConditions.bortleClass)")
+                            Text("Bortle \(effectiveConditions.bortleClass)")
                                 .font(.system(size: 10.5, weight: .medium))
                                 .foregroundColor(.white.opacity(0.92))
                                 .lineLimit(1)
@@ -347,9 +363,9 @@ public struct CosmosDashboardCard: View, Equatable {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(ThemeColors.accentCyan)
                 Spacer()
-                Text("\(cosmosVM.stargazingScore)")
+                Text("\(effectiveScore)")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundColor(scoreColor(cosmosVM.stargazingScore))
+                    .foregroundColor(scoreColor(effectiveScore))
             }
 
             HStack {
@@ -364,9 +380,9 @@ public struct CosmosDashboardCard: View, Equatable {
             .padding(.vertical, 2)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(cosmosVM.stargazingVerdict)
+                Text(effectiveVerdict)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(scoreColor(cosmosVM.stargazingScore))
+                    .foregroundColor(scoreColor(effectiveScore))
                 Text("\(cosmosVM.currentMoonPhase.quarter.displayName) · \(cosmosVM.currentMoonPhase.illuminationPercent)%")
                     .font(.system(size: 11))
                     .foregroundColor(ThemeColors.fgMutedDark)
@@ -401,7 +417,7 @@ public struct CosmosDashboardCard: View, Equatable {
                         Image(systemName: "eye.fill")
                             .font(.system(size: 10))
                             .foregroundColor(ThemeColors.accentGreen)
-                        Text("Bortle \(cosmosVM.stargazingConditions.bortleClass) · NELM \(String(format: "%.1f", cosmosVM.stargazingConditions.limitingMagnitude))")
+                        Text("Bortle \(effectiveConditions.bortleClass) · NELM \(String(format: "%.1f", effectiveConditions.limitingMagnitude))")
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -457,7 +473,7 @@ public struct CosmosDashboardCard: View, Equatable {
                         .foregroundColor(ThemeColors.fgMutedDark)
 
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(cosmosVM.stargazingScore)")
+                        Text("\(effectiveScore)")
                             .font(.system(size: 42, weight: .thin, design: .rounded))
                             .foregroundColor(.white)
                         Text("/100")
@@ -465,11 +481,11 @@ public struct CosmosDashboardCard: View, Equatable {
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
 
-                    Text(cosmosVM.stargazingVerdict)
+                    Text(effectiveVerdict)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(scoreColor(cosmosVM.stargazingScore))
+                        .foregroundColor(scoreColor(effectiveScore))
 
-                    Text("\(cosmosVM.currentMoonPhase.quarter.displayName) · \(cosmosVM.currentMoonPhase.illuminationPercent)% Moon · Bortle \(cosmosVM.stargazingConditions.bortleClass)")
+                    Text("\(cosmosVM.currentMoonPhase.quarter.displayName) · \(cosmosVM.currentMoonPhase.illuminationPercent)% Moon · Bortle \(effectiveConditions.bortleClass)")
                         .font(.system(size: 11))
                         .foregroundColor(ThemeColors.fgMutedDark)
                         .lineLimit(1)
@@ -508,7 +524,7 @@ public struct CosmosDashboardCard: View, Equatable {
             Spacer(minLength: 2)
 
             HStack {
-                if let window = cosmosVM.stargazingConditions.bestWindowDescription {
+                if let window = effectiveConditions.bestWindowDescription {
                     Text("Best dark window: \(window)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(ThemeColors.fgMutedDark)

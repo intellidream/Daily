@@ -791,6 +791,22 @@ class CosmosLiveRepository(private val context: Context) {
         obs
     }
 
+    suspend fun deleteObservation(id: String) = withContext(Dispatchers.IO) {
+        val existing = loadObservations().filterNot { it.id == id }
+        prefs.edit().putString(KEY_OBSERVATIONS, json.encodeToString(existing)).apply()
+        val uid = currentAuthenticatedUserId()
+        if (uid != null) {
+            runCatching {
+                SupabaseClientManager.client.from("cosmos_observations").delete {
+                    filter {
+                        eq("id", id)
+                        eq("user_id", uid)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - 6. Opt-In Local Observatory Notifications (ISS, Aurora Kp, Pristine Sky)
 
     fun evaluateOptInNotifications(

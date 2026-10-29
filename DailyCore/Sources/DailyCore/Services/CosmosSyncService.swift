@@ -270,6 +270,25 @@ public final class CosmosSyncService: ObservableObject {
             .execute()
     }
 
+    public func deleteObservation(id: UUID) {
+        if let idx = observations.firstIndex(where: { $0.id == id }) {
+            let removed = observations.remove(at: idx)
+            saveToLocalStorage()
+            Task { await deleteRemoteObservation(removed) }
+        }
+    }
+
+    private func deleteRemoteObservation(_ item: CosmosObservation) async {
+        guard SettingsService.shared.settings.cloudSyncEnabled,
+              let userId = await effectiveUserIdAsync() else { return }
+        _ = try? await SupabaseService.shared.client
+            .from("cosmos_observations")
+            .delete()
+            .eq("user_id", value: userId)
+            .eq("id", value: item.id.uuidString.lowercased())
+            .execute()
+    }
+
     private func pushObservationToSupabase(_ item: CosmosObservation) async {
         guard SettingsService.shared.settings.cloudSyncEnabled,
               let userId = await effectiveUserIdAsync() else { return }

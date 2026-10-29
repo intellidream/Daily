@@ -531,6 +531,50 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun removeBookmark(objectId: String, objectName: String, category: String) {
+        viewModelScope.launch {
+            val updated = liveRepository.toggleBookmark(
+                objectId = objectId,
+                objectName = objectName,
+                category = category
+            )
+            _state.value = _state.value.copy(bookmarks = updated)
+            postStatusBanner("Removed $objectName from Sky Bookmarks.")
+        }
+    }
+
+    fun deleteObservation(id: String) {
+        viewModelScope.launch {
+            liveRepository.deleteObservation(id)
+            _state.value = _state.value.copy(
+                observations = _state.value.observations.filterNot { it.id == id }
+            )
+            postStatusBanner("Observation deleted.")
+        }
+    }
+
+    fun targetForBookmark(bm: CosmosBookmark): CosmosSearchResult {
+        val q = bm.objectId.lowercase()
+        CelestialBody.entries.firstOrNull { it.name.lowercase() == q }?.let {
+            return CosmosSearchResult.Planet(it)
+        }
+        catalogRepository.deepSkyObjects.firstOrNull { it.id.lowercase() == q }?.let {
+            return CosmosSearchResult.DSO(it)
+        }
+        catalogRepository.constellations.firstOrNull { it.id.lowercase() == q || it.nameEn.lowercase() == q }?.let {
+            return CosmosSearchResult.Constellation(it)
+        }
+        val star = CosmosStar(
+            hip = 0,
+            name = bm.objectName,
+            constellation = bm.constellation ?: "UNK",
+            raHours = bm.raHours ?: 0.0,
+            decDegrees = bm.decDeg ?: 0.0,
+            mag = bm.magnitude ?: 3.0
+        )
+        return CosmosSearchResult.Star(star)
+    }
+
     fun logSightingToTagdos(target: CosmosSearchResult, optics: String = "Naked Eye", notes: String = "") {
         viewModelScope.launch {
             val s = _state.value

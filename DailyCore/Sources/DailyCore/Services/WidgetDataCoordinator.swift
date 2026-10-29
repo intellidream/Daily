@@ -1133,19 +1133,45 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     }
 
     public func fetchCosmosSnapshot() -> CosmosWidgetSnapshot {
-        if let data = groupDefaults.data(forKey: cosmosSnapshotKey),
-           let snapshot = try? JSONDecoder().decode(CosmosWidgetSnapshot.self, from: data),
-           abs(Date().timeIntervalSince(snapshot.lastUpdated)) < 5400 {
-            return snapshot
-        }
-
-        // Deterministic live astronomical calculation when cache is cold
         let now = Date()
         let lat = groupDefaults.object(forKey: "weather_cached_lat") as? Double ?? 44.4268
         let lon = groupDefaults.object(forKey: "weather_cached_lon") as? Double ?? 26.1025
         let obs = (latitude: lat, longitude: lon)
         let obs3 = (latitude: lat, longitude: lon, elevation: 50.0)
         let moon = AstronomyService.shared.moonPhase(at: now, observer: obs)
+        var visibleNames: [String] = []
+        for p in [CelestialBody.venus, .jupiter, .saturn, .mars, .mercury, .uranus, .neptune] {
+            if AstronomyService.shared.coordinates(of: p, for: obs3, at: now).altitudeDegrees > 0.0 {
+                visibleNames.append(p.displayName)
+            }
+        }
+        let topSummary = visibleNames.isEmpty ? "Solar bodies below horizon" : visibleNames.prefix(3).joined(separator: " · ")
+
+        if let data = groupDefaults.data(forKey: cosmosSnapshotKey),
+           let snapshot = try? JSONDecoder().decode(CosmosWidgetSnapshot.self, from: data) {
+            // If cached snapshot exists (< 24 hours), preserve honest weather/seeing score and Bortle
+            // while recalculating real-time celestial positions (moon and visible planets).
+            if abs(now.timeIntervalSince(snapshot.lastUpdated)) < 86400 {
+                return CosmosWidgetSnapshot(
+                    stargazingScore: snapshot.stargazingScore,
+                    stargazingVerdict: snapshot.stargazingVerdict,
+                    qualityHexColor: snapshot.qualityHexColor,
+                    moonPhaseName: moon.quarter.displayName,
+                    moonIlluminationPercent: Int((moon.illuminatedFraction * 100.0).rounded()),
+                    moonSymbol: moon.quarter.sfSymbol,
+                    visiblePlanetsCount: visibleNames.count,
+                    topPlanetsSummary: topSummary,
+                    bestWindowLabel: snapshot.bestWindowLabel,
+                    nextIssPassSummary: snapshot.nextIssPassSummary,
+                    kpIndex: snapshot.kpIndex,
+                    bortleClass: snapshot.bortleClass,
+                    provenanceBadge: snapshot.provenanceBadge,
+                    lastUpdated: snapshot.lastUpdated
+                )
+            }
+        }
+
+        // Deterministic live astronomical calculation when cache is completely cold
         let bortle = CosmosCatalogService.shared.bortleClass(latitude: lat, longitude: lon)
         let cond = AstronomyService.shared.evaluateStargazingConditions(
             observer: obs,
@@ -1156,12 +1182,6 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             cloudCoverHigh: nil,
             bortleClass: bortle
         )
-        var visibleNames: [String] = []
-        for p in [CelestialBody.venus, .jupiter, .saturn, .mars, .mercury, .uranus, .neptune] {
-            if AstronomyService.shared.coordinates(of: p, for: obs3, at: now).altitudeDegrees > 0.0 {
-                visibleNames.append(p.displayName)
-            }
-        }
         return CosmosWidgetSnapshot(
             stargazingScore: cond.score,
             stargazingVerdict: cond.quality.displayName,
@@ -1170,7 +1190,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             moonIlluminationPercent: Int((moon.illuminatedFraction * 100.0).rounded()),
             moonSymbol: moon.quarter.sfSymbol,
             visiblePlanetsCount: visibleNames.count,
-            topPlanetsSummary: visibleNames.isEmpty ? "Solar bodies below horizon" : visibleNames.prefix(3).joined(separator: " · "),
+            topPlanetsSummary: topSummary,
             bestWindowLabel: cond.bestWindowDescription ?? "Calculated at dusk",
             nextIssPassSummary: nil,
             kpIndex: nil,

@@ -662,6 +662,57 @@ namespace Daily_WinUI.Services.Cosmos
             return obs;
         }
 
+        public async Task<List<CosmosObservationRecord>> LoadObservationsAsync()
+        {
+            var local = new List<CosmosObservationRecord>();
+            if (File.Exists(ObservationsCachePath))
+            {
+                try { local = JsonSerializer.Deserialize<List<CosmosObservationRecord>>(File.ReadAllText(ObservationsCachePath), _jsonOpts) ?? new(); }
+                catch { }
+            }
+
+            string? uid = GetAuthenticatedUserId();
+            if (!string.IsNullOrEmpty(uid) && App.SupabaseClient != null)
+            {
+                try
+                {
+                    var resp = await App.SupabaseClient.From<CosmosObservationRecord>()
+                        .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
+                        .Order("observed_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                        .Limit(50)
+                        .Get().ConfigureAwait(false);
+                    if (resp.Models.Count > 0)
+                    {
+                        var merged = resp.Models.Concat(local).DistinctBy(x => x.Id).OrderByDescending(x => x.ObservedAt).ToList();
+                        File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(merged, _jsonOpts));
+                        return merged;
+                    }
+                }
+                catch { }
+            }
+            return local;
+        }
+
+        public async Task DeleteObservationAsync(string id)
+        {
+            var list = await LoadObservationsAsync().ConfigureAwait(false);
+            list.RemoveAll(x => x.Id == id);
+            try { File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
+
+            string? uid = GetAuthenticatedUserId();
+            if (!string.IsNullOrEmpty(uid) && App.SupabaseClient != null)
+            {
+                try
+                {
+                    await App.SupabaseClient.From<CosmosObservationRecord>()
+                        .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, id)
+                        .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
+                        .Delete().ConfigureAwait(false);
+                }
+                catch { }
+            }
+        }
+
         private static string? GetAuthenticatedUserId()
         {
             try

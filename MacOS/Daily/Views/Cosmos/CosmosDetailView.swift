@@ -1824,45 +1824,155 @@ public struct CosmosDetailView: View {
             }
         }
 
-        if !syncService.bookmarks.isEmpty || !syncService.observations.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("BOOKMARKS & LOGGED SIGHTINGS (#SKY)")
+        // 7. Synchronized Sky Bookmarks (Supabase Cloud + Local Cache)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("SKY BOOKMARKS (\(syncService.bookmarks.count))")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(p.fgMuted)
+                Spacer()
+                Text("CLOUD SYNC")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(p.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(p.pillBackground, in: Capsule())
+            }
 
-                ForEach(syncService.bookmarks.prefix(5)) { bm in
-                    HStack {
-                        Image(systemName: "bookmark.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(p.accent)
-                        Text(bm.objectName)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(p.fgPrimary)
-                        Spacer()
-                        Text(bm.category)
-                            .font(.system(size: 10))
-                            .foregroundColor(p.fgMuted)
+            if syncService.bookmarks.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 13))
+                        .foregroundColor(p.fgMuted)
+                    Text("No bookmarks saved yet. Tap the bookmark icon on any star, planet, or DSO to sync across all devices.")
+                        .font(.system(size: 11))
+                        .foregroundColor(p.fgMuted)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground.opacity(0.6)))
+            } else {
+                ForEach(syncService.bookmarks) { bm in
+                    HStack(spacing: 10) {
+                        Button {
+                            triggerHaptic()
+                            showingDrawer = false
+                            let tgt = vm.target(forBookmark: bm)
+                            vm.centerOn(target: tgt)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "bookmark.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(p.accent)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(bm.objectName)
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                        .foregroundColor(p.fgPrimary)
+                                    Text("\(bm.category)\(bm.constellation.map { " · \($0)" } ?? "")")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(p.fgMuted)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            triggerHaptic()
+                            syncService.toggleBookmark(
+                                objectId: bm.objectId,
+                                objectName: bm.objectName,
+                                category: bm.category
+                            )
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                                .foregroundColor(p.fgMuted)
+                                .padding(6)
+                                .background(Circle().fill(p.cardBackground))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Delete bookmark")
                     }
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground))
                 }
+            }
+        }
 
-                ForEach(syncService.observations.prefix(4)) { obs in
-                    HStack {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(p.positive)
-                        VStack(alignment: .leading, spacing: 1) {
+        // 8. Logged Sky Sightings & Observations (#sky TagDoS + Supabase)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("OBSERVATIONS & LOGGED SIGHTINGS (\(syncService.observations.count))")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(p.fgMuted)
+                Spacer()
+                Text("#SKY TAGDOS")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(p.positive)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(p.pillBackground, in: Capsule())
+            }
+
+            if syncService.observations.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 13))
+                        .foregroundColor(p.fgMuted)
+                    Text("No sightings logged yet. Select any celestial object and tap 'Log Sighting (#sky)' to record observations.")
+                        .font(.system(size: 11))
+                        .foregroundColor(p.fgMuted)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground.opacity(0.6)))
+            } else {
+                ForEach(syncService.observations) { obs in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(p.positive)
                             Text(obs.objectName)
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundColor(p.fgPrimary)
-                            Text("\(obs.observedAt.formatted(date: .abbreviated, time: .shortened)) · \(obs.optics)")
-                                .font(.system(size: 10))
+                            Spacer()
+                            Text(obs.category)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundColor(p.fgMuted)
+
+                            Button {
+                                triggerHaptic()
+                                syncService.deleteObservation(id: obs.id)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(p.fgMuted)
+                                    .padding(4)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Delete observation")
+                        }
+
+                        Text("\(obs.observedAt.formatted(date: .abbreviated, time: .shortened)) · \(obs.optics)")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(p.fgSecondary)
+
+                        if let b = obs.bortleClass, let s = obs.stargazingScore {
+                            Text("Bortle \(b) · Sky Score \(s)/100 · \(obs.locationName.isEmpty ? "Local Horizon" : obs.locationName)")
+                                .font(.system(size: 9.5))
                                 .foregroundColor(p.fgMuted)
                         }
-                        Spacer()
+
+                        if !obs.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(obs.notes)
+                                .font(.system(size: 10.5))
+                                .foregroundColor(p.fgSecondary)
+                                .lineLimit(3)
+                        }
                     }
-                    .padding(8)
+                    .padding(9)
                     .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground))
                 }
             }
@@ -1913,6 +2023,62 @@ public struct CosmosDetailView: View {
 
                     ScrollView {
                         LazyVStack(spacing: 8) {
+                            if vm.searchQuery.isEmpty && !syncService.bookmarks.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Image(systemName: "bookmark.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(p.accent)
+                                        Text("SAVED BOOKMARKS (\(syncService.bookmarks.count))")
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                            .foregroundColor(p.accent)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 4)
+                                    .padding(.top, 4)
+
+                                    ForEach(syncService.bookmarks) { bm in
+                                        let target = vm.target(forBookmark: bm)
+                                        let live = vm.liveMetrics(for: target)
+                                        Button {
+                                            triggerHaptic()
+                                            showingSearchSheet = false
+                                            vm.centerOn(target: target)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: "bookmark.fill")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundColor(p.accent)
+                                                    .frame(width: 26)
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(bm.objectName)
+                                                        .font(.system(size: 13.5, weight: .semibold))
+                                                        .foregroundColor(p.fgPrimary)
+                                                    Text("\(bm.category)\(bm.constellation.map { " · \($0)" } ?? "") · Alt \(Int(live.altitudeDegrees.rounded()))°")
+                                                        .font(.system(size: 11.5))
+                                                        .foregroundColor(p.fgMuted)
+                                                }
+                                                Spacer()
+                                                Text(live.isAboveHorizon ? "Visible" : "Set")
+                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(live.isAboveHorizon ? p.positive : p.fgMuted)
+                                            }
+                                            .padding(11)
+                                            .background(RoundedRectangle(cornerRadius: 12).fill(p.pillBackground))
+                                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(p.accent.opacity(0.3), lineWidth: 0.8))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    Text("TONIGHT'S FEATURED OBJECTS")
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(p.fgMuted)
+                                        .padding(.horizontal, 4)
+                                        .padding(.top, 10)
+                                }
+                            }
+
                             ForEach(vm.searchResults) { target in
                                 let live = vm.liveMetrics(for: target)
                                 Button {

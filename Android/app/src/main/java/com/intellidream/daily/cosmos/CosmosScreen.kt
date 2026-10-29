@@ -49,8 +49,10 @@ import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CenterFocusStrong
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.FastForward
@@ -504,6 +506,10 @@ fun CosmosScreen(
                 onQueryChanged = { viewModel.onSearchQueryChanged(it) },
                 onSelectResult = {
                     viewModel.selectTarget(it, centerCamera = true)
+                    showSearchSheet = false
+                },
+                onSelectBookmark = { bm ->
+                    viewModel.selectTarget(viewModel.targetForBookmark(bm), centerCamera = true)
                     showSearchSheet = false
                 },
                 onDismiss = { showSearchSheet = false }
@@ -2609,6 +2615,172 @@ private fun ObservatoryTelemetryCards(
             Text(circ.summary, color = palette.fgSecondary, fontSize = 11.5.sp)
         }
     }
+
+    // 8. Synchronized Sky Bookmarks (Supabase Cloud + Local Cache)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(palette.cardBg)
+            .border(1.dp, palette.border, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("SKY BOOKMARKS (${state.bookmarks.size})", color = palette.fgMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("CLOUD SYNC", color = palette.accent, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+        }
+
+        if (state.bookmarks.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(palette.pillBg.copy(alpha = 0.6f))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Rounded.BookmarkBorder, contentDescription = null, tint = palette.fgMuted, modifier = Modifier.size(16.dp))
+                Text(
+                    "No bookmarks saved yet. Tap the bookmark icon on any celestial object to sync across all devices.",
+                    color = palette.fgMuted,
+                    fontSize = 11.5.sp
+                )
+            }
+        } else {
+            state.bookmarks.forEach { bm ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(palette.pillBg)
+                        .clickable { viewModel.selectTarget(viewModel.targetForBookmark(bm), centerCamera = true) }
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Rounded.Bookmark, contentDescription = null, tint = palette.accent, modifier = Modifier.size(15.dp))
+                        Column {
+                            Text(bm.objectName, color = palette.fgPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "${bm.category}${bm.constellation?.let { " · $it" } ?: ""}",
+                                color = palette.fgSecondary,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    Icon(
+                        Icons.Rounded.Delete,
+                        contentDescription = "Remove bookmark",
+                        tint = palette.fgMuted,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable { viewModel.removeBookmark(bm.objectId, bm.objectName, bm.category) }
+                    )
+                }
+            }
+        }
+    }
+
+    // 9. Logged Sky Sightings & Observations (#sky TagDoS + Supabase)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(palette.cardBg)
+            .border(1.dp, palette.border, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("OBSERVATIONS & LOGGED SIGHTINGS (${state.observations.size})", color = palette.fgMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("#SKY TAGDOS", color = palette.positive, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+        }
+
+        if (state.observations.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(palette.pillBg.copy(alpha = 0.6f))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Rounded.EditNote, contentDescription = null, tint = palette.fgMuted, modifier = Modifier.size(16.dp))
+                Text(
+                    "No sky observations logged yet. Select any celestial object and tap 'Log Sighting (#sky)' to record observations.",
+                    color = palette.fgMuted,
+                    fontSize = 11.5.sp
+                )
+            }
+        } else {
+            state.observations.forEach { obs ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(palette.pillBg)
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = palette.positive, modifier = Modifier.size(14.dp))
+                            Text(obs.objectName, color = palette.fgPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(obs.category.uppercase(), color = palette.fgMuted, fontSize = 9.5.sp)
+                            Icon(
+                                Icons.Rounded.Delete,
+                                contentDescription = "Delete observation",
+                                tint = palette.fgMuted,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { viewModel.deleteObservation(obs.id) }
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "${obs.observedAt.take(16).replace('T', ' ')} · ${obs.optics}",
+                        color = palette.fgSecondary,
+                        fontSize = 10.5.sp
+                    )
+
+                    if (obs.bortleClass != null && obs.stargazingScore != null) {
+                        Text(
+                            text = "Bortle ${obs.bortleClass} · Sky Score ${obs.stargazingScore}/100 · ${obs.locationName.ifBlank { "Local Horizon" }}",
+                            color = palette.fgMuted,
+                            fontSize = 9.5.sp
+                        )
+                    }
+
+                    if (obs.notes.isNotBlank()) {
+                        Text(obs.notes, color = palette.fgSecondary, fontSize = 10.5.sp, maxLines = 3)
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -2623,6 +2795,7 @@ private fun CosmosSearchDialog(
     palette: AndroidCosmosPalette,
     onQueryChanged: (String) -> Unit,
     onSelectResult: (CosmosSearchResult) -> Unit,
+    onSelectBookmark: (com.intellidream.daily.model.CosmosBookmark) -> Unit,
     onDismiss: () -> Unit
 ) {
     Box(
@@ -2689,11 +2862,15 @@ private fun CosmosSearchDialog(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(palette.pillBg)
-                                .clickable { onQueryChanged(bm.objectName) }
+                                .clickable { onSelectBookmark(bm) }
                                 .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(bm.objectName, color = palette.fgPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Rounded.Bookmark, contentDescription = null, tint = palette.accent, modifier = Modifier.size(14.dp))
+                                Text(bm.objectName, color = palette.fgPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
                             Text(bm.category.uppercase(), color = palette.accent, fontSize = 10.sp)
                         }
                     }

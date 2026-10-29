@@ -17,50 +17,61 @@ private struct CosmosHeadingReadoutView: View {
     let isUsingTrueNorth: Bool
     let isMotionTracking: Bool
     let needsCalibration: Bool
+    var isCompact: Bool = false
     let palette: CosmosPalette
 
     var body: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 5) {
+        VStack(spacing: isCompact ? 1.5 : 2.0) {
+            HStack(spacing: isCompact ? 3 : 5) {
                 Text(locationName)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.system(size: isCompact ? 11 : 13, weight: .bold, design: .rounded))
                     .foregroundColor(palette.fgPrimary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: isCompact ? 95 : nil, alignment: .trailing)
 
-                Text(
-                    String(
-                        format: "· %03d° %@ · Alt %+d° · %@",
-                        Int(camera.effectiveAzimuth.rounded()) % 360,
-                        CelestialCoordinates.compassPoint(for: camera.effectiveAzimuth),
-                        Int(camera.effectiveAltitude.rounded()),
-                        camera.fov < 10.0 ? String(format: "%.1f° FOV", camera.fov) : "\(Int(camera.fov.rounded()))° FOV"
-                    )
-                )
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(palette.accent)
-                .lineLimit(1)
+                Text(headingString)
+                    .font(.system(size: isCompact ? 9.5 : 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(palette.accent)
+                    .lineLimit(1)
             }
 
-            HStack(spacing: 5) {
+            HStack(spacing: isCompact ? 3 : 5) {
                 Circle()
                     .fill(isLiveTime ? palette.positive : palette.warning)
-                    .frame(width: 5, height: 5)
+                    .frame(width: isCompact ? 4.5 : 5, height: isCompact ? 4.5 : 5)
 
                 Text(statusLabel)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.system(size: isCompact ? 9 : 10, weight: .medium, design: .monospaced))
                     .foregroundColor(palette.fgMuted)
+                    .lineLimit(1)
 
                 if isMotionTracking {
-                    Text(needsCalibration ? "· Calibrate Compass (Figure-8)" : (isUsingTrueNorth ? "· True North AR" : "· Magnetic AR"))
-                        .font(.system(size: 10, weight: .semibold))
+                    Text(needsCalibration ? (isCompact ? "· Cal (8)" : "· Calibrate Compass (Figure-8)") : (isUsingTrueNorth ? (isCompact ? "· True N" : "· True North AR") : (isCompact ? "· Mag AR" : "· Magnetic AR")))
+                        .font(.system(size: isCompact ? 8.5 : 10, weight: .semibold))
                         .foregroundColor(needsCalibration ? palette.warning : palette.accent)
+                        .lineLimit(1)
                 } else if camera.isZenithPlanisphereLocked {
-                    Text("· Zenith Lock")
-                        .font(.system(size: 10, weight: .semibold))
+                    Text(isCompact ? "· Zenith" : "· Zenith Lock")
+                        .font(.system(size: isCompact ? 8.5 : 10, weight: .semibold))
                         .foregroundColor(palette.accent)
+                        .lineLimit(1)
                 }
             }
         }
+        .frame(maxWidth: isCompact ? 165 : nil)
+    }
+
+    private var headingString: String {
+        let az = Int(camera.effectiveAzimuth.rounded()) % 360
+        let comp = CelestialCoordinates.compassPoint(for: camera.effectiveAzimuth)
+        let alt = Int(camera.effectiveAltitude.rounded())
+        if isCompact {
+            return String(format: "· %03d° %@ · %+d°", az, comp, alt)
+        }
+        let fovStr = camera.fov < 10.0 ? String(format: "%.1f° FOV", camera.fov) : "\(Int(camera.fov.rounded()))° FOV"
+        return String(format: "· %03d° %@ · Alt %+d° · %@", az, comp, alt, fovStr)
     }
 
     private var statusLabel: String {
@@ -387,7 +398,7 @@ public struct CosmosDetailView: View {
 
                 // Top HUD
                 VStack(spacing: 8) {
-                    topHUDBar(isSplitActive: isSplitActive, canToggleSplit: canToggleSplit)
+                    topHUDBar(isSplitActive: isSplitActive, canToggleSplit: canToggleSplit, viewportWidth: geometry.size.width)
                     zoomPresetsStrip
 
                     if let banner = vm.statusBannerMessage {
@@ -470,9 +481,10 @@ public struct CosmosDetailView: View {
     // MARK: - Top HUD Bar & Zoom Strip
 
     @ViewBuilder
-    private func topHUDBar(isSplitActive: Bool, canToggleSplit: Bool) -> some View {
+    private func topHUDBar(isSplitActive: Bool, canToggleSplit: Bool, viewportWidth: CGFloat = 800) -> some View {
         let p = vm.palette
-        HStack(alignment: .center, spacing: 8) {
+        let isCompact = viewportWidth < 520
+        HStack(alignment: .center, spacing: isCompact ? 6 : 8) {
             if let onNavigateBack = onNavigateBack {
                 Button {
                     triggerHaptic()
@@ -494,22 +506,33 @@ public struct CosmosDetailView: View {
                     triggerHaptic()
                     onNavigateToWeather()
                 } label: {
-                    HStack(spacing: 4) {
+                    if isCompact {
                         Image(systemName: "cloud.sun.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Weather")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(p.accent)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(p.pillBackground))
+                            .overlay(Circle().strokeBorder(p.border, lineWidth: 1))
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "cloud.sun.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Weather")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(p.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(p.pillBackground))
+                        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
                     }
-                    .foregroundColor(p.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(p.pillBackground))
-                    .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .help("Back to Weather")
+                .accessibilityLabel("Weather")
             }
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
             CosmosHeadingReadoutView(
                 camera: vm.camera,
@@ -520,12 +543,13 @@ public struct CosmosDetailView: View {
                 isUsingTrueNorth: motionService.isUsingTrueNorth,
                 isMotionTracking: vm.isMotionTrackingEnabled,
                 needsCalibration: motionService.needsCompassCalibration,
+                isCompact: isCompact,
                 palette: p
             )
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
-            HStack(spacing: 6) {
+            HStack(spacing: isCompact ? 5 : 6) {
                 // Red Night-Vision Toggle (#FF1824)
                 Button {
                     triggerHaptic()
@@ -1867,46 +1891,155 @@ public struct CosmosDetailView: View {
             }
         }
 
-        // 7. Bookmarks & Logged Sky Sightings
-        if !syncService.bookmarks.isEmpty || !syncService.observations.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("BOOKMARKS & LOGGED SIGHTINGS (#SKY)")
+        // 7. Synchronized Sky Bookmarks (Supabase Cloud + Local Cache)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("SKY BOOKMARKS (\(syncService.bookmarks.count))")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(p.fgMuted)
+                Spacer()
+                Text("CLOUD SYNC")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(p.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(p.pillBackground, in: Capsule())
+            }
 
-                ForEach(syncService.bookmarks.prefix(5)) { bm in
-                    HStack {
-                        Image(systemName: "bookmark.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(p.accent)
-                        Text(bm.objectName)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(p.fgPrimary)
-                        Spacer()
-                        Text(bm.category)
-                            .font(.system(size: 10))
-                            .foregroundColor(p.fgMuted)
+            if syncService.bookmarks.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 13))
+                        .foregroundColor(p.fgMuted)
+                    Text("No bookmarks saved yet. Tap the bookmark icon on any star, planet, or DSO to sync across all devices.")
+                        .font(.system(size: 11))
+                        .foregroundColor(p.fgMuted)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground.opacity(0.6)))
+            } else {
+                ForEach(syncService.bookmarks) { bm in
+                    HStack(spacing: 10) {
+                        Button {
+                            triggerHaptic()
+                            showingDrawer = false
+                            let tgt = vm.target(forBookmark: bm)
+                            vm.centerOn(target: tgt)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "bookmark.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(p.accent)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(bm.objectName)
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                        .foregroundColor(p.fgPrimary)
+                                    Text("\(bm.category)\(bm.constellation.map { " · \($0)" } ?? "")")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(p.fgMuted)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            triggerHaptic()
+                            syncService.toggleBookmark(
+                                objectId: bm.objectId,
+                                objectName: bm.objectName,
+                                category: bm.category
+                            )
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                                .foregroundColor(p.fgMuted)
+                                .padding(6)
+                                .background(Circle().fill(p.cardBackground))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Delete bookmark")
                     }
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground))
                 }
+            }
+        }
 
-                ForEach(syncService.observations.prefix(4)) { obs in
-                    HStack {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(p.positive)
-                        VStack(alignment: .leading, spacing: 1) {
+        // 8. Logged Sky Sightings & Observations (#sky TagDoS + Supabase)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("OBSERVATIONS & LOGGED SIGHTINGS (\(syncService.observations.count))")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(p.fgMuted)
+                Spacer()
+                Text("#SKY TAGDOS")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(p.positive)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(p.pillBackground, in: Capsule())
+            }
+
+            if syncService.observations.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 13))
+                        .foregroundColor(p.fgMuted)
+                    Text("No sightings logged yet. Select any celestial object and tap 'Log Sighting (#sky)' to record observations.")
+                        .font(.system(size: 11))
+                        .foregroundColor(p.fgMuted)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground.opacity(0.6)))
+            } else {
+                ForEach(syncService.observations) { obs in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(p.positive)
                             Text(obs.objectName)
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundColor(p.fgPrimary)
-                            Text("\(obs.observedAt.formatted(date: .abbreviated, time: .shortened)) · \(obs.optics)")
-                                .font(.system(size: 10))
+                            Spacer()
+                            Text(obs.category)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundColor(p.fgMuted)
+
+                            Button {
+                                triggerHaptic()
+                                syncService.deleteObservation(id: obs.id)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(p.fgMuted)
+                                    .padding(4)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Delete observation")
+                        }
+
+                        Text("\(obs.observedAt.formatted(date: .abbreviated, time: .shortened)) · \(obs.optics)")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(p.fgSecondary)
+
+                        if let b = obs.bortleClass, let s = obs.stargazingScore {
+                            Text("Bortle \(b) · Sky Score \(s)/100 · \(obs.locationName.isEmpty ? "Local Horizon" : obs.locationName)")
+                                .font(.system(size: 9.5))
                                 .foregroundColor(p.fgMuted)
                         }
-                        Spacer()
+
+                        if !obs.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(obs.notes)
+                                .font(.system(size: 10.5))
+                                .foregroundColor(p.fgSecondary)
+                                .lineLimit(3)
+                        }
                     }
-                    .padding(8)
+                    .padding(9)
                     .background(RoundedRectangle(cornerRadius: 10).fill(p.pillBackground))
                 }
             }
@@ -1957,6 +2090,62 @@ public struct CosmosDetailView: View {
 
                     ScrollView {
                         LazyVStack(spacing: 8) {
+                            if vm.searchQuery.isEmpty && !syncService.bookmarks.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Image(systemName: "bookmark.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(p.accent)
+                                        Text("SAVED BOOKMARKS (\(syncService.bookmarks.count))")
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                            .foregroundColor(p.accent)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 4)
+                                    .padding(.top, 4)
+
+                                    ForEach(syncService.bookmarks) { bm in
+                                        let target = vm.target(forBookmark: bm)
+                                        let live = vm.liveMetrics(for: target)
+                                        Button {
+                                            triggerHaptic()
+                                            showingSearchSheet = false
+                                            vm.centerOn(target: target)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: "bookmark.fill")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundColor(p.accent)
+                                                    .frame(width: 26)
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(bm.objectName)
+                                                        .font(.system(size: 13.5, weight: .semibold))
+                                                        .foregroundColor(p.fgPrimary)
+                                                    Text("\(bm.category)\(bm.constellation.map { " · \($0)" } ?? "") · Alt \(Int(live.altitudeDegrees.rounded()))°")
+                                                        .font(.system(size: 11.5))
+                                                        .foregroundColor(p.fgMuted)
+                                                }
+                                                Spacer()
+                                                Text(live.isAboveHorizon ? "Visible" : "Set")
+                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(live.isAboveHorizon ? p.positive : p.fgMuted)
+                                            }
+                                            .padding(11)
+                                            .background(RoundedRectangle(cornerRadius: 12).fill(p.pillBackground))
+                                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(p.accent.opacity(0.3), lineWidth: 0.8))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    Text("TONIGHT'S FEATURED OBJECTS")
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(p.fgMuted)
+                                        .padding(.horizontal, 4)
+                                        .padding(.top, 10)
+                                }
+                            }
+
                             ForEach(vm.searchResults) { target in
                                 let live = vm.liveMetrics(for: target)
                                 Button {

@@ -681,23 +681,29 @@ public final class CosmosViewModel: ObservableObject {
         self.sunTimes = astronomyService.sunTimes(for: obs, on: simulationDate)
         self.circadianContext = astronomyService.circadianLunarContext(for: obs, on: simulationDate)
 
-        let liveCond = liveService.stargazingConditions
-        let evaluated = astronomyService.evaluateStargazingConditions(
-            observer: obs,
-            date: simulationDate,
-            cloudCoverTotal: liveCond?.cloudCoverTotalPercent,
-            cloudCoverLow: liveCond?.cloudCoverLowPercent,
-            cloudCoverMid: liveCond?.cloudCoverMidPercent,
-            cloudCoverHigh: liveCond?.cloudCoverHighPercent,
-            bortleClass: liveCond?.bortleClass,
-            seeingArcseconds: liveCond?.seeingArcseconds,
-            transparencyLabel: liveCond?.transparencyLabel,
-            dewPointDepression: liveCond?.dewPointDepressionCelsius,
-            provenance: liveCond?.provenance ?? .offlineCalculated(epochAgeHours: nil)
-        )
-        self.stargazingConditions = evaluated
-        self.stargazingScore = evaluated.score
-        self.stargazingVerdict = evaluated.quality.displayName
+        if let liveCond = liveService.stargazingConditions, isLiveTime {
+            self.stargazingConditions = liveCond
+            self.stargazingScore = liveCond.score
+            self.stargazingVerdict = liveCond.quality.displayName
+        } else {
+            let liveCond = liveService.stargazingConditions
+            let evaluated = astronomyService.evaluateStargazingConditions(
+                observer: obs,
+                date: simulationDate,
+                cloudCoverTotal: liveCond?.cloudCoverTotalPercent,
+                cloudCoverLow: liveCond?.cloudCoverLowPercent,
+                cloudCoverMid: liveCond?.cloudCoverMidPercent,
+                cloudCoverHigh: liveCond?.cloudCoverHighPercent,
+                bortleClass: liveCond?.bortleClass,
+                seeingArcseconds: liveCond?.seeingArcseconds,
+                transparencyLabel: liveCond?.transparencyLabel,
+                dewPointDepression: liveCond?.dewPointDepressionCelsius,
+                provenance: liveCond?.provenance ?? .offlineCalculated(epochAgeHours: nil)
+            )
+            self.stargazingConditions = evaluated
+            self.stargazingScore = evaluated.score
+            self.stargazingVerdict = evaluated.quality.displayName
+        }
 
         var count = 0
         let obs3 = (latitude: obs.latitude, longitude: obs.longitude, elevation: 50.0)
@@ -1630,6 +1636,35 @@ public final class CosmosViewModel: ObservableObject {
         }
 
         return results
+    }
+
+    public func target(forBookmark bookmark: CosmosBookmark) -> CosmosTarget {
+        let q = bookmark.objectId.lowercased()
+        if let body = CelestialBody.allCases.first(where: { $0.rawValue.lowercased() == q || $0.displayName.lowercased() == q }) {
+            return target(for: body)
+        }
+        if let dso = catalogService.deepSkyObjects.first(where: { $0.id.lowercased() == q || $0.name.lowercased() == q }) {
+            return target(for: dso)
+        }
+        if let star = catalogService.brightStars.first(where: { "\($0.hip)".lowercased() == q || $0.name.lowercased() == q }) {
+            return target(for: star)
+        }
+        if let c = catalogService.constellations.first(where: { $0.id.lowercased() == q || $0.nameEn.lowercased() == q }) {
+            return target(for: c)
+        }
+        return CosmosTarget(
+            id: bookmark.objectId,
+            kind: .star(hip: 0),
+            name: bookmark.objectName,
+            subtitle: "\(bookmark.category)\(bookmark.constellation.map { " · \($0)" } ?? "")",
+            category: bookmark.category,
+            iconName: "bookmark.fill",
+            rightAscensionHours: bookmark.raHours ?? 0.0,
+            declinationDegrees: bookmark.decDeg ?? 0.0,
+            visualMagnitude: bookmark.magnitude,
+            constellationName: bookmark.constellation,
+            lore: bookmark.notes.isEmpty ? "Saved celestial bookmark synced with Supabase." : bookmark.notes
+        )
     }
 
     public var tonightFeaturedTargets: [CosmosTarget] {

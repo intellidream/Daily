@@ -627,12 +627,44 @@
                             CornerRadius="16"
                             Padding="16">
                             <StackPanel Spacing="8">
-                                <TextBlock Text="SAVED SKY BOOKMARKS" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="BookmarksHeaderLabel" Text="SAVED SKY BOOKMARKS" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" VerticalAlignment="Center" />
+                                    <Border Grid.Column="1" Background="#26FFD166" CornerRadius="10" Padding="8,2">
+                                        <TextBlock Text="CLOUD SYNC" FontSize="9" FontWeight="Bold" FontFamily="Consolas, Segoe UI" Foreground="#FFFFD166" />
+                                    </Border>
+                                </Grid>
                                 <StackPanel x:Name="BookmarksStack" Spacing="6" />
                             </StackPanel>
                         </Border>
 
-                        <!-- 6. NASA Astronomy Picture of the Day (APOD) -->
+                        <!-- 6. Logged Sky Sightings & Observations (#sky TagDoS + Supabase) -->
+                        <Border
+                            x:Name="ObservationsDeckCard"
+                            Background="#10FFFFFF"
+                            BorderBrush="#24FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="ObservationsHeaderLabel" Text="OBSERVATIONS &amp; LOGGED SIGHTINGS" FontSize="10.5" FontWeight="Bold" Foreground="#AAFFFFFF" VerticalAlignment="Center" />
+                                    <Border Grid.Column="1" Background="#2606D6A0" CornerRadius="10" Padding="8,2">
+                                        <TextBlock Text="#SKY TAGDOS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, Segoe UI" Foreground="#FF06D6A0" />
+                                    </Border>
+                                </Grid>
+                                <StackPanel x:Name="ObservationsStack" Spacing="6" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 7. NASA Astronomy Picture of the Day (APOD) -->
                         <Border
                             x:Name="ApodDeckCard"
                             Background="#10FFFFFF"
