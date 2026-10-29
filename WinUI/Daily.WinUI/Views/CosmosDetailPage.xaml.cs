@@ -1693,8 +1693,17 @@ namespace Daily_WinUI.Views
         {
             UpdateCameraHudOnly();
 
+            Color scoreColor = _isNightVision
+                ? Color.FromArgb(255, 255, 24, 36)
+                : (_stargazing.Score >= 70
+                    ? Color.FromArgb(255, 52, 211, 153)
+                    : (_stargazing.Score >= 45
+                        ? Color.FromArgb(255, 251, 191, 36)
+                        : Color.FromArgb(255, 251, 146, 60)));
+
             TelemetryStargazing.Text = $"Sky Score {_stargazing.Score}/100 ({_stargazing.Quality})";
-            ProvenanceBadgeText.Text = _stargazing.Provenance.BadgeText;
+            TelemetryStargazing.Foreground = new SolidColorBrush(scoreColor);
+            ProvenanceBadgeText.Text = $"TELEMETRY · {_stargazing.Provenance.BadgeText}";
             LocationSubtitle.Text = $"{_locationLabel} • Bortle {_bortleClass} • Moon {_moonPhase.Description} ({_moonPhase.IlluminationPercent}%)";
 
             bool isLive = Math.Abs(_timeOffset.TotalSeconds) < 3.0 && _playMultiplier == 1;
@@ -1711,8 +1720,11 @@ namespace Daily_WinUI.Views
             // Stargazing Deck Card
             DeckSkyProvenanceText.Text = _stargazing.Provenance.BadgeText;
             DeckScoreValueText.Text = _stargazing.Score.ToString(CultureInfo.InvariantCulture);
+            DeckScoreValueText.Foreground = new SolidColorBrush(scoreColor);
             DeckScoreQualityText.Text = $"{_stargazing.Quality} Stargazing Conditions";
-            DeckBestWindowText.Text = _stargazing.BestWindowDescription ?? "Best Dark Window: Calculating twilight...";
+            DeckBestWindowText.Text = !string.IsNullOrWhiteSpace(_stargazing.BestWindowDescription)
+                ? $"Best Dark Window: {_stargazing.BestWindowDescription}"
+                : "Best Dark Window: Calculating twilight...";
 
             string cLow = _stargazing.CloudCoverLowPercent?.ToString() ?? "--";
             string cMid = _stargazing.CloudCoverMidPercent?.ToString() ?? "--";

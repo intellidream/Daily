@@ -357,8 +357,8 @@ namespace Daily_WinUI.Services.Cosmos
                         maxUtc = t;
                         maxAlt = pos.AltitudeDegrees;
                         maxAz = pos.AzimuthDegrees;
-                        bestMag = pos.EstimatedMagnitude;
-                        anySunlit = pos.IsSunlit;
+                        bestMag = pos.IsSunlit ? pos.EstimatedMagnitude : 12.0;
+                        anySunlit = pos.IsSunlit && pos.AltitudeDegrees >= 10.0;
                         darkSkyAtPeak = false;
                         samples = new List<SatelliteTrajectorySample>();
                     }
@@ -369,13 +369,16 @@ namespace Daily_WinUI.Services.Cosmos
                         AltitudeDegrees = pos.AltitudeDegrees,
                         IsSunlit = pos.IsSunlit
                     });
-                    if (pos.IsSunlit) anySunlit = true;
+                    if (pos.IsSunlit && pos.AltitudeDegrees >= 10.0)
+                    {
+                        anySunlit = true;
+                        if (pos.EstimatedMagnitude < bestMag) bestMag = pos.EstimatedMagnitude;
+                    }
                     if (pos.AltitudeDegrees > maxAlt)
                     {
                         maxAlt = pos.AltitudeDegrees;
                         maxUtc = t;
                         maxAz = pos.AzimuthDegrees;
-                        bestMag = pos.EstimatedMagnitude;
                         var at = new AstroTime(t);
                         var sunEq = Astronomy.Equator(Body.Sun, at, observer, EquatorEpoch.OfDate, Aberration.Corrected);
                         var sunHor = Astronomy.Horizon(at, observer, sunEq.ra, sunEq.dec, Refraction.Normal);
@@ -388,7 +391,7 @@ namespace Daily_WinUI.Services.Cosmos
                     var lastSample = samples.Count > 0 ? samples[^1] : null;
                     DateTime endUtc = lastSample?.TimestampUtc ?? t;
                     double endAz = lastSample?.AzimuthDegrees ?? pos.AzimuthDegrees;
-                    bool qualifies = maxAlt >= minPeakAltitudeDeg && (!requireSunlitAndDarkSky || (anySunlit && darkSkyAtPeak));
+                    bool qualifies = maxAlt >= minPeakAltitudeDeg && (!requireSunlitAndDarkSky || (anySunlit && bestMag < 5.0 && darkSkyAtPeak));
                     if (qualifies)
                     {
                         passes.Add(new SatellitePass
