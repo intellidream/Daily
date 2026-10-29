@@ -267,6 +267,7 @@ namespace Daily_WinUI.Views
                 RenderBookmarksDeck();
                 RenderObservationsDeck();
                 RenderApodDeck();
+                RefreshSelectedTargetInspector();
                 SkyCanvas.Invalidate();
             });
         }
@@ -1974,8 +1975,118 @@ namespace Daily_WinUI.Views
                 TargetOpticsText.Text = m.Description;
             }
 
-            bool isBookmarked = !string.IsNullOrEmpty(objId) && _bookmarks.Any(b => b.ObjectId == objId);
+            bool isBookmarked = !string.IsNullOrEmpty(objId) && IsTargetBookmarked(objId, TargetNameText.Text);
             BookmarkTargetIcon.Glyph = isBookmarked ? "\uE735" : "\uE734";
+            BookmarkTargetIcon.Foreground = _isNightVision
+                ? new SolidColorBrush(Color.FromArgb(255, 255, 24, 36))
+                : (isBookmarked
+                    ? new SolidColorBrush(Color.FromArgb(255, 255, 209, 102))
+                    : new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)));
+            ToolTipService.SetToolTip(BookmarkTargetBtn, isBookmarked ? "Remove Sky Bookmark (Cloud synced)" : "Save Sky Bookmark (Cloud synced)");
+        }
+
+        private bool IsTargetBookmarked(string objId, string targetName)
+        {
+            if (_bookmarks == null || _bookmarks.Count == 0) return false;
+
+            string cleanTargetName = targetName?.Trim() ?? "";
+
+            string bodySuffix = "";
+            if (objId.StartsWith("BODY-", StringComparison.OrdinalIgnoreCase))
+                bodySuffix = objId.Substring(5).Trim();
+            else if (objId.StartsWith("body_", StringComparison.OrdinalIgnoreCase))
+                bodySuffix = objId.Substring(5).Trim();
+
+            foreach (var bm in _bookmarks)
+            {
+                if (string.IsNullOrWhiteSpace(bm.ObjectId)) continue;
+
+                // 1. Direct case-insensitive match on ID
+                if (string.Equals(bm.ObjectId, objId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                // 2. Solar system body cross-platform variants
+                if (!string.IsNullOrEmpty(bodySuffix))
+                {
+                    if (string.Equals(bm.ObjectId, bodySuffix, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(bm.ObjectId, "body_" + bodySuffix, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(bm.ObjectId, "BODY-" + bodySuffix, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(bm.ObjectName, bodySuffix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                // 3. ISS / Satellite match
+                if ((objId.Equals("SAT-25544", StringComparison.OrdinalIgnoreCase) || objId.Equals("sat_25544", StringComparison.OrdinalIgnoreCase)) &&
+                    (bm.ObjectId.Equals("SAT-25544", StringComparison.OrdinalIgnoreCase) || bm.ObjectId.Equals("sat_25544", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                // 4. ObjectName match
+                if (!string.IsNullOrEmpty(cleanTargetName) && !string.IsNullOrEmpty(bm.ObjectName))
+                {
+                    if (string.Equals(bm.ObjectName, cleanTargetName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    if (cleanTargetName.Contains(bm.ObjectName, StringComparison.OrdinalIgnoreCase) ||
+                        bm.ObjectName.Contains(cleanTargetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private void SelectBookmarkTarget(CosmosBookmarkRecord bm)
+        {
+            string q = bm.ObjectId?.ToLowerInvariant() ?? "";
+            string name = bm.ObjectName?.ToLowerInvariant() ?? "";
+
+            // 1. Planet / Celestial Body
+            var body = Enum.GetValues<CelestialBody>().FirstOrDefault(b =>
+                b.ToString().ToLowerInvariant() == q ||
+                $"body-{b}".ToLowerInvariant() == q ||
+                $"body_{b}".ToLowerInvariant() == q ||
+                b.ToString().ToLowerInvariant() == name);
+            if (body != default || q.Contains("moon") || name.Contains("moon"))
+            {
+                var bodyToFind = (q.Contains("moon") || name.Contains("moon")) ? CelestialBody.Moon : body;
+                var found = _bodies.FirstOrDefault(x => x.Body == bodyToFind);
+                if (found != null)
+                {
+                    SelectTarget(found, centerCamera: true);
+                    return;
+                }
+            }
+
+            // 2. DSO
+            var dso = _catalogRepo.DeepSkyObjects.FirstOrDefault(d =>
+                d.Id.Equals(bm.ObjectId, StringComparison.OrdinalIgnoreCase) ||
+                d.Name.Equals(bm.ObjectName, StringComparison.OrdinalIgnoreCase));
+            if (dso != null)
+            {
+                SelectTarget(dso, centerCamera: true);
+                return;
+            }
+
+            // 3. Star
+            var star = _catalogRepo.Stars.FirstOrDefault(s =>
+                $"hip-{s.Hip}".Equals(bm.ObjectId, StringComparison.OrdinalIgnoreCase) ||
+                s.Name.Equals(bm.ObjectName, StringComparison.OrdinalIgnoreCase));
+            if (star != null)
+            {
+                SelectTarget(star, centerCamera: true);
+                return;
+            }
+
+            // 4. ISS
+            if (q.Contains("25544") || name.Contains("iss"))
+            {
+                if (_issLivePos != null) SelectTarget(_issLivePos, centerCamera: true);
+                return;
+            }
         }
 
         private static string FormatRaDec(double raHours, double decDeg)
@@ -2135,6 +2246,7 @@ namespace Daily_WinUI.Views
                 };
                 btn.Click += (_, _) =>
                 {
+                    SelectBookmarkTarget(bm);
                     if (bm.RaHours.HasValue && bm.DecDeg.HasValue)
                     {
                         var (az, alt) = _astronomyService.EquatorialToHorizontal(bm.RaHours.Value, bm.DecDeg.Value, CurrentSimulationUtc, _latitude, _longitude);
@@ -2168,6 +2280,7 @@ namespace Daily_WinUI.Views
                 {
                     _bookmarks = await _liveService.ToggleBookmarkAsync(bm.ObjectId, bm.ObjectName, bm.Category);
                     RenderBookmarksDeck();
+                    RefreshSelectedTargetInspector();
                     ShowToast($"Removed {bm.ObjectName} from Bookmarks");
                 };
                 Grid.SetColumn(delBtn, 1);
@@ -2353,10 +2466,12 @@ namespace Daily_WinUI.Views
         {
             var meta = ExtractSelectedTargetMeta();
             if (meta == null) return;
-            _bookmarks = await _liveService.ToggleBookmarkAsync(meta.Value.Id, meta.Value.Name, meta.Value.Category, meta.Value.Ra, meta.Value.Dec, meta.Value.Mag);
+            var existing = _bookmarks.FirstOrDefault(b => IsTargetBookmarked(meta.Value.Id, meta.Value.Name));
+            string targetIdToToggle = existing?.ObjectId ?? meta.Value.Id;
+            _bookmarks = await _liveService.ToggleBookmarkAsync(targetIdToToggle, meta.Value.Name, meta.Value.Category, meta.Value.Ra, meta.Value.Dec, meta.Value.Mag);
             RefreshSelectedTargetInspector();
             RenderBookmarksDeck();
-            bool saved = _bookmarks.Any(x => x.ObjectId == meta.Value.Id);
+            bool saved = IsTargetBookmarked(meta.Value.Id, meta.Value.Name);
             ShowToast(saved ? $"Saved {meta.Value.Name} to Sky Bookmarks" : $"Removed {meta.Value.Name} from Bookmarks");
         }
 
@@ -2730,7 +2845,12 @@ namespace Daily_WinUI.Views
             TargetOpticsText.Foreground = secondaryText;
             LogSightingBtnText.Foreground = primaryText;
             ScheduleObsBtnText.Foreground = primaryText;
-            BookmarkTargetIcon.Foreground = _isNightVision ? accentBrush : new SolidColorBrush(Color.FromArgb(255, 255, 209, 102));
+            bool isCurrentBookmarked = _selectedTarget != null && ExtractSelectedTargetMeta() is var cm && cm != null && IsTargetBookmarked(cm.Value.Id, cm.Value.Name);
+            BookmarkTargetIcon.Foreground = _isNightVision
+                ? accentBrush
+                : (isCurrentBookmarked
+                    ? new SolidColorBrush(Color.FromArgb(255, 255, 209, 102))
+                    : new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)));
 
             DeckSkyProvenanceText.Foreground = accentBrush;
             DeckScoreValueText.Foreground = _isNightVision ? accentBrush : new SolidColorBrush(emerald);

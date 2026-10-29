@@ -15,7 +15,7 @@ namespace Daily.Services
         
         public UserPreferences Settings => _currentSettings;
         public bool IsAuthenticated => _supabase.Auth.CurrentSession != null;
-        public string? CurrentUserId => _supabase.Auth.CurrentUser?.Id;
+        public string? CurrentUserId => _supabase.Auth.CurrentSession?.User?.Id ?? _supabase.Auth.CurrentUser?.Id;
         public string? CurrentUserEmail => _supabase.Auth.CurrentSession?.User?.Email;
         public string? CurrentUserAvatarUrl 
         {

@@ -513,22 +513,33 @@ namespace Daily_WinUI.Services.Cosmos
             }
 
             string? uid = GetAuthenticatedUserId();
-            if (string.IsNullOrEmpty(uid) || App.SupabaseClient == null) return local;
+            if (App.SupabaseClient == null) return local;
 
             try
             {
-                var resp = await App.SupabaseClient.From<CosmosBookmarkRecord>()
-                    .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
-                    .Get()
-                    .ConfigureAwait(false);
-                var merged = resp.Models.Concat(local).GroupBy(x => x.ObjectId).Select(g => g.First()).ToList();
-                File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(merged, _jsonOpts));
-                return merged;
+                var query = App.SupabaseClient.From<CosmosBookmarkRecord>();
+                var resp = !string.IsNullOrEmpty(uid)
+                    ? await query.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid).Get().ConfigureAwait(false)
+                    : (App.SupabaseClient.Auth.CurrentSession != null
+                        ? await query.Get().ConfigureAwait(false)
+                        : null);
+
+                if (resp?.Models != null && resp.Models.Count > 0)
+                {
+                    var remoteList = resp.Models;
+                    var merged = remoteList.Concat(local)
+                        .GroupBy(x => x.ObjectId, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList();
+                    File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(merged, _jsonOpts));
+                    return merged;
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return local;
+                System.Diagnostics.Debug.WriteLine($"[CosmosLiveService] LoadBookmarksAsync exception: {ex.Message}");
             }
+            return local;
         }
 
         public async Task<List<CosmosBookmarkRecord>> ToggleBookmarkAsync(
@@ -541,18 +552,21 @@ namespace Daily_WinUI.Services.Cosmos
         {
             var list = await LoadBookmarksAsync().ConfigureAwait(false);
             string? uid = GetAuthenticatedUserId();
-            var existing = list.FirstOrDefault(x => x.ObjectId == objectId);
+            var existing = list.FirstOrDefault(x => string.Equals(x.ObjectId, objectId, StringComparison.OrdinalIgnoreCase) ||
+                                                    string.Equals(x.ObjectName, objectName, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
-                list.RemoveAll(x => x.ObjectId == objectId);
+                list.RemoveAll(x => string.Equals(x.ObjectId, existing.ObjectId, StringComparison.OrdinalIgnoreCase));
                 try { File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
-                if (!string.IsNullOrEmpty(uid) && App.SupabaseClient != null)
+                if (App.SupabaseClient != null)
                 {
                     try
                     {
-                        await App.SupabaseClient.From<CosmosBookmarkRecord>()
-                            .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
-                            .Filter("object_id", Supabase.Postgrest.Constants.Operator.Equals, objectId)
+                        var delQuery = App.SupabaseClient.From<CosmosBookmarkRecord>();
+                        if (!string.IsNullOrEmpty(uid))
+                            delQuery = delQuery.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid);
+                        await delQuery
+                            .Filter("object_id", Supabase.Postgrest.Constants.Operator.Equals, existing.ObjectId)
                             .Delete()
                             .ConfigureAwait(false);
                     }
@@ -576,7 +590,7 @@ namespace Daily_WinUI.Services.Cosmos
                 };
                 list.Insert(0, created);
                 try { File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
-                if (!string.IsNullOrEmpty(uid) && App.SupabaseClient != null)
+                if (App.SupabaseClient != null)
                 {
                     try { await App.SupabaseClient.From<CosmosBookmarkRecord>().Upsert(created).ConfigureAwait(false); }
                     catch { }
@@ -672,16 +686,24 @@ namespace Daily_WinUI.Services.Cosmos
             }
 
             string? uid = GetAuthenticatedUserId();
-            if (!string.IsNullOrEmpty(uid) && App.SupabaseClient != null)
+            if (App.SupabaseClient != null)
             {
                 try
                 {
-                    var resp = await App.SupabaseClient.From<CosmosObservationRecord>()
-                        .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
-                        .Order("observed_at", Supabase.Postgrest.Constants.Ordering.Descending)
-                        .Limit(50)
-                        .Get().ConfigureAwait(false);
-                    if (resp.Models.Count > 0)
+                    var query = App.SupabaseClient.From<CosmosObservationRecord>();
+                    var resp = !string.IsNullOrEmpty(uid)
+                        ? await query.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
+                            .Order("observed_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                            .Limit(50)
+                            .Get().ConfigureAwait(false)
+                        : (App.SupabaseClient.Auth.CurrentSession != null
+                            ? await query
+                                .Order("observed_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                                .Limit(50)
+                                .Get().ConfigureAwait(false)
+                            : null);
+
+                    if (resp?.Models != null && resp.Models.Count > 0)
                     {
                         var merged = resp.Models.Concat(local).DistinctBy(x => x.Id).OrderByDescending(x => x.ObservedAt).ToList();
                         File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(merged, _jsonOpts));
@@ -700,14 +722,15 @@ namespace Daily_WinUI.Services.Cosmos
             try { File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
 
             string? uid = GetAuthenticatedUserId();
-            if (!string.IsNullOrEmpty(uid) && App.SupabaseClient != null)
+            if (App.SupabaseClient != null)
             {
                 try
                 {
-                    await App.SupabaseClient.From<CosmosObservationRecord>()
-                        .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, id)
-                        .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid)
-                        .Delete().ConfigureAwait(false);
+                    var delQuery = App.SupabaseClient.From<CosmosObservationRecord>()
+                        .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, id);
+                    if (!string.IsNullOrEmpty(uid))
+                        delQuery = delQuery.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid);
+                    await delQuery.Delete().ConfigureAwait(false);
                 }
                 catch { }
             }
@@ -717,10 +740,23 @@ namespace Daily_WinUI.Services.Cosmos
         {
             try
             {
+                var sessionUid = App.SupabaseClient?.Auth?.CurrentSession?.User?.Id;
+                if (!string.IsNullOrWhiteSpace(sessionUid) && sessionUid != "guest")
+                    return sessionUid;
+
                 var settings = App.Current?.Services?.GetService<ISettingsService>();
                 if (settings?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(settings.CurrentUserId) && settings.CurrentUserId != "guest")
                     return settings.CurrentUserId;
-                return App.SupabaseClient?.Auth?.CurrentUser?.Id;
+
+                var auth = App.Current?.Services?.GetService<Daily_WinUI.Services.WinUIAuthService>();
+                if (auth?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(auth.CurrentUserId) && auth.CurrentUserId != "guest")
+                    return auth.CurrentUserId;
+
+                var userUid = App.SupabaseClient?.Auth?.CurrentUser?.Id;
+                if (!string.IsNullOrWhiteSpace(userUid) && userUid != "guest")
+                    return userUid;
+
+                return null;
             }
             catch
             {
