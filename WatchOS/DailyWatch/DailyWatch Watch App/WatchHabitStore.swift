@@ -334,14 +334,15 @@ public class WatchHabitStore: ObservableObject {
         
         let loggedAt = HabitDateParser.toIsoUtcString(targetDate)
         let isHeat = type.lowercased().contains("heat") || type.lowercased().contains("vape")
-        let metadataString = "{\"brand\":\"\(type)\",\"type\":\"\(type)\"}"
+        let canonicalType = isHeat ? "Heated Tobacco" : (type.lowercased().contains("cigarillo") ? "Cigarillo" : (type.lowercased().contains("roll") ? "Rolled" : "Cigarette"))
+        let metadataString = "{\"type\":\"\(canonicalType)\",\"drink\":\"\(canonicalType)\",\"brand\":\"\(canonicalType)\",\"smokeType\":\"\(canonicalType)\"}"
         
         let newLog = HabitLog(
             id: UUID(),
             user_id: WatchSessionManager.shared.currentUserId,
             habit_type: "smokes",
             value: 1.0,
-            unit: "items",
+            unit: "cigs",
             logged_at: loggedAt,
             metadata: metadataString
         )

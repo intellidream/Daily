@@ -32,7 +32,7 @@ public struct WatchSmartLedgerQuickItem: Identifiable, Codable, Equatable {
             let countStr = count.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(count))" : String(format: "%.1f", count)
             return "\(countStr) × \(Int(unitPrice)) Lei"
         }
-        return "Fix / Lunar"
+        return "Fixed / Monthly"
     }
 }
 
@@ -70,10 +70,10 @@ public final class WatchSmartLedgerStore: ObservableObject {
         } else {
             // Baseline top quick-adjust items from golden Smart Ledger
             self.items = [
-                WatchSmartLedgerQuickItem(id: "tigari", name: "Țigări", count: 10, unitPrice: 26.50, isScaled: true, currency: "Lei"),
-                WatchSmartLedgerQuickItem(id: "cora", name: "Cora / Market", count: 1, unitPrice: 150.0, isScaled: true, currency: "Lei"),
-                WatchSmartLedgerQuickItem(id: "car", name: "Benzină / Mașină", count: 500, unitPrice: 1.0, isScaled: false, currency: "Lei"),
-                WatchSmartLedgerQuickItem(id: "vacante", name: "Vacanțe / Relax", count: 1000, unitPrice: 1.0, isScaled: false, currency: "Lei")
+                WatchSmartLedgerQuickItem(id: "tigari", name: "Smokes", count: 10, unitPrice: 26.50, isScaled: true, currency: "Lei"),
+                WatchSmartLedgerQuickItem(id: "cora", name: "Groceries / Market", count: 1, unitPrice: 150.0, isScaled: true, currency: "Lei"),
+                WatchSmartLedgerQuickItem(id: "car", name: "Gas / Car", count: 500, unitPrice: 1.0, isScaled: false, currency: "Lei"),
+                WatchSmartLedgerQuickItem(id: "vacante", name: "Vacation / Relax", count: 1000, unitPrice: 1.0, isScaled: false, currency: "Lei")
             ]
         }
 

@@ -138,9 +138,9 @@ fun HabitLogsScreen(
                 }
             } else {
                 items(logs) { log ->
-                    val isCoffee = log.metadata?.contains("Coffee") == true
-                    val isSmall = log.metadata?.contains("Small Water") == true
-                    val isHeat = log.metadata?.contains("Heated") == true
+                    val isCoffee = log.isCoffeeDrink
+                    val isSmall = log.metadata?.contains("Small", ignoreCase = true) == true
+                    val isHeat = log.isHeatedSmoke
 
                     val emoji = when {
                         isWater && isCoffee -> "☕"
@@ -153,8 +153,8 @@ fun HabitLogsScreen(
                         isWater && isCoffee -> "${log.value.toInt()} ml Coffee"
                         isWater && isSmall -> "${log.value.toInt()} ml Small"
                         isWater -> "${log.value.toInt()} ml Large"
-                        isHeat -> "1 Heat"
-                        else -> "1 Cig"
+                        isHeat -> "${maxOf(1, log.value.toInt())} Heat"
+                        else -> "${maxOf(1, log.value.toInt())} Cig"
                     }
 
                     val timeStr = remember(log.logged_at) {

@@ -47,10 +47,10 @@ struct WatchSmartLedgerCard: View {
                     .foregroundColor(Color(hex: "#34D399"))
             }
 
-            // 2 Metric Chips: Depozite & Sold
+            // 2 Metric Chips: Deposits & Balance
             HStack(spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("DEPOZITE")
+                    Text("DEPOSITS")
                         .font(.system(size: 7, weight: .bold))
                         .foregroundColor(Color(hex: "#10B981"))
                     Text(store.deposits)
@@ -64,7 +64,7 @@ struct WatchSmartLedgerCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("SOLD")
+                    Text("BALANCE")
                         .font(.system(size: 7, weight: .bold))
                         .foregroundColor(Color(hex: "#00E5FF"))
                     Text(store.sold)

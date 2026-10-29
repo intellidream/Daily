@@ -157,7 +157,7 @@ fun SmokesScreen(
             var tHeat = 0
             for (log in cached) {
                 val count = maxOf(1, log.value.toInt())
-                val isHeat = log.metadata?.contains("Heated") == true
+                val isHeat = log.isHeatedSmoke
                 if (isHeat) tHeat += count else tCig += count
             }
             todayCig = tCig
@@ -453,7 +453,7 @@ fun SmokesScreen(
                 items(count = dayLogs.size, key = { dayLogs[it].id }) { index ->
                     val log = dayLogs[index]
                     val count = maxOf(1, log.value.toInt())
-                    val isHeat = log.metadata?.contains("Heated") == true
+                    val isHeat = log.isHeatedSmoke
                     val displayType = if (isHeat) "Heated" else "Cigarette"
 
                     Row(
@@ -585,7 +585,7 @@ fun SmokesScreen(
             onDismiss = { showCustomDialog = false },
             onLog = { type, offsetMinutes ->
                 SoundAndHapticFeedback.playLogAdded(context, view)
-                sessionManager.logSmoke(type, dayOffset)
+                sessionManager.logSmoke(type, dayOffset, offsetMinutes)
                 loadCachedDate(targetDateStr)
                 showCustomDialog = false
             }

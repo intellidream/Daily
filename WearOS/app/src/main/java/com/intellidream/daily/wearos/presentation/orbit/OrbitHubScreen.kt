@@ -61,9 +61,9 @@ fun OrbitHubScreen(
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     val greeting = remember(hour) {
         when {
-            hour < 12 -> "Bună dimineața"
-            hour < 18 -> "Bună ziua"
-            else -> "Bună seara"
+            hour < 12 -> "Good morning"
+            hour < 18 -> "Good afternoon"
+            else -> "Good evening"
         }
     }
 
@@ -155,7 +155,7 @@ fun OrbitHubScreen(
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
-                        text = "Energie stabilă și ritm optim. 5 stream-uri active în TagDoS, hidratare la 45%. Cer senin pe parcursul după-amiezii.",
+                        text = "Steady energy and optimal pace. 5 active streams in TagDoS, hydration at 45%. Clear skies throughout the afternoon.",
                         fontSize = 10.sp,
                         color = Color(0xFFC0CAD8),
                         lineHeight = 13.sp
@@ -179,13 +179,13 @@ fun OrbitHubScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "METEO & ATMOSFERĂ",
+                            text = "WEATHER & ATMOSPHERE",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF38BDF8)
                         )
                         Text(
-                            text = "București",
+                            text = "Bucharest",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF94A3B8)
@@ -221,7 +221,7 @@ fun OrbitHubScreen(
                                 )
                             }
                             Text(
-                                text = "Parțial noros",
+                                text = "Partly cloudy",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFFCBD5E1)
@@ -251,7 +251,7 @@ fun OrbitHubScreen(
                             )
                         }
                         Text(
-                            text = "Umiditate 58%",
+                            text = "Humidity 58%",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF94A3B8)
@@ -277,7 +277,7 @@ fun OrbitHubScreen(
                         .padding(10.dp)
                 ) {
                     Text(
-                        text = "COSMOS & RITM CIRCADIAN",
+                        text = "COSMOS & CIRCADIAN RHYTHM",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFF59E0B)
@@ -355,7 +355,7 @@ fun OrbitHubScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Lună în creștere",
+                                text = "Waxing Gibbous",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White

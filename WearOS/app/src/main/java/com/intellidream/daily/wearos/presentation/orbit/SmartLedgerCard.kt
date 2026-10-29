@@ -53,7 +53,7 @@ data class WearLedgerQuickItem(
         return if (isScaled) {
             val countStr = if (count % 1 == 0.0) "${count.toInt()}" else String.format("%.1f", count)
             "$countStr × ${unitPrice.toInt()} Lei"
-        } else "Fix / Lunar"
+        } else "Fixed / Monthly"
     }
 }
 
@@ -135,7 +135,7 @@ fun SmartLedgerCard(
                     .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
                 Column {
-                    Text(text = "DEPOZITE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                    Text(text = "DEPOSITS", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
                     Text(text = deposits, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White)
                 }
             }
@@ -148,7 +148,7 @@ fun SmartLedgerCard(
                     .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
                 Column {
-                    Text(text = "SOLD", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E5FF))
+                    Text(text = "BALANCE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E5FF))
                     Text(text = sold, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White)
                 }
             }
@@ -165,9 +165,9 @@ fun SmartLedgerCard(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Item 1: Tigari
+        // Item 1: Smokes
         QuickItemRow(
-            item = WearLedgerQuickItem("tigari", "Țigări", tigariCount, 26.50, true),
+            item = WearLedgerQuickItem("tigari", "Smokes", tigariCount, 26.50, true),
             onMinus = {
                 tigariCount = maxOf(0.0, tigariCount - 1.0)
                 prefs.edit().putFloat("ledger_tigari_count", tigariCount.toFloat()).apply()
@@ -180,9 +180,9 @@ fun SmartLedgerCard(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Item 2: Cora
+        // Item 2: Groceries
         QuickItemRow(
-            item = WearLedgerQuickItem("cora", "Cora / Market", coraCount, 150.0, true),
+            item = WearLedgerQuickItem("cora", "Groceries / Market", coraCount, 150.0, true),
             onMinus = {
                 coraCount = maxOf(0.0, coraCount - 1.0)
                 prefs.edit().putFloat("ledger_cora_count", coraCount.toFloat()).apply()
@@ -195,9 +195,9 @@ fun SmartLedgerCard(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Item 3: Car
+        // Item 3: Gas / Car
         QuickItemRow(
-            item = WearLedgerQuickItem("car", "Benzină / Mașină", carAmount, 1.0, false),
+            item = WearLedgerQuickItem("car", "Gas / Car", carAmount, 1.0, false),
             onMinus = {
                 carAmount = maxOf(0.0, carAmount - 50.0)
                 prefs.edit().putFloat("ledger_car_amount", carAmount.toFloat()).apply()

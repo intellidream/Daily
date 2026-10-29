@@ -348,7 +348,7 @@ class WatchSessionManager private constructor(private val context: Context) {
     }
 
     fun logWater(amount: Int, type: String, dayOffset: Int = 0): HabitLog {
-        val isCoffee = type.contains("Coffee")
+        val isCoffee = type.contains("Coffee", ignoreCase = true) || type.contains("Espresso", ignoreCase = true)
         val targetCal = Calendar.getInstance()
         if (dayOffset != 0) {
             targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
@@ -359,7 +359,10 @@ class WatchSessionManager private constructor(private val context: Context) {
         }
         val currentDateStr = localDateFmt.format(targetCal.time)
         val loggedAtStr = isoFmt.format(targetCal.time)
-        val metadata = buildJsonObject { put("drink", type) }.toString()
+        val metadata = buildJsonObject {
+            put("drink", type)
+            put("type", type)
+        }.toString()
 
         val newLog = HabitLog(
             user_id = _currentUserId.value,
@@ -375,8 +378,8 @@ class WatchSessionManager private constructor(private val context: Context) {
         setBubblesLogs(currentDateStr, updated)
 
         if (dayOffset == 0) {
-            val totalWater = updated.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
-            val totalCoffee = updated.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
+            val totalWater = updated.filter { !it.isCoffeeDrink }.sumOf { it.value.toInt() }
+            val totalCoffee = updated.filter { it.isCoffeeDrink }.sumOf { it.value.toInt() }
             persistWaterTotal(totalWater + totalCoffee)
             updateBubblesWeekToday(isCoffee = isCoffee, delta = amount.toDouble())
         }
@@ -391,11 +394,24 @@ class WatchSessionManager private constructor(private val context: Context) {
         return newLog
     }
 
-    fun logSmoke(type: String, dayOffset: Int = 0): HabitLog {
-        val isHeat = type.contains("Heated")
+    fun logSmoke(type: String, dayOffset: Int = 0, offsetMinutes: Int = 0): HabitLog {
+        val isHeat = type.contains("Heated", ignoreCase = true) || type.contains("Heat", ignoreCase = true) || type.contains("Vape", ignoreCase = true)
+        val canonicalType = if (isHeat) {
+            "Heated Tobacco"
+        } else if (type.contains("Cigarillo", ignoreCase = true)) {
+            "Cigarillo"
+        } else if (type.contains("Roll", ignoreCase = true)) {
+            "Rolled"
+        } else {
+            "Cigarette"
+        }
+
         val targetCal = Calendar.getInstance()
         if (dayOffset != 0) {
             targetCal.add(Calendar.DAY_OF_YEAR, dayOffset)
+        }
+        if (offsetMinutes != 0) {
+            targetCal.add(Calendar.MINUTE, -offsetMinutes)
         }
         val localDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
@@ -403,13 +419,18 @@ class WatchSessionManager private constructor(private val context: Context) {
         }
         val currentDateStr = localDateFmt.format(targetCal.time)
         val loggedAtStr = isoFmt.format(targetCal.time)
-        val metadata = buildJsonObject { put("brand", type) }.toString()
+        val metadata = buildJsonObject {
+            put("type", canonicalType)
+            put("drink", canonicalType)
+            put("brand", canonicalType)
+            put("smokeType", canonicalType)
+        }.toString()
 
         val newLog = HabitLog(
             user_id = _currentUserId.value,
             habit_type = "smokes",
             value = 1.0,
-            unit = "count",
+            unit = "cigs",
             logged_at = loggedAtStr,
             metadata = metadata
         )
@@ -419,8 +440,8 @@ class WatchSessionManager private constructor(private val context: Context) {
         setSmokesLogs(currentDateStr, updated)
 
         if (dayOffset == 0) {
-            val totalCig = updated.filter { it.metadata?.contains("Heated") != true }.sumOf { maxOf(1, it.value.toInt()) }
-            val totalHeat = updated.filter { it.metadata?.contains("Heated") == true }.sumOf { maxOf(1, it.value.toInt()) }
+            val totalCig = updated.filter { !it.isHeatedSmoke }.sumOf { maxOf(1, it.value.toInt()) }
+            val totalHeat = updated.filter { it.isHeatedSmoke }.sumOf { maxOf(1, it.value.toInt()) }
             persistSmokesTotal(totalCig + totalHeat)
             updateSmokesWeekToday(isHeated = isHeat, delta = 1.0)
             prefs.edit().putLong(KEY_LAST_SMOKE_TIMESTAMP, targetCal.timeInMillis).apply()
@@ -514,27 +535,27 @@ class WatchSessionManager private constructor(private val context: Context) {
             ?: localDateFmt.format(Date())
 
         if (isWater) {
-            val isCoffee = log.metadata?.contains("Coffee") == true
+            val isCoffee = log.isCoffeeDrink
             val existing = bubblesDayCache[dateStr] ?: emptyList()
             val updated = existing.filter { it.id != log.id }
             setBubblesLogs(dateStr, updated)
 
             if (dayOffset == 0) {
-                val totalWater = updated.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
-                val totalCoffee = updated.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
+                val totalWater = updated.filter { !it.isCoffeeDrink }.sumOf { it.value.toInt() }
+                val totalCoffee = updated.filter { it.isCoffeeDrink }.sumOf { it.value.toInt() }
                 persistWaterTotal(totalWater + totalCoffee)
                 updateBubblesWeekToday(isCoffee = isCoffee, delta = -log.value)
             }
         } else {
-            val isHeat = log.metadata?.contains("Heated") == true
+            val isHeat = log.isHeatedSmoke
             val count = maxOf(1.0, log.value)
             val existing = smokesDayCache[dateStr] ?: emptyList()
             val updated = existing.filter { it.id != log.id }
             setSmokesLogs(dateStr, updated)
 
             if (dayOffset == 0) {
-                val totalCig = updated.filter { it.metadata?.contains("Heated") != true }.sumOf { maxOf(1, it.value.toInt()) }
-                val totalHeat = updated.filter { it.metadata?.contains("Heated") == true }.sumOf { maxOf(1, it.value.toInt()) }
+                val totalCig = updated.filter { !it.isHeatedSmoke }.sumOf { maxOf(1, it.value.toInt()) }
+                val totalHeat = updated.filter { it.isHeatedSmoke }.sumOf { maxOf(1, it.value.toInt()) }
                 persistSmokesTotal(totalCig + totalHeat)
                 updateSmokesWeekToday(isHeated = isHeat, delta = -count)
             }
@@ -666,7 +687,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                     var tW = 0
                     var tC = 0
                     for (log in todayWaterLogs) {
-                        if (log.metadata?.contains("Coffee") == true) tC += log.value.toInt() else tW += log.value.toInt()
+                        if (log.isCoffeeDrink) tC += log.value.toInt() else tW += log.value.toInt()
                     }
                     persistWaterTotal(tW + tC)
 
@@ -682,7 +703,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                             var w = 0.0
                             var c = 0.0
                             for (log in dayLogsForDate) {
-                                val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
+                                val isCoffee = log.isCoffeeDrink
                                 if (isCoffee) c += log.value else w += log.value
                             }
                             buckets.add(WaterDayBucket(dStr, lbl, dStr == todayDateStr, water = w, coffee = c))
@@ -708,7 +729,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                     var tHeat = 0
                     for (log in todaySmokesLogs) {
                         val count = maxOf(1, log.value.toInt())
-                        if (log.metadata?.contains("Heated") == true) tHeat += count else tCig += count
+                        if (log.isHeatedSmoke) tHeat += count else tCig += count
                     }
                     persistSmokesTotal(tCig + tHeat)
 
@@ -724,7 +745,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                             var cig = 0.0
                             var heat = 0.0
                             for (log in dayLogsForDate) {
-                                val isHeated = log.metadata?.contains("Heated", ignoreCase = true) == true
+                                val isHeated = log.isHeatedSmoke
                                 val count = maxOf(1.0, log.value)
                                 if (isHeated) heat += count else cig += count
                             }
@@ -793,7 +814,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                         var w = 0.0
                         var c = 0.0
                         for (log in dayLogsForDate) {
-                            val isCoffee = log.metadata?.contains("Coffee", ignoreCase = true) == true
+                            val isCoffee = log.isCoffeeDrink
                             if (isCoffee) c += log.value else w += log.value
                         }
                         buckets.add(WaterDayBucket(dStr, lbl, dStr == todayDateStr, water = w, coffee = c))
@@ -836,7 +857,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                         var cig = 0.0
                         var heat = 0.0
                         for (log in dayLogsForDate) {
-                            val isHeated = log.metadata?.contains("Heated", ignoreCase = true) == true
+                            val isHeated = log.isHeatedSmoke
                             val count = maxOf(1.0, log.value)
                             if (isHeated) heat += count else cig += count
                         }

@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import java.util.Locale
 import java.util.UUID
 
 object FlexibleMetadataSerializer : KSerializer<String?> {
@@ -70,4 +71,22 @@ data class HabitLog(
     @Serializable(with = FlexibleMetadataSerializer::class)
     val metadata: String? = null,
     val is_deleted: Boolean = false
-)
+) {
+    val isHeatedSmoke: Boolean
+        get() {
+            val meta = metadata?.lowercase(Locale.ROOT) ?: return false
+            return meta.contains("heat") || meta.contains("vape") || meta.contains("iqos") || meta.contains("glo") || meta.contains("ploom")
+        }
+
+    val isCoffeeDrink: Boolean
+        get() {
+            val meta = metadata?.lowercase(Locale.ROOT) ?: return false
+            return meta.contains("coffee") || meta.contains("espresso") || meta.contains("cappuccino") || meta.contains("latte")
+        }
+
+    val isTeaDrink: Boolean
+        get() {
+            val meta = metadata?.lowercase(Locale.ROOT) ?: return false
+            return meta.contains("tea") || meta.contains("matcha") || meta.contains("ceai")
+        }
+}

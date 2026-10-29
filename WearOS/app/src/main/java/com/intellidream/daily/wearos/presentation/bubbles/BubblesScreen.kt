@@ -146,7 +146,7 @@ fun BubblesScreen(
             var tWater = 0
             var tCoffee = 0
             for (log in cached) {
-                if (log.metadata?.contains("Coffee") == true) tCoffee += log.value.toInt() else tWater += log.value.toInt()
+                if (log.isCoffeeDrink) tCoffee += log.value.toInt() else tWater += log.value.toInt()
             }
             todayWater = tWater
             todayCoffee = tCoffee
@@ -458,8 +458,8 @@ fun BubblesScreen(
 
                 items(count = dayLogs.size, key = { dayLogs[it].id }) { index ->
                     val log = dayLogs[index]
-                    val isCoffee = log.metadata?.contains("Coffee") == true
-                    val isSmall = log.metadata?.contains("Small") == true
+                    val isCoffee = log.isCoffeeDrink
+                    val isSmall = log.metadata?.contains("Small", ignoreCase = true) == true
                     val displayType = if (isCoffee) "Coffee" else if (isSmall) "Small" else "Large"
 
                     Row(

@@ -6,11 +6,11 @@ struct WatchOrbitHubView: View {
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         if hour < 12 {
-            return "Bună dimineața"
+            return "Good morning"
         } else if hour < 18 {
-            return "Bună ziua"
+            return "Good afternoon"
         } else {
-            return "Bună seara"
+            return "Good evening"
         }
     }
 
@@ -18,7 +18,7 @@ struct WatchOrbitHubView: View {
     private var currentTemp: Int = 19
     private var highTemp: Int = 22
     private var lowTemp: Int = 13
-    private var conditionText: String = "Parțial noros"
+    private var conditionText: String = "Partly cloudy"
     private var popPercent: Int = 12
     private var humidity: Int = 58
     private var uvIndex: Int = 3
@@ -26,7 +26,7 @@ struct WatchOrbitHubView: View {
     // Cosmos state
     private var sunriseTime: String = "07:14"
     private var sunsetTime: String = "18:24"
-    private var moonPhaseName: String = "Lună în creștere"
+    private var moonPhaseName: String = "Waxing Gibbous"
     private var moonIllumination: Int = 78
 
     // 6 Macro Pillars
@@ -79,7 +79,7 @@ struct WatchOrbitHubView: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
 
-                    Text("Energie stabilă și ritm optim. 5 stream-uri active în TagDoS, hidratare la 45%. Cer senin pe parcursul după-amiezii.")
+                    Text("Steady energy and optimal pace. 5 active streams in TagDoS, hydration at 45%. Clear skies throughout the afternoon.")
                         .font(.system(size: 10))
                         .foregroundColor(.white.opacity(0.75))
                         .lineSpacing(2)
@@ -97,12 +97,12 @@ struct WatchOrbitHubView: View {
                 // 2. Hyper-Local Weather Card
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("METEO & ATMOSFERĂ")
+                        Text("WEATHER & ATMOSPHERE")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundColor(Color(hex: "#38BDF8"))
                             .tracking(0.5)
                         Spacer()
-                        Text("București")
+                        Text("Bucharest")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.6))
                     }
@@ -170,7 +170,7 @@ struct WatchOrbitHubView: View {
                 // 3. Cosmos: Solar & Lunar Arc
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("COSMOS & RITM CIRCADIAN")
+                        Text("COSMOS & CIRCADIAN RHYTHM")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundColor(Color(hex: "#F59E0B"))
                             .tracking(0.5)
