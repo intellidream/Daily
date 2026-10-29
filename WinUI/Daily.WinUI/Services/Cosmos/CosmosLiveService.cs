@@ -508,7 +508,7 @@ namespace Daily_WinUI.Services.Cosmos
             var local = new List<CosmosBookmarkRecord>();
             if (File.Exists(BookmarksCachePath))
             {
-                try { local = JsonSerializer.Deserialize<List<CosmosBookmarkRecord>>(File.ReadAllText(BookmarksCachePath), _jsonOpts) ?? new(); }
+                try { local = Newtonsoft.Json.JsonConvert.DeserializeObject<List<CosmosBookmarkRecord>>(File.ReadAllText(BookmarksCachePath)) ?? new(); }
                 catch { }
             }
 
@@ -533,7 +533,7 @@ namespace Daily_WinUI.Services.Cosmos
                         .GroupBy(x => x.ObjectId, StringComparer.OrdinalIgnoreCase)
                         .Select(g => g.First())
                         .ToList();
-                    File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(merged, _jsonOpts));
+                    File.WriteAllText(BookmarksCachePath, Newtonsoft.Json.JsonConvert.SerializeObject(merged, Newtonsoft.Json.Formatting.Indented));
                     return merged;
                 }
             }
@@ -559,7 +559,7 @@ namespace Daily_WinUI.Services.Cosmos
             if (existing != null)
             {
                 list.RemoveAll(x => string.Equals(x.ObjectId, existing.ObjectId, StringComparison.OrdinalIgnoreCase));
-                try { File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
+                try { File.WriteAllText(BookmarksCachePath, Newtonsoft.Json.JsonConvert.SerializeObject(list, Newtonsoft.Json.Formatting.Indented)); } catch { }
                 if (App.SupabaseClient != null)
                 {
                     try
@@ -600,7 +600,7 @@ namespace Daily_WinUI.Services.Cosmos
                     UpdatedAt = DateTime.UtcNow
                 };
                 list.Insert(0, created);
-                try { File.WriteAllText(BookmarksCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
+                try { File.WriteAllText(BookmarksCachePath, Newtonsoft.Json.JsonConvert.SerializeObject(list, Newtonsoft.Json.Formatting.Indented)); } catch { }
                 if (App.SupabaseClient != null)
                 {
                     try { await App.SupabaseClient.From<CosmosBookmarkRecord>().Upsert(created).ConfigureAwait(false); }
@@ -671,10 +671,10 @@ namespace Daily_WinUI.Services.Cosmos
             try
             {
                 var local = File.Exists(ObservationsCachePath)
-                    ? JsonSerializer.Deserialize<List<CosmosObservationRecord>>(File.ReadAllText(ObservationsCachePath), _jsonOpts) ?? new()
+                    ? (Newtonsoft.Json.JsonConvert.DeserializeObject<List<CosmosObservationRecord>>(File.ReadAllText(ObservationsCachePath)) ?? new())
                     : new();
                 local.Insert(0, obs);
-                File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(local, _jsonOpts));
+                File.WriteAllText(ObservationsCachePath, Newtonsoft.Json.JsonConvert.SerializeObject(local, Newtonsoft.Json.Formatting.Indented));
             }
             catch { }
 
@@ -692,7 +692,7 @@ namespace Daily_WinUI.Services.Cosmos
             var local = new List<CosmosObservationRecord>();
             if (File.Exists(ObservationsCachePath))
             {
-                try { local = JsonSerializer.Deserialize<List<CosmosObservationRecord>>(File.ReadAllText(ObservationsCachePath), _jsonOpts) ?? new(); }
+                try { local = Newtonsoft.Json.JsonConvert.DeserializeObject<List<CosmosObservationRecord>>(File.ReadAllText(ObservationsCachePath)) ?? new(); }
                 catch { }
             }
 
@@ -717,7 +717,7 @@ namespace Daily_WinUI.Services.Cosmos
                     if (resp?.Models != null && resp.Models.Count > 0)
                     {
                         var merged = resp.Models.Concat(local).DistinctBy(x => x.Id).OrderByDescending(x => x.ObservedAt).ToList();
-                        File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(merged, _jsonOpts));
+                        File.WriteAllText(ObservationsCachePath, Newtonsoft.Json.JsonConvert.SerializeObject(merged, Newtonsoft.Json.Formatting.Indented));
                         return merged;
                     }
                 }
@@ -730,7 +730,7 @@ namespace Daily_WinUI.Services.Cosmos
         {
             var list = await LoadObservationsAsync().ConfigureAwait(false);
             list.RemoveAll(x => x.Id == id);
-            try { File.WriteAllText(ObservationsCachePath, JsonSerializer.Serialize(list, _jsonOpts)); } catch { }
+            try { File.WriteAllText(ObservationsCachePath, Newtonsoft.Json.JsonConvert.SerializeObject(list, Newtonsoft.Json.Formatting.Indented)); } catch { }
 
             string? uid = GetAuthenticatedUserId();
             if (App.SupabaseClient != null)
