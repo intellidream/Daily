@@ -74,8 +74,9 @@ namespace Daily_WinUI.Controls
             {
                 // 1. Weather & Cosmos Ephemeris Telemetry
                 var coords = await _locationService.GetCurrentCoordinatesAsync();
-                double obsLat = coords?.Latitude ?? SettingsService.Load().LastLatitude ?? 44.4323;
-                double obsLon = coords?.Longitude ?? SettingsService.Load().LastLongitude ?? 26.1063;
+                var savedSettings = Daily_WinUI.Services.SettingsService.Load();
+                double obsLat = coords?.Latitude ?? savedSettings.LastLatitude ?? 44.4323;
+                double obsLon = coords?.Longitude ?? savedSettings.LastLongitude ?? 26.1063;
                 int? liveClouds = null;
                 if (coords.HasValue)
                 {
