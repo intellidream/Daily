@@ -67,6 +67,7 @@ export interface NapSession {
 }
 
 export interface SleepRecoveryVerdict {
+  id?: string;
   status: 'Optimal' | 'Great' | 'Fair' | 'Deficit';
   headline: string;
   narrative: string;

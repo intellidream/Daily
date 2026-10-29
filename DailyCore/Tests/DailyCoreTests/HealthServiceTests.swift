@@ -767,6 +767,27 @@ struct HealthServiceTests {
         #expect(decoded.stress?.monkeyMood == .zen)
         #expect(decoded.vitals["hrv_sdnn"]?.value == 72.0)
     }
+
+    @Test func testCanonicalSleepGuidanceDecodingWithoutId() async throws {
+        let jsonWithoutId = """
+        {
+            "status": "Great",
+            "headline": "Strong Recharging with Balanced Sleep Stages",
+            "narrative": "Solid overall rest of 5.3 hours. Autonomic tone and muscular recovery are in healthy parameters.",
+            "readiness_score": 80,
+            "physical_repair_rating": "High",
+            "cognitive_restore_rating": "High",
+            "sleep_continuity_rating": "Continuous"
+        }
+        """.data(using: .utf8)!
+        
+        let decoder = JSONDecoder()
+        let verdict = try decoder.decode(SleepRecoveryVerdict.self, from: jsonWithoutId)
+        #expect(verdict.status == .great)
+        #expect(!verdict.id.isEmpty)
+        #expect(verdict.readinessScore == 80)
+        #expect(verdict.physicalRepairRating == "High")
+    }
 }
 
 

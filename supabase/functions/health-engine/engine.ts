@@ -722,6 +722,7 @@ export function generateSleepGuidance(session: SleepSession | null): SleepGuidan
   const continuity = awakeCount <= 3 ? 'Continuous' : 'Fragmented';
 
   const verdict: SleepRecoveryVerdict = {
+    id: `sleep_verdict_${targetDateStr}`,
     status,
     headline,
     narrative,

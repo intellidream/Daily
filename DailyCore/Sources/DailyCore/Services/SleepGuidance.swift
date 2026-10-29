@@ -78,6 +78,18 @@ public struct SleepRecoveryVerdict: Identifiable, Codable, Sendable, Equatable {
         self.cognitiveRestoreRating = cognitiveRestoreRating
         self.sleepContinuityRating = sleepContinuityRating
     }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.status = try container.decode(SleepRecoveryStatus.self, forKey: .status)
+        self.headline = try container.decode(String.self, forKey: .headline)
+        self.narrative = try container.decode(String.self, forKey: .narrative)
+        self.readinessScore = try container.decode(Int.self, forKey: .readinessScore)
+        self.physicalRepairRating = try container.decode(String.self, forKey: .physicalRepairRating)
+        self.cognitiveRestoreRating = try container.decode(String.self, forKey: .cognitiveRestoreRating)
+        self.sleepContinuityRating = try container.decode(String.self, forKey: .sleepContinuityRating)
+    }
 }
 
 // MARK: - Actionable Sleep Tip Category & Model
@@ -151,6 +163,15 @@ public struct SleepActionableTip: Identifiable, Hashable, Codable, Sendable {
         self.advice = advice
         self.scientificRationale = scientificRationale
     }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.category = try container.decode(SleepTipCategory.self, forKey: .category)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.advice = try container.decode(String.self, forKey: .advice)
+        self.scientificRationale = try container.decode(String.self, forKey: .scientificRationale)
+    }
 }
 
 // MARK: - Sleep AI Context & Follow-Up Prompts
@@ -167,6 +188,12 @@ public struct SleepAIContext: Codable, Sendable, Equatable {
     public init(narrativeSynthesis: String, suggestedPrompts: [String]) {
         self.narrativeSynthesis = narrativeSynthesis
         self.suggestedPrompts = suggestedPrompts
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.narrativeSynthesis = try container.decode(String.self, forKey: .narrativeSynthesis)
+        self.suggestedPrompts = try container.decodeIfPresent([String].self, forKey: .suggestedPrompts) ?? []
     }
 }
 
