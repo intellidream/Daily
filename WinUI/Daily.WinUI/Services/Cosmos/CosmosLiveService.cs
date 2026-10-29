@@ -513,17 +513,19 @@ namespace Daily_WinUI.Services.Cosmos
             }
 
             string? uid = GetAuthenticatedUserId();
+            Daily_WinUI.App.LogDiagnostic($"[CosmosLiveService] LoadBookmarksAsync started. uid='{uid}', SupabaseClient={(App.SupabaseClient != null)}, SessionUser='{App.SupabaseClient?.Auth?.CurrentSession?.User?.Id}'");
             if (App.SupabaseClient == null) return local;
 
             try
             {
-                var query = App.SupabaseClient.From<CosmosBookmarkRecord>();
+                var table = App.SupabaseClient.From<CosmosBookmarkRecord>();
                 var resp = !string.IsNullOrEmpty(uid)
-                    ? await query.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid).Get().ConfigureAwait(false)
+                    ? await table.Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, uid).Get().ConfigureAwait(false)
                     : (App.SupabaseClient.Auth.CurrentSession != null
-                        ? await query.Get().ConfigureAwait(false)
+                        ? await table.Get().ConfigureAwait(false)
                         : null);
 
+                Daily_WinUI.App.LogDiagnostic($"[CosmosLiveService] LoadBookmarksAsync query result count: {resp?.Models?.Count ?? -1}");
                 if (resp?.Models != null && resp.Models.Count > 0)
                 {
                     var remoteList = resp.Models;
@@ -537,7 +539,7 @@ namespace Daily_WinUI.Services.Cosmos
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[CosmosLiveService] LoadBookmarksAsync exception: {ex.Message}");
+                Daily_WinUI.App.LogDiagnostic($"[CosmosLiveService] LoadBookmarksAsync exception: {ex}");
             }
             return local;
         }
