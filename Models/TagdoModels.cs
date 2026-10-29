@@ -122,27 +122,30 @@ namespace Daily.Models
     [Supabase.Postgrest.Attributes.Table("tagdos_streams")]
     public class RemoteTagdoStream : Supabase.Postgrest.Models.BaseModel
     {
-        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        [Supabase.Postgrest.Attributes.PrimaryKey("id", true)]
         [Supabase.Postgrest.Attributes.Column("id")]
         public string Id { get; set; } = string.Empty;
 
         [Supabase.Postgrest.Attributes.Column("user_id")]
         public string? UserId { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("order_index")]
-        public int OrderIndex { get; set; }
+        [Supabase.Postgrest.Attributes.Column("stream_number")]
+        public int StreamNumber { get; set; }
 
         [Supabase.Postgrest.Attributes.Column("title")]
         public string Title { get; set; } = string.Empty;
 
-        [Supabase.Postgrest.Attributes.Column("raw_text")]
-        public string RawText { get; set; } = string.Empty;
+        [Supabase.Postgrest.Attributes.Column("raw_syntax")]
+        public string RawSyntax { get; set; } = string.Empty;
 
-        [Supabase.Postgrest.Attributes.Column("stream_reminder")]
-        public DateTime? StreamReminder { get; set; }
+        [Supabase.Postgrest.Attributes.Column("reminder_time")]
+        public string? ReminderTime { get; set; }
 
         [Supabase.Postgrest.Attributes.Column("active_memos")]
         public string? ActiveMemos { get; set; }
+
+        [Supabase.Postgrest.Attributes.Column("attachments")]
+        public Newtonsoft.Json.Linq.JToken? Attachments { get; set; }
 
         [Supabase.Postgrest.Attributes.Column("updated_at")]
         public DateTime UpdatedAt { get; set; }
@@ -151,7 +154,7 @@ namespace Daily.Models
     [Supabase.Postgrest.Attributes.Table("tagdos_quick_notes")]
     public class RemoteTagdoQuickNote : Supabase.Postgrest.Models.BaseModel
     {
-        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        [Supabase.Postgrest.Attributes.PrimaryKey("id", true)]
         [Supabase.Postgrest.Attributes.Column("id")]
         public string Id { get; set; } = string.Empty;
 
@@ -166,6 +169,9 @@ namespace Daily.Models
 
         [Supabase.Postgrest.Attributes.Column("is_pinned")]
         public bool IsPinned { get; set; }
+
+        [Supabase.Postgrest.Attributes.Column("tags")]
+        public List<string> Tags { get; set; } = new();
 
         [Supabase.Postgrest.Attributes.Column("created_at")]
         public DateTime CreatedAt { get; set; }

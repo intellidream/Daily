@@ -225,6 +225,21 @@ public sealed partial class RssFeedDetailPage : Page
 
     public async Task RefreshFromTitleBarAsync()
     {
+        try
+        {
+            var syncService = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+            if (syncService != null)
+            {
+                await syncService.SyncAsync(Daily.Services.SyncScope.SavedArticles | Daily.Services.SyncScope.RssSubscriptions);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[RssFeedDetailPage] Cloud sync warning: {ex.Message}");
+        }
+
+        UpdateSavedLists();
+
         if (_selectedItem != null)
         {
             await OpenReaderViewAsync(_selectedItem);

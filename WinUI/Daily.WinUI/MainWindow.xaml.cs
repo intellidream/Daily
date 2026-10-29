@@ -48,6 +48,7 @@ public sealed partial class MainWindow : Window
         _ = NavigateAfterHydrationAsync();
 
         AppWindow.Changed += AppWindow_Changed;
+        Activated += MainWindow_Activated;
         Closed += MainWindow_Closed;
         AppWindow.Closing += AppWindow_Closing;
 
@@ -1104,6 +1105,47 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    private DateTime _lastForegroundSyncUtc = DateTime.UtcNow;
+
+    private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == WindowActivationState.Deactivated)
+            return;
+
+        var nowUtc = DateTime.UtcNow;
+        if ((nowUtc - _lastForegroundSyncUtc) < TimeSpan.FromMinutes(3))
+            return;
+
+        _lastForegroundSyncUtc = nowUtc;
+        System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                var guardian = App.Current?.Services?.GetService<Daily.Services.Auth.ISupabaseSessionGuardian>();
+                if (guardian != null)
+                {
+                    await guardian.EnsureValidSessionAsync();
+                }
+
+                var syncService = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+                if (syncService != null)
+                {
+                    await syncService.SyncAsync(Daily.Services.SyncScope.All);
+                }
+
+                var healthService = App.Current?.Services?.GetService<Daily.Services.Health.IHealthService>();
+                if (healthService != null)
+                {
+                    await healthService.PullDeltasAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Foreground activation sync warning: {ex.Message}");
+            }
+        });
+    }
+
     public void ShowAndActivate()
     {
         AppWindow.Show();
@@ -1116,39 +1158,36 @@ public sealed partial class MainWindow : Window
             SetForegroundWindow(hwnd);
         }
 
-        // Run background session refresh and catch-up pulls on restoration
+        _lastForegroundSyncUtc = DateTime.UtcNow;
+
+        // Run background session validation and catch-up sync on restoration
         System.Threading.Tasks.Task.Run(async () =>
         {
             try
             {
-                var supabase = App.Current.Services.GetService<Supabase.Client>();
-                if (supabase != null)
+                var guardian = App.Current.Services.GetService<Daily.Services.Auth.ISupabaseSessionGuardian>();
+                if (guardian != null)
                 {
-                    var auth = supabase.Auth;
-                    if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
-                    {
-                        System.Diagnostics.Debug.WriteLine("[MainWindow] Restore: Session expired. Refreshing session...");
-                        try { await auth.RefreshSession(); } catch { }
-                    }
+                    await guardian.EnsureValidSessionAsync();
                 }
 
-                var habitsService = App.Current.Services.GetService<Daily.Services.IHabitsService>();
-                if (habitsService != null)
+                var syncService = App.Current.Services.GetService<Daily.Services.ISyncService>();
+                if (syncService != null)
                 {
-                    await habitsService.InitializeAsync();
+                    await syncService.SyncAsync(Daily.Services.SyncScope.All);
                 }
 
                 var healthService = App.Current.Services.GetService<Daily.Services.Health.IHealthService>();
                 if (healthService != null)
                 {
-                    await healthService.InitializeAsync();
+                    await healthService.PullDeltasAsync();
                 }
 
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (RootFrame.Content is MainPage mainPage)
                     {
-                        mainPage.TriggerRefresh();
+                        _ = mainPage.RefreshSilentFromBackgroundAsync();
                     }
                 });
             }

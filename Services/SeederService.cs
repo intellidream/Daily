@@ -17,12 +17,18 @@ namespace Daily.Services
         private readonly IDatabaseService _databaseService;
         private readonly ISyncService _syncService;
         private readonly Supabase.Client _supabase;
+        private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
 
-        public SeederService(IDatabaseService databaseService, ISyncService syncService, Supabase.Client supabase)
+        public SeederService(
+            IDatabaseService databaseService,
+            ISyncService syncService,
+            Supabase.Client supabase,
+            Daily.Services.Auth.ISupabaseSessionGuardian? sessionGuardian = null)
         {
             _databaseService = databaseService;
             _syncService = syncService;
             _supabase = supabase;
+            _sessionGuardian = sessionGuardian;
         }
 
         public async Task SeedHistoryAsync(string userId)
@@ -133,15 +139,25 @@ namespace Daily.Services
             try 
             {
                 var auth = _supabase.Auth;
-                if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.EnsureValidSessionAsync();
+                }
+                else if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
                 {
                     try { await auth.RefreshSession(); } catch { }
                 }
 
                 // Check if user already has feeds in Supabase
-                var remoteResponse = await _supabase.From<RssSubscription>()
-                                            .Where(x => x.UserId == Guid.Parse(userId))
-                                            .Get();
+                var remoteResponse = _sessionGuardian != null
+                    ? await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabase.From<RssSubscription>()
+                            .Where(x => x.UserId == Guid.Parse(userId))
+                            .Get(),
+                        "SeederService.SeedRssFeedsAsync")
+                    : await _supabase.From<RssSubscription>()
+                        .Where(x => x.UserId == Guid.Parse(userId))
+                        .Get();
                 var remoteFeeds = remoteResponse.Models;
 
                 if (remoteFeeds.Count == 0)

@@ -13,7 +13,8 @@ namespace Daily.Services
         SavedArticles = 1 << 3,
         RssSubscriptions = 1 << 4,
         CalendarAccounts = 1 << 5,
-        All = Habits | Finances | Preferences | SavedArticles | RssSubscriptions | CalendarAccounts
+        Tagdos = 1 << 6,
+        All = Habits | Finances | Preferences | SavedArticles | RssSubscriptions | CalendarAccounts | Tagdos
     }
 
     [Flags]
@@ -39,6 +40,8 @@ namespace Daily.Services
         event Action? OnPreferencesPulled;
         event Action? OnRssSubscriptionsPulled;
         event Action? OnSavedArticlesPulled;
+        event Action? OnFinancesPulled;
+        event Action? OnTagdosPulled;
         void Log(string message);
     }
 }

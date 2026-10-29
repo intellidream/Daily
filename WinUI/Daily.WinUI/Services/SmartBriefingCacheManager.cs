@@ -24,15 +24,18 @@ namespace Daily_WinUI.Services
         private readonly IDatabaseService _db;
         private readonly Supabase.Client _supabase;
         private readonly SmartBriefingService _briefingService;
+        private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
 
         public SmartBriefingCacheManager(
             IDatabaseService db, 
             Supabase.Client supabase, 
-            SmartBriefingService briefingService)
+            SmartBriefingService briefingService,
+            Daily.Services.Auth.ISupabaseSessionGuardian? sessionGuardian = null)
         {
             _db = db;
             _supabase = supabase;
             _briefingService = briefingService;
+            _sessionGuardian = sessionGuardian;
         }
 
         private DayTimeSlot GetDayTimeSlot(DateTime utcDateTime)
@@ -289,15 +292,25 @@ namespace Daily_WinUI.Services
                 string? userId = auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
 
-                if (auth.CurrentSession != null && auth.CurrentSession.Expired())
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.EnsureValidSessionAsync();
+                }
+                else if (auth.CurrentSession != null && auth.CurrentSession.Expired())
                 {
                     try { await auth.RefreshSession(); } catch { }
                 }
 
                 Debug.WriteLine("[SmartBriefingCacheManager] Fetching remote briefing cache from Supabase...");
-                var response = await _supabase.From<Daily.Models.SmartBriefingRemote>()
-                    .Where(b => b.UserId == userId)
-                    .Get();
+                var response = _sessionGuardian != null
+                    ? await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabase.From<Daily.Models.SmartBriefingRemote>()
+                            .Where(b => b.UserId == userId)
+                            .Get(),
+                        "SmartBriefingCacheManager.PullRemoteCache")
+                    : await _supabase.From<Daily.Models.SmartBriefingRemote>()
+                        .Where(b => b.UserId == userId)
+                        .Get();
 
                 var remote = response.Model;
                 if (remote != null)
@@ -366,7 +379,11 @@ namespace Daily_WinUI.Services
                         try
                         {
                             var auth = _supabase.Auth;
-                            if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
+                            if (_sessionGuardian != null)
+                            {
+                                await _sessionGuardian.EnsureValidSessionAsync();
+                            }
+                            else if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
                             {
                                 try { await auth.RefreshSession(); } catch { }
                             }
@@ -377,7 +394,16 @@ namespace Daily_WinUI.Services
                                 SerializedData = serialized,
                                 Timestamp = now
                             };
-                            await _supabase.From<Daily.Models.SmartBriefingRemote>().Upsert(remoteObj);
+                            if (_sessionGuardian != null)
+                            {
+                                await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                                    () => _supabase.From<Daily.Models.SmartBriefingRemote>().Upsert(remoteObj),
+                                    "SmartBriefingCacheManager.SaveBriefingToCache");
+                            }
+                            else
+                            {
+                                await _supabase.From<Daily.Models.SmartBriefingRemote>().Upsert(remoteObj);
+                            }
                             Debug.WriteLine("[SmartBriefingCacheManager] Briefing cache synced to Supabase successfully.");
                         }
                         catch (Exception ex)

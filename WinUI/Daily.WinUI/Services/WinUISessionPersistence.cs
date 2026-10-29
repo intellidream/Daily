@@ -10,7 +10,15 @@ namespace Daily_WinUI.Services
     public class WinUISessionPersistence : IGotrueSessionPersistence<Session>
     {
         private const string SessionKey = "SupabaseSession";
+        private const string BackupSessionKey = "SupabaseSession_Backup";
         private const string PasswordVaultResource = "Daily_Supabase";
+
+        /// <summary>
+        /// Guards against Supabase.Gotrue internal DestroySession() calls during SetSession()
+        /// or transient offline token refresh failures. Only explicit SignOut or permanent
+        /// refresh-token revocation sets this to true.
+        /// </summary>
+        public static volatile bool AllowDestroySession = false;
 
         private string GetSettingsFile(string key)
         {
@@ -21,7 +29,10 @@ namespace Daily_WinUI.Services
 
         private void SaveSetting(string key, string value)
         {
-            File.WriteAllText(GetSettingsFile(key), value);
+            var targetPath = GetSettingsFile(key);
+            var tempPath = targetPath + ".tmp";
+            File.WriteAllText(tempPath, value);
+            File.Move(tempPath, targetPath, overwrite: true);
         }
 
         private string? LoadSetting(string key)
@@ -51,10 +62,17 @@ namespace Daily_WinUI.Services
         {
             try
             {
+                if (session == null || string.IsNullOrEmpty(session.AccessToken))
+                    return;
+
                 // Serialize the ENTIRE session to JSON to preserve CreatedAt, ProviderToken, and User metadata
                 // CRITICAL: Must use Newtonsoft.Json because Supabase models use [JsonProperty] attributes
                 var json = Newtonsoft.Json.JsonConvert.SerializeObject(session);
                 SaveSetting(SessionKey + "_JSON", json);
+                if (!string.IsNullOrEmpty(session.RefreshToken))
+                {
+                    SaveSetting(BackupSessionKey + "_JSON", json);
+                }
                 
                 System.Diagnostics.Debug.WriteLine("[WinUISessionPersistence] Session saved via JSON serialization.");
             }
@@ -66,7 +84,14 @@ namespace Daily_WinUI.Services
 
         public void DestroySession()
         {
+            if (!AllowDestroySession)
+            {
+                System.Diagnostics.Debug.WriteLine("[WinUISessionPersistence] Ignored implicit SDK DestroySession() to protect persisted RefreshToken.");
+                return;
+            }
+
             DeleteSetting(SessionKey + "_JSON");
+            DeleteSetting(BackupSessionKey + "_JSON");
             
             // Cleanup legacy files just in case
             DeleteSetting("AccessToken");
@@ -85,7 +110,17 @@ namespace Daily_WinUI.Services
                 var json = LoadSetting(SessionKey + "_JSON");
                 if (!string.IsNullOrEmpty(json))
                 {
-                    return Newtonsoft.Json.JsonConvert.DeserializeObject<Session>(json);
+                    var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<Session>(json);
+                    if (parsed != null && !string.IsNullOrEmpty(parsed.AccessToken))
+                        return parsed;
+                }
+
+                var backupJson = LoadSetting(BackupSessionKey + "_JSON");
+                if (!string.IsNullOrEmpty(backupJson))
+                {
+                    var backupParsed = Newtonsoft.Json.JsonConvert.DeserializeObject<Session>(backupJson);
+                    if (backupParsed != null && !string.IsNullOrEmpty(backupParsed.AccessToken))
+                        return backupParsed;
                 }
                 
                 // Fallback for legacy format if JSON doesn't exist

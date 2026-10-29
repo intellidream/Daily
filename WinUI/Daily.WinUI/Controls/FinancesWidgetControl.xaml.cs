@@ -22,6 +22,12 @@ public sealed class FinancesSnapshot
     public decimal NetWorth { get; init; }
     public decimal Cash { get; init; }
     public decimal Investments { get; init; }
+    public string SmartNetWorthDisplay { get; init; } = "0 Lei";
+    public string SmartNetWorthEurDisplay { get; init; } = "~0 €";
+    public string SmartDepositsDisplay { get; init; } = "0 Lei";
+    public string SmartBalanceDisplay { get; init; } = "0 Lei";
+    public string SmartFlowDisplay { get; init; } = "In 0 · Out 0";
+    public List<SmartLedgerItem> TopLedgerOutgoingItems { get; init; } = new();
     public List<MacroIndicator> MacroIndicators { get; init; } = new();
     public List<CountryEconomicData> HeatmapData { get; init; } = new();
     public List<LocalAccount> Accounts { get; init; } = new();
@@ -40,6 +46,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
     private IMacroService _macroService;
     private IHeatmapService _heatmapService;
     private Daily.Services.IRefreshService _refreshService;
+    private Daily.Services.ISyncService? _syncService;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
 
     // View State
@@ -83,7 +90,44 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         set { _hasStocks = value; OnPropertyChanged(); }
     }
 
-    // Money Data
+    // Money Data (Smart Ledger + Legacy)
+    private string _smartNetWorthDisplay = "0 Lei";
+    public string SmartNetWorthDisplay
+    {
+        get => _smartNetWorthDisplay;
+        set { _smartNetWorthDisplay = value; OnPropertyChanged(); }
+    }
+
+    private string _smartNetWorthEurDisplay = "~0 €";
+    public string SmartNetWorthEurDisplay
+    {
+        get => _smartNetWorthEurDisplay;
+        set { _smartNetWorthEurDisplay = value; OnPropertyChanged(); }
+    }
+
+    private string _smartDepositsDisplay = "0 Lei";
+    public string SmartDepositsDisplay
+    {
+        get => _smartDepositsDisplay;
+        set { _smartDepositsDisplay = value; OnPropertyChanged(); }
+    }
+
+    private string _smartBalanceDisplay = "0 Lei";
+    public string SmartBalanceDisplay
+    {
+        get => _smartBalanceDisplay;
+        set { _smartBalanceDisplay = value; OnPropertyChanged(); }
+    }
+
+    private string _smartFlowDisplay = "In 0 · Out 0";
+    public string SmartFlowDisplay
+    {
+        get => _smartFlowDisplay;
+        set { _smartFlowDisplay = value; OnPropertyChanged(); }
+    }
+
+    public ObservableCollection<SmartLedgerItem> TopLedgerOutgoingItems { get; } = new();
+
     private string _netWorthDisplay = "$0";
     public string NetWorthDisplay
     {
@@ -124,6 +168,7 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             _macroService = App.Current.Services.GetRequiredService<IMacroService>();
             _heatmapService = App.Current.Services.GetRequiredService<IHeatmapService>();
             _refreshService = App.Current.Services.GetRequiredService<Daily.Services.IRefreshService>();
+            _syncService = App.Current.Services.GetService<Daily.Services.ISyncService>();
 
             this.Loaded += OnLoaded;
             this.Unloaded += OnUnloaded;
@@ -147,11 +192,20 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
     {
         if (_refreshService != null)
         {
+            _refreshService.RefreshRequested -= OnRefreshRequested;
             _refreshService.RefreshRequested += OnRefreshRequested;
         }
         if (_financesService != null)
         {
+            _financesService.OnQuotesUpdated -= OnQuotesUpdated;
             _financesService.OnQuotesUpdated += OnQuotesUpdated;
+            _financesService.OnSmartLedgerUpdated -= OnSmartLedgerUpdated;
+            _financesService.OnSmartLedgerUpdated += OnSmartLedgerUpdated;
+        }
+        if (_syncService != null)
+        {
+            _syncService.OnFinancesPulled -= OnSmartLedgerUpdated;
+            _syncService.OnFinancesPulled += OnSmartLedgerUpdated;
         }
         var task = LoadDataAsync();
         MainPage.Current?.RegisterLoadingTask(task);
@@ -168,6 +222,11 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         if (_financesService != null)
         {
             _financesService.OnQuotesUpdated -= OnQuotesUpdated;
+            _financesService.OnSmartLedgerUpdated -= OnSmartLedgerUpdated;
+        }
+        if (_syncService != null)
+        {
+            _syncService.OnFinancesPulled -= OnSmartLedgerUpdated;
         }
     }
 
@@ -177,6 +236,58 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         {
             await LoadDataAsync(showLoadingSpinner: false);
         });
+    }
+
+    private void OnSmartLedgerUpdated()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            await RefreshSmartLedgerMetricsOnlyAsync();
+        });
+    }
+
+    private async Task RefreshSmartLedgerMetricsOnlyAsync()
+    {
+        try
+        {
+            var ledger = await _financesService.GetSmartLedgerAsync();
+            if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
+            {
+                ApplyParsedSmartLedger(SmartLedgerParser.Parse(ledger.LedgerText));
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FinancesWidgetControl] RefreshSmartLedgerMetricsOnlyAsync error: {ex.Message}");
+        }
+    }
+
+    private void ApplyParsedSmartLedger(ParsedSmartLedger parsed)
+    {
+        SmartNetWorthDisplay = parsed.FormattedNetWorth;
+        SmartNetWorthEurDisplay = parsed.FormattedNetWorthEUR;
+        SmartDepositsDisplay = parsed.FormattedDeposit;
+        SmartBalanceDisplay = parsed.FormattedBalance;
+        SmartFlowDisplay = $"In {FormatCompactLei(parsed.IncomingTotal)} · Out {FormatCompactLei(parsed.OutgoingTotal)}";
+
+        var outgoingSection = parsed.Sections.FirstOrDefault(s => string.Equals(s.Name, "Outgoing", StringComparison.OrdinalIgnoreCase));
+        var topOutgoing = outgoingSection?.Items
+            .Where(i => !i.IsPureNote && i.CalculatedAmount > 0)
+            .OrderByDescending(i => i.CalculatedAmount)
+            .Take(5)
+            .ToList() ?? new List<SmartLedgerItem>();
+
+        UpdateObservableCollection(TopLedgerOutgoingItems, topOutgoing, AreLedgerItemsEqual);
+    }
+
+    private static string FormatCompactLei(decimal amount)
+    {
+        if (Math.Abs(amount) >= 1000m)
+        {
+            decimal k = amount / 1000m;
+            return k % 1 == 0 ? $"{k:F0}k" : $"{k:0.#}k";
+        }
+        return $"{amount:N0}";
     }
 
     private Task OnRefreshRequested()
@@ -238,7 +349,11 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             var macros = await _macroService.GetMacroIndicatorsAsync();
             var heatmap = await _heatmapService.GetGlobalHeatmapDataAsync();
 
-            // 2. Money Data
+            // 2. Money Data (Smart Ledger + Legacy)
+            var smartLedger = await _financesService.GetSmartLedgerAsync();
+            var parsedLedger = (smartLedger != null && !string.IsNullOrWhiteSpace(smartLedger.LedgerText))
+                ? SmartLedgerParser.Parse(smartLedger.LedgerText)
+                : new ParsedSmartLedger();
             var nw = await _financesService.GetNetWorthAsync();
             var accounts = await _financesService.GetAccountsAsync();
             
@@ -269,6 +384,8 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
             UpdateObservableCollection(HeatmapData, topHeatmap, AreHeatmapsEqual);
             HasHeatmapData = HeatmapData.Any();
 
+            ApplyParsedSmartLedger(parsedLedger);
+
             NetWorthDisplay = nw.ToString("C0");
 
             decimal cash = accounts.Sum(a => a.CurrentBalance);
@@ -290,6 +407,12 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
                 NetWorth = nw,
                 Cash = cash,
                 Investments = investments,
+                SmartNetWorthDisplay = SmartNetWorthDisplay,
+                SmartNetWorthEurDisplay = SmartNetWorthEurDisplay,
+                SmartDepositsDisplay = SmartDepositsDisplay,
+                SmartBalanceDisplay = SmartBalanceDisplay,
+                SmartFlowDisplay = SmartFlowDisplay,
+                TopLedgerOutgoingItems = TopLedgerOutgoingItems.ToList(),
                 MacroIndicators = topMacros,
                 HeatmapData = topHeatmap,
                 Accounts = topAccounts,
@@ -314,6 +437,13 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
 
     private void ApplySnapshot(FinancesSnapshot s)
     {
+        SmartNetWorthDisplay = s.SmartNetWorthDisplay;
+        SmartNetWorthEurDisplay = s.SmartNetWorthEurDisplay;
+        SmartDepositsDisplay = s.SmartDepositsDisplay;
+        SmartBalanceDisplay = s.SmartBalanceDisplay;
+        SmartFlowDisplay = s.SmartFlowDisplay;
+        UpdateObservableCollection(TopLedgerOutgoingItems, s.TopLedgerOutgoingItems, AreLedgerItemsEqual);
+
         NetWorthDisplay = s.NetWorth.ToString("C0");
         CashDisplay = s.Cash.ToString("C0");
         InvestmentsDisplay = s.Investments.ToString("C0");
@@ -328,6 +458,15 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         UpdateObservableCollection(TopStocks, s.TopStocks, AreStockQuotesEqual);
         UpdateObservableCollection(ExtendedStocks, s.ExtendedStocks, AreStockQuotesEqual);
         HasStocks = TopStocks.Any();
+    }
+
+    private static bool AreLedgerItemsEqual(SmartLedgerItem a, SmartLedgerItem b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return false;
+        return a.DisplayName == b.DisplayName &&
+               a.CalculatedAmount == b.CalculatedAmount &&
+               a.Currency == b.Currency;
     }
 
     private static bool AreStockQuotesEqual(StockQuote a, StockQuote b)
@@ -408,6 +547,11 @@ public sealed partial class FinancesWidgetControl : UserControl, INotifyProperty
         if (FinancesFlipView.SelectedIndex == 0) CurrentViewLabel = "World";
         else if (FinancesFlipView.SelectedIndex == 1) CurrentViewLabel = "Stocks";
         else if (FinancesFlipView.SelectedIndex == 2) CurrentViewLabel = "Money";
+
+        if (_financesService != null)
+        {
+            _financesService.CurrentViewType = CurrentViewLabel;
+        }
     }
 
     private void Prev_Click(object sender, RoutedEventArgs e)

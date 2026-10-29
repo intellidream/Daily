@@ -25,6 +25,7 @@ namespace Daily_WinUI.Views
         public TagdosNotesDetailPage()
         {
             this.InitializeComponent();
+            this.Unloaded += Page_Unloaded;
         }
 
         private void Page_Loaded(object sender, RoutedEventArgs e)
@@ -38,9 +39,22 @@ namespace Daily_WinUI.Views
             _tagdosService = App.Current.Services.GetService<ITagdosService>();
             if (_tagdosService != null)
             {
+                _tagdosService.DataChanged -= TagdosService_DataChanged;
                 _tagdosService.DataChanged += TagdosService_DataChanged;
             }
             _ = LoadDataAsync();
+            if (_tagdosService != null)
+            {
+                _ = _tagdosService.SyncWithRemoteAsync();
+            }
+        }
+
+        private void Page_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_tagdosService != null)
+            {
+                _tagdosService.DataChanged -= TagdosService_DataChanged;
+            }
         }
 
         private void TagdosService_DataChanged(object? sender, EventArgs e)

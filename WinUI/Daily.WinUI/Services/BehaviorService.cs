@@ -22,11 +22,16 @@ namespace Daily_WinUI.Services
     {
         private readonly IDatabaseService _db;
         private readonly Supabase.Client _supabase;
+        private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
 
-        public BehaviorService(IDatabaseService db, Supabase.Client supabase)
+        public BehaviorService(
+            IDatabaseService db,
+            Supabase.Client supabase,
+            Daily.Services.Auth.ISupabaseSessionGuardian? sessionGuardian = null)
         {
             _db = db;
             _supabase = supabase;
+            _sessionGuardian = sessionGuardian;
         }
 
         public async Task TrackEventAsync(string feature, string actionType, string metadataJson)
@@ -85,7 +90,11 @@ namespace Daily_WinUI.Services
                 string? userId = auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
 
-                if (auth.CurrentSession != null && auth.CurrentSession.Expired())
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.EnsureValidSessionAsync();
+                }
+                else if (auth.CurrentSession != null && auth.CurrentSession.Expired())
                 {
                     try { await auth.RefreshSession(); } catch { }
                 }
@@ -111,7 +120,16 @@ namespace Daily_WinUI.Services
                 }).ToList();
 
                 // Batch Upsert to Supabase
-                await _supabase.From<SmartBehaviorEventRemote>().Upsert(remoteList);
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabase.From<SmartBehaviorEventRemote>().Upsert(remoteList),
+                        "BehaviorService.SyncEventsAsync");
+                }
+                else
+                {
+                    await _supabase.From<SmartBehaviorEventRemote>().Upsert(remoteList);
+                }
 
                 // Mark as synced locally
                 foreach (var ev in unsynced)
@@ -139,7 +157,11 @@ namespace Daily_WinUI.Services
                 string? userId = auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
 
-                if (auth.CurrentSession != null && auth.CurrentSession.Expired())
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.EnsureValidSessionAsync();
+                }
+                else if (auth.CurrentSession != null && auth.CurrentSession.Expired())
                 {
                     try { await auth.RefreshSession(); } catch { }
                 }
@@ -167,9 +189,15 @@ namespace Daily_WinUI.Services
                 }
 
                 // Fetch remote events since our cutoff
-                var response = await _supabase.From<SmartBehaviorEventRemote>()
-                    .Where(e => e.UserId == userId && e.Timestamp > pullCutoff)
-                    .Get();
+                var response = _sessionGuardian != null
+                    ? await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabase.From<SmartBehaviorEventRemote>()
+                            .Where(e => e.UserId == userId && e.Timestamp > pullCutoff)
+                            .Get(),
+                        "BehaviorService.PullEventsAsync")
+                    : await _supabase.From<SmartBehaviorEventRemote>()
+                        .Where(e => e.UserId == userId && e.Timestamp > pullCutoff)
+                        .Get();
 
                 var remoteEvents = response.Models;
                 if (remoteEvents != null && remoteEvents.Count > 0)

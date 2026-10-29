@@ -1,10 +1,15 @@
 using Daily.Configuration;
 using Daily.Models.Finances;
 using Daily.Services;
+using Daily.Services.Auth;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using Supabase;
+using Supabase.Gotrue;
+using Supabase.Gotrue.Interfaces;
 using Supabase.Postgrest;
+using Supabase.Realtime;
 
 namespace Daily.Services.Finances
 {
@@ -14,9 +19,16 @@ namespace Daily.Services.Finances
         private readonly FinnhubService _finnhubService;
         private readonly Supabase.Client _supabaseClient;
         private readonly IDatabaseService _databaseService;
+        private readonly ISupabaseSessionGuardian? _sessionGuardian;
+        private readonly SemaphoreSlim _ledgerSyncLock = new(1, 1);
+
+        private RealtimeChannel? _ledgerRealtimeChannel;
+        private string? _realtimeUserId;
+        private readonly IGotrueClient<User, Session>.AuthEventHandler? _authListener;
 
         public event Action OnViewTypeChanged;
         public event Action? OnQuotesUpdated;
+        public event Action? OnSmartLedgerUpdated;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _fetchingSymbols = new();
         private string _currentViewType = "World";
         public string CurrentViewType
@@ -32,15 +44,53 @@ namespace Daily.Services.Finances
             }
         }
 
-        public FinancesService(YahooFinanceService yahooService, FinnhubService finnhubService, Supabase.Client supabaseClient, IDatabaseService databaseService)
+        public FinancesService(
+            YahooFinanceService yahooService,
+            FinnhubService finnhubService,
+            Supabase.Client supabaseClient,
+            IDatabaseService databaseService,
+            ISupabaseSessionGuardian? sessionGuardian = null)
         {
             _yahooService = yahooService;
             _finnhubService = finnhubService;
             _supabaseClient = supabaseClient;
             _databaseService = databaseService;
+            _sessionGuardian = sessionGuardian;
+
+            _authListener = OnAuthStateChanged;
+            _supabaseClient.Auth.AddStateChangedListener(_authListener);
         }
 
-        public async Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols)
+        private void OnAuthStateChanged(IGotrueClient<User, Session> sender, Supabase.Gotrue.Constants.AuthState state)
+        {
+            if (state == Supabase.Gotrue.Constants.AuthState.SignedIn ||
+                state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+            {
+                _ = Task.Run(async () =>
+                {
+                    await SetupSmartLedgerRealtimeAsync(forceRecreate: state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed);
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
+                    {
+                        await GetSmartLedgerAsync(forceRefresh: true);
+                    }
+                });
+            }
+            else if (state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+            {
+                _realtimeUserId = null;
+            }
+        }
+
+        private Task<T> ExecuteWithAuthAsync<T>(Func<Task<T>> operation, string operationName)
+        {
+            if (_sessionGuardian != null)
+            {
+                return _sessionGuardian.ExecuteWithAuthRetryAsync(operation, operationName);
+            }
+            return operation();
+        }
+
+        public async Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols, bool forceRefresh = false)
         {
             var results = new List<StockQuote>();
             var symbolsToFetch = new List<string>();
@@ -76,8 +126,8 @@ namespace Daily.Services.Finances
                 if (cached != null)
                 {
                     cached.Type = MapMarketType(cached.Type, symbol);
-                    // Check Freshness (1 hour)
-                    if (cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddHours(-1))
+                    // Check Freshness (1 hour) unless caller explicitly requested a forced refresh
+                    if (!forceRefresh && cached.LastUpdatedAt.HasValue && cached.LastUpdatedAt.Value > DateTime.UtcNow.AddHours(-1))
                     {
                         isFresh = true;
                     }
@@ -356,9 +406,14 @@ namespace Daily.Services.Finances
             return mapped;
         }
 
-        public async Task<List<string>> GetWatchlistSymbolsAsync()
+        public async Task<List<string>> GetWatchlistSymbolsAsync(bool forceRefresh = false)
         {
             await _databaseService.InitializeAsync();
+
+            if (_sessionGuardian != null)
+            {
+                await _sessionGuardian.EnsureValidSessionAsync();
+            }
 
             var userId = _supabaseClient.Auth.CurrentUser?.Id;
             if (string.IsNullOrEmpty(userId))
@@ -374,7 +429,7 @@ namespace Daily.Services.Finances
                     .OrderBy(w => w.DisplayOrder)
                     .ToListAsync();
 
-                if (cached.Any())
+                if (!forceRefresh && cached.Any())
                 {
                     var oldest = cached.Min(w => w.LastUpdatedAt ?? DateTime.MinValue);
                     if (oldest > DateTime.UtcNow.AddHours(-1))
@@ -384,11 +439,11 @@ namespace Daily.Services.Finances
                     }
                 }
 
-                var response = await _supabaseClient
+                var response = await ExecuteWithAuthAsync(() => _supabaseClient
                     .From<Daily.Models.Finances.UserWatchlist>()
                     .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userId)
                     .Order("display_order", Supabase.Postgrest.Constants.Ordering.Ascending)
-                    .Get();
+                    .Get(), "Finances.GetWatchlistSymbols");
 
                 if (response.Models != null && response.Models.Any())
                 {
@@ -565,98 +620,357 @@ namespace Daily.Services.Finances
         // SMART LEDGER
         // ==========================================
 
-        public async Task<LocalSmartLedger?> GetSmartLedgerAsync()
+        public async Task<LocalSmartLedger?> GetSmartLedgerAsync(bool forceRefresh = false)
         {
+            await _databaseService.InitializeAsync();
+
+            if (_sessionGuardian != null)
+            {
+                await _sessionGuardian.EnsureValidSessionAsync();
+            }
+
             var user = _supabaseClient.Auth.CurrentUser;
-            if (user == null) return null;
+            if (user == null)
+            {
+                var guestRow = await _databaseService.Connection.Table<LocalSmartLedger>()
+                    .Where(l => l.UserId == "local_user")
+                    .OrderByDescending(l => l.UpdatedAt)
+                    .FirstOrDefaultAsync();
 
-            var local = await _databaseService.Connection.Table<LocalSmartLedger>()
-                .Where(l => l.UserId == user.Id)
-                .FirstOrDefaultAsync();
+                if (guestRow == null || string.IsNullOrWhiteSpace(guestRow.LedgerText))
+                {
+                    guestRow = new LocalSmartLedger
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        UserId = "local_user",
+                        LedgerText = SmartLedgerParser.DefaultLedgerText,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        SyncedAt = null
+                    };
+                    await _databaseService.Connection.InsertOrReplaceAsync(guestRow);
+                }
+                return guestRow;
+            }
 
-            // Try pulling latest from Supabase cloud
+            await _ledgerSyncLock.WaitAsync();
+            bool notifyChanged = false;
+            LocalSmartLedger? resultRow = null;
+
             try
             {
-                if (Guid.TryParse(user.Id, out var userGuid))
-                {
-                    var remoteRes = await _supabaseClient.From<SmartLedger>()
-                        .Where(x => x.UserId == userGuid)
-                        .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
-                        .Limit(1)
-                        .Get();
+                var allLocal = await _databaseService.Connection.Table<LocalSmartLedger>()
+                    .Where(l => l.UserId == user.Id)
+                    .OrderByDescending(l => l.UpdatedAt)
+                    .ToListAsync();
 
-                    var remote = remoteRes.Models.FirstOrDefault();
-                    if (remote != null)
+                var local = allLocal.FirstOrDefault();
+                foreach (var duplicate in allLocal.Skip(1))
+                {
+                    await _databaseService.Connection.DeleteAsync(duplicate);
+                }
+
+                // Pull & reconcile with Supabase cloud (matches DailyCore SmartLedgerStore.syncWithSupabase)
+                try
+                {
+                    if (Guid.TryParse(user.Id, out var userGuid))
                     {
-                        if (local == null || remote.UpdatedAt > local.UpdatedAt)
+                        var remoteRes = await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>()
+                            .Where(x => x.UserId == userGuid)
+                            .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                            .Limit(1)
+                            .Get(), "Finances.GetSmartLedger");
+
+                        var remote = remoteRes.Models.FirstOrDefault();
+                        if (remote != null)
                         {
-                            var localUpdated = new LocalSmartLedger
+                            var remoteTime = remote.UpdatedAt.ToUniversalTime();
+                            var localTime = local != null ? Mappers.SafeUtc(local.UpdatedAt) : DateTime.MinValue;
+                            bool localDirty = local != null && local.SyncedAt == null;
+
+                            bool shouldAdoptRemote = local == null
+                                || (!localDirty && (remoteTime > localTime || local.LedgerText != remote.LedgerText || !string.Equals(local.Id, remote.Id.ToString(), StringComparison.OrdinalIgnoreCase)))
+                                || (localDirty && remoteTime > localTime);
+
+                            if (shouldAdoptRemote)
                             {
-                                Id = remote.Id.ToString(),
-                                UserId = user.Id,
-                                LedgerText = remote.LedgerText,
-                                CreatedAt = remote.CreatedAt,
-                                UpdatedAt = remote.UpdatedAt,
-                                SyncedAt = DateTime.UtcNow
-                            };
-                            await _databaseService.Connection.InsertOrReplaceAsync(localUpdated);
-                            return localUpdated;
+                                bool textChanged = local == null || local.LedgerText != remote.LedgerText;
+                                if (local != null && !string.Equals(local.Id, remote.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    await _databaseService.Connection.DeleteAsync(local);
+                                }
+
+                                var localUpdated = new LocalSmartLedger
+                                {
+                                    Id = remote.Id.ToString(),
+                                    UserId = user.Id,
+                                    LedgerText = string.IsNullOrWhiteSpace(remote.LedgerText) ? SmartLedgerParser.DefaultLedgerText : remote.LedgerText,
+                                    CreatedAt = Mappers.SafeUtc(remote.CreatedAt),
+                                    UpdatedAt = remoteTime,
+                                    SyncedAt = DateTime.UtcNow
+                                };
+                                await _databaseService.Connection.InsertOrReplaceAsync(localUpdated);
+                                resultRow = localUpdated;
+                                notifyChanged = textChanged;
+                            }
+                            else if (local != null && localDirty)
+                            {
+                                // Local offline edit is newer than cloud -> adopt canonical remote ID and push up!
+                                if (!string.Equals(local.Id, remote.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var oldId = local.Id;
+                                    local.Id = remote.Id.ToString();
+                                    await _databaseService.Connection.DeleteAsync<LocalSmartLedger>(oldId);
+                                }
+
+                                var toPush = new SmartLedger
+                                {
+                                    Id = remote.Id,
+                                    UserId = userGuid,
+                                    LedgerText = local.LedgerText,
+                                    CreatedAt = Mappers.SafeUtc(local.CreatedAt),
+                                    UpdatedAt = localTime
+                                };
+                                await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>().Upsert(toPush), "Finances.PushDirtySmartLedger");
+                                local.SyncedAt = DateTime.UtcNow;
+                                await _databaseService.Connection.InsertOrReplaceAsync(local);
+                                resultRow = local;
+                            }
+                            else
+                            {
+                                resultRow = local;
+                            }
+                        }
+                        else
+                        {
+                            // No remote row exists yet for this user -> seed default if needed and push initial record
+                            if (local == null || string.IsNullOrWhiteSpace(local.LedgerText))
+                            {
+                                var now = DateTime.UtcNow;
+                                local = new LocalSmartLedger
+                                {
+                                    Id = Guid.NewGuid().ToString(),
+                                    UserId = user.Id,
+                                    LedgerText = SmartLedgerParser.DefaultLedgerText,
+                                    CreatedAt = now,
+                                    UpdatedAt = now,
+                                    SyncedAt = null
+                                };
+                                await _databaseService.Connection.InsertOrReplaceAsync(local);
+                                notifyChanged = true;
+                            }
+
+                            if (Guid.TryParse(local.Id, out var newRecordGuid))
+                            {
+                                var initialRemote = new SmartLedger
+                                {
+                                    Id = newRecordGuid,
+                                    UserId = userGuid,
+                                    LedgerText = local.LedgerText,
+                                    CreatedAt = Mappers.SafeUtc(local.CreatedAt),
+                                    UpdatedAt = Mappers.SafeUtc(local.UpdatedAt)
+                                };
+                                await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>().Upsert(initialRemote), "Finances.PushInitialSmartLedger");
+                                local.SyncedAt = DateTime.UtcNow;
+                                await _databaseService.Connection.InsertOrReplaceAsync(local);
+                            }
+
+                            resultRow = local;
                         }
                     }
                 }
+                catch (Exception ex)
+                {
+                    SupabaseSessionGuardian.LogGuardian($"[FinancesService] GetSmartLedgerAsync remote sync warning: {ex.Message}");
+                    resultRow = local;
+                }
+
+                // Offline fallback if still null
+                if (resultRow == null)
+                {
+                    var now = DateTime.UtcNow;
+                    resultRow = new LocalSmartLedger
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        UserId = user.Id,
+                        LedgerText = SmartLedgerParser.DefaultLedgerText,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                        SyncedAt = null
+                    };
+                    await _databaseService.Connection.InsertOrReplaceAsync(resultRow);
+                }
+
+                if (_realtimeUserId != user.Id)
+                {
+                    _ = Task.Run(() => SetupSmartLedgerRealtimeAsync(forceRecreate: false));
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                System.Diagnostics.Debug.WriteLine($"[FinancesService] Remote smart_ledgers pull notice: {ex.Message}");
+                _ledgerSyncLock.Release();
             }
 
-            return local;
+            if (notifyChanged)
+            {
+                OnSmartLedgerUpdated?.Invoke();
+            }
+
+            return resultRow;
         }
 
         public async Task SaveSmartLedgerAsync(string ledgerText)
         {
-            var user = _supabaseClient.Auth.CurrentUser;
-            if (user == null) return;
+            await _databaseService.InitializeAsync();
 
-            var existing = await _databaseService.Connection.Table<LocalSmartLedger>()
-                .Where(l => l.UserId == user.Id)
-                .FirstOrDefaultAsync();
-
-            var now = DateTime.UtcNow;
-            string recordId = existing?.Id ?? Guid.NewGuid().ToString();
-
-            var localRecord = new LocalSmartLedger
+            if (string.IsNullOrWhiteSpace(ledgerText))
             {
-                Id = recordId,
-                UserId = user.Id,
-                LedgerText = ledgerText,
-                CreatedAt = existing?.CreatedAt ?? now,
-                UpdatedAt = now,
-                SyncedAt = null // Mark dirty for sync
-            };
-            await _databaseService.Connection.InsertOrReplaceAsync(localRecord);
+                ledgerText = SmartLedgerParser.DefaultLedgerText;
+            }
+
+            if (_sessionGuardian != null)
+            {
+                await _sessionGuardian.EnsureValidSessionAsync();
+            }
+
+            var user = _supabaseClient.Auth.CurrentUser;
+            if (user == null)
+            {
+                var guestRow = new LocalSmartLedger
+                {
+                    Id = "local_guest_ledger",
+                    UserId = "local_user",
+                    LedgerText = ledgerText,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    SyncedAt = null
+                };
+                await _databaseService.Connection.InsertOrReplaceAsync(guestRow);
+                OnSmartLedgerUpdated?.Invoke();
+                return;
+            }
+
+            await _ledgerSyncLock.WaitAsync();
+            try
+            {
+                var allExisting = await _databaseService.Connection.Table<LocalSmartLedger>()
+                    .Where(l => l.UserId == user.Id)
+                    .OrderByDescending(l => l.UpdatedAt)
+                    .ToListAsync();
+
+                var existing = allExisting.FirstOrDefault();
+                foreach (var duplicate in allExisting.Skip(1))
+                {
+                    await _databaseService.Connection.DeleteAsync(duplicate);
+                }
+
+                var now = DateTime.UtcNow;
+                string recordId = existing?.Id ?? Guid.NewGuid().ToString();
+
+                var localRecord = new LocalSmartLedger
+                {
+                    Id = recordId,
+                    UserId = user.Id,
+                    LedgerText = ledgerText,
+                    CreatedAt = existing != null ? Mappers.SafeUtc(existing.CreatedAt) : now,
+                    UpdatedAt = now,
+                    SyncedAt = null // Mark dirty for sync
+                };
+                await _databaseService.Connection.InsertOrReplaceAsync(localRecord);
+            }
+            finally
+            {
+                _ledgerSyncLock.Release();
+            }
+
+            // Notify local UI & widgets immediately (optimistic local-first)
+            OnSmartLedgerUpdated?.Invoke();
 
             // Immediate push to Supabase
             try
             {
-                if (Guid.TryParse(user.Id, out var userGuid) && Guid.TryParse(recordId, out var recordGuid))
+                await _ledgerSyncLock.WaitAsync();
+                try
                 {
-                    var remote = new SmartLedger
+                    var latestLocal = await _databaseService.Connection.Table<LocalSmartLedger>()
+                        .Where(l => l.UserId == user.Id)
+                        .OrderByDescending(l => l.UpdatedAt)
+                        .FirstOrDefaultAsync();
+
+                    if (latestLocal != null && latestLocal.SyncedAt == null && Guid.TryParse(user.Id, out var userGuid))
                     {
-                        Id = recordGuid,
-                        UserId = userGuid,
-                        LedgerText = ledgerText,
-                        CreatedAt = localRecord.CreatedAt,
-                        UpdatedAt = now
-                    };
-                    await _supabaseClient.From<SmartLedger>().Upsert(remote);
-                    localRecord.SyncedAt = DateTime.UtcNow;
-                    await _databaseService.Connection.UpdateAsync(localRecord);
+                        // Check if a remote record already exists with a canonical UUID
+                        var existingRemoteRes = await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>()
+                            .Where(x => x.UserId == userGuid)
+                            .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                            .Limit(1)
+                            .Get(), "Finances.ResolveCanonicalSmartLedgerId");
+
+                        var existingRemote = existingRemoteRes.Models.FirstOrDefault();
+                        Guid canonicalGuid = existingRemote?.Id ?? (Guid.TryParse(latestLocal.Id, out var parsedG) ? parsedG : Guid.NewGuid());
+
+                        if (!string.Equals(latestLocal.Id, canonicalGuid.ToString(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            var oldId = latestLocal.Id;
+                            latestLocal.Id = canonicalGuid.ToString();
+                            await _databaseService.Connection.DeleteAsync<LocalSmartLedger>(oldId);
+                        }
+
+                        var remote = new SmartLedger
+                        {
+                            Id = canonicalGuid,
+                            UserId = userGuid,
+                            LedgerText = latestLocal.LedgerText,
+                            CreatedAt = Mappers.SafeUtc(latestLocal.CreatedAt),
+                            UpdatedAt = Mappers.SafeUtc(latestLocal.UpdatedAt)
+                        };
+                        await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>().Upsert(remote), "Finances.SaveSmartLedger");
+                        latestLocal.SyncedAt = DateTime.UtcNow;
+                        await _databaseService.Connection.InsertOrReplaceAsync(latestLocal);
+                    }
+                }
+                finally
+                {
+                    _ledgerSyncLock.Release();
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[FinancesService] Remote smart_ledgers push notice: {ex.Message}");
+                SupabaseSessionGuardian.LogGuardian($"[FinancesService] SaveSmartLedgerAsync remote push warning: {ex.Message}");
+            }
+        }
+
+        private async Task SetupSmartLedgerRealtimeAsync(bool forceRecreate)
+        {
+            var userId = _supabaseClient.Auth.CurrentUser?.Id;
+            if (string.IsNullOrEmpty(userId)) return;
+
+            if (!forceRecreate && _realtimeUserId == userId && _ledgerRealtimeChannel != null)
+                return;
+
+            try
+            {
+                if (_ledgerRealtimeChannel != null)
+                {
+                    try { _ledgerRealtimeChannel.Unsubscribe(); } catch { }
+                    _ledgerRealtimeChannel = null;
+                }
+
+                _ledgerRealtimeChannel = await _supabaseClient.From<SmartLedger>()
+                    .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            await GetSmartLedgerAsync(forceRefresh: true);
+                        });
+                    });
+
+                _realtimeUserId = userId;
+                SupabaseSessionGuardian.LogGuardian($"[FinancesService] Subscribed to Realtime for smart_ledgers (user={userId}).");
+            }
+            catch (Exception ex)
+            {
+                SupabaseSessionGuardian.LogGuardian($"[FinancesService] Realtime setup warning: {ex.Message}");
             }
         }
 

@@ -336,8 +336,17 @@ public partial class App : Application
         // Start initialization in background task so UI thread is completely unblocked
         InitializationTask = Task.Run(async () => await InitializeAsync());
 
-        // Listen for Windows network connectivity changes
+        // Listen for Windows network connectivity and power/display wake changes
         Windows.Networking.Connectivity.NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
+        try
+        {
+            Microsoft.Windows.System.Power.PowerManager.SystemSuspendStatusChanged += OnPowerOrDisplayStatusChanged;
+            Microsoft.Windows.System.Power.PowerManager.DisplayStatusChanged += OnPowerOrDisplayStatusChanged;
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic($"PowerManager subscription warning: {ex.Message}");
+        }
 
         _window = new MainWindow();
         _window.Activate();
@@ -360,7 +369,9 @@ public partial class App : Application
     {
         var options = new Supabase.SupabaseOptions
         {
-            AutoRefreshToken = true,
+            // Disabled intentionally: SupabaseSessionGuardian manages deterministic JWT refresh
+            // using real 'exp' claims without Gotrue's buggy Timer/SetSession DestroySession behavior.
+            AutoRefreshToken = false,
             AutoConnectRealtime = true,
             SessionHandler = new Daily_WinUI.Services.WinUISessionPersistence()
         };
@@ -376,18 +387,23 @@ public partial class App : Application
                 if (session != null && !string.IsNullOrEmpty(session.AccessToken))
                 {
                     System.Diagnostics.Debug.WriteLine("[App] Central Auth: Propagating access token to Realtime client.");
+                    new Daily_WinUI.Services.WinUISessionPersistence().SaveSession(session);
                     SupabaseClient.Realtime.SetAuth(session.AccessToken);
                 }
             }
             else if (state == Supabase.Gotrue.Constants.AuthState.SignedOut)
             {
-                System.Diagnostics.Debug.WriteLine("[App] Central Auth: Clearing access token from Realtime client.");
-                SupabaseClient.Realtime.SetAuth(null);
+                if (Daily_WinUI.Services.WinUISessionPersistence.AllowDestroySession)
+                {
+                    System.Diagnostics.Debug.WriteLine("[App] Central Auth: Clearing access token from Realtime client.");
+                    SupabaseClient.Realtime.SetAuth(null);
+                }
             }
         };
         SupabaseClient.Auth.AddStateChangedListener(_centralAuthListener);
 
         services.AddSingleton(SupabaseClient);
+        services.AddSingleton<Daily.Services.Auth.ISupabaseSessionGuardian, Daily.Services.Auth.SupabaseSessionGuardian>();
 
         // Core Services
         services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();
@@ -426,7 +442,8 @@ public partial class App : Application
             new Daily_WinUI.Services.HealthHubService(
                 sp.GetRequiredService<Supabase.Client>(),
                 sp.GetRequiredService<Daily.Services.IDatabaseService>(),
-                sp.GetService<Microsoft.Extensions.Logging.ILogger<Daily_WinUI.Services.HealthHubService>>()
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<Daily_WinUI.Services.HealthHubService>>(),
+                sp.GetService<Daily.Services.Auth.ISupabaseSessionGuardian>()
             )
         );
         services.AddSingleton<Daily.Services.Health.IHealthService>(sp => (Daily.Services.Health.IHealthService)sp.GetRequiredService<Daily_WinUI.Services.IHealthHubService>());
@@ -460,30 +477,19 @@ public partial class App : Application
             System.Diagnostics.Debug.WriteLine($"[App] Supabase initialization warning: {ex.Message}");
         }
 
-        // Manual Hydration
-        if (SupabaseClient.Auth.CurrentSession == null)
+        // Deterministic Session Hydration & Proactive Refresh Guardian
+        var sessionGuardian = Services.GetRequiredService<Daily.Services.Auth.ISupabaseSessionGuardian>();
+        sessionGuardian.OnSystemWakeDetected += () => TriggerWakeCatchUpSync("WallClockWake");
+        try
         {
-            LogDiagnostic("InitializeAsync: Supabase session is null, checking persistence");
-            var persistence = new Daily_WinUI.Services.WinUISessionPersistence();
-            var session = persistence.LoadSession();
-            if (session != null && !string.IsNullOrEmpty(session.AccessToken))
-            {
-                try
-                {
-                    LogDiagnostic("InitializeAsync: Restoring session via SetSession");
-                    await SupabaseClient.Auth.SetSession(session.AccessToken, session.RefreshToken);
-                    LogDiagnostic($"InitializeAsync: Session restored. CurrentUser={SupabaseClient.Auth.CurrentSession?.User?.Email}");
-                }
-                catch (Exception ex)
-                {
-                    LogDiagnostic($"InitializeAsync: SetSession failed: {ex.Message}");
-                }
-            }
+            var hydrated = await sessionGuardian.HydrateOrRefreshOnStartupAsync();
+            LogDiagnostic($"InitializeAsync: SessionGuardian hydrated={hydrated}, User={SupabaseClient.Auth.CurrentSession?.User?.Email}");
         }
-        else
+        catch (Exception ex)
         {
-            LogDiagnostic($"InitializeAsync: CurrentSession already active: {SupabaseClient.Auth.CurrentSession?.User?.Email}");
+            LogDiagnostic($"InitializeAsync: SessionGuardian hydration warning: {ex.Message}");
         }
+        sessionGuardian.StartBackgroundGuardian();
 
         _sessionRestoredTcs.TrySetResult(true);
 
@@ -535,9 +541,22 @@ public partial class App : Application
             var syncService = Services.GetRequiredService<Daily.Services.ISyncService>();
             syncService.StartBackgroundSync();
 
-            // Asynchronously sync calendars on startup
+            // Asynchronously sync TagDoS and calendars on startup
             _ = Task.Run(async () =>
             {
+                try
+                {
+                    var tagdosService = Services.GetService<Daily.Services.ITagdosService>();
+                    if (tagdosService != null)
+                    {
+                        await tagdosService.SyncWithRemoteAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Initial TagDoS sync failed: {ex.Message}");
+                }
+
                 try
                 {
                     var calendarService = Services.GetRequiredService<Daily_WinUI.Services.ICalendarService>();
@@ -766,6 +785,71 @@ public partial class App : Application
         catch { }
     }
 
+    private DateTime _lastWakeSyncUtc = DateTime.MinValue;
+
+    private void OnPowerOrDisplayStatusChanged(object? sender, object e)
+    {
+        try
+        {
+            if (Microsoft.Windows.System.Power.PowerManager.DisplayStatus == Microsoft.Windows.System.Power.DisplayStatus.On)
+            {
+                TriggerWakeCatchUpSync("PowerDisplayResume");
+            }
+        }
+        catch { }
+    }
+
+    internal void TriggerWakeCatchUpSync(string source)
+    {
+        var nowUtc = DateTime.UtcNow;
+        if ((nowUtc - _lastWakeSyncUtc) < TimeSpan.FromSeconds(20))
+            return;
+
+        _lastWakeSyncUtc = nowUtc;
+        System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(2000);
+                var guardian = Services?.GetService<Daily.Services.Auth.ISupabaseSessionGuardian>();
+                if (guardian != null)
+                {
+                    await guardian.EnsureValidSessionAsync();
+                }
+
+                try { await SupabaseClient.Realtime.ConnectAsync(); } catch { }
+
+                var syncService = Services?.GetService<Daily.Services.ISyncService>();
+                if (syncService != null)
+                {
+                    await syncService.SyncAsync(Daily.Services.SyncScope.All);
+                }
+
+                var healthService = Services?.GetService<Daily.Services.Health.IHealthService>();
+                if (healthService != null)
+                {
+                    await healthService.PullDeltasAsync();
+                }
+
+                if (MainWindow != null)
+                {
+                    MainWindow.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (MainWindow.MainFrame?.Content is MainPage mp)
+                        {
+                            _ = mp.RefreshSilentFromBackgroundAsync();
+                        }
+                    });
+                }
+                LogDiagnostic($"Wake catch-up sync ({source}) completed.");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Wake catch-up sync ({source}) failed: {ex.Message}");
+            }
+        });
+    }
+
     private void OnNetworkStatusChanged(object sender)
     {
         try
@@ -774,36 +858,7 @@ public partial class App : Application
             if (profile != null && profile.GetNetworkConnectivityLevel() == Windows.Networking.Connectivity.NetworkConnectivityLevel.InternetAccess)
             {
                 System.Diagnostics.Debug.WriteLine("[App] Windows internet connectivity restored. Connecting Realtime and syncing...");
-                System.Threading.Tasks.Task.Run(async () =>
-                {
-                    try
-                    {
-                        var auth = SupabaseClient.Auth;
-                        if (auth?.CurrentSession != null && auth.CurrentSession.Expired())
-                        {
-                            System.Diagnostics.Debug.WriteLine("[App] Reconnect: Session expired. Refreshing token...");
-                            try { await auth.RefreshSession(); } catch { }
-                        }
-
-                        await SupabaseClient.Realtime.ConnectAsync();
-
-                        var syncService = Services.GetService<Daily.Services.ISyncService>();
-                        if (syncService != null)
-                        {
-                            await syncService.PullAsync(Daily.Services.SyncScope.All);
-                        }
-
-                        var healthService = Services.GetService<Daily.Services.Health.IHealthService>();
-                        if (healthService != null)
-                        {
-                            await healthService.PullDeltasAsync();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[App] Reconnect/sync on connectivity change failed: {ex.Message}");
-                    }
-                });
+                TriggerWakeCatchUpSync("NetworkRestored");
             }
         }
         catch (Exception ex)

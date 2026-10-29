@@ -198,11 +198,11 @@ public sealed partial class MainPage : Page
                     var cacheManager = App.Current.Services.GetRequiredService<SmartBriefingCacheManager>();
                     var syncService = App.Current.Services.GetRequiredService<Daily.Services.ISyncService>();
                     
-                    // Run pulls concurrently (including Habits sync pull!)
+                    // Run pulls concurrently across ALL scopes (Habits, SavedArticles, RSS, Finances, Settings, TagDoS)
                     await Task.WhenAll(
                         behaviorSvc.PullEventsAsync(),
                         cacheManager.PullRemoteCacheAsync(),
-                        syncService.PullAsync(Daily.Services.SyncScope.Habits)
+                        syncService.SyncAsync(Daily.Services.SyncScope.All)
                     );
                 }
                 catch (Exception ex)
@@ -284,13 +284,45 @@ public sealed partial class MainPage : Page
 
     public void TriggerRefresh() => RefreshLiveWidgets();
 
+    public System.Threading.Tasks.Task RefreshSilentFromBackgroundAsync() => RefreshWidgetsSilentAsync();
+
     /// <summary>
     /// Refreshes all live widget controls in-place without rebuilding the grid.
     /// Walking the visual tree avoids the recreate-on-rebind issue where Loaded
     /// never re-fires on recycled GridView containers.
+    /// Also triggers a coordinated Supabase session check + full delta sync so cloud changes
+    /// across Habits, Finances, TagDoS, Health, News, and Settings always land on the dashboard.
     /// </summary>
     private void RefreshLiveWidgets()
     {
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                var guardian = App.Current?.Services?.GetService<Daily.Services.Auth.ISupabaseSessionGuardian>();
+                if (guardian != null)
+                {
+                    await guardian.EnsureValidSessionAsync();
+                }
+
+                var syncService = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+                if (syncService != null)
+                {
+                    await syncService.SyncAsync(Daily.Services.SyncScope.All);
+                }
+
+                var healthService = App.Current?.Services?.GetService<Daily.Services.Health.IHealthService>();
+                if (healthService != null)
+                {
+                    await healthService.PullDeltasAsync();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainPage] Coordinated cloud sync during RefreshLiveWidgets warning: {ex.Message}");
+            }
+        });
+
         foreach (var item in _widgets ?? Enumerable.Empty<Daily.Models.WidgetModel>())
         {
             var container = WidgetGridView.ContainerFromItem(item) as GridViewItem;
@@ -323,12 +355,31 @@ public sealed partial class MainPage : Page
 
     /// <summary>
     /// Silently refreshes live widget data in the background without UI animations or blocking.
-    /// Used when returning to the cached dashboard page from a Hub.
+    /// Used when returning to the cached dashboard page from a Hub or resuming from sleep/tray.
     /// </summary>
     private async System.Threading.Tasks.Task RefreshWidgetsSilentAsync()
     {
         try
         {
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    var guardian = App.Current?.Services?.GetService<Daily.Services.Auth.ISupabaseSessionGuardian>();
+                    if (guardian != null)
+                    {
+                        await guardian.EnsureValidSessionAsync();
+                    }
+
+                    var syncService = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+                    if (syncService != null)
+                    {
+                        await syncService.SyncAsync(Daily.Services.SyncScope.All);
+                    }
+                }
+                catch { }
+            });
+
             var tasks = new List<System.Threading.Tasks.Task>();
             foreach (var item in _widgets ?? Enumerable.Empty<Daily.Models.WidgetModel>())
             {

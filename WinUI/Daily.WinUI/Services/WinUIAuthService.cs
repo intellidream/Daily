@@ -195,17 +195,25 @@ public class WinUIAuthService
 
     public async Task SignOutAsync()
     {
+        WinUISessionPersistence.AllowDestroySession = true;
         try
         {
-            await _supabase.Auth.SignOut();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Sign out error: {ex.Message}");
-        }
+            try
+            {
+                await _supabase.Auth.SignOut();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WinUIAuth] Sign out error: {ex.Message}");
+            }
 
-        // Also destroy local persistence
-        var persistence = new WinUISessionPersistence();
-        persistence.DestroySession();
+            // Also destroy local persistence
+            var persistence = new WinUISessionPersistence();
+            persistence.DestroySession();
+        }
+        finally
+        {
+            WinUISessionPersistence.AllowDestroySession = false;
+        }
     }
 }

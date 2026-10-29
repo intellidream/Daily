@@ -17,8 +17,10 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     private IFinancesService _financesService;
     private IMacroService _macroService;
     private IHeatmapService _heatmapService;
+    private Daily.Services.ISyncService? _syncService;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private readonly SemaphoreSlim _watchlistLock = new(1, 1);
+    private bool _isUpdatingFromService;
 
     public event PropertyChangedEventHandler PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
@@ -131,8 +133,11 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
                 // Parse AST and update sections & headers
                 UpdateParsedLedgerUI();
 
-                // Save to SQLite and Supabase
-                _ = SaveSmartLedgerAsync();
+                // Save to SQLite and Supabase only when modified by user interaction
+                if (!_isUpdatingFromService)
+                {
+                    _ = SaveSmartLedgerAsync();
+                }
             }
         }
     }
@@ -146,6 +151,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             _financesService = App.Current.Services.GetRequiredService<IFinancesService>();
             _macroService = App.Current.Services.GetRequiredService<IMacroService>();
             _heatmapService = App.Current.Services.GetRequiredService<IHeatmapService>();
+            _syncService = App.Current.Services.GetService<Daily.Services.ISyncService>();
             this.Unloaded += Page_Unloaded;
         }
     }
@@ -160,7 +166,15 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
         if (_financesService != null)
         {
+            _financesService.OnQuotesUpdated -= OnQuotesUpdated;
             _financesService.OnQuotesUpdated += OnQuotesUpdated;
+            _financesService.OnSmartLedgerUpdated -= OnSmartLedgerUpdated;
+            _financesService.OnSmartLedgerUpdated += OnSmartLedgerUpdated;
+        }
+        if (_syncService != null)
+        {
+            _syncService.OnFinancesPulled -= OnSmartLedgerUpdated;
+            _syncService.OnFinancesPulled += OnSmartLedgerUpdated;
         }
         await LoadDataAsync();
         
@@ -175,6 +189,11 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         if (_financesService != null)
         {
             _financesService.OnQuotesUpdated -= OnQuotesUpdated;
+            _financesService.OnSmartLedgerUpdated -= OnSmartLedgerUpdated;
+        }
+        if (_syncService != null)
+        {
+            _syncService.OnFinancesPulled -= OnSmartLedgerUpdated;
         }
     }
 
@@ -186,21 +205,43 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         });
     }
 
-    private async Task LoadDataAsync(bool showLoadingSpinner = true)
+    private void OnSmartLedgerUpdated()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                var ledger = await _financesService.GetSmartLedgerAsync();
+                if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText) && ledger.LedgerText != _smartLedgerText)
+                {
+                    _isUpdatingFromService = true;
+                    try
+                    {
+                        SmartLedgerText = ledger.LedgerText;
+                    }
+                    finally
+                    {
+                        _isUpdatingFromService = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FinancesDetailPage] OnSmartLedgerUpdated error: {ex.Message}");
+            }
+        });
+    }
+
+    private async Task LoadDataAsync(bool showLoadingSpinner = true, bool forceRefresh = false)
     {
         await _loadLock.WaitAsync();
         try
         {
             if (showLoadingSpinner)
             {
-                IsWorldLoading = true;
-                IsStocksLoading = true;
-                IsMoneyLoading = true;
-
-                MacroIndicators.Clear();
-                HeatmapData.Clear();
-                Holdings.Clear();
-                Accounts.Clear();
+                IsWorldLoading = !MacroIndicators.Any();
+                IsStocksLoading = !WatchlistStocks.Any();
+                IsMoneyLoading = !LedgerSections.Any();
             }
 
             // World
@@ -210,7 +251,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             // Stocks (All stocks in watchlist)
             var portfolio = await _financesService.GetHoldingsWithQuotesAsync();
             
-            var watchlistSymbols = await _financesService.GetWatchlistSymbolsAsync();
+            var watchlistSymbols = await _financesService.GetWatchlistSymbolsAsync(forceRefresh);
             var _trackedSymbols = new List<string> 
             { 
                 "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META",
@@ -221,11 +262,11 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             var _forexSymbols = new List<string> { "EURUSD=X", "JPY=X", "GBPUSD=X", "AUDUSD=X" };
 
             var allSymbols = _trackedSymbols.Concat(watchlistSymbols).Concat(_cryptoSymbols).Concat(_forexSymbols).Distinct().ToList();
-            var allStocks = await _financesService.GetStockQuotesAsync(allSymbols);
+            var allStocks = await _financesService.GetStockQuotesAsync(allSymbols, forceRefresh);
 
             // Money
             await _financesService.ProcessRecurringTransactionsAsync();
-            var ledger = await _financesService.GetSmartLedgerAsync();
+            var ledger = await _financesService.GetSmartLedgerAsync(forceRefresh);
             var nw = await _financesService.GetNetWorthAsync();
             var accounts = await _financesService.GetAccountsAsync();
 
@@ -251,9 +292,17 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
             if (ledger != null)
             {
-                _smartLedgerText = ledger.LedgerText;
-                OnPropertyChanged(nameof(SmartLedgerText));
-                UpdateParsedLedgerUI();
+                _isUpdatingFromService = true;
+                try
+                {
+                    _smartLedgerText = ledger.LedgerText;
+                    OnPropertyChanged(nameof(SmartLedgerText));
+                    UpdateParsedLedgerUI();
+                }
+                finally
+                {
+                    _isUpdatingFromService = false;
+                }
             }
             
             NetWorthDisplay = nw.ToString("C0");
@@ -310,12 +359,20 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private async void RefreshBtn_Click(object sender, RoutedEventArgs e)
     {
-        await LoadDataAsync();
+        if (_syncService != null)
+        {
+            try { await _syncService.SyncAsync(Daily.Services.SyncScope.Finances); } catch { }
+        }
+        await LoadDataAsync(showLoadingSpinner: true, forceRefresh: true);
     }
 
     public async Task RefreshFromTitleBarAsync()
     {
-        await LoadDataAsync();
+        if (_syncService != null)
+        {
+            try { await _syncService.SyncAsync(Daily.Services.SyncScope.Finances); } catch { }
+        }
+        await LoadDataAsync(showLoadingSpinner: false, forceRefresh: true);
     }
 
     private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -406,7 +463,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private async Task SaveSmartLedgerAsync()
     {
-        if (_financesService == null) return;
+        if (_financesService == null || _isUpdatingFromService) return;
         
         // Use the parser to ensure totals are re-calculated
         var recalculated = Daily.Services.Finances.SmartLedgerParser.RecalculateTotals(_smartLedgerText);
@@ -414,6 +471,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         {
             _smartLedgerText = recalculated;
             OnPropertyChanged(nameof(SmartLedgerText));
+            UpdateParsedLedgerUI();
         }
 
         await _financesService.SaveSmartLedgerAsync(_smartLedgerText);
@@ -484,12 +542,24 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
         try
         {
             IsMoneyLoading = true;
-            var ledger = await _financesService.GetSmartLedgerAsync();
+            if (_syncService != null)
+            {
+                try { await _syncService.SyncAsync(Daily.Services.SyncScope.Finances); } catch { }
+            }
+            var ledger = await _financesService.GetSmartLedgerAsync(forceRefresh: true);
             if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
             {
-                _smartLedgerText = ledger.LedgerText;
-                OnPropertyChanged(nameof(SmartLedgerText));
-                UpdateParsedLedgerUI();
+                _isUpdatingFromService = true;
+                try
+                {
+                    _smartLedgerText = ledger.LedgerText;
+                    OnPropertyChanged(nameof(SmartLedgerText));
+                    UpdateParsedLedgerUI();
+                }
+                finally
+                {
+                    _isUpdatingFromService = false;
+                }
             }
         }
         catch (Exception ex)
@@ -504,7 +574,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private void ItemMinus_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is SmartLedgerItem item)
+        if (sender is Button btn && btn.Tag is SmartLedgerItem item && !item.IsPureNote)
         {
             decimal delta = item.IsScaled ? -1m : -100m;
             var newText = Daily.Services.Finances.SmartLedgerParser.AdjustItemAmount(SmartLedgerText, item, delta);
@@ -514,7 +584,7 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private void ItemPlus_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is SmartLedgerItem item)
+        if (sender is Button btn && btn.Tag is SmartLedgerItem item && !item.IsPureNote)
         {
             decimal delta = item.IsScaled ? 1m : 100m;
             var newText = Daily.Services.Finances.SmartLedgerParser.AdjustItemAmount(SmartLedgerText, item, delta);
@@ -524,80 +594,155 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
     private async void ItemQuickAdjust_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button btn || btn.Tag is not SmartLedgerItem item) return;
+        if (sender is not Button btn || btn.Tag is not SmartLedgerItem item || item.IsPureNote) return;
 
-        var stack = new StackPanel { Spacing = 16, MinWidth = 320 };
-        stack.Children.Add(new TextBlock 
-        { 
-            Text = $"Current: {item.DisplayName} = {item.RawAmount} ({item.FormattedCalculatedAmount})", 
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold 
-        });
+        var stack = new StackPanel { Spacing = 14, MinWidth = 380 };
+        var previewText = new TextBlock
+        {
+            Text = item.IsScaled
+                ? $"Unitate DSL (1 = 100 Lei) · Actual: {item.FormattedCalculatedAmount}"
+                : $"Sumă directă ({item.Currency}) · Actual: {item.FormattedCalculatedAmount}",
+            FontSize = 12,
+            Opacity = 0.75
+        };
+        stack.Children.Add(previewText);
 
         var numberBox = new TextBox
         {
-            Text = item.RawAmount.ToString(),
-            PlaceholderText = "New raw amount..."
+            Header = item.IsScaled ? "Valoare DSL (1 = 100 Lei)" : $"Valoare ({item.Currency})",
+            Text = item.FormattedRawAmount,
+            PlaceholderText = "Valoare..."
         };
+
+        void UpdatePreview()
+        {
+            var rawStr = (numberBox.Text ?? string.Empty).Trim().Replace(',', '.');
+            if (decimal.TryParse(rawStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val))
+            {
+                decimal calc = item.IsScaled ? val * 100m : val;
+                string unit = item.Currency == "EUR" ? "€" : "Lei";
+                previewText.Text = item.IsScaled
+                    ? $"Unitate DSL: {val:0.##}  →  = {calc:N0} {unit}"
+                    : $"Valoare nouă: {calc:N0} {unit}";
+            }
+        }
+        numberBox.TextChanged += (_, _) => UpdatePreview();
         stack.Children.Add(numberBox);
 
-        var quickButtonsPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
-        var deltas = item.IsScaled ? new decimal[] { -5, -1, 1, 5 } : new decimal[] { -500, -100, 100, 500 };
-        foreach (var d in deltas)
+        var quickButtonsPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Left };
+        var deltas = item.IsScaled
+            ? new (decimal rawDelta, string label)[] { (-5m, "-500"), (-2m, "-200"), (-1m, "-100"), (1m, "+100"), (2m, "+200"), (5m, "+500"), (10m, "+1000") }
+            : new (decimal rawDelta, string label)[] { (-1000m, "-1k"), (-500m, "-500"), (500m, "+500"), (1000m, "+1k"), (5000m, "+5k") };
+
+        foreach (var (rawDelta, label) in deltas)
         {
-            var deltaBtn = new Button 
-            { 
-                Content = d > 0 ? $"+{d}" : $"{d}", 
-                Padding = new Thickness(10, 4, 10, 4) 
-            };
-            deltaBtn.Click += (s, args) =>
+            var deltaBtn = new Button
             {
-                if (decimal.TryParse(numberBox.Text, out var currentVal))
+                Content = label,
+                Padding = new Thickness(9, 4, 9, 4),
+                CornerRadius = new CornerRadius(10)
+            };
+            deltaBtn.Click += (_, _) =>
+            {
+                var rawStr = (numberBox.Text ?? string.Empty).Trim().Replace(',', '.');
+                if (decimal.TryParse(rawStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var currentVal))
                 {
-                    numberBox.Text = Math.Max(0, currentVal + d).ToString();
+                    var nextVal = Math.Max(0m, currentVal + rawDelta);
+                    numberBox.Text = nextVal % 1 == 0
+                        ? ((long)nextVal).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : nextVal.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                 }
             };
             quickButtonsPanel.Children.Add(deltaBtn);
         }
         stack.Children.Add(quickButtonsPanel);
 
+        string originalNotes = item.Notes != null && item.Notes.Count > 0 ? string.Join(" / ", item.Notes) : string.Empty;
+        var noteBox = new TextBox
+        {
+            Header = "Notă opțională (în paranteze)",
+            Text = originalNotes,
+            PlaceholderText = "ex: Rz/141/Ing/10 sau C$40/B$20"
+        };
+        stack.Children.Add(noteBox);
+
         var dialog = new ContentDialog
         {
-            Title = $"Quick Adjust · {item.DisplayName}",
-            PrimaryButtonText = "Set Amount",
+            Title = $"Adjust · {item.DisplayName}",
+            PrimaryButtonText = "Save",
+            SecondaryButtonText = "Delete Item",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             Content = stack,
             XamlRoot = this.XamlRoot
         };
 
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
         {
-            if (decimal.TryParse(numberBox.Text, out var newAmt))
+            var rawStr = (numberBox.Text ?? string.Empty).Trim().Replace(',', '.');
+            if (decimal.TryParse(rawStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var newAmt))
             {
-                var newText = Daily.Services.Finances.SmartLedgerParser.SetItemAmount(SmartLedgerText, item, newAmt);
+                var newText = Daily.Services.Finances.SmartLedgerParser.UpdateItemAmountAndNote(
+                    SmartLedgerText,
+                    item.LineIndex,
+                    Math.Max(0m, newAmt),
+                    noteBox.Text,
+                    originalNotes);
                 SmartLedgerText = newText;
             }
+        }
+        else if (result == ContentDialogResult.Secondary)
+        {
+            SmartLedgerText = Daily.Services.Finances.SmartLedgerParser.DeleteItem(SmartLedgerText, item.LineIndex);
         }
     }
 
     private async void AddSectionItem_Click(object sender, RoutedEventArgs e)
     {
         string sectionName = (sender as Button)?.Tag as string ?? "Outgoing";
+        var section = LedgerSections.FirstOrDefault(s => string.Equals(s.Name, sectionName, StringComparison.OrdinalIgnoreCase));
+        bool isScaledSection = section?.IsScaled ?? !string.Equals(sectionName, "Deposit", StringComparison.OrdinalIgnoreCase);
 
-        var stack = new StackPanel { Spacing = 12, MinWidth = 320 };
-        stack.Children.Add(new TextBlock { Text = $"Add item to section: {sectionName}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        var stack = new StackPanel { Spacing = 12, MinWidth = 360 };
+        stack.Children.Add(new TextBlock
+        {
+            Text = isScaledSection
+                ? $"Secțiune: {sectionName} · Unitate DSL (1 = 100 Lei)"
+                : $"Secțiune: {sectionName} · Sumă directă",
+            FontSize = 12,
+            Opacity = 0.75
+        });
 
-        var nameBox = new TextBox { PlaceholderText = "Item name (e.g. Netflix, Sala, Bonus)" };
-        var amountBox = new TextBox { PlaceholderText = "Amount (e.g. 50 or 100)" };
-        var scaledCheck = new CheckBox { Content = "Scaled item (e.g. daily/multiplier like Tigari)", IsChecked = false };
+        var nameBox = new TextBox
+        {
+            Header = "Categorie / Nume linie",
+            PlaceholderText = "ex: Vacanțe, Abonamente, Economii"
+        };
+        var amountBox = new TextBox
+        {
+            Header = isScaledSection ? "Valoare DSL (ex: 10 = 1.000 Lei)" : "Sumă (ex: 5000)",
+            PlaceholderText = isScaledSection ? "10" : "5000"
+        };
+        var noteBox = new TextBox
+        {
+            Header = "Notă opțională (în paranteze)",
+            PlaceholderText = "ex: detaliere conturi / scadențe"
+        };
+
+        CurrencyComboBoxSetup(out var currencyCombo, isScaledSection);
 
         stack.Children.Add(nameBox);
         stack.Children.Add(amountBox);
-        stack.Children.Add(scaledCheck);
+        if (!isScaledSection)
+        {
+            stack.Children.Add(currencyCombo);
+        }
+        stack.Children.Add(noteBox);
 
         var dialog = new ContentDialog
         {
-            Title = "Add Ledger Item",
+            Title = $"Add to {sectionName}",
             PrimaryButtonText = "Add Item",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
@@ -607,15 +752,30 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
 
         if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(nameBox.Text))
         {
-            decimal.TryParse(amountBox.Text, out var amount);
+            var rawStr = (amountBox.Text ?? string.Empty).Trim().Replace(',', '.');
+            decimal.TryParse(rawStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var amount);
+            string suffix = (!isScaledSection && currencyCombo.SelectedIndex == 1) ? "€" : "";
             var newText = Daily.Services.Finances.SmartLedgerParser.AddItem(
-                SmartLedgerText, 
-                sectionName, 
-                nameBox.Text.Trim(), 
-                amount, 
-                "Lei", 
-                scaledCheck.IsChecked == true);
+                SmartLedgerText,
+                sectionName,
+                nameBox.Text.Trim(),
+                Math.Max(0m, amount),
+                noteBox.Text,
+                suffix);
             SmartLedgerText = newText;
         }
+    }
+
+    private static void CurrencyComboBoxSetup(out ComboBox combo, bool isScaledSection)
+    {
+        combo = new ComboBox
+        {
+            Header = "Monedă",
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        combo.Items.Add("Lei (RON)");
+        combo.Items.Add("EUR (€)");
+        combo.SelectedIndex = 0;
+        combo.IsEnabled = !isScaledSection;
     }
 }

@@ -24,6 +24,7 @@ namespace Daily_WinUI.Services
         private readonly Supabase.Client _supabaseClient;
         private readonly IDatabaseService _dbService;
         private readonly ILogger<HealthHubService>? _logger;
+        private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
         private readonly ConcurrentDictionary<string, HealthDailySummaryRecord> _memoryCache = new();
         private readonly ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches = new();
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
@@ -37,11 +38,13 @@ namespace Daily_WinUI.Services
         public HealthHubService(
             Supabase.Client supabaseClient,
             IDatabaseService dbService,
-            ILogger<HealthHubService>? logger = null)
+            ILogger<HealthHubService>? logger = null,
+            Daily.Services.Auth.ISupabaseSessionGuardian? sessionGuardian = null)
         {
             _supabaseClient = supabaseClient;
             _dbService = dbService;
             _logger = logger;
+            _sessionGuardian = sessionGuardian;
 
             try
             {
@@ -233,6 +236,10 @@ namespace Daily_WinUI.Services
         private async Task<HealthDailySummaryRecord?> RefreshSummaryFromRemoteAsync(DateTime date)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
+            if (_sessionGuardian != null)
+            {
+                try { await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false); } catch { }
+            }
             var currentUserId = _supabaseClient.Auth.CurrentSession?.User?.Id;
             if (string.IsNullOrEmpty(currentUserId))
             {
@@ -241,11 +248,17 @@ namespace Daily_WinUI.Services
 
             try
             {
-                var fetchTask = _supabaseClient.From<HealthDailySummaryRecord>()
-                    .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
-                    .Get();
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthDailySummaryRecord>()
+                            .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                            .Get(),
+                        "HealthHubService.RefreshSummaryFromRemote")
+                    : _supabaseClient.From<HealthDailySummaryRecord>()
+                        .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                        .Get();
 
-                var completed = await Task.WhenAny(fetchTask, Task.Delay(4000)).ConfigureAwait(false);
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
                 if (completed != fetchTask)
                 {
                     _logger?.LogWarning("[HealthHubService] Remote fetch timed out for {Date}", dateStr);
@@ -348,18 +361,30 @@ namespace Daily_WinUI.Services
             }
 
             // Sync missing from remote with timeout
+            if (_sessionGuardian != null)
+            {
+                try { await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false); } catch { }
+            }
             var currentUserId = _supabaseClient.Auth.CurrentSession?.User?.Id;
             if (!string.IsNullOrEmpty(currentUserId))
             {
                 try
                 {
-                    var fetchTask = _supabaseClient.From<HealthDailySummaryRecord>()
-                        .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
-                        .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
-                        .Where(x => x.UserId == currentUserId)
-                        .Get();
+                    var fetchTask = _sessionGuardian != null
+                        ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                            () => _supabaseClient.From<HealthDailySummaryRecord>()
+                                .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                                .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                                .Where(x => x.UserId == currentUserId)
+                                .Get(),
+                            "HealthHubService.GetDailySummariesRange")
+                        : _supabaseClient.From<HealthDailySummaryRecord>()
+                            .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                            .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                            .Where(x => x.UserId == currentUserId)
+                            .Get();
 
-                    var completed = await Task.WhenAny(fetchTask, Task.Delay(4000)).ConfigureAwait(false);
+                    var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
                     if (completed == fetchTask)
                     {
                         var resp = await fetchTask.ConfigureAwait(false);

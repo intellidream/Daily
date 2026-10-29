@@ -8,6 +8,94 @@ namespace Daily.Services.Finances
 {
     public class SmartLedgerParser
     {
+        public static readonly string DefaultLedgerText = @"**Incoming**
+
+---
+
+Card = 151 (Rz/141/Ing/10/Rev/0/Mom/9/!!!!/9)
+
+Cash = 9 (SG-1/A/3M)
+
+---
+
+Total = 160
+
+---
+
+**Outgoing**
+
+Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27 = 0
+
+V/N/Y/O/AI/M/W/E/I/Ap/Am/Sy/Ad/Sp = 9
+
+Rata/Rds/Gaz/Înt/Hid/(45)/Mom/(4) = 49
+
+Cora/Mega/Bringo/Fresh (Edn/3) = 10
+
+Tigari (40/45) = 10
+
+Car/Benzina/Honda (1/4) = 3 (SPL!/CER?)
+
+Serviciu/(0/*100)/Outs/(0*200) = 0
+
+Acasa/Tuns/Cadouri = 10 (M&T=5/!!!!!/5)
+
+Vacante/Noi/Iesiri/Other = 68 (C$40/B$20)
+
+Subs (APL-21.01-$5/RED-14.03-$1/CSP-29.05-$5)(PRL-11.08-$6/365-25.08-$7/NSK-29.8-$2)(MRG-31.8-$2/STRS-22.09-$1)(EMG-13.12-$1) = 1
+
+---
+
+Total = 160
+
+---
+
+**Balance** 
+
+---
+
+Total = 0
+
+---
+
+**Dentist**
+
+---
+
+(Total = 106)
+
+---
+
+**Deposit**
+
+---
+
+ECO/ME! = 44.000L(//~8.400€)
+
+ECO/B!A = 30.000L(//~5.600€)
+
+EUR = 0€
+
+ERO = 0€
+
+DEP = 0
+
+BIA = 0€
+
+---
+
+INT = 53.156,47 (-IMP-VER)//(~10.200€)
+
+---
+
+(Concediu = 14/23 (SEE/+5!))
+
+---
+
+(Chirie x7y ~ 37.000€ // Plati x7y ~ 9.000€)
+
+(Mașini x8y~(x7-27.000€)+(x8+-27.000€)$";
+
         public class LedgerCommand
         {
             public string action { get; set; } = string.Empty; // e.g. "transfer", "schedule"
@@ -111,78 +199,88 @@ namespace Daily.Services.Finances
         public static string RecalculateTotals(string ledgerText)
         {
             var lines = ledgerText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-            
-            decimal currentSectionSum = 0;
-            bool inSection = false;
+            var updated = RecalculateTotalsInLines(lines);
+            return string.Join("\n", updated);
+        }
 
-            // Recalculate all sections except Balance/Dentist/Deposit which are free-form or tracked differently
-            for (int i = 0; i < lines.Length; i++)
+        public static string[] RecalculateTotalsInLines(string[] lines)
+        {
+            var updated = (string[])lines.Clone();
+            string currentSection = "";
+            decimal incomingSum = 0m;
+            decimal outgoingSum = 0m;
+
+            int incomingTotalLineIndex = -1;
+            int outgoingTotalLineIndex = -1;
+            int balanceTotalLineIndex = -1;
+
+            for (int idx = 0; idx < updated.Length; idx++)
             {
-                var line = lines[i].Trim();
-                
-                if (line.StartsWith("**") && line.EndsWith("**"))
+                string trimmed = updated[idx].Trim();
+                if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
                 {
-                    if (line == "**Incoming**" || line == "**Outgoing**")
-                    {
-                        inSection = true;
-                        currentSectionSum = 0;
-                    }
-                    else
-                    {
-                        inSection = false;
-                    }
+                    currentSection = trimmed.Substring(2, trimmed.Length - 4).Trim();
                     continue;
                 }
 
-                if (inSection && line.Contains("=") && !line.StartsWith("Total"))
+                // Skip pure parenthesized notes like (Total = 106) or (Concediu = ...)
+                if (trimmed.StartsWith("(") && trimmed.EndsWith(")"))
                 {
-                    int commentIdx = line.IndexOf("//");
-                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
-
-                    currentSectionSum += ParseValue(mathPart);
+                    continue;
                 }
 
-                if (inSection && line.StartsWith("Total ="))
+                int eqIdx = trimmed.IndexOf('=');
+                if (eqIdx >= 0)
                 {
-                    int commentIdx = line.IndexOf("//");
-                    string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
-                    string commentPart = commentIdx >= 0 ? line.Substring(commentIdx) : "";
+                    string key = trimmed.Substring(0, eqIdx).Trim();
+                    string valStr = trimmed.Substring(eqIdx + 1).Trim();
 
-                    string sumStr = currentSectionSum % 1 == 0 ? currentSectionSum.ToString("F0") : currentSectionSum.ToString("G");
-                    lines[i] = $"Total = {sumStr} " + commentPart;
-                    lines[i] = lines[i].TrimEnd();
-                    inSection = false; 
-                    currentSectionSum = 0;
-                }
-            }
-
-            // Balance Calculation
-            decimal incomingTotal = ExtractTotal(lines, "**Incoming**");
-            decimal outgoingTotal = ExtractTotal(lines, "**Outgoing**");
-            
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (lines[i].Trim() == "**Balance**")
-                {
-                    for (int j = i + 1; j < lines.Length; j++)
+                    if (string.Equals(key, "Total", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (lines[j].Trim().StartsWith("Total ="))
-                        {
-                            int commentIdx = lines[j].IndexOf("//");
-                            string commentPart = commentIdx >= 0 ? lines[j].Substring(commentIdx) : "";
-
-                            decimal diff = incomingTotal - outgoingTotal;
-                            string sumStr = diff % 1 == 0 ? diff.ToString("F0") : diff.ToString("G");
-                            lines[j] = $"Total = {sumStr} " + commentPart;
-                            lines[j] = lines[j].TrimEnd();
-                            break;
-                        }
+                        if (string.Equals(currentSection, "Incoming", StringComparison.OrdinalIgnoreCase))
+                            incomingTotalLineIndex = idx;
+                        else if (string.Equals(currentSection, "Outgoing", StringComparison.OrdinalIgnoreCase))
+                            outgoingTotalLineIndex = idx;
+                        else if (string.Equals(currentSection, "Balance", StringComparison.OrdinalIgnoreCase))
+                            balanceTotalLineIndex = idx;
+                        continue;
                     }
-                    break;
+
+                    var parsed = ParseNumericDetailed(valStr, isScaled: false);
+                    if (string.Equals(currentSection, "Incoming", StringComparison.OrdinalIgnoreCase))
+                        incomingSum += parsed.Raw;
+                    else if (string.Equals(currentSection, "Outgoing", StringComparison.OrdinalIgnoreCase))
+                        outgoingSum += parsed.Raw;
                 }
             }
 
-            return string.Join(Environment.NewLine, lines);
+            static string FormatTotalLine(string existingLine, decimal totalVal)
+            {
+                int commentIdx = existingLine.IndexOf("//", StringComparison.Ordinal);
+                string commentSuffix = commentIdx >= 0 ? " " + existingLine.Substring(commentIdx).Trim() : "";
+                string formatted = totalVal % 1 == 0
+                    ? ((long)totalVal).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : totalVal.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                return $"Total = {formatted}{commentSuffix}";
+            }
+
+            if (incomingTotalLineIndex >= 0)
+            {
+                updated[incomingTotalLineIndex] = FormatTotalLine(updated[incomingTotalLineIndex], incomingSum);
+            }
+
+            if (outgoingTotalLineIndex >= 0)
+            {
+                updated[outgoingTotalLineIndex] = FormatTotalLine(updated[outgoingTotalLineIndex], outgoingSum);
+            }
+
+            if (balanceTotalLineIndex >= 0)
+            {
+                decimal bal = incomingSum - outgoingSum;
+                updated[balanceTotalLineIndex] = FormatTotalLine(updated[balanceTotalLineIndex], bal);
+            }
+
+            return updated;
         }
 
         public static decimal ExtractTotal(string[] lines, string sectionHeader)
@@ -573,31 +671,13 @@ namespace Daily.Services.Finances
             if (lineIndex < 0 || lineIndex >= lines.Length) return text;
 
             string line = lines[lineIndex];
-            int eqIdx = line.IndexOf("=");
+            int eqIdx = line.IndexOf('=');
             if (eqIdx < 0) return text;
 
-            string keyPart = line.Substring(0, eqIdx + 1);
-            string remainder = line.Substring(eqIdx + 1).Trim();
-
-            int commentIdx = remainder.IndexOf("//");
-            string mathPart = commentIdx >= 0 ? remainder.Substring(0, commentIdx) : remainder;
-            string commentPart = commentIdx >= 0 ? remainder.Substring(commentIdx) : "";
-
-            var match = Regex.Match(mathPart, @"^\s*([\-\d\.\,]+)(.*)");
-            if (match.Success)
-            {
-                string numStr = match.Groups[1].Value.Replace(',', '.');
-                string suffix = match.Groups.Count > 2 ? match.Groups[2].Value : "";
-
-                if (decimal.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal currentVal))
-                {
-                    decimal newVal = currentVal + deltaRaw;
-                    string formattedNum = newVal % 1 == 0 ? newVal.ToString("F0") : newVal.ToString("G");
-                    lines[lineIndex] = $"{keyPart} {formattedNum}{suffix} {commentPart}".TrimEnd();
-                }
-            }
-
-            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+            string valuePart = line.Substring(eqIdx + 1).Trim();
+            var parsed = ParseNumericDetailed(valuePart, isScaled: false);
+            decimal newRaw = Math.Max(0m, parsed.Raw + deltaRaw);
+            return SetItemAmount(text, lineIndex, newRaw);
         }
 
         public static string SetItemAmount(string text, SmartLedgerItem item, decimal newRaw)
@@ -611,79 +691,197 @@ namespace Daily.Services.Finances
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             if (lineIndex < 0 || lineIndex >= lines.Length) return text;
 
-            string line = lines[lineIndex];
-            int eqIdx = line.IndexOf("=");
+            string oldLine = lines[lineIndex];
+            int eqIdx = oldLine.IndexOf('=');
             if (eqIdx < 0) return text;
 
-            string keyPart = line.Substring(0, eqIdx + 1);
-            string remainder = line.Substring(eqIdx + 1).Trim();
+            string keyPart = oldLine.Substring(0, eqIdx + 1).TrimEnd(); // e.g. "Card =" or "ECO/ME! ="
+            string afterEq = oldLine.Substring(eqIdx + 1);
 
-            int commentIdx = remainder.IndexOf("//");
-            string mathPart = commentIdx >= 0 ? remainder.Substring(0, commentIdx) : remainder;
-            string commentPart = commentIdx >= 0 ? remainder.Substring(commentIdx) : "";
-
-            var match = Regex.Match(mathPart, @"^\s*([\-\d\.\,]+)(.*)");
-            if (match.Success)
+            // Find where notes '(' or comments '//' begin after '='
+            int noteOrCommentIdx = afterEq.Length;
+            int parenIdx = afterEq.IndexOf('(');
+            if (parenIdx >= 0)
             {
-                string suffix = match.Groups.Count > 2 ? match.Groups[2].Value : "";
-                string formattedNum = newRaw % 1 == 0 ? newRaw.ToString("F0") : newRaw.ToString("G");
-                lines[lineIndex] = $"{keyPart} {formattedNum}{suffix} {commentPart}".TrimEnd();
+                noteOrCommentIdx = Math.Min(noteOrCommentIdx, parenIdx);
+            }
+            int slashIdx = afterEq.IndexOf("//", StringComparison.Ordinal);
+            if (slashIdx >= 0)
+            {
+                noteOrCommentIdx = Math.Min(noteOrCommentIdx, slashIdx);
             }
 
-            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+            string numRegion = afterEq.Substring(0, noteOrCommentIdx);
+            string restOfLine = afterEq.Substring(noteOrCommentIdx);
+
+            // Preserve currency / units suffix if present in numRegion
+            string suffix = "";
+            if (numRegion.Contains("€"))
+                suffix = "€";
+            else if (numRegion.IndexOf("EUR", StringComparison.OrdinalIgnoreCase) >= 0)
+                suffix = " EUR";
+            else if (numRegion.Contains("L"))
+                suffix = "L";
+            else if (numRegion.Contains("$"))
+                suffix = "$";
+
+            string formattedNum = FormatNumberForDsl(Math.Max(0m, newRaw), numRegion);
+            string spaceBeforeRest = string.IsNullOrEmpty(restOfLine) || restOfLine.StartsWith(" ") || restOfLine.StartsWith("(") && suffix == "L"
+                ? ""
+                : " ";
+
+            lines[lineIndex] = $"{keyPart} {formattedNum}{suffix}{spaceBeforeRest}{restOfLine}".TrimEnd();
+            var recalculated = RecalculateTotalsInLines(lines);
+            return string.Join("\n", recalculated);
+        }
+
+        public static string UpdateItemAmountAndNote(string text, int lineIndex, decimal newRaw, string? updatedNote, string originalNotesJoined)
+        {
+            string updatedText = SetItemAmount(text, lineIndex, newRaw);
+            var trimmedNew = (updatedNote ?? string.Empty).Trim();
+            var trimmedOrig = (originalNotesJoined ?? string.Empty).Trim();
+            if (string.Equals(trimmedNew, trimmedOrig, StringComparison.Ordinal))
+            {
+                return updatedText;
+            }
+
+            var lines = updatedText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            if (lineIndex < 0 || lineIndex >= lines.Length) return updatedText;
+
+            string line = lines[lineIndex];
+            int eqIdx = line.IndexOf('=');
+            if (eqIdx < 0) return updatedText;
+
+            string keyPart = line.Substring(0, eqIdx + 1).TrimEnd();
+            string afterEq = line.Substring(eqIdx + 1);
+
+            // Preserve any '//' trailing comment outside parentheses while replacing trailing '(...)' note after '='
+            string trailingSlashComment = "";
+            string withoutParenAfterEq = Regex.Replace(afterEq, @"\s*\([^)]*\)", "").Trim();
+            int slashIdx = withoutParenAfterEq.IndexOf("//", StringComparison.Ordinal);
+            if (slashIdx >= 0)
+            {
+                trailingSlashComment = " " + withoutParenAfterEq.Substring(slashIdx).Trim();
+                withoutParenAfterEq = withoutParenAfterEq.Substring(0, slashIdx).Trim();
+            }
+
+            string noteSegment = string.IsNullOrWhiteSpace(trimmedNew) ? "" : $" ({trimmedNew})";
+            lines[lineIndex] = $"{keyPart} {withoutParenAfterEq}{noteSegment}{trailingSlashComment}".TrimEnd();
+            return string.Join("\n", RecalculateTotalsInLines(lines));
+        }
+
+        private static string FormatNumberForDsl(decimal value, string originalNumRegion)
+        {
+            var roCulture = (System.Globalization.NumberFormatInfo)System.Globalization.CultureInfo.InvariantCulture.NumberFormat.Clone();
+            roCulture.NumberGroupSeparator = ".";
+            roCulture.NumberDecimalSeparator = ",";
+
+            if (originalNumRegion.Contains(','))
+            {
+                return value % 1 == 0
+                    ? value.ToString("#,0", roCulture)
+                    : value.ToString("#,0.00", roCulture);
+            }
+
+            if (originalNumRegion.Contains('.'))
+            {
+                // Check if original used '.' as European thousands separator (e.g. 44.000)
+                var digitsAndDots = Regex.Match(originalNumRegion, @"[\d\.]+").Value;
+                var dotParts = digitsAndDots.Split('.');
+                if (dotParts.Length == 2 && dotParts[1].Length == 3 && value >= 1000m && value % 1 == 0)
+                {
+                    return value.ToString("#,0", roCulture);
+                }
+            }
+
+            return value % 1 == 0
+                ? ((long)value).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string currency, bool isScaled)
         {
-            string? note = isScaled ? "Scaled" : null;
-            return AddItem(text, sectionName, key, rawAmount, note);
+            string suffix = string.Equals(currency, "EUR", StringComparison.OrdinalIgnoreCase) ? "€" : "";
+            return AddItem(text, sectionName, key, rawAmount, note: null, currencySuffix: suffix);
         }
 
-        public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string? note = null)
+        public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string? note = null, string currencySuffix = "")
         {
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
-            int insertIndex = -1;
-            bool insideTargetSection = false;
+            int sectionHeaderIndex = -1;
 
             for (int i = 0; i < lines.Count; i++)
             {
-                string line = lines[i].Trim();
-                if (line.StartsWith("**") && line.EndsWith("**"))
+                string trimmed = lines[i].Trim();
+                if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
                 {
-                    string secName = line.Substring(2, line.Length - 4).Trim();
+                    string secName = trimmed.Substring(2, trimmed.Length - 4).Trim();
                     if (string.Equals(secName, sectionName, StringComparison.OrdinalIgnoreCase))
                     {
-                        insideTargetSection = true;
-                        continue;
-                    }
-                    else if (insideTargetSection)
-                    {
-                        insertIndex = i;
+                        sectionHeaderIndex = i;
                         break;
                     }
                 }
+            }
 
-                if (insideTargetSection && line.StartsWith("Total =", StringComparison.OrdinalIgnoreCase))
+            if (sectionHeaderIndex < 0)
+            {
+                return text;
+            }
+
+            int insertIndex = lines.Count;
+            for (int idx = sectionHeaderIndex + 1; idx < lines.Count; idx++)
+            {
+                string trimmed = lines[idx].Trim();
+                if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
                 {
-                    insertIndex = i;
+                    insertIndex = idx;
+                    break;
+                }
+
+                if (trimmed == "---" || trimmed == "- - -")
+                {
+                    bool isBeforeTotal = false;
+                    int lookAheadMax = Math.Min(idx + 5, lines.Count);
+                    for (int nextIdx = idx + 1; nextIdx < lookAheadMax; nextIdx++)
+                    {
+                        string nextTrimmed = lines[nextIdx].Trim();
+                        if (nextTrimmed.StartsWith("Total =", StringComparison.OrdinalIgnoreCase) ||
+                            nextTrimmed.StartsWith("Total=", StringComparison.OrdinalIgnoreCase) ||
+                            nextTrimmed.StartsWith("(Total", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isBeforeTotal = true;
+                            break;
+                        }
+                    }
+
+                    if (isBeforeTotal)
+                    {
+                        insertIndex = idx;
+                        break;
+                    }
+                }
+                else if (trimmed.StartsWith("Total =", StringComparison.OrdinalIgnoreCase) ||
+                         trimmed.StartsWith("Total=", StringComparison.OrdinalIgnoreCase))
+                {
+                    insertIndex = idx;
                     break;
                 }
             }
 
-            if (insertIndex < 0)
-            {
-                insertIndex = lines.Count;
-            }
+            string formattedNum = rawAmount % 1 == 0
+                ? ((long)rawAmount).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : rawAmount.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
-            string formattedNum = rawAmount % 1 == 0 ? rawAmount.ToString("F0") : rawAmount.ToString("G");
-            string newLine = string.IsNullOrWhiteSpace(note) 
-                ? $"{key} = {formattedNum}" 
-                : $"{key} = {formattedNum} ({note})";
+            string trimmedNote = (note ?? string.Empty).Trim();
+            string notePart = string.IsNullOrEmpty(trimmedNote) ? "" : $" ({trimmedNote})";
+            string newLine = $"{key.Trim()} = {formattedNum}{currencySuffix}{notePart}";
 
             lines.Insert(insertIndex, newLine);
             lines.Insert(insertIndex + 1, "");
 
-            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+            var updated = RecalculateTotalsInLines(lines.ToArray());
+            return string.Join("\n", updated);
         }
 
         public static string DeleteItem(string text, int lineIndex)
@@ -692,8 +890,16 @@ namespace Daily.Services.Finances
             if (lineIndex >= 0 && lineIndex < lines.Count)
             {
                 lines.RemoveAt(lineIndex);
+                if (lineIndex < lines.Count && string.IsNullOrWhiteSpace(lines[lineIndex]))
+                {
+                    if (lineIndex - 1 >= 0 && string.IsNullOrWhiteSpace(lines[lineIndex - 1]))
+                    {
+                        lines.RemoveAt(lineIndex);
+                    }
+                }
             }
-            return RecalculateTotals(string.Join(Environment.NewLine, lines));
+            var updated = RecalculateTotalsInLines(lines.ToArray());
+            return string.Join("\n", updated);
         }
     }
 }

@@ -308,48 +308,63 @@
                     </Grid.RowDefinitions>
 
                     <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
-                        <StackPanel Orientation="Vertical" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="Net Worth" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
-                            <TextBlock Text="{x:Bind NetWorthDisplay, Mode=OneWay}" FontSize="32" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" HorizontalAlignment="Center" Margin="0,-8,0,0"/>
-                            
-                            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
-                                <Border Background="#1A0288D1" CornerRadius="12" Padding="12,6">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF0288D1" />
-                                        <TextBlock Text="{x:Bind CashDisplay, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" Foreground="#FF0288D1" />
+                        <StackPanel Orientation="Vertical" Spacing="10" VerticalAlignment="Center">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="NET WORTH" FontSize="10" FontWeight="Bold" Opacity="0.55" CharacterSpacing="90" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Background="#2200B0FF" BorderBrush="#4400B0FF" BorderThickness="1" CornerRadius="10" Padding="8,2">
+                                    <TextBlock Text="{x:Bind SmartNetWorthEurDisplay, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="#00B0FF" />
+                                </Border>
+                            </Grid>
+
+                            <TextBlock Text="{x:Bind SmartNetWorthDisplay, Mode=OneWay}" FontSize="26" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" Margin="0,-4,0,2" TextTrimming="CharacterEllipsis" />
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="#3300C853" BorderThickness="1" CornerRadius="10" Padding="10,6">
+                                    <StackPanel Spacing="1">
+                                        <TextBlock Text="DEPOSITS" FontSize="9" FontWeight="Bold" Foreground="#00C853" Opacity="0.9" />
+                                        <TextBlock Text="{x:Bind SmartDepositsDisplay, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Border>
-                                <Border Background="#1A8E24AA" CornerRadius="12" Padding="12,6">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <FontIcon Glyph="&#xE81E;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF8E24AA" />
-                                        <TextBlock Text="{x:Bind InvestmentsDisplay, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" Foreground="#FF8E24AA" />
+                                <Border Grid.Column="1" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="#33AB47BC" BorderThickness="1" CornerRadius="10" Padding="10,6">
+                                    <StackPanel Spacing="1">
+                                        <TextBlock Text="MONTHLY FLOW" FontSize="9" FontWeight="Bold" Foreground="#AB47BC" Opacity="0.9" />
+                                        <TextBlock Text="{x:Bind SmartFlowDisplay, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Border>
-                            </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </ScrollViewer>
 
                     <Grid x:Name="MoneyExtendedPanel" Grid.Row="1" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Stretch">
-                        <ListView ItemsSource="{x:Bind Accounts, Mode=OneWay}" SelectionMode="None">
-                            <ListView.Header>
-                                <TextBlock Text="Accounts" FontSize="12" Opacity="0.5" Margin="0,0,0,8" />
-                            </ListView.Header>
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="models:LocalAccount">
-                                    <Grid Margin="0,0,0,12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold" />
-                                            <TextBlock Text="{x:Bind Type}" FontSize="11" Opacity="0.5" />
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="1" Text="{x:Bind CurrentBalance, Converter={StaticResource CurrencyConverter}}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Top Outgoing" FontSize="11" FontWeight="SemiBold" Opacity="0.55" Margin="0,0,0,2" />
+                                <ItemsControl ItemsSource="{x:Bind TopLedgerOutgoingItems, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SmartLedgerItem">
+                                            <Border CornerRadius="8" Background="{ThemeResource AppGlassSubColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Padding="10,6" Margin="0,0,0,6">
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{x:Bind DisplayName}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{x:Bind FormattedCalculatedAmount}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
             </FlipViewItem>

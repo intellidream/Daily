@@ -10,12 +10,13 @@ namespace Daily.Services.Finances
         string CurrentViewType { get; set; }
         event Action OnViewTypeChanged;
         event Action OnQuotesUpdated;
+        event Action? OnSmartLedgerUpdated;
         
-        Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols);
+        Task<List<StockQuote>> GetStockQuotesAsync(List<string> symbols, bool forceRefresh = false);
         Task<MoneyData> GetMoneyDataAsync();
 
         // Smart Ledger
-        Task<LocalSmartLedger?> GetSmartLedgerAsync();
+        Task<LocalSmartLedger?> GetSmartLedgerAsync(bool forceRefresh = false);
         Task SaveSmartLedgerAsync(string ledgerText);
         Task<List<LocalLedgerTransaction>> GetLedgerTransactionsAsync();
         Task SaveLedgerTransactionAsync(LocalLedgerTransaction transaction);
@@ -35,6 +36,6 @@ namespace Daily.Services.Finances
         Task<List<StockQuote>> GetHoldingsWithQuotesAsync();
 
         // Watchlist
-        Task<List<string>> GetWatchlistSymbolsAsync();
+        Task<List<string>> GetWatchlistSymbolsAsync(bool forceRefresh = false);
     }
 }

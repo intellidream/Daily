@@ -43,8 +43,17 @@ namespace Daily.Services
 
         private readonly ISeederService _seederService;
         private readonly IRssFeedService _rssFeedService;
+        private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
 
-        public HabitsService(Supabase.Client supabase, ISettingsService settingsService, IRefreshService refreshService, IHabitsRepository repository, ISyncService syncService, ISeederService seederService, IRssFeedService rssFeedService)
+        public HabitsService(
+            Supabase.Client supabase,
+            ISettingsService settingsService,
+            IRefreshService refreshService,
+            IHabitsRepository repository,
+            ISyncService syncService,
+            ISeederService seederService,
+            IRssFeedService rssFeedService,
+            Daily.Services.Auth.ISupabaseSessionGuardian? sessionGuardian = null)
         {
             try
             {
@@ -55,24 +64,54 @@ namespace Daily.Services
                 _syncService = syncService;
                 _seederService = seederService;
                 _rssFeedService = rssFeedService;
+                _sessionGuardian = sessionGuardian;
 
                 // Setup Auth Listener ONCE in Constructor
                 _authStateChangedHandler = (sender, state) =>
                 {
                     Console.WriteLine($"[HabitsService] Auth State Changed: {state}");
-                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || 
-                        state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
                     {
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await InitializeAsync(forceRecreateRealtime: true);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[HabitsService] Post-Auth Init Failed: {ex}");
+                            }
+                        });
+                    }
+                    else if (state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
+                    {
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                InvalidateRpcCache();
+                                await SetupRealtimeAsync(forceRecreate: true);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[HabitsService] TokenRefreshed Realtime re-bind warning: {ex.Message}");
+                            }
+                        });
+                    }
+                    else if (state == Supabase.Gotrue.Constants.AuthState.SignedOut)
+                    {
+#if WINUI_NATIVE
+                        if (!Daily_WinUI.Services.WinUISessionPersistence.AllowDestroySession)
+                            return;
+#endif
                         Task.Run(async () =>
                         {
                             try
                             {
                                 await InitializeAsync(forceRecreateRealtime: false);
                             }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[HabitsService] Post-Auth Init Failed: {ex}");
-                            }
+                            catch { }
                         });
                     }
                 };
@@ -482,12 +521,21 @@ namespace Daily.Services
             {
                 try
                 {
-                    var response = await _supabase.Rpc("get_habits_consistency", new Dictionary<string, object>
-                    {
-                        { "p_habit_type", habitType },
-                        { "p_start_date", startDate.ToString("yyyy-MM-dd") },
-                        { "p_end_date", endDate.ToString("yyyy-MM-dd") }
-                    });
+                    var response = _sessionGuardian != null
+                        ? await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                            () => _supabase.Rpc("get_habits_consistency", new Dictionary<string, object>
+                            {
+                                { "p_habit_type", habitType },
+                                { "p_start_date", startDate.ToString("yyyy-MM-dd") },
+                                { "p_end_date", endDate.ToString("yyyy-MM-dd") }
+                            }),
+                            "HabitsService.get_habits_consistency")
+                        : await _supabase.Rpc("get_habits_consistency", new Dictionary<string, object>
+                        {
+                            { "p_habit_type", habitType },
+                            { "p_start_date", startDate.ToString("yyyy-MM-dd") },
+                            { "p_end_date", endDate.ToString("yyyy-MM-dd") }
+                        });
 
                     var json = response.Content;
                     if (!string.IsNullOrEmpty(json) && json != "null")
@@ -541,10 +589,17 @@ namespace Daily.Services
             {
                 try
                 {
-                    var response = await _supabase.Rpc("get_smokes_financials", new Dictionary<string, object>
-                    {
-                        { "p_since_date", sinceDate.ToUniversalTime().ToString("o") }
-                    });
+                    var response = _sessionGuardian != null
+                        ? await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                            () => _supabase.Rpc("get_smokes_financials", new Dictionary<string, object>
+                            {
+                                { "p_since_date", sinceDate.ToUniversalTime().ToString("o") }
+                            }),
+                            "HabitsService.get_smokes_financials")
+                        : await _supabase.Rpc("get_smokes_financials", new Dictionary<string, object>
+                        {
+                            { "p_since_date", sinceDate.ToUniversalTime().ToString("o") }
+                        });
 
                     var json = response.Content;
                     if (!string.IsNullOrEmpty(json) && json != "null")

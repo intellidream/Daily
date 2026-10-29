@@ -10,7 +10,7 @@ namespace Daily.Models.Finances
     [Supabase.Postgrest.Attributes.Table("smart_ledgers")]
     public class SmartLedger : Supabase.Postgrest.Models.BaseModel
     {
-        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        [Supabase.Postgrest.Attributes.PrimaryKey("id", true)]
         public Guid Id { get; set; }
 
         [Supabase.Postgrest.Attributes.Column("user_id")]
@@ -53,7 +53,7 @@ namespace Daily.Models.Finances
     [Supabase.Postgrest.Attributes.Table("ledger_transactions")]
     public class LedgerTransaction : Supabase.Postgrest.Models.BaseModel
     {
-        [Supabase.Postgrest.Attributes.PrimaryKey("id")]
+        [Supabase.Postgrest.Attributes.PrimaryKey("id", true)]
         public Guid Id { get; set; }
 
         [Supabase.Postgrest.Attributes.Column("user_id")]
@@ -185,7 +185,10 @@ namespace Daily.Models.Finances
         public bool IsScaled { get; set; } = true;
         public List<string> Notes { get; set; } = new();
         public bool IsPureNote { get; set; }
+        public bool IsNotPureNote => !IsPureNote;
         public decimal PercentageOfSection { get; set; }
+        public bool HasNotes => !IsPureNote && Notes != null && Notes.Count > 0;
+        public string NotesDisplay => Notes != null && Notes.Count > 0 ? string.Join(" · ", Notes) : string.Empty;
 
         public string DisplayName
         {
@@ -251,6 +254,8 @@ namespace Daily.Models.Finances
         public string RawText { get; set; } = string.Empty;
 
         public string FormattedNetWorth => $"{NetWorth:N0} Lei";
+        public string FormattedNetWorthEUR => $"~{NetWorthEUR:N0} €";
+        public string FormattedDeposit => $"{DepositTotal:N0} Lei";
         public string FormattedIncoming => $"{IncomingTotal:N0} Lei";
         public string FormattedOutgoing => $"{OutgoingTotal:N0} Lei";
         public string FormattedBalance => $"{BalanceTotal:N0} Lei";
