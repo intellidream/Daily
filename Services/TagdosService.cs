@@ -67,20 +67,20 @@ namespace Daily.Services
             }
         }
 
-        private void OnAuthStateChanged(IGotrueClient<User, Session> sender, Constants.AuthState state)
+        private void OnAuthStateChanged(IGotrueClient<User, Session> sender, Supabase.Gotrue.Constants.AuthState state)
         {
-            if (state == Constants.AuthState.SignedIn || state == Constants.AuthState.TokenRefreshed)
+            if (state == Supabase.Gotrue.Constants.AuthState.SignedIn || state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed)
             {
                 _ = Task.Run(async () =>
                 {
-                    await SetupRealtimeAsync(forceRecreate: state == Constants.AuthState.TokenRefreshed).ConfigureAwait(false);
-                    if (state == Constants.AuthState.SignedIn)
+                    await SetupRealtimeAsync(forceRecreate: state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed).ConfigureAwait(false);
+                    if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
                     {
                         await SyncWithRemoteAsync().ConfigureAwait(false);
                     }
                 });
             }
-            else if (state == Constants.AuthState.SignedOut)
+            else if (state == Supabase.Gotrue.Constants.AuthState.SignedOut)
             {
                 _realtimeUserId = null;
             }
