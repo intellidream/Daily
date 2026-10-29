@@ -85,3 +85,25 @@ In response to the user's audit and requirements, three key system-wide improvem
 
 - **Supabase Authentication Context:** Whenever bookmarks or observations are created or deleted, operations automatically resolve the active `auth.users.id`. In offline or unauthenticated mode, changes persist to local SQLite/Room/UserDefaults caches and sync upon reconnection.
 - **TagDoS Quick Note Integration:** When logging a sighting, a rich markdown note tagged `#sky` is automatically recorded in `tagdos_quick_notes`, ensuring amateur astronomy logs seamlessly appear in the user's TagDoS stream.
+
+## 6. Windows 11 WinUI 3 Postgrest Serialization & Favorite Star Parity
+
+### Root Cause Analysis & Newtonsoft.Json Transition
+- **Issue:** On Windows 11, the Cosmos bookmarks deck remained empty (`SAVED SKY BOOKMARKS (0)`) even though the cloud database contained 9 bookmarks synced across Android and iOS. Target inspector favorite buttons also remained empty (`\uE734`).
+- **Root Cause:** In `WinUI/Daily.WinUI/Services/CosmosLiveService.cs`, Supabase `CosmosBookmarkRecord` and `CosmosObservationRecord` inherit from Postgrest `BaseModel`. Attempting to serialize `BaseModel` instances to local disk cache using `System.Text.Json` threw:
+  `System.NotSupportedException: The type 'Supabase.Postgrest.Attributes.PrimaryKeyAttribute' is not a supported dictionary key using converter of type 'System.Text.Json'`.
+  This exception silently interrupted the hydration lifecycle, aborting cache write and returning an empty list.
+- **Resolution:** Replaced `System.Text.Json` with `Newtonsoft.Json` (`JsonConvert.SerializeObject` and `JsonConvert.DeserializeObject`), matching the rest of Daily's Supabase Postgrest persistence.
+- **Target ID Normalization:** Celestial target identifiers vary across platforms (e.g. `BODY-Moon` or `body_moon` vs `Moon` / `moon`). Added `IsTargetBookmarked(string objId, string targetName)` to normalize IDs and match targets seamlessly against stored cloud records.
+- **Visual Feedback:** Updated `RefreshSelectedTargetInspector()` in `CosmosDetailPage.xaml.cs` to render a filled golden star `★` (`\uE735`) in `#FFFFD166` (or red in night vision) with dynamic tooltips, refreshing automatically when cloud bookmarks hydrate or deck items are clicked.
+
+## 7. Multi-Device Verification & Delivery Status
+
+| Platform / Target | Build Status | Delivery & Verification | Key Observables Verified |
+| :--- | :--- | :--- | :--- |
+| **Windows 11 VM** | Clean ARM64 build (`0 Errors`) | Live App Executed | `SAVED SKY BOOKMARKS (9)` with `CLOUD SYNC`, filled golden star `★` in Target Inspector |
+| **macOS Native** | Clean macOS Debug build | Launched via `-startTabCosmos` | Liquid Glass sky dome, cardinals (`NE`, `N`), Moon inspector with filled star `★`, 22/100 seeing score |
+| **SimulaDuo (Foldable)**| Clean iOS build | Launched via `-startTabCosmos` | Split dual-pane: interactive sky dome left, Observatory Deck right with 17/100 score & visible targets |
+| **SimulaPhone (iPhone 17 Pro)** | Clean iOS build | Launched via `-startTabCosmos` | Compact weather button, uncrowded location HUD, cardinal indicators, live ephemeris |
+| **Physical iPhone ("Schmitz")** | Clean signed build (MIHAI IONESCU) | Installed via `devicectl` & Launched | `com.intellidream.daily` launched into Cosmos view |
+
