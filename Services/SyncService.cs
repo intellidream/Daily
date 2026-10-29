@@ -1355,17 +1355,10 @@ namespace Daily.Services
             try 
             {
                 var userGuid = Guid.Parse(userId);
-                var effectiveLastPull = lastPull;
-                var response = await ExecuteWithAuthAsync(() =>
-                {
-                    var query = _supabase.From<Account>().Where(a => a.UserId == userGuid);
-                    if (effectiveLastPull > DateTime.MinValue)
-                    {
-                        var queryDate = effectiveLastPull.AddMinutes(-5);
-                        query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
-                    }
-                    return query.Get();
-                }, "PullAccounts");
+                // Note: Supabase 'accounts' table has no updated_at/created_at column; user account count is tiny.
+                var response = await ExecuteWithAuthAsync(
+                    () => _supabase.From<Account>().Where(a => a.UserId == userGuid).Get(),
+                    "PullAccounts");
 
                 int count = response.Models.Count;
                 if (count > 0)
@@ -1437,11 +1430,12 @@ namespace Daily.Services
                 var effectiveLastPull = lastPull;
                 var response = await ExecuteWithAuthAsync(() =>
                 {
+                    // Note: Supabase 'transactions' table uses 'date' (no updated_at/created_at column)
                     var query = _supabase.From<Transaction>().Order("date", Supabase.Postgrest.Constants.Ordering.Descending);
                     if (effectiveLastPull > DateTime.MinValue)
                     {
-                        var queryDate = effectiveLastPull.AddMinutes(-5);
-                        query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                        var queryDate = effectiveLastPull.AddDays(-7);
+                        query = query.Filter("date", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("yyyy-MM-dd"));
                     }
                     return query.Limit(1000).Get();
                 }, "PullTransactions");
@@ -1513,15 +1507,10 @@ namespace Daily.Services
         {
             try 
             {
-                var effectiveLastPull = lastPull;
+                // Note: Supabase 'holdings' table has no updated_at/created_at column; RLS scopes to user via account join.
                 var response = await ExecuteWithAuthAsync(() =>
                 {
-                    var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<Holding>)_supabase.From<Holding>(); // RLS handles userid via account join
-                    if (effectiveLastPull > DateTime.MinValue)
-                    {
-                        var queryDate = effectiveLastPull.AddMinutes(-5);
-                        query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
-                    }
+                    var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<Holding>)_supabase.From<Holding>();
                     return query.Limit(1000).Get();
                 }, "PullHoldings");
 

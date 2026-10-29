@@ -191,6 +191,11 @@ namespace Daily
                     SessionHandler = new Daily.Services.Auth.MauiSessionPersistence(logger, watchConn)
                 };
                 var client = new Supabase.Client(supabaseUrl, supabaseKey, options);
+                client.Realtime.GetHeaders = () => new System.Collections.Generic.Dictionary<string, string>
+                {
+                    { "apikey", supabaseKey },
+                    { "X-Client-Info", "daily-maui" }
+                };
                 
                 client.Auth.AddStateChangedListener((sender, state) =>
                 {

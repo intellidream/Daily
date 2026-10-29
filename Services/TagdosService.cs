@@ -863,6 +863,13 @@ namespace Daily.Services
 
             try
             {
+                if (_sessionGuardian != null)
+                {
+                    var connected = await _sessionGuardian.EnsureRealtimeConnectedAsync().ConfigureAwait(false);
+                    if (!connected)
+                        return;
+                }
+
                 if (_streamsRealtimeChannel != null)
                 {
                     try { _streamsRealtimeChannel.Unsubscribe(); } catch { }
@@ -874,20 +881,31 @@ namespace Daily.Services
                     _notesRealtimeChannel = null;
                 }
 
-                _streamsRealtimeChannel = await _supabaseClient.From<RemoteTagdoStream>()
+                var subStreamsTask = _supabaseClient.From<RemoteTagdoStream>()
                     .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
                     {
                         _ = Task.Run(SyncWithRemoteAsync);
                     });
+                if (await Task.WhenAny(subStreamsTask, Task.Delay(5000)).ConfigureAwait(false) == subStreamsTask)
+                {
+                    _streamsRealtimeChannel = await subStreamsTask.ConfigureAwait(false);
+                }
 
-                _notesRealtimeChannel = await _supabaseClient.From<RemoteTagdoQuickNote>()
+                var subNotesTask = _supabaseClient.From<RemoteTagdoQuickNote>()
                     .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
                     {
                         _ = Task.Run(SyncWithRemoteAsync);
                     });
+                if (await Task.WhenAny(subNotesTask, Task.Delay(5000)).ConfigureAwait(false) == subNotesTask)
+                {
+                    _notesRealtimeChannel = await subNotesTask.ConfigureAwait(false);
+                }
 
-                _realtimeUserId = userId;
-                SupabaseSessionGuardian.LogGuardian($"[TagdosService] Subscribed to Realtime for tagdos_streams & tagdos_quick_notes (user={userId}).");
+                if (_streamsRealtimeChannel != null || _notesRealtimeChannel != null)
+                {
+                    _realtimeUserId = userId;
+                    SupabaseSessionGuardian.LogGuardian($"[TagdosService] Subscribed to Realtime for tagdos_streams & tagdos_quick_notes (user={userId}).");
+                }
             }
             catch (Exception ex)
             {

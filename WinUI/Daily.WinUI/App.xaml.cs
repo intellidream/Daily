@@ -370,12 +370,18 @@ public partial class App : Application
         var options = new Supabase.SupabaseOptions
         {
             // Disabled intentionally: SupabaseSessionGuardian manages deterministic JWT refresh
-            // using real 'exp' claims without Gotrue's buggy Timer/SetSession DestroySession behavior.
+            // using real 'exp' claims without Gotrue's buggy Timer/SetSession DestroySession behavior,
+            // and connects Realtime single-flight after session hydration using publishable-key handshake headers.
             AutoRefreshToken = false,
-            AutoConnectRealtime = true,
+            AutoConnectRealtime = false,
             SessionHandler = new Daily_WinUI.Services.WinUISessionPersistence()
         };
         SupabaseClient = new Supabase.Client(Secrets.SupabaseUrl, Secrets.SupabaseKey, options);
+        SupabaseClient.Realtime.GetHeaders = () => new System.Collections.Generic.Dictionary<string, string>
+        {
+            { "apikey", Secrets.SupabaseKey },
+            { "X-Client-Info", "daily-winui" }
+        };
 
         // Keep central listener alive to propagate token refreshes and prevent garbage collection
         _centralAuthListener = (sender, state) =>
@@ -484,6 +490,10 @@ public partial class App : Application
         {
             var hydrated = await sessionGuardian.HydrateOrRefreshOnStartupAsync();
             LogDiagnostic($"InitializeAsync: SessionGuardian hydrated={hydrated}, User={SupabaseClient.Auth.CurrentSession?.User?.Email}");
+            if (hydrated)
+            {
+                _ = Task.Run(() => sessionGuardian.EnsureRealtimeConnectedAsync());
+            }
         }
         catch (Exception ex)
         {

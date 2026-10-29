@@ -380,11 +380,23 @@ namespace Daily.Services
             await _realtimeSemaphore.WaitAsync();
             try 
             {
-                var token = _supabase.Auth.CurrentSession?.AccessToken;
-                if (!string.IsNullOrEmpty(token))
+                if (_sessionGuardian != null)
                 {
-                    Console.WriteLine("[HabitsService] Propagating current session token to Realtime.");
-                    _supabase.Realtime.SetAuth(token);
+                    var connected = await _sessionGuardian.EnsureRealtimeConnectedAsync();
+                    if (!connected)
+                    {
+                        Console.WriteLine("[HabitsService] Realtime socket not connected; deferring channel subscription.");
+                        return;
+                    }
+                }
+                else
+                {
+                    var token = _supabase.Auth.CurrentSession?.AccessToken;
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        Console.WriteLine("[HabitsService] Propagating current session token to Realtime.");
+                        _supabase.Realtime.SetAuth(token);
+                    }
                 }
                 
                 if (forceRecreate)
@@ -437,16 +449,32 @@ namespace Daily.Services
                 {
                     _habitsLogsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_logs", null, null, new Dictionary<string, string>());
                     _habitsLogsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitLogReceived);
-                    await _habitsLogsChannel.Subscribe();
-                    Console.WriteLine("[HabitsService] Realtime subscribed to habits_logs");
+                    var subLogs = _habitsLogsChannel.Subscribe();
+                    if (await Task.WhenAny(subLogs, Task.Delay(5000)) == subLogs)
+                    {
+                        await subLogs;
+                        Console.WriteLine("[HabitsService] Realtime subscribed to habits_logs");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[HabitsService] Realtime subscribe to habits_logs timed out after 5s.");
+                    }
                 }
 
                 if (_habitsGoalsChannel == null)
                 {
                     _habitsGoalsChannel = _supabase.Realtime.Channel("realtime", "public", "habits_goals", null, null, new Dictionary<string, string>());
                     _habitsGoalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHabitGoalReceived);
-                    await _habitsGoalsChannel.Subscribe();
-                    Console.WriteLine("[HabitsService] Realtime subscribed to habits_goals");
+                    var subGoals = _habitsGoalsChannel.Subscribe();
+                    if (await Task.WhenAny(subGoals, Task.Delay(5000)) == subGoals)
+                    {
+                        await subGoals;
+                        Console.WriteLine("[HabitsService] Realtime subscribed to habits_goals");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[HabitsService] Realtime subscribe to habits_goals timed out after 5s.");
+                    }
                 }
             } 
             catch (Exception ex) 

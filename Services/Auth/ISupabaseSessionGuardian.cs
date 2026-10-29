@@ -46,6 +46,12 @@ namespace Daily.Services.Auth
         void StopBackgroundGuardian();
 
         /// <summary>
+        /// Ensures the Supabase Realtime WebSocket is connected single-flight using publishable-key-only
+        /// HTTP Upgrade headers (avoiding HTTP 401 with ES256 user JWTs) and propagates WALRUS SetAuth.
+        /// </summary>
+        Task<bool> EnsureRealtimeConnectedAsync(CancellationToken ct = default);
+
+        /// <summary>
         /// Decodes the real UTC expiration timestamp ('exp' claim) directly from a JWT string.
         /// </summary>
         DateTime? GetAccessTokenExpiryUtc(string? jwt);

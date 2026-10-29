@@ -27,10 +27,10 @@ namespace Daily.Models.Finances
         [Supabase.Postgrest.Attributes.Column("current_balance")]
         public decimal CurrentBalance { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("created_at")]
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime CreatedAt { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("updated_at")]
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime? UpdatedAt { get; set; }
     }
 
@@ -55,10 +55,10 @@ namespace Daily.Models.Finances
         [Supabase.Postgrest.Attributes.Column("description")]
         public string? Description { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("created_at")]
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime CreatedAt { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("updated_at")]
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime? UpdatedAt { get; set; }
     }
 
@@ -99,10 +99,10 @@ namespace Daily.Models.Finances
         [Supabase.Postgrest.Attributes.Column("cost_basis")]
         public decimal CostBasis { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("created_at")]
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime CreatedAt { get; set; }
 
-        [Supabase.Postgrest.Attributes.Column("updated_at")]
+        [Newtonsoft.Json.JsonIgnore]
         public DateTime? UpdatedAt { get; set; }
     }
 

@@ -950,13 +950,20 @@ namespace Daily.Services.Finances
 
             try
             {
+                if (_sessionGuardian != null)
+                {
+                    var connected = await _sessionGuardian.EnsureRealtimeConnectedAsync();
+                    if (!connected)
+                        return;
+                }
+
                 if (_ledgerRealtimeChannel != null)
                 {
                     try { _ledgerRealtimeChannel.Unsubscribe(); } catch { }
                     _ledgerRealtimeChannel = null;
                 }
 
-                _ledgerRealtimeChannel = await _supabaseClient.From<SmartLedger>()
+                var subTask = _supabaseClient.From<SmartLedger>()
                     .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
                     {
                         _ = Task.Run(async () =>
@@ -964,9 +971,12 @@ namespace Daily.Services.Finances
                             await GetSmartLedgerAsync(forceRefresh: true);
                         });
                     });
-
-                _realtimeUserId = userId;
-                SupabaseSessionGuardian.LogGuardian($"[FinancesService] Subscribed to Realtime for smart_ledgers (user={userId}).");
+                if (await Task.WhenAny(subTask, Task.Delay(5000)) == subTask)
+                {
+                    _ledgerRealtimeChannel = await subTask;
+                    _realtimeUserId = userId;
+                    SupabaseSessionGuardian.LogGuardian($"[FinancesService] Subscribed to Realtime for smart_ledgers (user={userId}).");
+                }
             }
             catch (Exception ex)
             {

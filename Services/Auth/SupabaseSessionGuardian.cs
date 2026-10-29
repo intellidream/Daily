@@ -21,6 +21,7 @@ namespace Daily.Services.Auth
 
         private readonly Supabase.Client _supabase;
         private readonly SemaphoreSlim _refreshLock = new(1, 1);
+        private readonly SemaphoreSlim _realtimeLock = new(1, 1);
         private readonly IGotrueClient<User, Session>.AuthEventHandler _authListener;
 
         private string? _lastKnownAccessToken;
@@ -34,6 +35,7 @@ namespace Daily.Services.Auth
         public SupabaseSessionGuardian(Supabase.Client supabase)
         {
             _supabase = supabase;
+            ConfigureRealtimeHandshakeHeaders();
 
             var initial = _supabase.Auth.CurrentSession;
             if (initial != null)
@@ -70,6 +72,7 @@ namespace Daily.Services.Auth
 
                     try
                     {
+                        ConfigureRealtimeHandshakeHeaders();
                         _supabase.Realtime.SetAuth(session.AccessToken);
                     }
                     catch (Exception ex)
@@ -497,6 +500,80 @@ namespace Daily.Services.Auth
             }
             catch { }
 #endif
+        }
+
+        private void ConfigureRealtimeHandshakeHeaders()
+        {
+            try
+            {
+                // Supabase's API Gateway rejects ES256 user JWTs in the HTTP Upgrade 'Authorization' header on
+                // /realtime/v1/websocket (HTTP 401) when paired with sb_publishable_* keys.
+                // Realtime user RLS uses Phoenix WALRUS via Realtime.SetAuth(accessToken), while the WebSocket
+                // HTTP Upgrade handshake must carry only the publishable API key.
+                Func<System.Collections.Generic.Dictionary<string, string>> handshakeHeaders = () =>
+                    new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        { "apikey", Daily.Configuration.Secrets.SupabaseKey },
+                        { "X-Client-Info", "daily-csharp" }
+                    };
+
+                if (_supabase.Realtime != null)
+                {
+                    _supabase.Realtime.GetHeaders = handshakeHeaders;
+                    if (_supabase.Realtime.Socket != null)
+                    {
+                        _supabase.Realtime.Socket.GetHeaders = handshakeHeaders;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogGuardian($"ConfigureRealtimeHandshakeHeaders warning: {ex.Message}");
+            }
+        }
+
+        public async Task<bool> EnsureRealtimeConnectedAsync(CancellationToken ct = default)
+        {
+            if (_supabase.Realtime == null)
+                return false;
+
+            await _realtimeLock.WaitAsync(ct);
+            try
+            {
+                ConfigureRealtimeHandshakeHeaders();
+
+                if (_supabase.Realtime.Socket == null || !_supabase.Realtime.Socket.IsConnected)
+                {
+                    var connectTask = _supabase.Realtime.ConnectAsync();
+                    var completed = await Task.WhenAny(connectTask, Task.Delay(5000, ct));
+                    if (completed != connectTask)
+                    {
+                        LogGuardian("EnsureRealtimeConnectedAsync: WebSocket connect timed out after 5s.");
+                        return false;
+                    }
+
+                    await connectTask; // Observe any connect exception cleanly inside try/catch
+                    ConfigureRealtimeHandshakeHeaders();
+                    LogGuardian("EnsureRealtimeConnectedAsync: Realtime WebSocket connected (101 Switching Protocols).");
+                }
+
+                var accessToken = _supabase.Auth.CurrentSession?.AccessToken;
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    _supabase.Realtime.SetAuth(accessToken);
+                }
+
+                return _supabase.Realtime.Socket?.IsConnected == true;
+            }
+            catch (Exception ex)
+            {
+                LogGuardian($"EnsureRealtimeConnectedAsync warning: {SummarizeException(ex)}");
+                return false;
+            }
+            finally
+            {
+                _realtimeLock.Release();
+            }
         }
 
         public static bool IsJwtAuthError(Exception ex)
