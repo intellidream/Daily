@@ -1,10 +1,9 @@
 package com.intellidream.daily.wearos.data
 
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
+import androidx.compose.runtime.Immutable
 import java.util.Locale
-import java.util.regex.Pattern
 
+@Immutable
 data class ParsedLedgerResult(
     val netWorth: Double,
     val netWorthEUR: Double,
@@ -12,9 +11,14 @@ data class ParsedLedgerResult(
     val balance: Double,
     val incoming: Double,
     val outgoing: Double,
-    val items: List<WearLedgerItemData>
+    val items: List<WearLedgerItemData>,
+    val netWorthFormatted: String = "",
+    val netWorthEURFormatted: String = "",
+    val depositsFormatted: String = "",
+    val balanceFormatted: String = ""
 )
 
+@Immutable
 data class WearLedgerItemData(
     val id: String,
     val name: String,
@@ -22,7 +26,9 @@ data class WearLedgerItemData(
     val rawAmount: Double,
     val calculatedAmount: Double,
     val isScaled: Boolean,
-    val currency: String = "Lei"
+    val currency: String = "Lei",
+    val subtitle: String = "",
+    val displayAmount: String = ""
 )
 
 object SmartLedgerParser {
@@ -163,6 +169,18 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
                 val cleanKey = cleanKeyName(keyPart)
                 if (shouldIncludeInWatchQuickAdjust(cleanKey, currentSection)) {
+                    val curr = if (parsedVal.isEUR) "EUR" else "Lei"
+                    val sub = if (isScaled) {
+                        val rawStr = if (parsedVal.raw % 1.0 == 0.0) "${parsedVal.raw.toLong()}" else String.format(Locale.US, "%.1f", parsedVal.raw)
+                        "$rawStr × 100 Lei"
+                    } else {
+                        "Direct / Monthly"
+                    }
+                    val disp = if (parsedVal.calculated % 1.0 == 0.0) {
+                        "${formatWithDots(parsedVal.calculated.toLong())} $curr"
+                    } else {
+                        "${formatWithDots(parsedVal.calculated.toLong())} $curr"
+                    }
                     extractedItems.add(
                         WearLedgerItemData(
                             id = "${lineIndex}_$cleanKey",
@@ -171,7 +189,9 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
                             rawAmount = parsedVal.raw,
                             calculatedAmount = parsedVal.calculated,
                             isScaled = isScaled,
-                            currency = if (parsedVal.isEUR) "EUR" else "Lei"
+                            currency = curr,
+                            subtitle = sub,
+                            displayAmount = disp
                         )
                     )
                 }
@@ -192,9 +212,32 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             balance = balanceTotal,
             incoming = incomingTotal,
             outgoing = outgoingTotal,
-            items = extractedItems
+            items = extractedItems,
+            netWorthFormatted = formatLei(nw),
+            netWorthEURFormatted = formatEur(nwEUR),
+            depositsFormatted = formatLei(depositTotal),
+            balanceFormatted = formatLei(balanceTotal)
         )
     }
+
+    fun formatWithDots(value: Long): String {
+        if (value == 0L) return "0"
+        val isNegative = value < 0
+        val absVal = if (isNegative) -value else value
+        val s = absVal.toString()
+        val sb = StringBuilder()
+        val len = s.length
+        for (i in 0 until len) {
+            if (i > 0 && (len - i) % 3 == 0) {
+                sb.append('.')
+            }
+            sb.append(s[i])
+        }
+        return if (isNegative) "-$sb" else sb.toString()
+    }
+
+    fun formatLei(value: Double): String = "${formatWithDots(value.toLong())} Lei"
+    fun formatEur(value: Double): String = "~${formatWithDots(value.toLong())} €"
 
     private fun shouldIncludeInWatchQuickAdjust(cleanKey: String, section: String): Boolean {
         if (section.equals("Outgoing", ignoreCase = true)) {

@@ -44,9 +44,12 @@ import com.google.android.horologist.compose.layout.rememberResponsiveColumnStat
 import com.intellidream.daily.wearos.presentation.theme.SurfaceCard
 import com.intellidream.daily.wearos.presentation.theme.SurfaceCardBorder
 import com.intellidream.daily.wearos.presentation.theme.WaterCyan
+import androidx.compose.runtime.Immutable
 import java.util.Calendar
 
+@Immutable
 data class MacroPillar(val name: String, val value: String, val color: Color)
+@Immutable
 data class StockTicker(val symbol: String, val price: String, val change: String, val isPositive: Boolean)
 
 @OptIn(ExperimentalHorologistApi::class)
@@ -410,7 +413,7 @@ fun OrbitHubScreen(
 
             // 5. Smart Ledger Quick Glance & Adjust
             item {
-                SmartLedgerCard()
+                SmartLedgerCard(isPageActive = isPageActive)
             }
 
             // 6. Market Watchlist Card

@@ -68,21 +68,8 @@ class WatchSmartLedgerRepository private constructor(private val context: Contex
             }
         }
 
-        fun formatLei(value: Double): String {
-            val symbols = DecimalFormatSymbols(Locale.GERMANY).apply {
-                groupingSeparator = '.'
-            }
-            val df = DecimalFormat("#,##0", symbols)
-            return "${df.format(value.toLong())} Lei"
-        }
-
-        fun formatEur(value: Double): String {
-            val symbols = DecimalFormatSymbols(Locale.GERMANY).apply {
-                groupingSeparator = '.'
-            }
-            val df = DecimalFormat("#,##0", symbols)
-            return "~${df.format(value.toLong())} €"
-        }
+        fun formatLei(value: Double): String = SmartLedgerParser.formatLei(value)
+        fun formatEur(value: Double): String = SmartLedgerParser.formatEur(value)
     }
 
     private fun loadCachedText(): String {

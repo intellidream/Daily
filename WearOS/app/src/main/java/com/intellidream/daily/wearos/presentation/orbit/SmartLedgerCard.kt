@@ -49,7 +49,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SmartLedgerCard(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPageActive: Boolean = true
 ) {
     val context = LocalContext.current
     val repository = remember { WatchSmartLedgerRepository.getInstance(context) }
@@ -58,20 +59,12 @@ fun SmartLedgerCard(
     val parsed by repository.parsed.collectAsState()
     val isSyncing by repository.isSyncing.collectAsState()
 
-    // Battery-friendly: Syncs only if cache is stale (> 10m old)
-    LaunchedEffect(Unit) {
-        repository.syncWithSupabase(force = false)
+    // Battery & CPU optimization: sync only when Orbit page is active and cache is stale (> 10m old)
+    LaunchedEffect(isPageActive) {
+        if (isPageActive) {
+            repository.syncWithSupabase(force = false)
+        }
     }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing)
-        ),
-        label = "Rotation"
-    )
 
     Column(
         modifier = modifier
@@ -103,41 +96,28 @@ fun SmartLedgerCard(
                 )
             }
 
-            // Sync / Refresh button
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x1A10B981))
-                    .clickable {
-                        scope.launch {
-                            repository.syncWithSupabase(force = true)
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Refresh",
-                    tint = if (isSyncing) Color(0xFF10B981) else Color(0xFF64748B),
-                    modifier = Modifier
-                        .size(11.dp)
-                        .then(if (isSyncing) Modifier.rotate(rotation) else Modifier)
-                )
-            }
+            // Sync / Refresh button isolated to prevent card recompositions
+            SyncRefreshButton(
+                isSyncing = isSyncing,
+                onClick = {
+                    scope.launch {
+                        repository.syncWithSupabase(force = true)
+                    }
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
         // Net worth line
         Text(
-            text = WatchSmartLedgerRepository.formatLei(parsed.netWorth),
+            text = parsed.netWorthFormatted,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
         Text(
-            text = WatchSmartLedgerRepository.formatEur(parsed.netWorthEUR),
+            text = parsed.netWorthEURFormatted,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color(0xFF34D399)
@@ -160,7 +140,7 @@ fun SmartLedgerCard(
                 Column {
                     Text(text = "DEPOSITS", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
                     Text(
-                        text = WatchSmartLedgerRepository.formatLei(parsed.deposits),
+                        text = parsed.depositsFormatted,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -179,7 +159,7 @@ fun SmartLedgerCard(
                 Column {
                     Text(text = "BALANCE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E5FF))
                     Text(
-                        text = WatchSmartLedgerRepository.formatLei(parsed.balance),
+                        text = parsed.balanceFormatted,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -221,24 +201,53 @@ fun SmartLedgerCard(
 }
 
 @Composable
+private fun SyncRefreshButton(
+    isSyncing: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .background(Color(0x1A10B981))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSyncing) {
+            val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = LinearEasing)
+                ),
+                label = "Rotation"
+            )
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = "Syncing",
+                tint = Color(0xFF10B981),
+                modifier = Modifier
+                    .size(11.dp)
+                    .rotate(rotation)
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = "Refresh",
+                tint = Color(0xFF64748B),
+                modifier = Modifier.size(11.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun QuickItemRow(
     item: WearLedgerItemData,
     onMinus: () -> Unit,
     onPlus: () -> Unit
 ) {
-    val subtitle = if (item.isScaled) {
-        val rawStr = if (item.rawAmount % 1.0 == 0.0) "${item.rawAmount.toInt()}" else String.format(java.util.Locale.US, "%.1f", item.rawAmount)
-        "$rawStr × 100 Lei"
-    } else {
-        "Direct / Monthly"
-    }
-
-    val displayAmount = if (item.calculatedAmount % 1.0 == 0.0) {
-        "${item.calculatedAmount.toInt()} ${item.currency}"
-    } else {
-        String.format(java.util.Locale.US, "%.1f %s", item.calculatedAmount, item.currency)
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -250,11 +259,11 @@ private fun QuickItemRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = item.name, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-            Text(text = subtitle, fontSize = 8.sp, color = Color(0xFF94A3B8))
+            Text(text = item.subtitle, fontSize = 8.sp, color = Color(0xFF94A3B8))
         }
 
         Text(
-            text = displayAmount,
+            text = item.displayAmount,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
