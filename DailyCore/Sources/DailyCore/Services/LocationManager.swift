@@ -31,16 +31,25 @@ public final class LocationManager: NSObject, CLLocationManagerDelegate, Observa
 
     /// Requests current GPS location with a strict timeout (default 10s).
     public func requestCurrentLocation(timeoutSeconds: TimeInterval = 10) async throws -> (latitude: Double, longitude: Double) {
-        // Check authorization
+        // 1. Check & request authorization
         if clManager.authorizationStatus == .notDetermined {
             clManager.requestWhenInUseAuthorization()
+            let authDeadline = Date().addingTimeInterval(min(timeoutSeconds, 8.0))
+            while clManager.authorizationStatus == .notDetermined && Date() < authDeadline {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
         }
 
-        // Return last known if fresh
+        if clManager.authorizationStatus == .denied || clManager.authorizationStatus == .restricted {
+            throw LocationError.unauthorized
+        }
+
+        // 2. Return last known if fresh
         if let lastKnown = lastKnownLocation {
             return lastKnown
         }
 
+        // 3. Request fresh single update from hardware
         return try await withCheckedThrowingContinuation { continuation in
             self.locationContinuation = continuation
 

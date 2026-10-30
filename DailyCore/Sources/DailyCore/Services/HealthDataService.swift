@@ -71,7 +71,7 @@ public final class HealthDataService: ObservableObject {
     
     // MARK: - Private State & Dependencies
     
-    private let groupSuiteName = "group.com.intellidream.daily"
+    private let groupSuiteName = GroupDefaults.suiteName
     private let userDefaults: UserDefaults
     private let supabase = SupabaseService.shared.client
     private let cacheTTL: TimeInterval = 300 // 5 minutes in-memory cache
@@ -136,7 +136,7 @@ public final class HealthDataService: ObservableObject {
     }()
     
     public init() {
-        self.userDefaults = UserDefaults(suiteName: "group.com.intellidream.daily") ?? UserDefaults.standard
+        self.userDefaults = UserDefaults(suiteName: groupSuiteName) ?? UserDefaults.standard
         
         // Observe auth session state changes so that once user authentication resolves,
         // real telemetry and canonical summaries are fetched immediately.

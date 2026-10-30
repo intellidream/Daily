@@ -38,6 +38,8 @@
 	<false/>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
+	<key>NSLocationUsageDescription</key>
+	<string>DayOne uses your location to provide accurate local weather forecasts and atmospheric conditions.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>DayOne uses your location to provide accurate local weather forecasts and atmospheric conditions.</string>
 </dict>

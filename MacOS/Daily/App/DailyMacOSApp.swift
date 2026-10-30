@@ -31,12 +31,16 @@ struct DailyMacOSApp: App {
         // Start cross-process Darwin notification listener for widget quick logging
         WidgetDarwinMutationListener.shared.startListening()
         
-        // Eagerly trigger initial sync from Supabase
+        // Eagerly trigger initial sync from Supabase and hydrate widget snapshots
         Task { @MainActor in
             SmartLedgerStore.shared.reloadFromStorage()
             HabitsService.shared.reloadFromLocalStorage()
+            TagdosStore.shared.loadFromStorage()
+            TagdosStore.shared.syncWithWidgets()
+            HabitsService.shared.saveDailyTotals()
             await HabitsService.shared.flushOfflineQueue()
             await HabitsService.shared.loadDataForSelectedDate()
+            await TagdosStore.shared.syncWithSupabase()
             await HealthDataService.shared.refreshIfStale()
             await WeatherService.shared.refreshWeather()
         }

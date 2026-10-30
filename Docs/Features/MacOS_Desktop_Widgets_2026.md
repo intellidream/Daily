@@ -138,3 +138,29 @@ La click pe widget, `handleIncomingURL` din `DailyMacOSApp` comută automat fere
    ```
 6. **Lansare Nativă și Navigare URL**:
    Aplicația rulează ca proces activ în macOS, răspunde la deschiderea URL-urilor de navigare și actualizează cache-ul de vreme în fundal.
+
+---
+
+## 6. Rezolvări Critice macOS Sandbox & Sincronizare Widgeturi
+
+1. **Permisiuni CoreLocation GPS (macOS App Sandbox)**:
+   * S-a adăugat entitlement-ul obligatoriu `<key>com.apple.security.personal-information.location</key><true/>` în `MacOS/Daily/Daily.entitlements`. Fără acest entitlement, interogările `locationd` eșuau silențios cu eroare sandbox 159, forțând fallback-ul pe rețea IP.
+   * S-au adăugat descrierile explicite `NSLocationUsageDescription` și `NSLocationWhenInUseUsageDescription` în `MacOS/Daily/Resources/Info.plist`.
+   * În `LocationManager.swift`, metoda `requestCurrentLocation` așteaptă acum asincron rezolvarea prompt-ului de permisiune când starea este `.notDetermined`.
+   * În `WeatherService.swift`, dacă locația curentă este degradată pe `.ip`, serviciul încearcă imediat upgrade-ul pe `.gps` la refresh fără a rămâne blocat 15 minute pe cache-ul de IP.
+
+2. **Corectare Container App Group macOS (`7LZ9ZT2Z5B.group.com.intellidream.daily`)**:
+   * În macOS App Sandbox, grupurile partajate impun prefixarea cu Team ID (`7LZ9ZT2Z5B.group.com.intellidream.daily`). Fără acest prefix, subsistemul `CoreFoundation CFPrefs` bloca scrierea cu eroarea: `setting preferences outside an application's container requires user-preference-write or file-write-data sandbox access`.
+   * `GroupDefaults.swift` comută automat pe `7LZ9ZT2Z5B.group.com.intellidream.daily` pe macOS (păstrând `group.com.intellidream.daily` pe iOS/watchOS) și efectuează migrare transparentă a tuturor cheilor existente la prima inițializare.
+   * `HabitsService`, `HealthDataService` și `WidgetDataCoordinator` consumă acum unitar `GroupDefaults.suiteName`.
+
+3. **Fallback-uri Reziliente pentru Toate Widgeturile**:
+   * `fetchSleepSnapshot()`: Dacă snapshot-ul agregat nu a fost încă publicat de ecranul de sănătate, inspectează automat `health_daily_summary_*` pentru ziua curentă sau ultimele 48h.
+   * `fetchStressSnapshot()`: Fallback automat pe sumarul canonic de stres din cache-ul local.
+   * `fetchTagdosSnapshot()`: Fallback automat pe fluxurile `daily_tagdos_streams_v1` dacă snapshot-ul nu a fost inițializat.
+   * `fetchBubblesSnapshot()` și `fetchSmokesSnapshot()`: Fallback pe `cached_water_total` și `cached_smokes_total`.
+
+4. **Verificare Live pe iPhone Schmitz (Dispozitiv Fizic)**:
+   * Build complet iOS scheme `Daily` pentru arhitectura arm64 nativă a iPhone 16 Pro Schmitz.
+   * Livrare cu succes prin `xcrun devicectl device install app` și lansare cu `xcrun devicectl device process launch`.
+   * Zero regresii pe iOS, widgeturi și sincronizare.

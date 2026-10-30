@@ -666,7 +666,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     public static let shared = WidgetDataCoordinator()
     public static let darwinMutationNotificationName = "com.intellidream.daily.widgetDidMutateData"
     
-    private let groupSuiteName = "group.com.intellidream.daily"
+    private let groupSuiteName = GroupDefaults.suiteName
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: groupSuiteName) ?? UserDefaults.standard
     }
@@ -710,6 +710,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         if let wData = groupDefaults.data(forKey: "habits_water_daily_totals"),
            let dict = try? JSONDecoder().decode([String: Double].self, from: wData) {
             totalMl = dict[key] ?? 0
+        }
+        if totalMl == 0 {
+            totalMl = Double(groupDefaults.integer(forKey: "cached_water_total"))
         }
         
         // 3. Breakdown from local logs
@@ -867,6 +870,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         if let sData = groupDefaults.data(forKey: "habits_smokes_daily_totals"),
            let dict = try? JSONDecoder().decode([String: Int].self, from: sData) {
             totalSmokes = dict[key] ?? 0
+        }
+        if totalSmokes == 0 {
+            totalSmokes = groupDefaults.integer(forKey: "cached_smokes_total")
         }
         
         // 3. Breakdown from local logs
@@ -1129,8 +1135,52 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     
     public func fetchSleepSnapshot() -> SleepWidgetSnapshot {
         if let data = groupDefaults.data(forKey: sleepSnapshotKey),
-           let snapshot = try? JSONDecoder().decode(SleepWidgetSnapshot.self, from: data) {
+           let snapshot = try? JSONDecoder().decode(SleepWidgetSnapshot.self, from: data),
+           snapshot.hasData {
             return snapshot
+        }
+        
+        // Resilient fallback: inspect recent canonical health summaries from local App Group
+        let cal = Calendar.current
+        for dayOffset in 0...2 {
+            if let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
+                let dKey = isoDateFormatter.string(from: date)
+                if let summaryData = groupDefaults.data(forKey: "health_daily_summary_\(dKey)"),
+                   let summary = try? JSONDecoder().decode(DailyHealthSummaryPayload.self, from: summaryData),
+                   let session = summary.sleep.primarySession, session.asleepSeconds > 0 {
+                    let color = DeviceColorPalette.getColor(for: session.sourceDevice)
+                    return SleepWidgetSnapshot(
+                        hasData: true,
+                        sleepScore: session.sleepScore,
+                        sleepQualityRating: session.sleepQualityRating,
+                        totalAsleepFormatted: session.totalAsleepFormatted,
+                        asleepSeconds: session.asleepSeconds,
+                        durationSeconds: session.durationSeconds,
+                        timeInBedFormatted: session.timeInBedFormatted,
+                        efficiencyPercent: session.efficiencyPercent,
+                        deepSeconds: session.deepSeconds,
+                        remSeconds: session.remSeconds,
+                        lightSeconds: session.lightSeconds,
+                        awakeSeconds: session.awakeSeconds,
+                        deepPercent: session.deepPercent,
+                        remPercent: session.remPercent,
+                        lightPercent: session.lightPercent,
+                        awakePercent: session.awakePercent,
+                        deepFormatted: session.deepFormatted,
+                        remFormatted: session.remFormatted,
+                        lightFormatted: session.lightFormatted,
+                        awakeFormatted: session.awakeFormatted,
+                        bedtimeFormatted: session.bedtimeFormatted,
+                        wakeTimeFormatted: session.wakeTimeFormatted,
+                        restorativePercent: session.restorativePercent,
+                        restingHeartRate: summary.vitals["resting_heart_rate"]?.value,
+                        hrvMs: summary.vitals["hrv_sdnn"]?.value ?? summary.stress?.currentHrvMs,
+                        sourceDevice: session.sourceDevice,
+                        sourceColor: color,
+                        lastUpdated: Date()
+                    )
+                }
+            }
         }
         return SleepWidgetSnapshot.empty
     }
@@ -1152,9 +1202,60 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     
     public func fetchTagdosSnapshot() -> TagdosWidgetSnapshot {
         if let data = groupDefaults.data(forKey: tagdosSnapshotKey),
-           let snapshot = try? JSONDecoder().decode(TagdosWidgetSnapshot.self, from: data) {
+           let snapshot = try? JSONDecoder().decode(TagdosWidgetSnapshot.self, from: data),
+           !snapshot.streams.isEmpty {
             return snapshot
         }
+        
+        // Resilient fallback: decode raw streams if snapshot has not yet been triggered
+        if let streamsData = groupDefaults.data(forKey: "daily_tagdos_streams_v1"),
+           let streams = try? JSONDecoder().decode([TagDoStream].self, from: streamsData),
+           !streams.isEmpty {
+            let snapshotStreams = streams.map { stream in
+                let driving = stream.drivingPill
+                let reminderStr: String? = {
+                    guard let rem = stream.streamReminder else { return nil }
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "HH:mm"
+                    return formatter.string(from: rem)
+                }()
+                let snapshotPills = stream.allPills.prefix(10).map { pill in
+                    TagdosWidgetSnapshotPill(
+                        text: pill.rawText,
+                        typeRaw: pill.type.rawValue,
+                        isCompleted: pill.isCompleted
+                    )
+                }
+                let memosPreview = stream.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? nil
+                    : String(stream.activeMemos.prefix(60))
+                return TagdosWidgetSnapshotStream(
+                    id: stream.id.uuidString,
+                    title: stream.displayTitle,
+                    drivingPillText: driving?.rawText,
+                    drivingPillType: driving?.type.rawValue,
+                    activePillsCount: stream.activePills.count,
+                    reminderTimeFormatted: reminderStr,
+                    pills: Array(snapshotPills),
+                    activeMemosPreview: memosPreview
+                )
+            }
+            let totalActive = streams.reduce(0) { $0 + $1.activePills.count }
+            let nextReminderStr: String? = {
+                let upcoming = streams.compactMap { $0.streamReminder }.sorted().first
+                guard let date = upcoming else { return nil }
+                let formatter = DateFormatter()
+                formatter.dateFormat = "HH:mm"
+                return formatter.string(from: date)
+            }()
+            return TagdosWidgetSnapshot(
+                streams: snapshotStreams,
+                totalActivePills: totalActive,
+                nextReminderFormatted: nextReminderStr,
+                lastUpdated: Date()
+            )
+        }
+        
         return TagdosWidgetSnapshot.empty
     }
 
@@ -1209,8 +1310,34 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     
     public func fetchStressSnapshot() -> StressWidgetSnapshot {
         if let data = groupDefaults.data(forKey: stressSnapshotKey),
-           let snapshot = try? JSONDecoder().decode(StressWidgetSnapshot.self, from: data) {
+           let snapshot = try? JSONDecoder().decode(StressWidgetSnapshot.self, from: data),
+           snapshot.hasData {
             return snapshot
+        }
+        
+        // Resilient fallback: inspect recent canonical health summaries from local App Group
+        let cal = Calendar.current
+        for dayOffset in 0...1 {
+            if let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
+                let dKey = isoDateFormatter.string(from: date)
+                if let summaryData = groupDefaults.data(forKey: "health_daily_summary_\(dKey)"),
+                   let summary = try? JSONDecoder().decode(DailyHealthSummaryPayload.self, from: summaryData),
+                   let stress = summary.stress, stress.currentScore > 0 {
+                    let level = stress.currentLevel
+                    return StressWidgetSnapshot(
+                        hasData: true,
+                        stressScore: Int(stress.currentScore),
+                        levelRaw: level.rawValue,
+                        monkeyMoodRaw: stress.monkeyMood.rawValue,
+                        adviceSnippet: stress.adviceQuote,
+                        hrvMs: stress.currentHrvMs,
+                        restingHeartRate: summary.vitals["resting_heart_rate"]?.value,
+                        parasympatheticPercent: stress.parasympatheticPercent,
+                        sympatheticPercent: stress.sympatheticPercent,
+                        lastUpdated: Date()
+                    )
+                }
+            }
         }
         return StressWidgetSnapshot.empty
     }

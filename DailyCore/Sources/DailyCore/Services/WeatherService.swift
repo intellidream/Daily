@@ -63,9 +63,10 @@ public final class WeatherService: ObservableObject {
     // MARK: - Resilient Location Determination
 
     public func getResilientCoordinates() async -> (lat: Double, lon: Double, source: LocationSource, cityName: String?) {
-        // 1. Check in-memory cache
+        // 1. Check in-memory cache (only retain if source was GPS; allow immediate retry if previously degraded to IP)
         if let lastCoords = lastCoordinates,
            let lastFetch = lastFetchTime,
+           locationSource == .gps,
            Date().timeIntervalSince(lastFetch) < cacheDuration {
             return (lastCoords.lat, lastCoords.lon, locationSource, currentLocationName)
         }

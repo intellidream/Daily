@@ -6,6 +6,9 @@ import WidgetKit
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @MainActor
 public final class HabitsService: ObservableObject {
@@ -131,7 +134,7 @@ public final class HabitsService: ObservableObject {
     
     private let supabase = SupabaseService.shared.client
     private let userDefaults: UserDefaults
-    private let groupSuiteName = "group.com.intellidream.daily"
+    private let groupSuiteName = GroupDefaults.suiteName
     private var offlineLogQueue: [HabitLogRecord] = []
     
     private let isoDateFormatter: DateFormatter = {
@@ -154,6 +157,19 @@ public final class HabitsService: ObservableObject {
         #if canImport(UIKit)
         NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.reloadFromLocalStorage()
+                await self.flushOfflineQueue()
+                await self.loadDataForSelectedDate()
+            }
+        }
+        #elseif canImport(AppKit)
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willBecomeActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -784,7 +800,7 @@ public final class HabitsService: ObservableObject {
         recomputeAllHistoriesAndHeatmaps()
     }
     
-    private func saveDailyTotals() {
+    public func saveDailyTotals() {
         if let wData = try? JSONEncoder().encode(waterDailyTotals) {
             userDefaults.set(wData, forKey: "habits_water_daily_totals")
         }

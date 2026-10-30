@@ -6,8 +6,11 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<key>com.apple.security.personal-information.location</key>
+	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
+		<string>7LZ9ZT2Z5B.group.com.intellidream.daily</string>
 		<string>group.com.intellidream.daily</string>
 	</array>
 </dict>

@@ -4,11 +4,31 @@ import Foundation
 public final class GroupDefaults: @unchecked Sendable {
     public static let shared = GroupDefaults()
     
+#if os(macOS)
+    public static let suiteName = "7LZ9ZT2Z5B.group.com.intellidream.daily"
+    public static let legacySuiteName = "group.com.intellidream.daily"
+#else
     public static let suiteName = "group.com.intellidream.daily"
+    public static let legacySuiteName = "group.com.intellidream.daily"
+#endif
     public let userDefaults: UserDefaults
     
     public init() {
         self.userDefaults = UserDefaults(suiteName: Self.suiteName) ?? .standard
+        
+        #if os(macOS)
+        // Seamlessly migrate legacy data from un-prefixed suite to Team-prefixed suite in macOS App Sandbox
+        if let legacy = UserDefaults(suiteName: Self.legacySuiteName) {
+            let legacyDict = legacy.dictionaryRepresentation()
+            for (k, v) in legacyDict {
+                if !k.hasPrefix("Apple") && !k.hasPrefix("NS") && !k.hasPrefix("AK") && !k.hasPrefix("com.apple") {
+                    if self.userDefaults.object(forKey: k) == nil {
+                        self.userDefaults.set(v, forKey: k)
+                    }
+                }
+            }
+        }
+        #endif
     }
     
     // MARK: - AppSettings Storage

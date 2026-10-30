@@ -70,7 +70,11 @@ public final class TagdosStore: ObservableObject {
 
     // MARK: - Persistence & Hydration
 
-    private func loadFromStorage() {
+    public func reloadFromStorage() {
+        loadFromStorage()
+    }
+
+    public func loadFromStorage() {
         // 1. Load Quick Notes (TagDoQuickNote)
         if let data = groupDefaults.data(forKey: notesStorageKey),
            let decoded = try? JSONDecoder().decode([TagDoQuickNote].self, from: data) {
