@@ -520,20 +520,20 @@ public final class WatchSmartLedgerStore: ObservableObject {
         return updated
     }
 
-    private func formatLei(_ val: Double) -> String {
+    private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.groupingSeparator = "."
         formatter.maximumFractionDigits = 0
-        let str = formatter.string(from: NSNumber(value: val)) ?? "\(Int(val))"
+        return formatter
+    }()
+
+    private func formatLei(_ val: Double) -> String {
+        let str = Self.currencyFormatter.string(from: NSNumber(value: val)) ?? "\(Int(val))"
         return "\(str) Lei"
     }
 
     private func formatEUR(_ val: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = "."
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: val)) ?? "\(Int(val))"
+        return Self.currencyFormatter.string(from: NSNumber(value: val)) ?? "\(Int(val))"
     }
 }
