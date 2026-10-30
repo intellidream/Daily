@@ -20,14 +20,10 @@ public final class KeychainManager: @unchecked Sendable {
     
     @discardableResult
     public func save(key: String, data: Data) -> Bool {
-        delete(key: key)
-        
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccount as String: key
         ]
         
         // Only set access group if available on the platform and device
@@ -37,12 +33,36 @@ public final class KeychainManager: @unchecked Sendable {
         }
         #endif
         
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let attributesToUpdate: [String: Any] = [
+            kSecValueData as String: data
+        ]
         
-        // If failed with group permission error, fallback without access group
-        if status != errSecSuccess && accessGroup != nil {
+        // 1. Attempt non-destructive in-place update first to preserve Keychain ACL and user permissions
+        var status = SecItemUpdate(query as CFDictionary, attributesToUpdate as CFDictionary)
+        
+        // 2. If item does not exist yet (errSecItemNotFound / -25300), create it fresh with SecItemAdd
+        if status == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            
+            status = SecItemAdd(addQuery as CFDictionary, nil)
+            
+            // If failed with group permission error, fallback without access group
+            if status != errSecSuccess && accessGroup != nil {
+                addQuery.removeValue(forKey: kSecAttrAccessGroup as String)
+                status = SecItemAdd(addQuery as CFDictionary, nil)
+            }
+        } else if status != errSecSuccess && accessGroup != nil {
+            // Update may have failed due to accessGroup mismatch; try fallback without access group
             query.removeValue(forKey: kSecAttrAccessGroup as String)
-            return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+            status = SecItemUpdate(query as CFDictionary, attributesToUpdate as CFDictionary)
+            if status == errSecItemNotFound {
+                var addQuery = query
+                addQuery[kSecValueData as String] = data
+                addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+                status = SecItemAdd(addQuery as CFDictionary, nil)
+            }
         }
         
         return status == errSecSuccess
