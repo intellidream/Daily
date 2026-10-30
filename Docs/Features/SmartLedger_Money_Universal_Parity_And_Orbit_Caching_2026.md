@@ -83,11 +83,14 @@ ON public.smart_ledgers (user_id, updated_at DESC);
 - **Verification**: `xcodebuild -scheme "DailyWatch Watch App"` passed with `** BUILD SUCCEEDED **`.
 
 ### 3.5 Wear OS (Pixel Watch 5 / OnePlus Watch 3)
-- **Parser**: Created `SmartLedgerParser.kt` under `wearos.data`, mirroring the complete DSL parser, quick adjust calculations, and line totals recalculation.
+- **Parser**: Created `SmartLedgerParser.kt` under `wearos.data`, mirroring the complete DSL parser, precomputing display strings with zero-allocation `formatWithDots`, quick adjust calculations, and line totals recalculation.
 - **Repository**: Created `WatchSmartLedgerRepository.kt` with SharedPreferences fast cache (`daily_prefs`), 10-minute network throttle TTL, and debounced Supabase mutations.
-- **Orbit Card**: Rebuilt `SmartLedgerCard.kt` to bind reactively to `WatchSmartLedgerRepository.parsed`, featuring animated sync indicators, manual refresh buttons, and 1-tap quick steppers (`+`/`-`).
-- **Build**: Added `org.gradle.java.home` to `WearOS/gradle.properties` for Java 17 compatibility.
-- **Verification**: `assembleDebug` passed cleanly in 17s.
+- **Orbit Card**: Rebuilt `SmartLedgerCard.kt` to bind reactively to `WatchSmartLedgerRepository.parsed`, featuring isolated `SyncRefreshButton` (eliminating continuous recompositions during idle), and 1-tap quick steppers (`+`/`-`).
+- **Data Models**: Added `@Immutable` to `ParsedLedgerResult`, `WearLedgerItemData`, `MacroPillar`, and `StockTicker` for flawless rotary crown skipping.
+- **Verification & Deployment**:
+  - `assembleRelease`: Minified Release APK with R8 code shrinking (8.8 MB).
+  - Deployed & running live on **Google Pixel Watch 5** (`192.168.3.65:38523`, PID 6877).
+  - Deployed & running live on **OnePlus Watch 3** (`adb-H631104000086F7F01C2-Q466CN._adb-tls-connect._tcp`, PID 12682).
 
 ---
 
@@ -124,5 +127,5 @@ flowchart TD
 | **iOS Physical** | Schmitz (iPhone 16 Pro) | `xcrun devicectl device install app --device 00008140...` | **INSTALLED ON DEVICE** |
 | **watchOS** | Apple Watch Series 12 / Ultra 2 | `xcodebuild -scheme "DailyWatch Watch App"` | **BUILD SUCCEEDED** |
 | **Android App** | Phone & Foldable targets | `cd Android && ./gradlew assembleDebug` | **BUILD SUCCESSFUL (11s)** |
-| **Wear OS App** | Pixel Watch 5 / OnePlus Watch 3 | `cd WearOS && ./gradlew assembleDebug` | **BUILD SUCCESSFUL (17s)** |
+| **Wear OS App** | Pixel Watch 5 / OnePlus Watch 3 | `./gradlew assembleRelease` + `adb install` | **DEPLOYED & RUNNING (PID 6877 & 12682)** |
 | **Windows 11** | Parallels Windows 11 VM (ARM64) | `dotnet build WinUI\Daily.WinUI -c Debug -p:Platform=ARM64` | **0 Errors, BUILD PASSED** |
