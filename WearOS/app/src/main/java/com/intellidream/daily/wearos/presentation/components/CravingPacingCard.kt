@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.Spa
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +39,7 @@ fun CravingPacingCard(sessionManager: WatchSessionManager) {
     val isWarning = sessionManager.isCravingWarning()
     val badgeColor = when {
         isWarning -> DailyWearColors.CoffeeOrange
+        formattedTime.contains("Smoke-Free") -> Color(0xFF10B981)
         formattedTime.contains("h") && !formattedTime.startsWith("0h") -> Color(0xFF10B981)
         else -> Color(0xFFEAB308)
     }
@@ -82,14 +83,14 @@ fun CravingPacingCard(sessionManager: WatchSessionManager) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Filled.Air,
-                        contentDescription = null,
+                        imageVector = Icons.Filled.Spa,
+                        contentDescription = "Breathe",
                         tint = Color(0xFF10B981),
-                        modifier = Modifier.size(9.dp)
+                        modifier = Modifier.size(10.dp)
                     )
-                    Spacer(Modifier.width(2.dp))
+                    Spacer(Modifier.width(3.dp))
                     Text(
-                        text = "48s",
+                        text = "Breathe",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF10B981)

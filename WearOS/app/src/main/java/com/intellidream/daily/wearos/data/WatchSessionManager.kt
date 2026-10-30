@@ -459,14 +459,14 @@ class WatchSessionManager private constructor(private val context: Context) {
 
     fun getFormattedTimeSinceLastSmoke(): String {
         val t = prefs.getLong(KEY_LAST_SMOKE_TIMESTAMP, -1L)
-        if (t <= 0L) return "Niciun fum azi"
+        if (t <= 0L) return "Smoke-Free Today! 🌟"
         val diffSec = maxOf(0L, (System.currentTimeMillis() - t) / 1000L)
+        if (diffSec < 60L) return "Just finished"
         val mins = diffSec / 60L
         val hours = mins / 60L
         val remMins = mins % 60L
-        return if (hours > 0L) "${hours}h ${remMins}m de la ultimul"
-        else if (mins > 0L) "${mins}m de la ultimul"
-        else "Chiar acum"
+        return if (hours > 0L) "${hours}h ${remMins}m craving-free"
+        else "${mins}m craving-free"
     }
 
     fun isCravingWarning(): Boolean {

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
 import com.intellidream.daily.wearos.data.WatchSmartLedgerRepository
@@ -96,15 +97,13 @@ fun SmartLedgerCard(
                 )
             }
 
-            // Sync / Refresh button isolated to prevent card recompositions
-            SyncRefreshButton(
-                isSyncing = isSyncing,
-                onClick = {
-                    scope.launch {
-                        repository.syncWithSupabase(force = true)
-                    }
-                }
-            )
+            if (isSyncing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(11.dp),
+                    strokeWidth = 1.5.dp,
+                    indicatorColor = Color(0xFF10B981)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -200,47 +199,6 @@ fun SmartLedgerCard(
     }
 }
 
-@Composable
-private fun SyncRefreshButton(
-    isSyncing: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .background(Color(0x1A10B981))
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        if (isSyncing) {
-            val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
-            val rotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1000, easing = LinearEasing)
-                ),
-                label = "Rotation"
-            )
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = "Syncing",
-                tint = Color(0xFF10B981),
-                modifier = Modifier
-                    .size(11.dp)
-                    .rotate(rotation)
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = "Refresh",
-                tint = Color(0xFF64748B),
-                modifier = Modifier.size(11.dp)
-            )
-        }
-    }
-}
 
 @Composable
 private fun QuickItemRow(

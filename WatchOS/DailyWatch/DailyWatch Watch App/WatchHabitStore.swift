@@ -93,17 +93,18 @@ public class WatchHabitStore: ObservableObject {
     
     public var formattedTimeSinceLastSmoke: String {
         guard let interval = timeSinceLastSmoke else {
-            return "Niciun fum azi"
+            return "Smoke-Free Today! 🌟"
+        }
+        if interval < 60 {
+            return "Just finished"
         }
         let mins = Int(interval / 60)
         let hours = mins / 60
         let remMins = mins % 60
         if hours > 0 {
-            return "\(hours)h \(remMins)m de la ultimul"
-        } else if mins > 0 {
-            return "\(mins)m de la ultimul"
+            return "\(hours)h \(remMins)m craving-free"
         } else {
-            return "Chiar acum"
+            return "\(mins)m craving-free"
         }
     }
     

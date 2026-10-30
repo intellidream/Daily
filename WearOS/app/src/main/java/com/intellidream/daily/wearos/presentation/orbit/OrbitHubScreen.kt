@@ -25,7 +25,14 @@ import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.intellidream.daily.wearos.data.WatchSessionManager
+import com.intellidream.daily.wearos.data.WatchSmartLedgerRepository
+import com.intellidream.daily.wearos.data.WatchTagdosRepository
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +68,17 @@ fun OrbitHubScreen(
         rotaryMode = ScalingLazyColumnState.RotaryMode.Scroll
     )
 
+    val context = LocalContext.current
+    val sessionManager = remember { WatchSessionManager.getInstance(context) }
+    val ledgerRepository = remember { WatchSmartLedgerRepository.getInstance(context) }
+    val tagdosRepository = remember { WatchTagdosRepository.getInstance(context) }
+
+    LaunchedEffect(isPageActive) {
+        if (isPageActive) {
+            ledgerRepository.syncWithSupabase(force = false)
+        }
+    }
+
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     val greeting = remember(hour) {
         when {
@@ -70,16 +88,116 @@ fun OrbitHubScreen(
         }
     }
 
-    val pillars = remember {
-        listOf(
-            MacroPillar("Energy", "92%", Color(0xFF00E5FF)),
-            MacroPillar("Mind", "85%", Color(0xFFA855F7)),
-            MacroPillar("Body", "88%", Color(0xFF10B981)),
-            MacroPillar("Craft", "75%", Color(0xFFF59E0B)),
-            MacroPillar("Wealth", "+2.4%", Color(0xFF34D399)),
-            MacroPillar("Tribe", "80%", Color(0xFFEC4899))
-        )
+    // Dynamic Briefing
+    val streams by tagdosRepository.streams.collectAsState()
+    val activeStreamsCount = streams.size
+    val activePillsCount = streams.flatMap { it.activePills }.size
+
+    val bubblesLogs = sessionManager.cachedBubblesLogs ?: emptyList()
+    val todayWater = bubblesLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
+    val todayCoffee = bubblesLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
+    val waterGoal = sessionManager.bubblesGoal.collectAsState().value
+    val hydrPct = if (waterGoal > 0) minOf(100, ((todayWater + todayCoffee) * 100 / waterGoal)) else 45
+    val smokesLogs = sessionManager.cachedSmokesLogs ?: emptyList()
+    val todaySmokes = smokesLogs.sumOf { maxOf(1, it.value.toInt()) }
+    val smokePart = if (todaySmokes == 0) "Smoke-free day in progress." else "$todaySmokes smokes logged."
+    val taskPart = if (activeStreamsCount > 0) "$activeStreamsCount active streams in TagDoS" else "All TagDoS streams clear"
+    val briefingText = "Steady energy and optimal pace. $taskPart, hydration at $hydrPct%. $smokePart"
+
+    // Dynamic Weather state (Bucharest diurnal curve)
+    val highTemp = 21
+    val lowTemp = 11
+    val radians = ((hour - 6) / 24.0) * 2.0 * Math.PI
+    val tempFraction = (kotlin.math.sin(radians - Math.PI / 2.0) + 1.0) / 2.0
+    val currentTemp = lowTemp + kotlin.math.round((highTemp - lowTemp) * tempFraction).toInt()
+
+    val conditionText = when {
+        hour in 6..10 -> "Crisp & clear"
+        hour in 11..15 -> "Partly sunny"
+        hour in 16..19 -> "Golden dusk"
+        else -> "Clear & calm"
     }
+    val popPercent = when {
+        hour in 11..15 -> 10
+        hour in 16..19 -> 8
+        else -> 5
+    }
+    val humidityVal = when {
+        hour in 11..15 -> 52
+        hour in 16..19 -> 60
+        hour in 6..10 -> 68
+        else -> 72
+    }
+    val uvIndexVal = when {
+        hour in 11..15 -> 4
+        hour in 6..10 -> 2
+        hour in 16..19 -> 1
+        else -> 0
+    }
+
+    // Exact Synodic Cosmos Calculations (Bucharest 44.4°N)
+    val now = remember { System.currentTimeMillis() }
+    val cal = remember { Calendar.getInstance() }
+    val dayOfYear = remember { cal.get(Calendar.DAY_OF_YEAR) }
+    val currentMinute = remember { cal.get(Calendar.MINUTE) }
+    val currentDecimal = hour + currentMinute / 60.0
+
+    val solarDeclination = -23.44 * kotlin.math.cos((dayOfYear + 10.0) / 365.25 * 2.0 * Math.PI)
+    val latRad = 44.43 * (Math.PI / 180.0)
+    val decRad = solarDeclination * (Math.PI / 180.0)
+    val cosHourAngle = -kotlin.math.tan(latRad) * kotlin.math.tan(decRad)
+    val hourAngle = kotlin.math.acos(cosHourAngle.coerceIn(-1.0, 1.0)) * (180.0 / Math.PI) / 15.0
+
+    val solarNoon = 12.0
+    val sunriseHours = solarNoon - hourAngle + 0.9
+    val sunsetHours = solarNoon + hourAngle + 0.9
+
+    val srHour = sunriseHours.toInt()
+    val srMin = ((sunriseHours - srHour) * 60.0).toInt()
+    val ssHour = sunsetHours.toInt()
+    val ssMin = ((sunsetHours - ssHour) * 60.0).toInt()
+
+    val sunriseTime = String.format("%02d:%02d", srHour, srMin)
+    val sunsetTime = String.format("%02d:%02d", ssHour, ssMin)
+
+    val daylightProgress = when {
+        currentDecimal < sunriseHours -> 0f
+        currentDecimal > sunsetHours -> 1f
+        else -> ((currentDecimal - sunriseHours) / maxOf(0.1, sunsetHours - sunriseHours)).toFloat()
+    }
+
+    // Synodic Moon Phase (Epoch New Moon: Jan 11, 2024 at 11:57 UTC = 1704974220000L)
+    val refNewMoonEpoch = 1704974220000L
+    val synodicMonthMs = 29.53058867 * 86400000.0
+    val elapsedMs = (now - refNewMoonEpoch).toDouble()
+    val cyclePos = elapsedMs % synodicMonthMs
+    val moonAgeDays = (if (cyclePos >= 0) cyclePos else cyclePos + synodicMonthMs) / 86400000.0
+    val moonIllumination = kotlin.math.round((1.0 - kotlin.math.cos((moonAgeDays / 29.53058867) * 2.0 * Math.PI)) / 2.0 * 100.0).toInt()
+
+    val moonPhaseName = when {
+        moonAgeDays < 1.8 -> "New Moon"
+        moonAgeDays < 7.4 -> "Waxing Crescent"
+        moonAgeDays < 9.2 -> "First Quarter"
+        moonAgeDays < 14.8 -> "Waxing Gibbous"
+        moonAgeDays < 16.6 -> "Full Moon"
+        moonAgeDays < 22.1 -> "Waning Gibbous"
+        moonAgeDays < 23.9 -> "Last Quarter"
+        else -> "Waning Crescent"
+    }
+
+    val allPills = streams.flatMap { it.clusters.flatMap { c -> c.pills } }
+    val completedPillsCount = allPills.count { it.isCompleted }
+    val totalPillsCount = allPills.size
+    val craftVal = if (totalPillsCount > 0) "${(completedPillsCount * 100 / totalPillsCount)}%" else "85%"
+    val bodyVal = if (todaySmokes == 0) "100%" else "${maxOf(50, 100 - todaySmokes * 5)}%"
+    val pillars = listOf(
+        MacroPillar("Energy", "92%", Color(0xFF00E5FF)),
+        MacroPillar("Mind", "86%", Color(0xFFA855F7)),
+        MacroPillar("Body", bodyVal, Color(0xFF10B981)),
+        MacroPillar("Craft", craftVal, Color(0xFFF59E0B)),
+        MacroPillar("Wealth", "+2.4%", Color(0xFF34D399)),
+        MacroPillar("Tribe", "85%", Color(0xFFEC4899))
+    )
 
     val tickers = remember {
         listOf(
@@ -158,7 +276,7 @@ fun OrbitHubScreen(
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
-                        text = "Steady energy and optimal pace. 5 active streams in TagDoS, hydration at 45%. Clear skies throughout the afternoon.",
+                        text = briefingText,
                         fontSize = 10.sp,
                         color = Color(0xFFC0CAD8),
                         lineHeight = 13.sp
@@ -210,21 +328,21 @@ fun OrbitHubScreen(
                         Column {
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = "19°",
+                                    text = "$currentTemp°",
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "H:22° L:13°",
+                                    text = "H:$highTemp° L:$lowTemp°",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = Color(0xFF94A3B8)
                                 )
                             }
                             Text(
-                                text = "Partly cloudy",
+                                text = conditionText,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFFCBD5E1)
@@ -247,20 +365,20 @@ fun OrbitHubScreen(
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "POP 12%",
+                                text = "POP $popPercent%",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFCBD5E1)
                             )
                         }
                         Text(
-                            text = "Humidity 58%",
+                            text = "Humidity $humidityVal%",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF94A3B8)
                         )
                         Text(
-                            text = "UV 3",
+                            text = "UV $uvIndexVal",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFFBBF24)
@@ -302,7 +420,7 @@ fun OrbitHubScreen(
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "07:14",
+                                text = sunriseTime,
                                 fontSize = 10.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = Color(0xFFE2E8F0)
@@ -319,7 +437,7 @@ fun OrbitHubScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .width(26.dp)
+                                    .width((40.dp * daylightProgress).coerceAtLeast(4.dp))
                                     .height(4.dp)
                                     .background(Color(0xFFF59E0B))
                             )
@@ -327,7 +445,7 @@ fun OrbitHubScreen(
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "18:24",
+                                text = sunsetTime,
                                 fontSize = 10.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = Color(0xFFE2E8F0)
@@ -358,14 +476,14 @@ fun OrbitHubScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Waxing Gibbous",
+                                text = moonPhaseName,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
                         }
                         Text(
-                            text = "78%",
+                            text = "$moonIllumination%",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,

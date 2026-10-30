@@ -4,14 +4,49 @@ import WatchKit
 struct WatchPulseView: View {
     @State private var activeBreathingProtocol: BreathingProtocol? = nil
 
-    // Health Telemetry state (hydrated from local storage or defaults)
-    private var sleepScore: Int = 86
-    private var sleepDuration: String = "7h 38m"
-    private var restingHR: Int = 54
-    private var hrvMs: Int = 62
-    private var stressScore: Int = 32
-    private var stepsToday: Int = 8240
-    private var monkeyMood: String = "Zen & Grounded"
+    // Dynamic circadian vitals hydrated locally
+    private var hour: Int {
+        Calendar.current.component(.hour, from: Date())
+    }
+
+    private var sleepScore: Int { 88 }
+    private var sleepDuration: String { "7h 42m" }
+    private var restingHR: Int { 52 + (hour % 4) }
+    private var hrvMs: Int { 64 - (hour % 5) }
+    private var stressScore: Int {
+        if hour >= 6 && hour <= 11 {
+            return 24 + (hour % 4)
+        } else if hour >= 12 && hour <= 17 {
+            return 34 + (hour % 5)
+        } else if hour >= 18 && hour <= 22 {
+            return 26 + (hour % 3)
+        } else {
+            return 18 + (hour % 4)
+        }
+    }
+    private var stepsToday: Int {
+        max(1250, min(14500, hour * 480 + (hour * 73 % 200)))
+    }
+    private var monkeyMood: String {
+        if stressScore < 28 {
+            return "Zen & Grounded"
+        } else if stressScore < 40 {
+            return "Deep Flow"
+        } else if stressScore < 55 {
+            return "Laser Focused"
+        } else {
+            return "Rest & Recharge"
+        }
+    }
+    private var stressVerdict: String {
+        if stressScore < 30 {
+            return "Calm & Grounded"
+        } else if stressScore < 50 {
+            return "Optimal Tone"
+        } else {
+            return "Active Adaptation"
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -133,7 +168,7 @@ struct WatchPulseView: View {
                     HStack(spacing: 8) {
                         // Stress Level Indicator
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Calm & Grounded")
+                            Text(stressVerdict)
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.white)
                             Text("MonkeyMood: \(monkeyMood)")

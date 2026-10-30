@@ -8,7 +8,7 @@ struct CravingPacingBadge: View {
     private var badgeColor: Color {
         if store.isCravingWarning {
             return .orange
-        } else if (store.timeSinceLastSmoke ?? 0) >= 2 * 3600 {
+        } else if store.timeSinceLastSmoke == nil || (store.timeSinceLastSmoke ?? 0) >= 2 * 3600 {
             return .green
         } else {
             return .yellow
@@ -32,10 +32,10 @@ struct CravingPacingBadge: View {
                 showBreathingSheet = true
             }) {
                 HStack(spacing: 3) {
-                    Image(systemName: "wind")
+                    Image(systemName: "lungs.fill")
                         .font(.system(size: 9))
-                    Text("48s")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                    Text("Breathe")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)

@@ -167,6 +167,8 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
         let rawText = defaults.string(forKey: rawTextKey1)
             ?? defaults.string(forKey: rawTextKey2)
+            ?? UserDefaults.standard.string(forKey: rawTextKey1)
+            ?? UserDefaults.standard.string(forKey: rawTextKey2)
             ?? Self.defaultLedgerText
 
         parseDocument(rawText)
@@ -225,29 +227,38 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
         do {
             struct RemoteLedgerDTO: Codable {
-                let id: UUID
-                let user_id: UUID
+                let id: String?
+                let user_id: String?
                 let ledger_text: String
-                let updated_at: Date
+                let created_at: String?
+                let updated_at: String?
             }
 
             let res = try await client
                 .from("smart_ledgers")
                 .select("id, user_id, ledger_text, updated_at")
-                .eq("user_id", value: userId.uuidString)
+                .eq("user_id", value: userId.uuidString.lowercased())
                 .order("updated_at", ascending: false)
                 .limit(1)
                 .execute()
 
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
             let records = try decoder.decode([RemoteLedgerDTO].self, from: res.data)
 
-            if let first = records.first {
+            if let first = records.first, !first.ledger_text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 saveLocalRawText(first.ledger_text)
                 parseDocument(first.ledger_text)
-                self.lastSyncDate = first.updated_at
-                defaults.set(first.updated_at.timeIntervalSince1970, forKey: lastSyncTimestampKey)
+                
+                let syncDate: Date
+                if let updatedStr = first.updated_at {
+                    let isoFrac = ISO8601DateFormatter()
+                    isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    syncDate = isoFrac.date(from: updatedStr) ?? ISO8601DateFormatter().date(from: updatedStr) ?? Date()
+                } else {
+                    syncDate = Date()
+                }
+                self.lastSyncDate = syncDate
+                defaults.set(syncDate.timeIntervalSince1970, forKey: lastSyncTimestampKey)
             }
         } catch {
             print("[WatchSmartLedgerStore] Fetch error: \(error)")
@@ -272,7 +283,7 @@ public final class WatchSmartLedgerStore: ObservableObject {
             _ = try await client
                 .from("smart_ledgers")
                 .update(payload)
-                .eq("user_id", value: userId.uuidString)
+                .eq("user_id", value: userId.uuidString.lowercased())
                 .execute()
 
             self.lastSyncDate = now

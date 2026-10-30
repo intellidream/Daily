@@ -22,18 +22,6 @@ struct WatchSmartLedgerCard: View {
                     ProgressView()
                         .scaleEffect(0.6)
                         .frame(width: 12, height: 12)
-                } else {
-                    Button {
-                        WKInterfaceDevice.current().play(.click)
-                        Task {
-                            await store.fetchLedgerData(force: true)
-                        }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
-                    .buttonStyle(.plain)
                 }
             }
 
