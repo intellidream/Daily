@@ -47,4 +47,43 @@ object HabitDateParser {
         }
         return null
     }
+
+    fun parseToEpochMs(raw: String?): Long? {
+        if (raw.isNullOrBlank()) return null
+        val trimmed = raw.trim()
+        val normalized = trimmed.replace(" ", "T")
+
+        // 1. Try OffsetDateTime (e.g. 2026-10-30T22:15:00.000+00:00)
+        try {
+            return OffsetDateTime.parse(normalized).toInstant().toEpochMilli()
+        } catch (_: Exception) {}
+
+        // 2. Try Instant (e.g. 2026-10-30T22:15:00.000Z)
+        try {
+            return Instant.parse(normalized).toEpochMilli()
+        } catch (_: Exception) {}
+
+        // 3. Fallback to SimpleDateFormat
+        val patterns = arrayOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd HH:mm:ssXXX",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd"
+        )
+        for (pattern in patterns) {
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.US)
+                val d: Date? = sdf.parse(trimmed)
+                if (d != null) {
+                    return d.time
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
 }

@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,18 +37,33 @@ import com.intellidream.daily.wearos.presentation.theme.DailyWearColors
 fun CravingPacingCard(sessionManager: WatchSessionManager) {
     var showSighDialog by remember { mutableStateOf(false) }
 
-    val formattedTime = sessionManager.getFormattedTimeSinceLastSmoke()
-    val isWarning = sessionManager.isCravingWarning()
-    val badgeColor = when {
-        isWarning -> DailyWearColors.CoffeeOrange
-        formattedTime.contains("Smoke-Free") -> Color(0xFF10B981)
-        formattedTime.contains("h") && !formattedTime.startsWith("0h") -> Color(0xFF10B981)
-        else -> Color(0xFFEAB308)
+    val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
+    var tick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30000L)
+            tick++
+        }
+    }
+
+    val formattedTime = remember(refreshTrigger, tick) {
+        sessionManager.getFormattedTimeSinceLastSmoke()
+    }
+    val isWarning = remember(refreshTrigger, tick) {
+        sessionManager.isCravingWarning()
+    }
+    val badgeColor = remember(formattedTime, isWarning) {
+        when {
+            isWarning -> DailyWearColors.CoffeeOrange
+            formattedTime.contains("Smoke-Free") -> Color(0xFF10B981)
+            formattedTime.contains("h") && !formattedTime.startsWith("0h") -> Color(0xFF10B981)
+            else -> Color(0xFFEAB308)
+        }
     }
 
     Box(
         modifier = Modifier
-            .fillMaxWidth(0.92f)
+            .fillMaxWidth(0.94f)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -57,7 +74,13 @@ fun CravingPacingCard(sessionManager: WatchSessionManager) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Left: Timer icon and craving-free text (wrapping to 2 lines when needed)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Timer,
                     contentDescription = null,
@@ -68,20 +91,26 @@ fun CravingPacingCard(sessionManager: WatchSessionManager) {
                 Text(
                     text = formattedTime,
                     fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    maxLines = 2,
                     fontWeight = FontWeight.SemiBold,
                     color = badgeColor
                 )
             }
 
+            // Right: Breathe action chip (strictly single-line, never squished)
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF10B981).copy(alpha = 0.2f))
                     .clickable { showSighDialog = true }
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                    .padding(horizontal = 7.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     Icon(
                         imageVector = Icons.Filled.Spa,
                         contentDescription = "Breathe",
@@ -93,7 +122,9 @@ fun CravingPacingCard(sessionManager: WatchSessionManager) {
                         text = "Breathe",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF10B981)
+                        color = Color(0xFF10B981),
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }

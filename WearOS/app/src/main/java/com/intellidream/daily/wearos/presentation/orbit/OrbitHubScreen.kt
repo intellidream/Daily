@@ -59,6 +59,26 @@ data class MacroPillar(val name: String, val value: String, val color: Color)
 @Immutable
 data class StockTicker(val symbol: String, val price: String, val change: String, val isPositive: Boolean)
 
+@androidx.compose.runtime.Immutable
+data class WeatherData(
+    val currentTemp: Int,
+    val highTemp: Int,
+    val lowTemp: Int,
+    val conditionText: String,
+    val popPercent: Int,
+    val humidityVal: Int,
+    val uvIndexVal: Int
+)
+
+@androidx.compose.runtime.Immutable
+data class CosmosData(
+    val sunriseTime: String,
+    val sunsetTime: String,
+    val daylightProgress: Float,
+    val moonPhaseName: String,
+    val moonIllumination: Int
+)
+
 @OptIn(ExperimentalHorologistApi::class)
 @Composable
 fun OrbitHubScreen(
@@ -88,116 +108,142 @@ fun OrbitHubScreen(
         }
     }
 
-    // Dynamic Briefing
+    // Dynamic Briefing - memoized to eliminate scroll allocations
     val streams by tagdosRepository.streams.collectAsState()
-    val activeStreamsCount = streams.size
-    val activePillsCount = streams.flatMap { it.activePills }.size
+    val waterGoal by sessionManager.bubblesGoal.collectAsState()
+    val refreshTrigger by sessionManager.dataRefreshTrigger.collectAsState()
 
-    val bubblesLogs = sessionManager.cachedBubblesLogs ?: emptyList()
-    val todayWater = bubblesLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
-    val todayCoffee = bubblesLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
-    val waterGoal = sessionManager.bubblesGoal.collectAsState().value
-    val hydrPct = if (waterGoal > 0) minOf(100, ((todayWater + todayCoffee) * 100 / waterGoal)) else 45
-    val smokesLogs = sessionManager.cachedSmokesLogs ?: emptyList()
-    val todaySmokes = smokesLogs.sumOf { maxOf(1, it.value.toInt()) }
-    val smokePart = if (todaySmokes == 0) "Smoke-free day in progress." else "$todaySmokes smokes logged."
-    val taskPart = if (activeStreamsCount > 0) "$activeStreamsCount active streams in TagDoS" else "All TagDoS streams clear"
-    val briefingText = "Steady energy and optimal pace. $taskPart, hydration at $hydrPct%. $smokePart"
-
-    // Dynamic Weather state (Bucharest diurnal curve)
-    val highTemp = 21
-    val lowTemp = 11
-    val radians = ((hour - 6) / 24.0) * 2.0 * Math.PI
-    val tempFraction = (kotlin.math.sin(radians - Math.PI / 2.0) + 1.0) / 2.0
-    val currentTemp = lowTemp + kotlin.math.round((highTemp - lowTemp) * tempFraction).toInt()
-
-    val conditionText = when {
-        hour in 6..10 -> "Crisp & clear"
-        hour in 11..15 -> "Partly sunny"
-        hour in 16..19 -> "Golden dusk"
-        else -> "Clear & calm"
-    }
-    val popPercent = when {
-        hour in 11..15 -> 10
-        hour in 16..19 -> 8
-        else -> 5
-    }
-    val humidityVal = when {
-        hour in 11..15 -> 52
-        hour in 16..19 -> 60
-        hour in 6..10 -> 68
-        else -> 72
-    }
-    val uvIndexVal = when {
-        hour in 11..15 -> 4
-        hour in 6..10 -> 2
-        hour in 16..19 -> 1
-        else -> 0
+    val briefingText = remember(streams, waterGoal, refreshTrigger) {
+        val activeStreamsCount = streams.size
+        val bubblesLogs = sessionManager.cachedBubblesLogs ?: emptyList()
+        val todayWater = bubblesLogs.filter { it.metadata?.contains("Coffee") != true }.sumOf { it.value.toInt() }
+        val todayCoffee = bubblesLogs.filter { it.metadata?.contains("Coffee") == true }.sumOf { it.value.toInt() }
+        val hydrPct = if (waterGoal > 0) minOf(100, ((todayWater + todayCoffee) * 100 / waterGoal)) else 45
+        val smokesLogs = sessionManager.cachedSmokesLogs ?: emptyList()
+        val todaySmokes = smokesLogs.sumOf { maxOf(1, it.value.toInt()) }
+        val smokePart = if (todaySmokes == 0) "Smoke-free day in progress." else "$todaySmokes smokes logged."
+        val taskPart = if (activeStreamsCount > 0) "$activeStreamsCount active streams in TagDoS" else "All TagDoS streams clear"
+        "Steady energy and optimal pace. $taskPart, hydration at $hydrPct%. $smokePart"
     }
 
-    // Exact Synodic Cosmos Calculations (Bucharest 44.4°N)
-    val now = remember { System.currentTimeMillis() }
-    val cal = remember { Calendar.getInstance() }
-    val dayOfYear = remember { cal.get(Calendar.DAY_OF_YEAR) }
-    val currentMinute = remember { cal.get(Calendar.MINUTE) }
-    val currentDecimal = hour + currentMinute / 60.0
+    // Dynamic Weather state (Bucharest diurnal curve) - memoized on hour
+    val weatherData = remember(hour) {
+        val highTemp = 21
+        val lowTemp = 11
+        val radians = ((hour - 6) / 24.0) * 2.0 * Math.PI
+        val tempFraction = (kotlin.math.sin(radians - Math.PI / 2.0) + 1.0) / 2.0
+        val currentTemp = lowTemp + kotlin.math.round((highTemp - lowTemp) * tempFraction).toInt()
 
-    val solarDeclination = -23.44 * kotlin.math.cos((dayOfYear + 10.0) / 365.25 * 2.0 * Math.PI)
-    val latRad = 44.43 * (Math.PI / 180.0)
-    val decRad = solarDeclination * (Math.PI / 180.0)
-    val cosHourAngle = -kotlin.math.tan(latRad) * kotlin.math.tan(decRad)
-    val hourAngle = kotlin.math.acos(cosHourAngle.coerceIn(-1.0, 1.0)) * (180.0 / Math.PI) / 15.0
-
-    val solarNoon = 12.0
-    val sunriseHours = solarNoon - hourAngle + 0.9
-    val sunsetHours = solarNoon + hourAngle + 0.9
-
-    val srHour = sunriseHours.toInt()
-    val srMin = ((sunriseHours - srHour) * 60.0).toInt()
-    val ssHour = sunsetHours.toInt()
-    val ssMin = ((sunsetHours - ssHour) * 60.0).toInt()
-
-    val sunriseTime = String.format("%02d:%02d", srHour, srMin)
-    val sunsetTime = String.format("%02d:%02d", ssHour, ssMin)
-
-    val daylightProgress = when {
-        currentDecimal < sunriseHours -> 0f
-        currentDecimal > sunsetHours -> 1f
-        else -> ((currentDecimal - sunriseHours) / maxOf(0.1, sunsetHours - sunriseHours)).toFloat()
+        val conditionText = when {
+            hour in 6..10 -> "Crisp & clear"
+            hour in 11..15 -> "Partly sunny"
+            hour in 16..19 -> "Golden dusk"
+            else -> "Clear & calm"
+        }
+        val popPercent = when {
+            hour in 11..15 -> 10
+            hour in 16..19 -> 8
+            else -> 5
+        }
+        val humidityVal = when {
+            hour in 11..15 -> 52
+            hour in 16..19 -> 60
+            hour in 6..10 -> 68
+            else -> 72
+        }
+        val uvIndexVal = when {
+            hour in 11..15 -> 4
+            hour in 6..10 -> 2
+            hour in 16..19 -> 1
+            else -> 0
+        }
+        WeatherData(currentTemp, highTemp, lowTemp, conditionText, popPercent, humidityVal, uvIndexVal)
     }
 
-    // Synodic Moon Phase (Epoch New Moon: Jan 11, 2024 at 11:57 UTC = 1704974220000L)
-    val refNewMoonEpoch = 1704974220000L
-    val synodicMonthMs = 29.53058867 * 86400000.0
-    val elapsedMs = (now - refNewMoonEpoch).toDouble()
-    val cyclePos = elapsedMs % synodicMonthMs
-    val moonAgeDays = (if (cyclePos >= 0) cyclePos else cyclePos + synodicMonthMs) / 86400000.0
-    val moonIllumination = kotlin.math.round((1.0 - kotlin.math.cos((moonAgeDays / 29.53058867) * 2.0 * Math.PI)) / 2.0 * 100.0).toInt()
+    val currentTemp = weatherData.currentTemp
+    val highTemp = weatherData.highTemp
+    val lowTemp = weatherData.lowTemp
+    val conditionText = weatherData.conditionText
+    val popPercent = weatherData.popPercent
+    val humidityVal = weatherData.humidityVal
+    val uvIndexVal = weatherData.uvIndexVal
 
-    val moonPhaseName = when {
-        moonAgeDays < 1.8 -> "New Moon"
-        moonAgeDays < 7.4 -> "Waxing Crescent"
-        moonAgeDays < 9.2 -> "First Quarter"
-        moonAgeDays < 14.8 -> "Waxing Gibbous"
-        moonAgeDays < 16.6 -> "Full Moon"
-        moonAgeDays < 22.1 -> "Waning Gibbous"
-        moonAgeDays < 23.9 -> "Last Quarter"
-        else -> "Waning Crescent"
+    // Exact Synodic Cosmos Calculations - memoized on hour
+    val cosmosData = remember(hour) {
+        val cal = Calendar.getInstance()
+        val now = System.currentTimeMillis()
+        val dayOfYear = cal.get(Calendar.DAY_OF_YEAR)
+        val currentMinute = cal.get(Calendar.MINUTE)
+        val currentDecimal = hour + currentMinute / 60.0
+
+        val solarDeclination = -23.44 * kotlin.math.cos((dayOfYear + 10.0) / 365.25 * 2.0 * Math.PI)
+        val latRad = 44.43 * (Math.PI / 180.0)
+        val decRad = solarDeclination * (Math.PI / 180.0)
+        val cosHourAngle = -kotlin.math.tan(latRad) * kotlin.math.tan(decRad)
+        val hourAngle = kotlin.math.acos(cosHourAngle.coerceIn(-1.0, 1.0)) * (180.0 / Math.PI) / 15.0
+
+        val solarNoon = 12.0
+        val sunriseHours = solarNoon - hourAngle + 0.9
+        val sunsetHours = solarNoon + hourAngle + 0.9
+
+        val srHour = sunriseHours.toInt()
+        val srMin = ((sunriseHours - srHour) * 60.0).toInt()
+        val ssHour = sunsetHours.toInt()
+        val ssMin = ((sunsetHours - ssHour) * 60.0).toInt()
+
+        val sunriseTime = String.format("%02d:%02d", srHour, srMin)
+        val sunsetTime = String.format("%02d:%02d", ssHour, ssMin)
+
+        val daylightProgress = when {
+            currentDecimal < sunriseHours -> 0f
+            currentDecimal > sunsetHours -> 1f
+            else -> ((currentDecimal - sunriseHours) / maxOf(0.1, sunsetHours - sunriseHours)).toFloat()
+        }
+
+        // Synodic Moon Phase (Epoch New Moon: Jan 11, 2024 at 11:57 UTC = 1704974220000L)
+        val refNewMoonEpoch = 1704974220000L
+        val synodicMonthMs = 29.53058867 * 86400000.0
+        val elapsedMs = (now - refNewMoonEpoch).toDouble()
+        val cyclePos = elapsedMs % synodicMonthMs
+        val moonAgeDays = (if (cyclePos >= 0) cyclePos else cyclePos + synodicMonthMs) / 86400000.0
+        val moonIllumination = kotlin.math.round((1.0 - kotlin.math.cos((moonAgeDays / 29.53058867) * 2.0 * Math.PI)) / 2.0 * 100.0).toInt()
+
+        val moonPhaseName = when {
+            moonAgeDays < 1.8 -> "New Moon"
+            moonAgeDays < 7.4 -> "Waxing Crescent"
+            moonAgeDays < 9.2 -> "First Quarter"
+            moonAgeDays < 14.8 -> "Waxing Gibbous"
+            moonAgeDays < 16.6 -> "Full Moon"
+            moonAgeDays < 22.1 -> "Waning Gibbous"
+            moonAgeDays < 23.9 -> "Last Quarter"
+            else -> "Waning Crescent"
+        }
+        CosmosData(sunriseTime, sunsetTime, daylightProgress, moonPhaseName, moonIllumination)
     }
 
-    val allPills = streams.flatMap { it.clusters.flatMap { c -> c.pills } }
-    val completedPillsCount = allPills.count { it.isCompleted }
-    val totalPillsCount = allPills.size
-    val craftVal = if (totalPillsCount > 0) "${(completedPillsCount * 100 / totalPillsCount)}%" else "85%"
-    val bodyVal = if (todaySmokes == 0) "100%" else "${maxOf(50, 100 - todaySmokes * 5)}%"
-    val pillars = listOf(
-        MacroPillar("Energy", "92%", Color(0xFF00E5FF)),
-        MacroPillar("Mind", "86%", Color(0xFFA855F7)),
-        MacroPillar("Body", bodyVal, Color(0xFF10B981)),
-        MacroPillar("Craft", craftVal, Color(0xFFF59E0B)),
-        MacroPillar("Wealth", "+2.4%", Color(0xFF34D399)),
-        MacroPillar("Tribe", "85%", Color(0xFFEC4899))
-    )
+    val sunriseTime = cosmosData.sunriseTime
+    val sunsetTime = cosmosData.sunsetTime
+    val daylightProgress = cosmosData.daylightProgress
+    val moonPhaseName = cosmosData.moonPhaseName
+    val moonIllumination = cosmosData.moonIllumination
+
+    val pillars = remember(streams, refreshTrigger) {
+        val allPills = streams.flatMap { it.clusters.flatMap { c -> c.pills } }
+        val completedPillsCount = allPills.count { it.isCompleted }
+        val totalPillsCount = allPills.size
+        val craftVal = if (totalPillsCount > 0) "${(completedPillsCount * 100 / totalPillsCount)}%" else "85%"
+        val smokesLogs = sessionManager.cachedSmokesLogs ?: emptyList()
+        val todaySmokes = smokesLogs.sumOf { maxOf(1, it.value.toInt()) }
+        val bodyVal = if (todaySmokes == 0) "100%" else "${maxOf(50, 100 - todaySmokes * 5)}%"
+        listOf(
+            MacroPillar("Energy", "92%", Color(0xFF00E5FF)),
+            MacroPillar("Mind", "86%", Color(0xFFA855F7)),
+            MacroPillar("Body", bodyVal, Color(0xFF10B981)),
+            MacroPillar("Craft", craftVal, Color(0xFFF59E0B)),
+            MacroPillar("Wealth", "+2.4%", Color(0xFF34D399)),
+            MacroPillar("Tribe", "85%", Color(0xFFEC4899))
+        )
+    }
 
     val tickers = remember {
         listOf(

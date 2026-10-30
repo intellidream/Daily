@@ -24,6 +24,8 @@ struct CravingPacingBadge: View {
             Text(store.formattedTimeSinceLastSmoke)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundColor(badgeColor)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
             
             Spacer()
             
@@ -36,6 +38,7 @@ struct CravingPacingBadge: View {
                         .font(.system(size: 9))
                     Text("Breathe")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .lineLimit(1)
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
@@ -44,6 +47,7 @@ struct CravingPacingBadge: View {
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .fixedSize()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)

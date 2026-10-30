@@ -457,9 +457,19 @@ class WatchSessionManager private constructor(private val context: Context) {
         return newLog
     }
 
+    val lastSmokeTimestamp: Long?
+        get() {
+            val logs = cachedSmokesLogs
+            if (logs.isNullOrEmpty()) return null
+            val latest = logs.maxByOrNull {
+                HabitDateParser.parseToEpochMs(it.logged_at) ?: 0L
+            } ?: return null
+            return HabitDateParser.parseToEpochMs(latest.logged_at)
+        }
+
     fun getFormattedTimeSinceLastSmoke(): String {
-        val t = prefs.getLong(KEY_LAST_SMOKE_TIMESTAMP, -1L)
-        if (t <= 0L) return "Smoke-Free Today! 🌟"
+        val t = lastSmokeTimestamp
+        if (t == null || t <= 0L) return "Smoke-Free Today! 🌟"
         val diffSec = maxOf(0L, (System.currentTimeMillis() - t) / 1000L)
         if (diffSec < 60L) return "Just finished"
         val mins = diffSec / 60L
@@ -470,8 +480,8 @@ class WatchSessionManager private constructor(private val context: Context) {
     }
 
     fun isCravingWarning(): Boolean {
-        val t = prefs.getLong(KEY_LAST_SMOKE_TIMESTAMP, -1L)
-        if (t <= 0L) return false
+        val t = lastSmokeTimestamp
+        if (t == null || t <= 0L) return false
         val diffSec = (System.currentTimeMillis() - t) / 1000L
         return diffSec < 45 * 60
     }

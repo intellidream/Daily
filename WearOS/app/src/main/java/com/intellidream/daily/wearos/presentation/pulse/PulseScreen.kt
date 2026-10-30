@@ -59,29 +59,35 @@ fun PulseScreen(
 
     var activeProtocol by remember { mutableStateOf<WearBreathingProtocol?>(null) }
 
-    // Dynamic circadian vitals hydrated locally
+    // Dynamic circadian vitals hydrated locally (memoized on hour to ensure 60fps rotary scrolling)
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
     val sleepScore = 82
     val sleepDuration = "7h 8m"
-    val restingHR = 52 + (hour % 4)
-    val hrvMs = 64 - (hour % 5)
-    val stressScore = when {
-        hour in 6..11 -> 24 + (hour % 4)
-        hour in 12..17 -> 34 + (hour % 5)
-        hour in 18..22 -> 26 + (hour % 3)
-        else -> 18 + (hour % 4)
+    val restingHR = remember(hour) { 52 + (hour % 4) }
+    val hrvMs = remember(hour) { 64 - (hour % 5) }
+    val stressScore = remember(hour) {
+        when {
+            hour in 6..11 -> 24 + (hour % 4)
+            hour in 12..17 -> 34 + (hour % 5)
+            hour in 18..22 -> 26 + (hour % 3)
+            else -> 18 + (hour % 4)
+        }
     }
-    val stepsToday = maxOf(1250, minOf(14500, hour * 480 + (hour * 73 % 200)))
-    val monkeyMood = when {
-        stressScore < 28 -> "Zen & Grounded"
-        stressScore < 40 -> "Deep Flow"
-        stressScore < 55 -> "Laser Focused"
-        else -> "Rest & Recharge"
+    val stepsToday = remember(hour) { maxOf(1250, minOf(14500, hour * 480 + (hour * 73 % 200))) }
+    val monkeyMood = remember(stressScore) {
+        when {
+            stressScore < 28 -> "Zen & Grounded"
+            stressScore < 40 -> "Deep Flow"
+            stressScore < 55 -> "Laser Focused"
+            else -> "Rest & Recharge"
+        }
     }
-    val stressVerdict = when {
-        stressScore < 30 -> "Calm & Grounded"
-        stressScore < 50 -> "Optimal Tone"
-        else -> "Active Adaptation"
+    val stressVerdict = remember(stressScore) {
+        when {
+            stressScore < 30 -> "Calm & Grounded"
+            stressScore < 50 -> "Optimal Tone"
+            else -> "Active Adaptation"
+        }
     }
 
     ScreenScaffold(scrollState = columnState) {
