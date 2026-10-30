@@ -9,8 +9,21 @@ struct WatchPulseView: View {
         Calendar.current.component(.hour, from: Date())
     }
 
-    private var sleepScore: Int { 88 }
-    private var sleepDuration: String { "7h 42m" }
+    private var cachedSleep: (score: Int, duration: String) {
+        let defaults = UserDefaults(suiteName: "group.com.intellidream.daily") ?? UserDefaults.standard
+        if let data = defaults.data(forKey: "daily_sleep_widget_snapshot_v1"),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let score = json["sleepScore"] as? Int ?? 82
+            let duration = json["totalAsleepFormatted"] as? String ?? "7h 8m"
+            if !duration.isEmpty && duration != "--" {
+                return (score, duration)
+            }
+        }
+        return (82, "7h 8m")
+    }
+
+    private var sleepScore: Int { cachedSleep.score }
+    private var sleepDuration: String { cachedSleep.duration }
     private var restingHR: Int { 52 + (hour % 4) }
     private var hrvMs: Int { 64 - (hour % 5) }
     private var stressScore: Int {

@@ -61,8 +61,8 @@ fun PulseScreen(
 
     // Dynamic circadian vitals hydrated locally
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
-    val sleepScore = 88
-    val sleepDuration = "7h 42m"
+    val sleepScore = 82
+    val sleepDuration = "7h 8m"
     val restingHR = 52 + (hour % 4)
     val hrvMs = 64 - (hour % 5)
     val stressScore = when {

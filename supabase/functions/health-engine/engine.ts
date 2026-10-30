@@ -684,7 +684,7 @@ export function getSleepQualityRating(score: number): string {
   return 'No Data';
 }
 
-export function generateSleepGuidance(session: SleepSession | null): SleepGuidance | null {
+export function generateSleepGuidance(session: SleepSession | null, targetDateStr?: string): SleepGuidance | null {
   if (!session || session.asleep_seconds <= 0) return null;
 
   const score = session.sleep_score;
@@ -721,8 +721,10 @@ export function generateSleepGuidance(session: SleepSession | null): SleepGuidan
   const cognitiveRestore = remPct >= 20 ? 'High' : remPct >= 14 ? 'Adequate' : 'Low';
   const continuity = awakeCount <= 3 ? 'Continuous' : 'Fragmented';
 
+  const verdictId = targetDateStr ? `sleep_verdict_${targetDateStr}` : `sleep_verdict_${session.id}`;
+
   const verdict: SleepRecoveryVerdict = {
-    id: `sleep_verdict_${targetDateStr}`,
+    id: verdictId,
     status,
     headline,
     narrative,
@@ -1332,7 +1334,7 @@ export function computeDailyHealthSummary(input: EngineInput): HealthDailySummar
 
   // 1. Process Sleep
   const sleepResult = clusterSleepTelemetry(telemetry, targetDate, tzOffsetMin, preferredDevice);
-  const sleepGuidance = generateSleepGuidance(sleepResult.primarySession);
+  const sleepGuidance = generateSleepGuidance(sleepResult.primarySession, targetDate);
 
   // 2. Process Activity & Steps
   const activitySummary = computeDailySteps(telemetry, targetDate, tzOffsetMin, preferredDevice);

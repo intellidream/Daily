@@ -511,15 +511,24 @@ public final class HealthDataService: ObservableObject {
             let endIso = isoTimestampFormatter.string(from: windowEnd)
             
             do {
-                let records: [HealthTelemetryRecord] = try await supabase.from("health_telemetry")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .gte("start_time", value: startIso)
-                    .lte("start_time", value: endIso)
-                    .order("start_time", ascending: true)
-                    .execute()
-                    .value
-                fetchedTelemetry.append(contentsOf: records)
+                let pageSize = 1000
+                var page = 0
+                while page < 20 {
+                    let from = page * pageSize
+                    let to = from + pageSize - 1
+                    let records: [HealthTelemetryRecord] = try await supabase.from("health_telemetry")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .gte("start_time", value: startIso)
+                        .lte("start_time", value: endIso)
+                        .order("start_time", ascending: true)
+                        .range(from: from, to: to)
+                        .execute()
+                        .value
+                    fetchedTelemetry.append(contentsOf: records)
+                    if records.count < pageSize { break }
+                    page += 1
+                }
             } catch {
                 print("[HealthDataService] Warning: Could not fetch health_telemetry: \(error.localizedDescription)")
             }

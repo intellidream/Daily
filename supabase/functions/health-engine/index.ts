@@ -142,15 +142,42 @@ async function processDayForUser(
   // Day window ends D 23:59:59.999 (+24h)
   const windowEndIso = new Date(targetMidnight.getTime() + 24 * 3600 * 1000 - 1).toISOString();
 
-  // 1. Fetch raw telemetry within the full window for this user (with explicit limit to prevent PostgREST 1000 default truncate)
-  const { data: telemetryRows, error: telemErr } = await supabase
-    .from('health_telemetry')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('start_time', windowStartIso)
-    .lte('start_time', windowEndIso)
-    .order('start_time', { ascending: true })
-    .limit(25000);
+  // 1. Fetch raw telemetry within the full window for this user using chunked range pagination
+  // (PostgREST server caps at 1000 rows/request, so range pagination is mandatory to prevent truncation)
+  const pageSize = 1000;
+  let page = 0;
+  const telemetryRows: any[] = [];
+
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data: batch, error: telemErr } = await supabase
+      .from('health_telemetry')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('start_time', windowStartIso)
+      .lte('start_time', windowEndIso)
+      .order('start_time', { ascending: true })
+      .range(from, to);
+
+    if (telemErr) {
+      console.error(`[health-engine] Error fetching telemetry page ${page}:`, telemErr);
+      break;
+    }
+
+    if (!batch || batch.length === 0) {
+      break;
+    }
+
+    telemetryRows.push(...batch);
+
+    if (batch.length < pageSize) {
+      break;
+    }
+
+    page++;
+    if (page > 30) break; // Safety threshold (up to 30,000 records)
+  }
 
   if (!telemetryRows || telemetryRows.length === 0) {
     // If telemetry has already been pruned for this historical date, do NOT overwrite an existing summary with nulls!
