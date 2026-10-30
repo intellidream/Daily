@@ -537,13 +537,151 @@ public struct CosmosWidgetSnapshot: Sendable, Codable {
     }
 }
 
+/// Hourly forecast item for Weather Widget
+public struct WeatherWidgetHourlyItem: Sendable, Codable {
+    public let timeLabel: String
+    public let temp: Double
+    public let iconCode: String
+    public let popPercent: Int
+
+    public init(timeLabel: String, temp: Double, iconCode: String, popPercent: Int = 0) {
+        self.timeLabel = timeLabel
+        self.temp = temp
+        self.iconCode = iconCode
+        self.popPercent = popPercent
+    }
+}
+
+/// Daily forecast item for Weather Widget
+public struct WeatherWidgetDailyItem: Sendable, Codable {
+    public let dayName: String
+    public let tempMin: Double
+    public let tempMax: Double
+    public let iconCode: String
+    public let popPercent: Int
+
+    public init(dayName: String, tempMin: Double, tempMax: Double, iconCode: String, popPercent: Int = 0) {
+        self.dayName = dayName
+        self.tempMin = tempMin
+        self.tempMax = tempMax
+        self.iconCode = iconCode
+        self.popPercent = popPercent
+    }
+}
+
+/// Snapshot model for Weather & Atmospheric Forecast Widget
+public struct WeatherWidgetSnapshot: Sendable, Codable {
+    public let hasData: Bool
+    public let cityName: String
+    public let temp: Double
+    public let feelsLike: Double
+    public let tempMin: Double
+    public let tempMax: Double
+    public let conditionText: String
+    public let iconCode: String
+    public let humidityPercent: Int
+    public let windSpeed: Double
+    public let windUnit: String
+    public let hourly: [WeatherWidgetHourlyItem]
+    public let daily: [WeatherWidgetDailyItem]
+    public let lastUpdated: Date
+
+    public init(
+        hasData: Bool = true,
+        cityName: String,
+        temp: Double,
+        feelsLike: Double,
+        tempMin: Double,
+        tempMax: Double,
+        conditionText: String,
+        iconCode: String,
+        humidityPercent: Int,
+        windSpeed: Double,
+        windUnit: String = "m/s",
+        hourly: [WeatherWidgetHourlyItem] = [],
+        daily: [WeatherWidgetDailyItem] = [],
+        lastUpdated: Date = Date()
+    ) {
+        self.hasData = hasData
+        self.cityName = cityName
+        self.temp = temp
+        self.feelsLike = feelsLike
+        self.tempMin = tempMin
+        self.tempMax = tempMax
+        self.conditionText = conditionText
+        self.iconCode = iconCode
+        self.humidityPercent = humidityPercent
+        self.windSpeed = windSpeed
+        self.windUnit = windUnit
+        self.hourly = hourly
+        self.daily = daily
+        self.lastUpdated = lastUpdated
+    }
+
+    public static var placeholder: WeatherWidgetSnapshot {
+        WeatherWidgetSnapshot(
+            hasData: true,
+            cityName: "Bucharest",
+            temp: 19,
+            feelsLike: 18,
+            tempMin: 12,
+            tempMax: 22,
+            conditionText: "Clear Sky",
+            iconCode: "01d",
+            humidityPercent: 52,
+            windSpeed: 2.8,
+            windUnit: "m/s",
+            hourly: [
+                WeatherWidgetHourlyItem(timeLabel: "Now", temp: 19, iconCode: "01d"),
+                WeatherWidgetHourlyItem(timeLabel: "15:00", temp: 21, iconCode: "01d"),
+                WeatherWidgetHourlyItem(timeLabel: "18:00", temp: 18, iconCode: "02d"),
+                WeatherWidgetHourlyItem(timeLabel: "21:00", temp: 15, iconCode: "01n")
+            ],
+            daily: [
+                WeatherWidgetDailyItem(dayName: "Today", tempMin: 12, tempMax: 22, iconCode: "01d"),
+                WeatherWidgetDailyItem(dayName: "Sat", tempMin: 11, tempMax: 20, iconCode: "02d"),
+                WeatherWidgetDailyItem(dayName: "Sun", tempMin: 10, tempMax: 18, iconCode: "10d", popPercent: 40)
+            ]
+        )
+    }
+
+    public static var empty: WeatherWidgetSnapshot {
+        WeatherWidgetSnapshot(
+            hasData: false,
+            cityName: "Local Area",
+            temp: 0,
+            feelsLike: 0,
+            tempMin: 0,
+            tempMax: 0,
+            conditionText: "Syncing Weather",
+            iconCode: "02d",
+            humidityPercent: 0,
+            windSpeed: 0
+        )
+    }
+}
+
 /// Central data coordinator managing 0ms read/write between the Main App and WidgetKit Extension.
 public final class WidgetDataCoordinator: @unchecked Sendable {
     public static let shared = WidgetDataCoordinator()
+    public static let darwinMutationNotificationName = "com.intellidream.daily.widgetDidMutateData"
     
     private let groupSuiteName = "group.com.intellidream.daily"
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: groupSuiteName) ?? UserDefaults.standard
+    }
+
+    private func postCrossProcessMutationNotification() {
+        #if os(macOS) || os(iOS)
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterPostNotification(
+            center,
+            CFNotificationName(Self.darwinMutationNotificationName as CFString),
+            nil,
+            nil,
+            true
+        )
+        #endif
     }
     
     private let isoDateFormatter: DateFormatter = {
@@ -644,8 +782,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     }
     
     private var cachedUserId: UUID? {
-        if let idStr = groupDefaults.string(forKey: "authenticated_user_id") ?? groupDefaults.string(forKey: "current_user_id") {
-            return UUID(uuidString: idStr)
+        for key in ["supabase_user_id", "authenticated_user_id", "current_user_id"] {
+            if let idStr = groupDefaults.string(forKey: key), !idStr.isEmpty, idStr.lowercased() != "guest",
+               let uuid = UUID(uuidString: idStr) {
+                return uuid
+            }
         }
         return nil
     }
@@ -705,10 +846,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             groupDefaults.set(encoded, forKey: "offline_habits_queue")
         }
         
-        // 4. Reload Widget Timelines
+        // 4. Reload Widget Timelines & notify running app process
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+        postCrossProcessMutationNotification()
     }
     
     // MARK: - Smokes (Tobacco & Cessation)
@@ -838,10 +980,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             groupDefaults.set(encoded, forKey: "offline_habits_queue")
         }
         
-        // 4. Reload Widget Timelines
+        // 4. Reload Widget Timelines & notify running app process
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+        postCrossProcessMutationNotification()
     }
     
     // MARK: - Money (SmartLedger)
@@ -886,6 +1029,8 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         )
     }
     
+    private let ledgerLocalModifiedKey = "daily_smart_ledger_local_modified_at_v1"
+
     /// Adjusts an account amount by a real currency amount (e.g. -100 Lei or +100 Lei).
     /// Automatically converts to DSL units if the underlying section is scaled (1 unit = 100 Lei).
     public func adjustLedgerAmount(accountName: String, deltaReal: Double) {
@@ -901,11 +1046,13 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         let deltaRaw = item.isScaled ? (deltaReal / 100.0) : deltaReal
         let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
         groupDefaults.set(updatedText, forKey: ledgerStorageKey)
+        groupDefaults.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
         UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
         
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+        postCrossProcessMutationNotification()
     }
     
     public func adjustLedgerAmount(accountName: String, deltaRaw: Double) {
@@ -919,11 +1066,13 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         
         let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
         groupDefaults.set(updatedText, forKey: ledgerStorageKey)
+        groupDefaults.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
         UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
         
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+        postCrossProcessMutationNotification()
     }
     
     // MARK: - Sleep (Sleep Studio)
@@ -1200,6 +1349,85 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         )
     }
 
+    // MARK: - Weather & Atmospheric Forecast
+
+    private let weatherSnapshotKey = "daily_weather_widget_snapshot_v1"
+
+    public func updateWeatherSnapshot(
+        cityName: String,
+        current: WeatherResponse,
+        hourlyItems: [ForecastItem],
+        dailyItems: [DailyForecastSummary],
+        latitude: Double,
+        longitude: Double,
+        isImperial: Bool = false
+    ) {
+        groupDefaults.set(latitude, forKey: "weather_cached_lat")
+        groupDefaults.set(longitude, forKey: "weather_cached_lon")
+
+        let hourFmt = DateFormatter()
+        hourFmt.locale = Locale(identifier: "en_US_POSIX")
+        hourFmt.dateFormat = "HH:mm"
+
+        let hourly: [WeatherWidgetHourlyItem] = hourlyItems.prefix(6).enumerated().map { idx, item in
+            WeatherWidgetHourlyItem(
+                timeLabel: idx == 0 ? "Now" : hourFmt.string(from: item.date),
+                temp: item.main.temp,
+                iconCode: item.weather.first?.icon ?? "01d",
+                popPercent: Int(((item.pop ?? 0) * 100).rounded())
+            )
+        }
+
+        let daily: [WeatherWidgetDailyItem] = dailyItems.prefix(5).map { d in
+            WeatherWidgetDailyItem(
+                dayName: d.dayName,
+                tempMin: d.tempMin,
+                tempMax: d.tempMax,
+                iconCode: d.iconCode,
+                popPercent: Int((d.popMax * 100).rounded())
+            )
+        }
+
+        let todayMin = dailyItems.first?.tempMin ?? current.main.tempMin
+        let todayMax = dailyItems.first?.tempMax ?? current.main.tempMax
+        let condText = current.weather.first?.description.capitalized ?? "Clear"
+        let iconCode = current.weather.first?.icon ?? "01d"
+
+        let snapshot = WeatherWidgetSnapshot(
+            hasData: true,
+            cityName: cityName.isEmpty ? (current.name.isEmpty ? "Local Area" : current.name) : cityName,
+            temp: current.main.temp,
+            feelsLike: current.main.feelsLike,
+            tempMin: todayMin,
+            tempMax: todayMax,
+            conditionText: condText,
+            iconCode: iconCode,
+            humidityPercent: current.main.humidity,
+            windSpeed: current.wind?.speed ?? 0,
+            windUnit: isImperial ? "mph" : "m/s",
+            hourly: hourly,
+            daily: daily,
+            lastUpdated: Date()
+        )
+
+        if let data = try? JSONEncoder().encode(snapshot) {
+            groupDefaults.set(data, forKey: weatherSnapshotKey)
+            UserDefaults.standard.set(data, forKey: weatherSnapshotKey)
+        }
+
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+    }
+
+    public func fetchWeatherSnapshot() -> WeatherWidgetSnapshot {
+        if let data = groupDefaults.data(forKey: weatherSnapshotKey),
+           let snapshot = try? JSONDecoder().decode(WeatherWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+        return WeatherWidgetSnapshot.empty
+    }
+
     // MARK: - Combined Executive Snapshot (5 Core Pillars + Briefing)
 
     public func fetchCombinedSnapshot() -> CombinedWidgetSnapshot {
@@ -1209,6 +1437,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         let sleep = fetchSleepSnapshot()
         let tagdos = fetchTagdosSnapshot()
         let stress = fetchStressSnapshot()
+        let weather = fetchWeatherSnapshot()
 
         let hour = Calendar.current.component(.hour, from: Date())
         let isMorning = (hour >= 5 && hour < 12)
@@ -1232,9 +1461,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
 
             snippet = BriefingSummarySnippet(
                 greeting: BriefingTimeSlot.current().diurnalGreeting(for: "Mihai"),
-                weatherTemp: m.weatherTemp,
-                weatherCondition: m.weatherCondition,
-                weatherIcon: m.weatherIcon,
+                weatherTemp: m.weatherTemp ?? (weather.hasData ? weather.temp : nil),
+                weatherCondition: m.weatherCondition ?? (weather.hasData ? weather.conditionText : nil),
+                weatherIcon: m.weatherIcon ?? (weather.hasData ? weather.iconCode : nil),
                 sleepDurationFormatted: m.sleepDurationFormatted,
                 sleepScore: m.sleepScore,
                 topFocusText: focus,
@@ -1244,9 +1473,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             let primaryPill = tagdos.streams.first?.drivingPillText
             snippet = BriefingSummarySnippet(
                 greeting: isMorning ? "Good Morning, Mihai" : "Welcome back, Mihai",
-                weatherTemp: nil,
-                weatherCondition: nil,
-                weatherIcon: nil,
+                weatherTemp: weather.hasData ? weather.temp : nil,
+                weatherCondition: weather.hasData ? weather.conditionText : nil,
+                weatherIcon: weather.hasData ? weather.iconCode : nil,
                 sleepDurationFormatted: sleep.hasData ? sleep.totalAsleepFormatted : nil,
                 sleepScore: sleep.hasData ? sleep.sleepScore : nil,
                 topFocusText: primaryPill != nil ? "Focus: \(primaryPill!)" : nil,

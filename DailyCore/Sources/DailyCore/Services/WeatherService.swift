@@ -156,6 +156,17 @@ public final class WeatherService: ObservableObject {
             // Process forecast summaries
             self.hourlyForecasts = Array(forecastResult.list.prefix(8))
             self.dailySummaries = aggregateDailyForecasts(from: forecastResult.list)
+
+            // Update App Group snapshot for desktop widgets and briefing
+            WidgetDataCoordinator.shared.updateWeatherSnapshot(
+                cityName: self.currentLocationName,
+                current: currentResult,
+                hourlyItems: self.hourlyForecasts,
+                dailyItems: self.dailySummaries,
+                latitude: targetLat,
+                longitude: targetLon,
+                isImperial: SettingsService.shared.settings.weatherUnitSystem == .imperial
+            )
         } catch {
             self.errorMessage = error.localizedDescription
             print("[WeatherService] Weather fetch failed: \(error)")

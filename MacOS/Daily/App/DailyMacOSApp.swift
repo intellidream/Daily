@@ -28,6 +28,9 @@ struct DailyMacOSApp: App {
         // (no local HealthKit daemon on macOS; telemetry arrives via Supabase sync)
         HealthDataService.shared.localDataProvider = nil
         
+        // Start cross-process Darwin notification listener for widget quick logging
+        WidgetDarwinMutationListener.shared.startListening()
+        
         // Eagerly trigger initial sync from Supabase
         Task { @MainActor in
             SmartLedgerStore.shared.reloadFromStorage()
@@ -45,6 +48,9 @@ struct DailyMacOSApp: App {
             RootView()
                 .preferredColorScheme(colorScheme)
                 .frame(minWidth: 440, minHeight: 650)
+                .onOpenURL { url in
+                    handleIncomingURL(url)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
@@ -227,5 +233,32 @@ struct DailyMacOSApp: App {
         case .dark: return .dark
         case .light: return .light
         }
+    }
+    
+    private func handleIncomingURL(_ url: URL) {
+        guard url.scheme == "daily" else { return }
+        let host = url.host ?? ""
+        let path = url.path.lowercased()
+        
+        let targetTab: NavigationTab
+        if host == "habits" || path.contains("habits") {
+            targetTab = .habits
+        } else if host == "finances" || path.contains("finances") || path.contains("money") {
+            targetTab = .finances
+        } else if host == "health" || path.contains("health") || path.contains("sleep") || path.contains("stress") {
+            targetTab = .health
+        } else if host == "weather" || path.contains("weather") {
+            targetTab = .weather
+        } else if host == "cosmos" || path.contains("cosmos") {
+            targetTab = .cosmos
+        } else if host == "tagdos" || path.contains("tagdos") {
+            targetTab = .tagdos
+        } else if host == "news" || path.contains("news") {
+            targetTab = .news
+        } else {
+            targetTab = .dashboard
+        }
+        
+        MacOSWindowManager.shared.activateMainWindow(selectingTab: targetTab)
     }
 }

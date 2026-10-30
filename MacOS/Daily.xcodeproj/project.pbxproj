@@ -8,11 +8,39 @@
 
 /* Begin PBXBuildFile section */
 		M1000000000000000000000C /* DailyCore in Frameworks */ = {isa = PBXBuildFile; productRef = M1000000000000000000000B /* DailyCore */; };
+		M2000000000000000000000B /* DailyCore in Frameworks */ = {isa = PBXBuildFile; productRef = M1000000000000000000000B /* DailyCore */; };
+		M2000000000000000000000D /* DailyWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = M20000000000000000000001 /* DailyWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		M2000000000000000000000E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = M10000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = M20000000000000000000002;
+			remoteInfo = DailyWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		M2000000000000000000000C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				M2000000000000000000000D /* DailyWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		M10000000000000000000005 /* DayOne.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DayOne.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		M10000000000000000000014 /* Daily.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Daily.entitlements; sourceTree = "<group>"; };
+		M20000000000000000000001 /* DailyWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DailyWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		M20000000000000000000007 /* DailyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DailyWidgets/DailyWidgets.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -24,6 +52,14 @@
 			);
 			target = M10000000000000000000002 /* Daily */;
 		};
+		M20000000000000000000010 /* Exceptions for "DailyWidgets" folder in "DailyWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Info.plist",
+				"DailyWidgets.entitlements",
+			);
+			target = M20000000000000000000002 /* DailyWidgets */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +69,14 @@
 				M10000000000000000000013 /* Exceptions for "Daily" folder in "Daily" target */,
 			);
 			path = Daily;
+			sourceTree = "<group>";
+		};
+		M20000000000000000000006 /* DailyWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				M20000000000000000000010 /* Exceptions for "DailyWidgets" folder in "DailyWidgets" target */,
+			);
+			path = DailyWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -46,6 +90,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		M20000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				M2000000000000000000000B /* DailyCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -53,7 +105,9 @@
 			isa = PBXGroup;
 			children = (
 				M10000000000000000000014 /* Daily.entitlements */,
+				M20000000000000000000007 /* DailyWidgets.entitlements */,
 				M10000000000000000000006 /* Daily */,
+				M20000000000000000000006 /* DailyWidgets */,
 				M10000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				M10000000000000000000005 /* DayOne.app */,
+				M20000000000000000000001 /* DailyWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,10 +131,12 @@
 				M10000000000000000000007 /* Sources */,
 				M10000000000000000000008 /* Frameworks */,
 				M10000000000000000000009 /* Resources */,
+				M2000000000000000000000C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				M2000000000000000000000F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				M10000000000000000000006 /* Daily */,
@@ -92,6 +149,29 @@
 			productReference = M10000000000000000000005 /* DayOne.app */;
 			productType = "com.apple.product-type.application";
 		};
+		M20000000000000000000002 /* DailyWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = M20000000000000000000008 /* Build configuration list for PBXNativeTarget "DailyWidgets" */;
+			buildPhases = (
+				M20000000000000000000003 /* Sources */,
+				M20000000000000000000004 /* Frameworks */,
+				M20000000000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				M20000000000000000000006 /* DailyWidgets */,
+			);
+			name = DailyWidgets;
+			packageProductDependencies = (
+				M1000000000000000000000B /* DailyCore */,
+			);
+			productName = DailyWidgetsExtension;
+			productReference = M20000000000000000000001 /* DailyWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -103,6 +183,9 @@
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					M10000000000000000000002 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					M20000000000000000000002 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
 				};
@@ -125,12 +208,20 @@
 			projectRoot = "";
 			targets = (
 				M10000000000000000000002 /* Daily */,
+				M20000000000000000000002 /* DailyWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		M10000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		M20000000000000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -147,7 +238,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		M20000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		M2000000000000000000000F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = M20000000000000000000002 /* DailyWidgets */;
+			targetProxy = M2000000000000000000000E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		M1000000000000000000000F /* Debug */ = {
@@ -326,6 +432,61 @@
 			};
 			name = Release;
 		};
+		M20000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DailyWidgets/DailyWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DailyWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.intellidream.daily.macos.DailyWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)Extension";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		M2000000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DailyWidgets/DailyWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7LZ9ZT2Z5B;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DailyWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.intellidream.daily.macos.DailyWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)Extension";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -343,6 +504,15 @@
 			buildConfigurations = (
 				M10000000000000000000011 /* Debug */,
 				M10000000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		M20000000000000000000008 /* Build configuration list for PBXNativeTarget "DailyWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				M20000000000000000000009 /* Debug */,
+				M2000000000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
