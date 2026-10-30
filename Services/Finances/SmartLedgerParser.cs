@@ -531,13 +531,14 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
                     var notes = ExtractParentheses(line);
                     var parsedNum = ParseNumericDetailed(valuePart, currentSectionScaled, eurRate);
+                    string cleanKey = CleanKeyName(keyPart);
 
                     var item = new SmartLedgerItem
                     {
                         SectionName = currentSectionName,
                         LineIndex = lineIndex,
                         RawLine = rawLine,
-                        Key = keyPart,
+                        Key = cleanKey,
                         RawAmount = parsedNum.Raw,
                         CalculatedAmount = parsedNum.Calculated,
                         Currency = parsedNum.IsEUR ? "EUR" : "Lei",
@@ -595,6 +596,17 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
                 NetWorthEUR = nwEUR,
                 RawText = text
             };
+        }
+
+        private static string CleanKeyName(string key)
+        {
+            var k = key.Trim();
+            k = Regex.Replace(k, @"\(.*?\)", "").Trim();
+            while (k.EndsWith("/"))
+            {
+                k = k.Substring(0, k.Length - 1).Trim();
+            }
+            return k;
         }
 
         private static (decimal Raw, decimal Calculated, bool IsEUR) ParseNumericDetailed(string valStr, bool isScaled, decimal eurRate = 5.0m)

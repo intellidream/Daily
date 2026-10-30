@@ -26,7 +26,7 @@ struct WatchSmartLedgerCard: View {
                     Button {
                         WKInterfaceDevice.current().play(.click)
                         Task {
-                            await store.fetchLedgerData()
+                            await store.fetchLedgerData(force: true)
                         }
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -88,57 +88,9 @@ struct WatchSmartLedgerCard: View {
 
             VStack(spacing: 5) {
                 ForEach(store.items) { item in
-                    HStack(spacing: 4) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(item.name)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                            Text(item.displaySubtitle)
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-
-                        Spacer(minLength: 2)
-
-                        Text(item.displayAmount)
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(Color(hex: "#34D399"))
-                            .padding(.trailing, 2)
-
-                        // Steppers [-] and [+]
-                        HStack(spacing: 3) {
-                            Button {
-                                let step = item.isScaled ? 1.0 : (item.count >= 500 ? 100.0 : 50.0)
-                                store.adjustItem(id: item.id, delta: -step)
-                            } label: {
-                                Image(systemName: "minus")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 22, height: 22)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                let step = item.isScaled ? 1.0 : (item.count >= 500 ? 100.0 : 50.0)
-                                store.adjustItem(id: item.id, delta: step)
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 22, height: 22)
-                                    .background(Color(hex: "#10B981").opacity(0.35))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    WatchSmartLedgerItemRow(item: item) { delta in
+                        store.adjustItem(lineIndex: item.lineIndex, deltaRaw: delta)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
         }
@@ -149,7 +101,66 @@ struct WatchSmartLedgerCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color(hex: "#10B981").opacity(0.25), lineWidth: 1)
+                .stroke(Color(hex: "#10B981").opacity(0.3), lineWidth: 1)
         )
+    }
+}
+
+private struct WatchSmartLedgerItemRow: View {
+    let item: WatchSmartLedgerQuickItem
+    let onAdjust: (Double) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text(item.displaySubtitle)
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+
+            Spacer(minLength: 2)
+
+            Text(item.displayAmount)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(Color(hex: "#34D399"))
+                .padding(.trailing, 2)
+
+            // Steppers [-] and [+]
+            HStack(spacing: 3) {
+                Button {
+                    let step = item.isScaled ? 1.0 : (item.rawAmount >= 500 ? 100.0 : 50.0)
+                    onAdjust(-step)
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.10))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    let step = item.isScaled ? 1.0 : (item.rawAmount >= 500 ? 100.0 : 50.0)
+                    onAdjust(step)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Color(hex: "#10B981").opacity(0.35))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

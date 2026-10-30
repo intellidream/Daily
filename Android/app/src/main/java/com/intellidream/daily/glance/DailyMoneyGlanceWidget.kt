@@ -67,14 +67,21 @@ class DailyMoneyGlanceWidget : GlanceAppWidget() {
         val netWorthLei = parsed?.netWorth ?: (depositsTotal + cardAmount + cashAmount)
         val netWorthEUR = parsed?.netWorthEUR ?: (netWorthLei / 5.0)
 
-        val incomingTotal = 16000.0
-        val outgoingTotal = 16000.0
+        val incomingTotal = parsed?.incomingTotal ?: 16000.0
+        val outgoingTotal = parsed?.outgoingTotal ?: 16000.0
 
-        val topOutgoing = listOf(
-            "Vacante" to 6800.0,
-            "Rata" to 4900.0,
-            "Cora" to 1000.0
-        )
+        val outgoingSection = parsed?.sections?.firstOrNull { it.name.equals("Outgoing", ignoreCase = true) }
+        val topOutgoing = outgoingSection?.items
+            ?.filter { !it.isPureNote && it.calculatedAmount > 0 }
+            ?.sortedByDescending { it.calculatedAmount }
+            ?.take(3)
+            ?.map { it.displayName to it.calculatedAmount }
+            ?.ifEmpty { null }
+            ?: listOf(
+                "Vacante" to 6800.0,
+                "Rata" to 4900.0,
+                "Cora" to 1000.0
+            )
 
         val formattedEUR = WidgetVisualGraphics.formatCompactEUR(netWorthEUR)
 

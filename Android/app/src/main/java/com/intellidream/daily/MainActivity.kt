@@ -360,6 +360,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         healthRepository.refreshIfStale()
         lifecycleScope.launch {
+            DailyApp.instance.smartLedgerRepository.syncWithCloud()
             com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@MainActivity)
         }
     }

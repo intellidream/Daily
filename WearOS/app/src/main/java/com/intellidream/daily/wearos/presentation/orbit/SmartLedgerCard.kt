@@ -1,6 +1,10 @@
 package com.intellidream.daily.wearos.presentation.orbit
 
-import android.content.Context
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,15 +23,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -36,42 +43,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
-
-data class WearLedgerQuickItem(
-    val id: String,
-    val name: String,
-    val count: Double,
-    val unitPrice: Double,
-    val isScaled: Boolean,
-    val currency: String = "Lei"
-) {
-    val totalAmount: Double get() = if (isScaled) count * unitPrice else count
-    val displayAmount: String get() {
-        return if (totalAmount % 1 == 0.0) "${totalAmount.toInt()} $currency" else String.format("%.1f %s", totalAmount, currency)
-    }
-    val subtitle: String get() {
-        return if (isScaled) {
-            val countStr = if (count % 1 == 0.0) "${count.toInt()}" else String.format("%.1f", count)
-            "$countStr × ${unitPrice.toInt()} Lei"
-        } else "Fixed / Monthly"
-    }
-}
+import com.intellidream.daily.wearos.data.WatchSmartLedgerRepository
+import com.intellidream.daily.wearos.data.WearLedgerItemData
+import kotlinx.coroutines.launch
 
 @Composable
 fun SmartLedgerCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("daily_prefs", Context.MODE_PRIVATE) }
+    val repository = remember { WatchSmartLedgerRepository.getInstance(context) }
+    val scope = rememberCoroutineScope()
 
-    var netWorth by remember { mutableStateOf(prefs.getString("ledger_net_worth", "128.450 Lei") ?: "128.450 Lei") }
-    var netWorthEUR by remember { mutableStateOf(prefs.getString("ledger_net_worth_eur", "~25.690 €") ?: "~25.690 €") }
-    var deposits by remember { mutableStateOf(prefs.getString("ledger_deposits", "74.000 Lei") ?: "74.000 Lei") }
-    var sold by remember { mutableStateOf(prefs.getString("ledger_sold", "53.156 Lei") ?: "53.156 Lei") }
+    val parsed by repository.parsed.collectAsState()
+    val isSyncing by repository.isSyncing.collectAsState()
 
-    var tigariCount by remember { mutableStateOf(prefs.getFloat("ledger_tigari_count", 10.0f).toDouble()) }
-    var coraCount by remember { mutableStateOf(prefs.getFloat("ledger_cora_count", 1.0f).toDouble()) }
-    var carAmount by remember { mutableStateOf(prefs.getFloat("ledger_car_amount", 500.0f).toDouble()) }
+    // Battery-friendly: Syncs only if cache is stale (> 10m old)
+    LaunchedEffect(Unit) {
+        repository.syncWithSupabase(force = false)
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing)
+        ),
+        label = "Rotation"
+    )
 
     Column(
         modifier = modifier
@@ -102,19 +102,42 @@ fun SmartLedgerCard(
                     color = Color(0xFF10B981)
                 )
             }
+
+            // Sync / Refresh button
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x1A10B981))
+                    .clickable {
+                        scope.launch {
+                            repository.syncWithSupabase(force = true)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Refresh",
+                    tint = if (isSyncing) Color(0xFF10B981) else Color(0xFF64748B),
+                    modifier = Modifier
+                        .size(11.dp)
+                        .then(if (isSyncing) Modifier.rotate(rotation) else Modifier)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
         // Net worth line
         Text(
-            text = netWorth,
+            text = WatchSmartLedgerRepository.formatLei(parsed.netWorth),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
         Text(
-            text = netWorthEUR,
+            text = WatchSmartLedgerRepository.formatEur(parsed.netWorthEUR),
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color(0xFF34D399)
@@ -122,7 +145,7 @@ fun SmartLedgerCard(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Chips: Depozite & Sold
+        // Chips: Deposits & Balance
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -136,7 +159,13 @@ fun SmartLedgerCard(
             ) {
                 Column {
                     Text(text = "DEPOSITS", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
-                    Text(text = deposits, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White)
+                    Text(
+                        text = WatchSmartLedgerRepository.formatLei(parsed.deposits),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color.White
+                    )
                 }
             }
 
@@ -149,73 +178,67 @@ fun SmartLedgerCard(
             ) {
                 Column {
                     Text(text = "BALANCE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E5FF))
-                    Text(text = sold, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White)
+                    Text(
+                        text = WatchSmartLedgerRepository.formatLei(parsed.balance),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color.White
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        if (parsed.items.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "QUICK ADJUST (1-TAP)",
-            fontSize = 8.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF94A3B8)
-        )
+            Text(
+                text = "QUICK ADJUST (1-TAP)",
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF94A3B8)
+            )
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-        // Item 1: Smokes
-        QuickItemRow(
-            item = WearLedgerQuickItem("tigari", "Smokes", tigariCount, 26.50, true),
-            onMinus = {
-                tigariCount = maxOf(0.0, tigariCount - 1.0)
-                prefs.edit().putFloat("ledger_tigari_count", tigariCount.toFloat()).apply()
-            },
-            onPlus = {
-                tigariCount += 1.0
-                prefs.edit().putFloat("ledger_tigari_count", tigariCount.toFloat()).apply()
+            // Dynamic quick items from smart ledger Outgoing section
+            parsed.items.take(4).forEach { item ->
+                QuickItemRow(
+                    item = item,
+                    onMinus = {
+                        val step = if (item.isScaled) 1.0 else 50.0
+                        repository.adjustItem(item.lineIndex, -step)
+                    },
+                    onPlus = {
+                        val step = if (item.isScaled) 1.0 else 50.0
+                        repository.adjustItem(item.lineIndex, step)
+                    }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
             }
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Item 2: Groceries
-        QuickItemRow(
-            item = WearLedgerQuickItem("cora", "Groceries / Market", coraCount, 150.0, true),
-            onMinus = {
-                coraCount = maxOf(0.0, coraCount - 1.0)
-                prefs.edit().putFloat("ledger_cora_count", coraCount.toFloat()).apply()
-            },
-            onPlus = {
-                coraCount += 1.0
-                prefs.edit().putFloat("ledger_cora_count", coraCount.toFloat()).apply()
-            }
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Item 3: Gas / Car
-        QuickItemRow(
-            item = WearLedgerQuickItem("car", "Gas / Car", carAmount, 1.0, false),
-            onMinus = {
-                carAmount = maxOf(0.0, carAmount - 50.0)
-                prefs.edit().putFloat("ledger_car_amount", carAmount.toFloat()).apply()
-            },
-            onPlus = {
-                carAmount += 50.0
-                prefs.edit().putFloat("ledger_car_amount", carAmount.toFloat()).apply()
-            }
-        )
+        }
     }
 }
 
 @Composable
 private fun QuickItemRow(
-    item: WearLedgerQuickItem,
+    item: WearLedgerItemData,
     onMinus: () -> Unit,
     onPlus: () -> Unit
 ) {
+    val subtitle = if (item.isScaled) {
+        val rawStr = if (item.rawAmount % 1.0 == 0.0) "${item.rawAmount.toInt()}" else String.format(java.util.Locale.US, "%.1f", item.rawAmount)
+        "$rawStr × 100 Lei"
+    } else {
+        "Direct / Monthly"
+    }
+
+    val displayAmount = if (item.calculatedAmount % 1.0 == 0.0) {
+        "${item.calculatedAmount.toInt()} ${item.currency}"
+    } else {
+        String.format(java.util.Locale.US, "%.1f %s", item.calculatedAmount, item.currency)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -227,11 +250,11 @@ private fun QuickItemRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = item.name, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-            Text(text = item.subtitle, fontSize = 8.sp, color = Color(0xFF94A3B8))
+            Text(text = subtitle, fontSize = 8.sp, color = Color(0xFF94A3B8))
         }
 
         Text(
-            text = item.displayAmount,
+            text = displayAmount,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,

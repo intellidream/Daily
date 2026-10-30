@@ -4,14 +4,22 @@
 - **Maintain Stability & Prevent Regressions**: Never break existing functional features. Preserve comments, docstrings, and verified functionality.
 - **Ask, Don't Assume**: If requirements, architecture, or designs are ambiguous or unknown, ask the user directly instead of making assumptions.
 - **Simulator First, Physical Device Delivery**:
-  - **iOS**: Rigorously test work on the iOS simulator (SimulaPhone) first (including mock/edge cases and visual inspection); once verified, build, deploy, and verify live on the physical iPhone ("Schmitz").
-  - **Android**: Rigorously test work on the Android emulator (`Medium_Phone_API_36.1` on Mac) first (including mock/edge cases, UI dump, and visual inspection); once verified, build, deploy via `adb`, and verify live on the physical **Google Pixel 9 Pro**, **Samsung Galaxy Z Fold 8 ("RADAR")**, and **Samsung Galaxy S25 Edge** (if connected).
+  - **iOS**: Rigorously test work on the iOS simulator (SimulaPhone) and foldable (SimulaDuo) first (including mock/edge cases and visual inspection); once verified, build, deploy, and verify live on the physical iPhone ("Schmitz"). Schmitz is the golden standard.
+  - **Android**: Rigorously test work on the Android emulator (`Medium_Phone_API_36.1` on Mac) first (including mock/edge cases, UI dump, and visual inspection); once verified, build, deploy via `adb`, and verify live on the physical **Google Pixel 9 Pro ("Trapper")**, **Samsung Galaxy Z Fold 8 ("RADAR")**, and **Samsung Galaxy S25 Edge** (if connected).
   - **macOS**: Rigorously test work natively on the host Mac; verify window management, hidden title bar chrome, MenuBarExtra popover, keyboard shortcuts, trackpad haptics, and live Supabase telemetry consumption before deployment.
   - **Windows (WinUI 3)**: Rigorously test work on the Parallels Windows 11 VM (`prlctl exec "Windows 11"`); verify single-window fluid navigation, Mica/Acrylic backdrops, Taskbar Flyout, keyboard shortcuts, and Syncfusion Scheduler without regressing NPU/Phi-Silica or offline capabilities.
+  - **watchOS**: Rigorously test work on the watchOS simulator (e.g. Apple Watch Series / Ultra) first; once verified, build, deploy, and verify live on the physical **Apple Watch Ultra 2 ("Mihai’s Apple Watch")** via `xcrun devicectl`.
+  - **Wear OS**: Rigorously test work on the Wear OS emulator first; once verified, build, deploy via `adb`, and verify live on physical **Google Pixel Watch 5** and **OnePlus Watch 3** (if connected).
+- **Smartwatch Network & Battery Caching Policy**:
+  - For Orbit Context, widgets, complications, and tiles: Always serve from local fast cache (< 1ms, zero network latency on view appearance).
+  - Network queries to Supabase must be throttled with a TTL (minimum 10-15 minutes without user action) or triggered only via explicit user pull-to-refresh / button tap.
+  - Never run unthrottled background polling loops or duplicate queries on smartwatches to protect battery life and prevent thermal throttling.
 - **Modern Native Architecture**:
   - For Android: Pure Kotlin with Jetpack Compose (Liquid Glass design system, 120Hz smooth scrolling), local-first Room database cache (`synced_at` dirty tracking), WorkManager for background sync, Supabase Kotlin SDK, Android Health Connect integration, and Jetpack Glance widgets.
   - For macOS: Pure Swift & SwiftUI targeting macOS 15.0+, leveraging `DailyCore` for domain models and business logic. Hybrid architecture combining a full Liquid Glass window (floating pill navigation as default, collapsible sidebar as option, fast `⌘1-7` shortcuts) with a persistent `MenuBarExtra` drop-down companion popover. Health functions in consumer-only mode, ingesting telemetry seamlessly from Supabase.
   - For Windows: Pure WinUI 3 (Windows App SDK targeting .NET 10, ARM64 & x64) leveraging linked shared core models and services. Single-window in-place navigation with Floating Glass Capsule and Collapsible Sidebar (`Ctrl+1-8`), interactive Windows 11 Taskbar Flyout companion, deep Syncfusion Calendar/Scheduler integration, on-device AI/NPU acceleration, and responsive desktop framing.
+  - For watchOS: Pure SwiftUI Watch App targeting watchOS 11+, paired with iOS companion and direct Supabase sync for standalone functionality, App Group caching for instant glanceability.
+  - For Wear OS: Pure Kotlin with Compose for Wear OS (Horologist, ScalingLazyColumn), paired with Android companion and direct Supabase sync, SharedPreferences caching for instant glanceability.
 - **macOS Development Workflow**:
   - 1. Implement feature/architecture cleanly in `MacOS/` referencing `iOS/` as golden standard without modifying `iOS/` files.
   - 2. Rigorously build and test execution natively on macOS.
@@ -32,4 +40,3 @@
   - Avoid spamming full-resolution screenshot `view_file` calls in a single session to prevent context token exhaustion and model crashes.
 - **Documentation**: After implementing features and verifying builds are functional, ALWAYS document the relevant changes in the `Docs/Features` directory.
 - **Clean Commits & Push**: Create clean, well-structured git commits with descriptive titles and summaries, and push to remote.
-

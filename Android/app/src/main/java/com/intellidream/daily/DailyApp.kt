@@ -86,6 +86,11 @@ class DailyApp : Application() {
                 return financeRemoteService.pushLedger(text, userId)
             }
         }
+        smartLedgerRepository.onLedgerChanged = {
+            appScope.launch {
+                com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
+            }
+        }
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
         val newsHandler = object : com.intellidream.daily.database.NewsSyncHandler {
@@ -153,17 +158,20 @@ class DailyApp : Application() {
             if (currentSettings != null) {
                 habitsRepository.setWaterGoal(currentSettings.habitsWaterTargetLiters * 1000.0)
             }
-            val state = authRepository.sessionState.firstOrNull()
-            val uid = (state as? com.intellidream.daily.model.AuthSessionState.Authenticated)?.profile?.id
-            if (!uid.isNullOrEmpty() && uid != "guest") {
-                habitsRepository.currentUserId = uid
-                habitsRepository.syncLogs(uid)
-                newsRepository.currentUserId = uid
-                newsRepository.syncWithSupabase(uid)
-                healthRepository.currentUserId = uid
-                healthRepository.syncUnsyncedTelemetry()
-                healthRepository.syncUnsyncedVitals()
-                smartLedgerRepository.setUserId(uid)
+            appScope.launch {
+                authRepository.sessionState.collect { state ->
+                    val uid = (state as? com.intellidream.daily.model.AuthSessionState.Authenticated)?.profile?.id
+                    if (!uid.isNullOrEmpty() && uid != "guest") {
+                        habitsRepository.currentUserId = uid
+                        habitsRepository.syncLogs(uid)
+                        newsRepository.currentUserId = uid
+                        newsRepository.syncWithSupabase(uid)
+                        healthRepository.currentUserId = uid
+                        healthRepository.syncUnsyncedTelemetry()
+                        healthRepository.syncUnsyncedVitals()
+                        smartLedgerRepository.setUserId(uid)
+                    }
+                }
             }
             weatherRepository.refreshWeather(
                 force = false,

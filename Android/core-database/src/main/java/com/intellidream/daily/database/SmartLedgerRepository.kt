@@ -34,6 +34,7 @@ class SmartLedgerRepository(
     val parsedLedger: StateFlow<ParsedSmartLedger> = _parsedLedger.asStateFlow()
 
     var syncHandler: SmartLedgerSyncHandler? = null
+    var onLedgerChanged: (() -> Unit)? = null
     private var activeUserId: String? = null
     private var pushJob: Job? = null
 
@@ -44,6 +45,7 @@ class SmartLedgerRepository(
                     if (entity.rawText != _rawText.value) {
                         _rawText.value = entity.rawText
                         _parsedLedger.value = SmartLedgerParser.parse(entity.rawText)
+                        onLedgerChanged?.invoke()
                     }
                 } else {
                     // Seed database with default ledger text
@@ -81,6 +83,7 @@ class SmartLedgerRepository(
                 if (remoteUpdated > localUpdated) {
                     _rawText.value = remoteText
                     _parsedLedger.value = SmartLedgerParser.parse(remoteText)
+                    onLedgerChanged?.invoke()
                     smartLedgerDao.upsert(
                         SmartLedgerEntity(
                             id = "primary_ledger",
@@ -107,6 +110,7 @@ class SmartLedgerRepository(
         val textToUse = if (trimmed.isEmpty()) DEFAULT_LEDGER_TEXT else newText
         _rawText.value = textToUse
         _parsedLedger.value = SmartLedgerParser.parse(textToUse)
+        onLedgerChanged?.invoke()
 
         val now = System.currentTimeMillis()
         scope.launch {
