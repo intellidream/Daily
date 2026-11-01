@@ -27,9 +27,18 @@
   - For Wear OS: Pure Kotlin with Compose for Wear OS (Horologist, ScalingLazyColumn), paired with Android companion and direct Supabase sync, SharedPreferences caching for instant glanceability.
 - **macOS Development Workflow**:
   - 1. Implement feature/architecture cleanly in `MacOS/` referencing `iOS/` as golden standard without modifying `iOS/` files.
-  - 2. Rigorously build and test execution natively on macOS.
+  - 2. Rigorously build and test execution natively on macOS (`xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build`).
   - 3. Only after verification passes, document thoroughly in `Docs/Features/`.
   - 4. Create clean, descriptive commits with proper titles and summaries, and push to remote.
+  - **macOS App Sandbox Entitlement Rules**:
+    - In `MacOS/*.entitlements`, never use unprefixed App Groups like `group.com.intellidream.daily`. On macOS App Sandbox, App Groups MUST strictly use the Team-ID prefix: `7LZ9ZT2Z5B.group.com.intellidream.daily`. Any unprefixed App Group triggers Xcode to demand a Mac App Development provisioning profile containing the Mac's hardware UUID, breaking CLI `xcodebuild` with `No profiles found`.
+  - **macOS Native Signing Mandate**:
+    - NEVER disable code signing with `CODE_SIGNING_ALLOWED=NO` or `CODE_SIGNING_REQUIRED=NO` for macOS targets, and NEVER attempt ad-hoc signing (`-`) or manual bash script `codesign --force` post-build.
+    - Xcode 16 generates dynamic debug dylibs (`Daily.debug.dylib`, `__preview.dylib`, `DailyWidgetsExtension.debug.dylib`). Bypassing Xcode automatic signing causes dyld launch aborts (`mapping process and mapped file (non-platform) have different Team IDs`) and breaks the Designated Requirement in Keychain ACLs.
+    - Always enforce `CODE_SIGN_IDENTITY = "Apple Development"` and `DEVELOPMENT_TEAM = 7LZ9ZT2Z5B` directly in `MacOS/Daily.xcodeproj/project.pbxproj` and allow Xcode to build and sign all nested bundles and dylibs atomically.
+  - **macOS Zero-Prompt Credential & Token Storage**:
+    - In macOS App Sandbox, the hardware Data Protection Keychain is unavailable without an explicit `keychain-access-groups` provisioning profile; standard generic password queries fallback to legacy `login.keychain-db`, which triggers macOS `SecurityAgent` password dialogs on access.
+    - Auth tokens and shared state on macOS must be persisted and retrieved via `GroupDefaults.shared.userDefaults` (the sandboxed, FileVault-encrypted container `7LZ9ZT2Z5B.group.com.intellidream.daily`), which provides instant, zero-prompt, shared access between `Daily.app` and `DailyWidgetsExtension.appex`.
 - **Windows (WinUI 3) Development Workflow**:
   - 1. Implement feature/architecture cleanly in `WinUI/Daily.WinUI` following Windows Fluent and Liquid Glass design patterns.
   - 2. Commit code on the host Mac and push to `origin/main`.

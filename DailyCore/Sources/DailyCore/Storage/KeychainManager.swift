@@ -20,6 +20,14 @@ public final class KeychainManager: @unchecked Sendable {
     
     @discardableResult
     public func save(key: String, data: Data) -> Bool {
+        #if os(macOS)
+        // Mirror to team-isolated group container on macOS to guarantee zero SecurityAgent prompts
+        GroupDefaults.shared.userDefaults.set(data, forKey: "keychain_\(key)")
+        if let str = String(data: data, encoding: .utf8) {
+            GroupDefaults.shared.userDefaults.set(str, forKey: key)
+        }
+        #endif
+        
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
@@ -74,6 +82,18 @@ public final class KeychainManager: @unchecked Sendable {
     }
     
     public func getData(key: String) -> Data? {
+        #if os(macOS)
+        if let data = GroupDefaults.shared.userDefaults.data(forKey: "keychain_\(key)") {
+            return data
+        }
+        if let str = GroupDefaults.shared.userDefaults.string(forKey: "keychain_\(key)") {
+            return str.data(using: .utf8)
+        }
+        if let str = GroupDefaults.shared.userDefaults.string(forKey: key) {
+            return str.data(using: .utf8)
+        }
+        #endif
+        
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
@@ -105,6 +125,11 @@ public final class KeychainManager: @unchecked Sendable {
     
     @discardableResult
     public func delete(key: String) -> Bool {
+        #if os(macOS)
+        GroupDefaults.shared.userDefaults.removeObject(forKey: "keychain_\(key)")
+        GroupDefaults.shared.userDefaults.removeObject(forKey: key)
+        #endif
+        
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
