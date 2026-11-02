@@ -83,7 +83,24 @@ namespace Daily_WinUI.DesktopWidgets
         [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
         private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForSystem();
+
         private const uint SPI_GETWORKAREA = 0x0030;
+
+        public static double GetDesktopDpiScale()
+        {
+            try
+            {
+                uint dpi = GetDpiForSystem();
+                if (dpi > 0)
+                {
+                    return (double)dpi / 96.0;
+                }
+            }
+            catch { }
+            return 1.0;
+        }
 
         public static RectInt32 GetDesktopWorkArea()
         {
@@ -105,29 +122,37 @@ namespace Daily_WinUI.DesktopWidgets
             return displayArea?.WorkArea ?? new RectInt32(0, 0, 1382, 728);
         }
 
-        private static void ClampModelToWorkArea(DesktopWidgetModel model, RectInt32 workArea)
+        public static void ClampModelToWorkArea(DesktopWidgetModel model, RectInt32 workArea)
         {
-            int widgetWidth = model.Size == DesktopWidgetSize.Small ? 170 : 360;
-            int widgetHeight = model.Size == DesktopWidgetSize.Large ? 360 : 170;
+            double scale = GetDesktopDpiScale();
+            int widgetWidth = (int)((model.Size == DesktopWidgetSize.Small ? 170 : 360) * scale);
+            int widgetHeight = (int)((model.Size == DesktopWidgetSize.Large ? 360 : 170) * scale);
 
-            int maxX = workArea.X + workArea.Width - widgetWidth - 16;
-            int maxY = workArea.Y + workArea.Height - widgetHeight - 16;
+            int maxX = workArea.X + workArea.Width - widgetWidth - (int)(16 * scale);
+            int maxY = workArea.Y + workArea.Height - widgetHeight - (int)(16 * scale);
 
-            if (model.X > maxX) model.X = Math.Max(workArea.X + 16, maxX);
-            if (model.X < workArea.X) model.X = workArea.X + 16;
-            if (model.Y > maxY) model.Y = Math.Max(workArea.Y + 16, maxY);
-            if (model.Y < workArea.Y) model.Y = workArea.Y + 16;
+            if (model.X > maxX) model.X = Math.Max(workArea.X + (int)(16 * scale), maxX);
+            if (model.X < workArea.X) model.X = workArea.X + (int)(16 * scale);
+            if (model.Y > maxY) model.Y = Math.Max(workArea.Y + (int)(16 * scale), maxY);
+            if (model.Y < workArea.Y) model.Y = workArea.Y + (int)(16 * scale);
         }
 
         private List<DesktopWidgetModel> CreateDefaultWidgets()
         {
             var list = new List<DesktopWidgetModel>();
             var workArea = GetDesktopWorkArea();
+            double scale = GetDesktopDpiScale();
 
-            // Place on the right side of the desktop wallpaper with 24px padding
-            int padding = 24;
-            int rightX = Math.Max(padding, workArea.X + workArea.Width - 360 - padding);
-            int startY = workArea.Y + 24;
+            int mediumWidth = (int)(360 * scale);
+            int smallWidth = (int)(170 * scale);
+            int mediumHeight = (int)(170 * scale);
+            int smallHeight = (int)(170 * scale);
+            int padding = (int)(24 * scale);
+            int gap = (int)(12 * scale);
+
+            // Place on the right side of the desktop wallpaper with 24pt padding
+            int rightX = Math.Max(padding, workArea.X + workArea.Width - mediumWidth - padding);
+            int startY = workArea.Y + padding;
 
             // 1. Combined Widget (Medium)
             list.Add(new DesktopWidgetModel
@@ -145,7 +170,7 @@ namespace Daily_WinUI.DesktopWidgets
                 Type = DesktopWidgetType.Bubbles,
                 Size = DesktopWidgetSize.Small,
                 X = rightX,
-                Y = startY + 182,
+                Y = startY + mediumHeight + gap,
                 IsLocked = false
             });
 
@@ -153,8 +178,8 @@ namespace Daily_WinUI.DesktopWidgets
             {
                 Type = DesktopWidgetType.Smokes,
                 Size = DesktopWidgetSize.Small,
-                X = rightX + 180,
-                Y = startY + 182,
+                X = rightX + smallWidth + gap,
+                Y = startY + mediumHeight + gap,
                 IsLocked = false
             });
 
@@ -164,7 +189,7 @@ namespace Daily_WinUI.DesktopWidgets
                 Type = DesktopWidgetType.Money,
                 Size = DesktopWidgetSize.Medium,
                 X = rightX,
-                Y = startY + 364,
+                Y = startY + mediumHeight + gap + smallHeight + gap,
                 IsLocked = false
             });
 

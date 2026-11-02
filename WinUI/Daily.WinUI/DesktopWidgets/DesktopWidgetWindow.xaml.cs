@@ -64,7 +64,6 @@ namespace Daily_WinUI.DesktopWidgets
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int WS_EX_APPWINDOW = 0x00040000;
 
-        private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
@@ -264,17 +263,19 @@ namespace Daily_WinUI.DesktopWidgets
             _isDragging = false;
             HeaderOverlay.ReleasePointerCapture(e.Pointer);
 
-            // Snap to 16px magnetic grid
+            // Snap to 16px magnetic grid and clamp to visible desktop work area
             var curPos = AppWindow.Position;
             int snappedX = (int)(Math.Round((double)curPos.X / 16.0) * 16);
             int snappedY = (int)(Math.Round((double)curPos.Y / 16.0) * 16);
 
-            AppWindow.Move(new PointInt32(snappedX, snappedY));
             Model.X = snappedX;
             Model.Y = snappedY;
+            DesktopWidgetManager.ClampModelToWorkArea(Model, DesktopWidgetManager.GetDesktopWorkArea());
 
-            // Push to desktop layer
-            SetWindowPos(_hwnd, HWND_BOTTOM, snappedX, snappedY, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+            AppWindow.Move(new PointInt32(Model.X, Model.Y));
+
+            // Retain window at desktop Z-order without stealing foreground activation (do NOT use HWND_BOTTOM)
+            SetWindowPos(_hwnd, IntPtr.Zero, Model.X, Model.Y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
 
             DesktopWidgetManager.Instance.SaveConfiguration();
             e.Handled = true;
