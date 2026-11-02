@@ -30,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.intellidream.daily.wearos.data.WatchPulseRepository
 import com.intellidream.daily.wearos.data.WatchSessionManager
 import com.intellidream.daily.wearos.data.WatchSmartLedgerRepository
 import com.intellidream.daily.wearos.data.WatchTagdosRepository
@@ -92,6 +93,8 @@ fun OrbitHubScreen(
     val sessionManager = remember { WatchSessionManager.getInstance(context) }
     val ledgerRepository = remember { WatchSmartLedgerRepository.getInstance(context) }
     val tagdosRepository = remember { WatchTagdosRepository.getInstance(context) }
+    val pulseRepository = remember { WatchPulseRepository.getInstance(context) }
+    val pulseSnap by pulseRepository.snapshot.collectAsState()
 
     LaunchedEffect(isPageActive) {
         if (isPageActive) {
@@ -227,7 +230,7 @@ fun OrbitHubScreen(
     val moonPhaseName = cosmosData.moonPhaseName
     val moonIllumination = cosmosData.moonIllumination
 
-    val pillars = remember(streams, refreshTrigger) {
+    val pillars = remember(streams, refreshTrigger, pulseSnap) {
         val allPills = streams.flatMap { it.clusters.flatMap { c -> c.pills } }
         val completedPillsCount = allPills.count { it.isCompleted }
         val totalPillsCount = allPills.size
@@ -235,9 +238,19 @@ fun OrbitHubScreen(
         val smokesLogs = sessionManager.cachedSmokesLogs ?: emptyList()
         val todaySmokes = smokesLogs.sumOf { maxOf(1, it.value.toInt()) }
         val bodyVal = if (todaySmokes == 0) "100%" else "${maxOf(50, 100 - todaySmokes * 5)}%"
+        val energyVal = if (pulseSnap.hasSleepData) {
+            "${pulseSnap.readinessScore ?: pulseSnap.sleepScore}%"
+        } else {
+            "92%"
+        }
+        val mindVal = if (pulseSnap.hasStressData && pulseSnap.parasympatheticPercent > 0) {
+            "${pulseSnap.parasympatheticPercent}%"
+        } else {
+            "86%"
+        }
         listOf(
-            MacroPillar("Energy", "92%", Color(0xFF00E5FF)),
-            MacroPillar("Mind", "86%", Color(0xFFA855F7)),
+            MacroPillar("Energy", energyVal, Color(0xFF00E5FF)),
+            MacroPillar("Mind", mindVal, Color(0xFFA855F7)),
             MacroPillar("Body", bodyVal, Color(0xFF10B981)),
             MacroPillar("Craft", craftVal, Color(0xFFF59E0B)),
             MacroPillar("Wealth", "+2.4%", Color(0xFF34D399)),

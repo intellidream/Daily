@@ -5,6 +5,7 @@ struct WatchOrbitHubView: View {
     @ObservedObject private var tagdosStore = WatchTagdosStore.shared
     @ObservedObject private var habitStore = WatchHabitStore.shared
     @ObservedObject private var ledgerStore = WatchSmartLedgerStore.shared
+    @ObservedObject private var pulseStore = WatchPulseStore.shared
 
     // Current time-based greeting & diurnal state
     private var greeting: String {
@@ -150,9 +151,23 @@ struct WatchOrbitHubView: View {
         let totalPills = allPills.count
         let craftPct = totalPills > 0 ? "\(Int(Double(completedPills) / Double(totalPills) * 100))%" : "80%"
 
+        let energyVal: String = {
+            if pulseStore.snapshot.hasSleepData {
+                let score = pulseStore.snapshot.readinessScore ?? pulseStore.snapshot.sleepScore
+                return "\(score)%"
+            }
+            return "92%"
+        }()
+        let mindVal: String = {
+            if pulseStore.snapshot.hasStressData && pulseStore.snapshot.parasympatheticPercent > 0 {
+                return "\(pulseStore.snapshot.parasympatheticPercent)%"
+            }
+            return "86%"
+        }()
+
         return [
-            ("Energy", "bolt.fill", "92%", "#00E5FF"),
-            ("Mind", "brain.head.profile", "86%", "#A855F7"),
+            ("Energy", "bolt.fill", energyVal, "#00E5FF"),
+            ("Mind", "brain.head.profile", mindVal, "#A855F7"),
             ("Body", "figure.walk", bodyVal, "#10B981"),
             ("Craft", "hammer.fill", craftPct, "#F59E0B"),
             ("Wealth", "chart.line.uptrend.xyaxis", "+2.4%", "#34D399"),

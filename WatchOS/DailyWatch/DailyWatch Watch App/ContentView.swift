@@ -4,7 +4,8 @@ import Supabase
 
 struct ContentView: View {
     @StateObject private var sessionManager = WatchSessionManager.shared
-    @State private var selectedTab: Int = 0
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedTab: Int = UserDefaults.standard.object(forKey: "initialWatchTab") as? Int ?? 0
     
     var body: some View {
         Group {
@@ -42,9 +43,24 @@ struct ContentView: View {
                         Task {
                             await WatchTagdosStore.shared.fetchTagdosData()
                         }
+                    } else if newTab == 3 {
+                        Task {
+                            await WatchPulseStore.shared.fetchPulseData()
+                        }
                     } else if newTab == 4 {
                         Task {
                             await WatchSmartLedgerStore.shared.fetchLedgerData()
+                        }
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        if selectedTab == 2 {
+                            Task { await WatchTagdosStore.shared.fetchTagdosData() }
+                        } else if selectedTab == 3 {
+                            Task { await WatchPulseStore.shared.fetchPulseData() }
+                        } else if selectedTab == 4 {
+                            Task { await WatchSmartLedgerStore.shared.fetchLedgerData() }
                         }
                     }
                 }

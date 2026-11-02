@@ -135,17 +135,18 @@ class HealthTelemetryManager {
     
     /// Syncs Watch-originated biometrics directly into Supabase lean tables (`health_daily_vitals`,
     /// `health_intraday_heart_rate`, `health_sleep_sessions`) with zero writes to legacy `health_telemetry`.
-    func syncTelemetry(isDeepSync: Bool = false) async {
+    @discardableResult
+    func syncTelemetry(isDeepSync: Bool = false, force: Bool = false) async -> Bool {
         let now = Date()
         let lastSync = UserDefaults.standard.double(forKey: "last_health_sync_time")
-        if !isDeepSync && lastSync > 0 && (now.timeIntervalSince1970 - lastSync) < minSyncIntervalSeconds {
-            return
+        if !force && !isDeepSync && lastSync > 0 && (now.timeIntervalSince1970 - lastSync) < minSyncIntervalSeconds {
+            return false
         }
         
         guard let pClient = WatchSessionManager.shared.supabaseClient,
               let userUUID = WatchSessionManager.shared.currentUserId else {
             os_log("Supabase client or user not available. Skipping lean watch sync.", type: .error)
-            return
+            return false
         }
         
         let userId = userUUID.uuidString.lowercased()
@@ -212,11 +213,14 @@ class HealthTelemetryManager {
             }
         }
         
-        if isDeepSync, let sleepPayload = await fetchTodayWatchSleepSession(userId: userId, dateKey: dateKey, startOfDay: startOfDay) {
+        let lastSleepDate = UserDefaults.standard.string(forKey: "last_watch_sleep_sync_date") ?? ""
+        let shouldSyncSleep = isDeepSync || force || (lastSleepDate != dateKey)
+        if shouldSyncSleep, let sleepPayload = await fetchTodayWatchSleepSession(userId: userId, dateKey: dateKey, startOfDay: startOfDay) {
             do {
                 try await pClient.from("health_sleep_sessions")
                     .upsert(sleepPayload, onConflict: "user_id,local_date,session_type,source_device_key")
                     .execute()
+                UserDefaults.standard.set(dateKey, forKey: "last_watch_sleep_sync_date")
                 didPushAny = true
             } catch {
                 os_log("Watch lean sleep upsert warning: %@", type: .error, error.localizedDescription)
@@ -231,6 +235,7 @@ class HealthTelemetryManager {
             groupPrefs.set(syncTimestamp, forKey: "last_health_sync_time")
             groupPrefs.set(status, forKey: "last_health_sync_status")
         }
+        return didPushAny
     }
     
     // MARK: - Watch-Only Source Filtering & Queries
