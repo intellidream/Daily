@@ -290,5 +290,15 @@ class HealthRemoteService(
             false
         }
     }
+
+    suspend fun registerHealthSource(source: HealthSourceRecord): Boolean = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_sources"].upsert(source)
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to register health source: ${e.message}")
+            false
+        }
+    }
 }
 

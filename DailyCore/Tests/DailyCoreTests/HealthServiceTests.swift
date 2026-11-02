@@ -848,6 +848,101 @@ struct HealthServiceTests {
         #expect(point.bpm == 62)
         #expect(point.sourceDevice == "Pixel Watch 5")
     }
+    
+    @Test func testLeanStaticBuilders() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let dateKey = "2026-11-02"
+        let userId = "user-test-123"
+        let host = "Schmitz"
+        
+        // 1. Test 5-minute Intraday HR Bucketing
+        let t10_01 = cal.date(byAdding: .minute, value: 601, to: today)! // 10:01
+        let t10_03 = cal.date(byAdding: .minute, value: 603, to: today)! // 10:03
+        let t10_04 = cal.date(byAdding: .minute, value: 604, to: today)! // 10:04
+        let t10_07 = cal.date(byAdding: .minute, value: 607, to: today)! // 10:07 (next bucket: 605)
+        
+        let hrSamples = [
+            HealthTelemetryRecord(userId: userId, type: "heart_rate", value: 60, unit: "bpm", startTime: t10_01, endTime: t10_01, sourceDevice: "Apple Watch Ultra 2"),
+            HealthTelemetryRecord(userId: userId, type: "heart_rate", value: 70, unit: "bpm", startTime: t10_03, endTime: t10_03, sourceDevice: "Apple Watch Ultra 2"),
+            HealthTelemetryRecord(userId: userId, type: "heart_rate", value: 80, unit: "bpm", startTime: t10_04, endTime: t10_04, sourceDevice: "Apple Watch Ultra 2"),
+            HealthTelemetryRecord(userId: userId, type: "heart_rate", value: 65, unit: "bpm", startTime: t10_07, endTime: t10_07, sourceDevice: "Apple Watch Ultra 2")
+        ]
+        
+        let buckets = HealthDataService.groupIntradayHeartRateIntoBuckets(
+            records: hrSamples,
+            userId: userId,
+            dateKey: dateKey,
+            calendar: cal
+        )
+        
+        #expect(buckets.count == 2)
+        let b600 = buckets.first(where: { $0.bucketMinute == 600 })
+        #expect(b600 != nil)
+        #expect(b600?.bpmAvg == 70) // (60 + 70 + 80) / 3
+        #expect(b600?.bpmMin == 60)
+        #expect(b600?.bpmMax == 80)
+        #expect(b600?.sampleCount == 3)
+        
+        let b605 = buckets.first(where: { $0.bucketMinute == 605 })
+        #expect(b605 != nil)
+        #expect(b605?.bpmAvg == 65)
+        #expect(b605?.sampleCount == 1)
+        
+        // 2. Test Daily Vitals Builder
+        let vitalsTelemetry = [
+            HealthTelemetryRecord(userId: userId, type: "steps", value: 8500, unit: "count", startTime: today, endTime: today, sourceDevice: "Apple Watch Ultra 2"),
+            HealthTelemetryRecord(userId: userId, type: "active_energy", value: 450, unit: "kcal", startTime: today, endTime: today, sourceDevice: "Apple Watch Ultra 2"),
+            HealthTelemetryRecord(userId: userId, type: "resting_heart_rate", value: 54, unit: "bpm", startTime: today, endTime: today, sourceDevice: "Apple Watch Ultra 2"),
+            HealthTelemetryRecord(userId: userId, type: "oxygen_saturation", value: 98.5, unit: "%", startTime: today, endTime: today, sourceDevice: "Apple Watch Ultra 2")
+        ]
+        
+        let vitalsRecords = HealthDataService.buildLeanDailyVitalsRecords(
+            records: vitalsTelemetry,
+            targetDate: today,
+            dateKey: dateKey,
+            userId: userId,
+            hostName: host,
+            calendar: cal
+        )
+        
+        #expect(vitalsRecords.count == 1)
+        let primaryVitals = vitalsRecords[0]
+        #expect(primaryVitals.steps == 8500)
+        #expect(primaryVitals.activeKcal == 450)
+        #expect(primaryVitals.restingHeartRate == 54)
+        #expect(primaryVitals.spo2 == 98.5)
+        #expect(primaryVitals.sourceDeviceKey == "Apple Watch Ultra 2")
+        
+        // 3. Test Sleep Session Builder
+        let sStart = cal.date(byAdding: .hour, value: -8, to: today)!
+        let sEnd = today
+        let stages = [
+            SleepStageRecord(id: "s1", stageType: .deep, startTime: sStart, endTime: sStart.addingTimeInterval(3600)),
+            SleepStageRecord(id: "s2", stageType: .rem, startTime: sStart.addingTimeInterval(3600), endTime: sEnd)
+        ]
+        let session = SleepSession(
+            startTime: sStart,
+            endTime: sEnd,
+            stages: stages,
+            sourceDevice: "Apple Watch Ultra 2"
+        )
+        
+        let sleepRecords = HealthDataService.buildLeanSleepSessionRecords(
+            primarySession: session,
+            naps: [],
+            dateKey: dateKey,
+            userId: userId,
+            hostName: host
+        )
+        
+        #expect(sleepRecords.count == 1)
+        let sRec = sleepRecords[0]
+        #expect(sRec.sessionType == "primary_sleep")
+        #expect(sRec.sourceDeviceKey == "Apple Watch Ultra 2")
+        #expect(sRec.deepSeconds == 3600)
+        #expect(sRec.sleepScore != nil && sRec.sleepScore! > 0)
+    }
 }
 
 

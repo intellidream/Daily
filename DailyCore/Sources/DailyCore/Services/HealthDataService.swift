@@ -716,6 +716,76 @@ public final class HealthDataService: ObservableObject {
         if let rhr = primary.restingHeartRate, rhr > 0 {
             self.restingBpm = Double(rhr)
         }
+        
+        let dateKey = primary.localDate
+        var updatedVitals = self.currentVitals
+        if let rhr = primary.restingHeartRate, rhr > 0 {
+            updatedVitals[.restingHeartRate] = VitalMetricRecord(
+                userId: primary.userId,
+                type: HealthMetricType.restingHeartRate.rawValue,
+                value: Double(rhr),
+                unit: "bpm",
+                date: dateKey,
+                sourceDevice: primary.sourceDeviceKey,
+                createdAt: primary.updatedAt ?? Date()
+            )
+        }
+        if let spo2 = primary.spo2, spo2 > 0 {
+            updatedVitals[.oxygenSaturation] = VitalMetricRecord(
+                userId: primary.userId,
+                type: HealthMetricType.oxygenSaturation.rawValue,
+                value: spo2,
+                unit: "%",
+                date: dateKey,
+                sourceDevice: primary.sourceDeviceKey,
+                createdAt: primary.updatedAt ?? Date()
+            )
+        }
+        if let resp = primary.respiratoryRate, resp > 0 {
+            updatedVitals[.respiratoryRate] = VitalMetricRecord(
+                userId: primary.userId,
+                type: HealthMetricType.respiratoryRate.rawValue,
+                value: resp,
+                unit: "br/min",
+                date: dateKey,
+                sourceDevice: primary.sourceDeviceKey,
+                createdAt: primary.updatedAt ?? Date()
+            )
+        }
+        if let temp = primary.skinTempCelsius {
+            updatedVitals[.bodyTemperature] = VitalMetricRecord(
+                userId: primary.userId,
+                type: HealthMetricType.bodyTemperature.rawValue,
+                value: temp,
+                unit: "°C",
+                date: dateKey,
+                sourceDevice: primary.sourceDeviceKey,
+                createdAt: primary.updatedAt ?? Date()
+            )
+        }
+        if let weight = primary.weightKg, weight > 0 {
+            updatedVitals[.weight] = VitalMetricRecord(
+                userId: primary.userId,
+                type: HealthMetricType.weight.rawValue,
+                value: weight,
+                unit: "kg",
+                date: dateKey,
+                sourceDevice: primary.sourceDeviceKey,
+                createdAt: primary.updatedAt ?? Date()
+            )
+        }
+        if let hrv = primary.hrvSdnnNightly, hrv > 0 {
+            updatedVitals[.hrvSdnn] = VitalMetricRecord(
+                userId: primary.userId,
+                type: HealthMetricType.hrvSdnn.rawValue,
+                value: hrv,
+                unit: "ms",
+                date: dateKey,
+                sourceDevice: primary.sourceDeviceKey,
+                createdAt: primary.updatedAt ?? Date()
+            )
+        }
+        self.currentVitals = updatedVitals
     }
     
     /// Unpacks 5-minute bucketed heart rate into published curve.
@@ -1421,7 +1491,13 @@ public final class HealthDataService: ObservableObject {
         // No-op in Architecture V3: canonical aggregates are computed into health_daily_summary
     }
     
-    /// Syncs local high-frequency telemetry samples to Supabase `health_telemetry` table idempotently.
+    // MARK: - Lean Health Ingestion (Phase 2)
+    
+    /// Syncs local on-device health data to Supabase lean tables:
+    /// - health_sleep_sessions (clustered discrete sessions, 1-2 rows/day)
+    /// - health_daily_vitals (consolidated vitals, 1 row/day/device)
+    /// - health_intraday_heart_rate (5-minute buckets, max 288 rows/day/device)
+    /// - health_sources (hardware registration)
     public func syncTelemetryToSupabase(telemetry: [HealthTelemetryRecord]) async {
         guard AuthService.shared.isAuthenticated,
               let session = try? await supabase.auth.session,
@@ -1438,77 +1514,56 @@ public final class HealthDataService: ObservableObject {
         
         guard !deltaTelemetry.isEmpty else { return }
         
-        let tzOffsetMin = Calendar.current.timeZone.secondsFromGMT() / 60
+        let hostName = localDataProvider?.hostPhoneName ?? "Schmitz"
         
-        let prepared = deltaTelemetry.compactMap { r -> HealthTelemetryRecord? in
-            if let dev = r.sourceDevice, DeviceSource.from(name: dev).isVirtualEngine {
-                return nil
-            }
-            let dKey = r.localDate ?? isoDateFormatter.string(from: r.startTime)
-            return HealthTelemetryRecord(
-                id: r.id,
-                userId: userId,
-                type: r.type,
-                value: r.value,
-                unit: r.unit,
-                startTime: r.startTime,
-                endTime: r.endTime,
-                sourceDevice: r.sourceDevice,
-                createdAt: r.createdAt ?? Date(),
-                externalId: r.externalId ?? r.id,
-                sourceId: r.sourceId,
-                semantics: r.semantics,
-                tzOffsetMin: r.tzOffsetMin ?? tzOffsetMin,
-                localDate: dKey,
-                hostDeviceName: r.hostDeviceName,
-                sensorSourceName: r.sensorSourceName,
-                sourceDeviceKey: r.effectiveSourceKey,
-                sourceColor: r.effectiveColor
-            )
+        // Group telemetry by localDate (e.g. "YYYY-MM-DD")
+        let recordsByDate = Dictionary(grouping: deltaTelemetry) { r -> String in
+            r.localDate ?? isoDateFormatter.string(from: r.startTime)
         }
         
-        guard !prepared.isEmpty else { return }
-        
-        var newRecords = prepared
-        do {
-            let externalIds = prepared.map { $0.externalId ?? "" }.filter { !$0.isEmpty }
-            struct IdResponse: Decodable { let external_id: String }
-            let existing: [IdResponse] = try await supabase.from("health_telemetry")
-                .select("external_id")
-                .in("external_id", values: externalIds)
-                .execute()
-                .value
-            let existingSet = Set(existing.map { $0.external_id })
-            newRecords = prepared.filter {
-                guard let extId = $0.externalId else { return true }
-                return !existingSet.contains(extId)
-            }
-        } catch {
-            print("[HealthDataService] Warning: Could not fetch existing external_ids: \(error)")
-        }
-        
-        guard !newRecords.isEmpty else { return }
-        
-        var anyChunkSucceeded = false
+        var anySyncSucceeded = false
         var affectedDates = Set<String>()
-        for r in newRecords {
-            affectedDates.insert(r.localDate ?? isoDateFormatter.string(from: r.startTime))
-        }
         
-        let batchSize = 200
-        for i in stride(from: 0, to: newRecords.count, by: batchSize) {
-            let chunk = Array(newRecords[i..<min(i + batchSize, newRecords.count)])
-            do {
-                try await supabase.from("health_telemetry").insert(chunk).execute()
-                anyChunkSucceeded = true
-            } catch {
-                print("[HealthDataService] Warning: Failed to sync telemetry batch: \(error.localizedDescription)")
+        for (dateKey, dateRecords) in recordsByDate {
+            let targetDate = isoDateFormatter.date(from: dateKey) ?? Date()
+            
+            // 1. Sync Clustered Sleep Sessions to `health_sleep_sessions`
+            let sleepOk = await syncLeanSleepSessions(
+                records: dateRecords,
+                targetDate: targetDate,
+                dateKey: dateKey,
+                userId: userId,
+                hostName: hostName
+            )
+            
+            // 2. Sync Consolidated Daily Vitals to `health_daily_vitals`
+            let vitalsOk = await syncLeanDailyVitals(
+                records: dateRecords,
+                targetDate: targetDate,
+                dateKey: dateKey,
+                userId: userId,
+                hostName: hostName
+            )
+            
+            // 3. Sync 5-minute Intraday Heart Rate Buckets to `health_intraday_heart_rate`
+            let hrOk = await syncLeanIntradayHeartRate(
+                records: dateRecords,
+                targetDate: targetDate,
+                dateKey: dateKey,
+                userId: userId
+            )
+            
+            if sleepOk || vitalsOk || hrOk {
+                anySyncSucceeded = true
+                affectedDates.insert(dateKey)
             }
         }
         
-        // If telemetry was successfully uploaded, update watermark and trigger canonical engine computation (throttled)
-        if anyChunkSucceeded {
-            let maxEpoch = newRecords.map { ($0.endTime ?? $0.startTime).timeIntervalSince1970 * 1000 }.max() ?? 0
+        // 4. Ensure local devices are registered in `health_sources`
+        await registerLocalHealthSources(userId: userId, hostName: hostName, telemetry: deltaTelemetry)
+        
+        if anySyncSucceeded {
+            let maxEpoch = deltaTelemetry.map { ($0.endTime ?? $0.startTime).timeIntervalSince1970 * 1000 }.max() ?? 0
             if maxEpoch > self.lastPushedTelemetryEpochMs {
                 self.lastPushedTelemetryEpochMs = maxEpoch
             }
@@ -1516,6 +1571,357 @@ public final class HealthDataService: ObservableObject {
                 triggerCanonicalEngineIfNeeded(for: dKey, userId: userId)
             }
         }
+    }
+    
+    private func syncLeanSleepSessions(
+        records: [HealthTelemetryRecord],
+        targetDate: Date,
+        dateKey: String,
+        userId: String,
+        hostName: String
+    ) async -> Bool {
+        let sleepRecords = records.filter { $0.isSleep || $0.isSleepStage }
+        guard !sleepRecords.isEmpty else { return false }
+        
+        let clusterResult = SleepClusteringEngine.clusterSleep(
+            targetDate: targetDate,
+            telemetry: sleepRecords,
+            vitalsSummary: [:],
+            preferredDevice: nil
+        )
+        
+        let sessions = Self.buildLeanSleepSessionRecords(
+            primarySession: clusterResult.primarySession,
+            naps: clusterResult.naps,
+            dateKey: dateKey,
+            userId: userId,
+            hostName: hostName
+        )
+        
+        guard !sessions.isEmpty else { return false }
+        var success = true
+        for session in sessions {
+            do {
+                try await supabase.from("health_sleep_sessions")
+                    .upsert(session)
+                    .execute()
+            } catch {
+                print("[HealthDataService] Warning: Failed to upsert sleep session: \(error.localizedDescription)")
+                success = false
+            }
+        }
+        return success
+    }
+    
+    private func syncLeanDailyVitals(
+        records: [HealthTelemetryRecord],
+        targetDate: Date,
+        dateKey: String,
+        userId: String,
+        hostName: String
+    ) async -> Bool {
+        let vitalsList = Self.buildLeanDailyVitalsRecords(
+            records: records,
+            targetDate: targetDate,
+            dateKey: dateKey,
+            userId: userId,
+            hostName: hostName
+        )
+        guard !vitalsList.isEmpty else { return false }
+        var success = true
+        for vitals in vitalsList {
+            do {
+                try await supabase.from("health_daily_vitals")
+                    .upsert(vitals)
+                    .execute()
+            } catch {
+                print("[HealthDataService] Warning: Failed to upsert daily vitals: \(error.localizedDescription)")
+                success = false
+            }
+        }
+        return success
+    }
+    
+    private func syncLeanIntradayHeartRate(
+        records: [HealthTelemetryRecord],
+        targetDate: Date,
+        dateKey: String,
+        userId: String
+    ) async -> Bool {
+        let buckets = Self.groupIntradayHeartRateIntoBuckets(
+            records: records,
+            userId: userId,
+            dateKey: dateKey
+        )
+        guard !buckets.isEmpty else { return false }
+        var success = true
+        let batchSize = 100
+        for i in stride(from: 0, to: buckets.count, by: batchSize) {
+            let chunk = Array(buckets[i..<min(i + batchSize, buckets.count)])
+            do {
+                try await supabase.from("health_intraday_heart_rate")
+                    .upsert(chunk)
+                    .execute()
+            } catch {
+                print("[HealthDataService] Warning: Failed to upsert intraday HR chunk: \(error.localizedDescription)")
+                success = false
+            }
+        }
+        return success
+    }
+    
+    private func registerLocalHealthSources(userId: String, hostName: String, telemetry: [HealthTelemetryRecord]) async {
+        let sourcesFound = Set(telemetry.compactMap { $0.sourceDevice }.filter { !DeviceSource.from(name: $0).isVirtualEngine })
+        guard !sourcesFound.isEmpty else { return }
+        
+        for name in sourcesFound {
+            let sourceSlug = name.lowercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+            let sourceId = "\(hostName.lowercased())_\(sourceSlug)"
+            let isWatch = name.localizedCaseInsensitiveContains("watch")
+            let isRing = name.localizedCaseInsensitiveContains("oura") || name.localizedCaseInsensitiveContains("ring")
+            let isPhone = name.localizedCaseInsensitiveContains("iphone") || name.localizedCaseInsensitiveContains("phone") || name.localizedCaseInsensitiveContains("pixel")
+            let kind = isWatch ? "watch" : (isRing ? "ring" : (isPhone ? "phone" : "wearable"))
+            let platform = name.localizedCaseInsensitiveContains("apple") || hostName.localizedCaseInsensitiveContains("schmitz") ? "iOS" : "Android"
+            let vendor = name.localizedCaseInsensitiveContains("apple") ? "Apple" : (name.localizedCaseInsensitiveContains("oura") ? "Oura" : "Google")
+            let color = DeviceColorPalette.getColor(for: name)
+            
+            let record = HealthSourceRecord(
+                id: sourceId,
+                userId: userId,
+                platform: platform,
+                deviceKind: kind,
+                vendor: vendor,
+                model: nil,
+                displayName: name,
+                hostDeviceName: hostName,
+                prioritySleep: isRing ? 30 : (isWatch ? 20 : 10),
+                priorityActivity: isWatch ? 20 : (isRing ? 15 : 10),
+                color: color,
+                createdAt: Date()
+            )
+            
+            do {
+                try await supabase.from("health_sources").upsert(record).execute()
+            } catch {
+                // Non-fatal background device registration
+            }
+        }
+    }
+    
+    // MARK: - Static Lean Builders
+    
+    nonisolated public static func groupIntradayHeartRateIntoBuckets(
+        records: [HealthTelemetryRecord],
+        userId: String,
+        dateKey: String,
+        calendar: Calendar = Calendar.current
+    ) -> [HealthIntradayHeartRateRecord] {
+        let hrRecords = records.filter { $0.isHeartRate && ($0.value ?? 0) > 0 }
+        guard !hrRecords.isEmpty else { return [] }
+        
+        struct BucketKey: Hashable {
+            let sourceKey: String
+            let bucketMinute: Int
+        }
+        
+        var buckets: [BucketKey: [Double]] = [:]
+        for r in hrRecords {
+            guard let bpm = r.value, bpm >= 30 && bpm <= 240 else { continue }
+            let key = r.effectiveSourceKey.isEmpty ? (r.sourceDevice ?? "Unknown") : r.effectiveSourceKey
+            let minute = calendar.component(.minute, from: r.startTime)
+            let hour = calendar.component(.hour, from: r.startTime)
+            let bucketMinute = hour * 60 + (minute / 5) * 5
+            
+            let bKey = BucketKey(sourceKey: key, bucketMinute: bucketMinute)
+            buckets[bKey, default: []].append(bpm)
+        }
+        
+        var results: [HealthIntradayHeartRateRecord] = []
+        for (bKey, bpms) in buckets {
+            let avg = bpms.reduce(0, +) / Double(bpms.count)
+            let minBpm = bpms.min() ?? avg
+            let maxBpm = bpms.max() ?? avg
+            let sourceSlug = bKey.sourceKey
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+            let recordId = "hr_\(userId)_\(dateKey)_\(sourceSlug)_\(bKey.bucketMinute)"
+            
+            results.append(HealthIntradayHeartRateRecord(
+                id: recordId,
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: bKey.sourceKey,
+                bucketMinute: bKey.bucketMinute,
+                bpmAvg: Int(round(avg)),
+                bpmMin: Int(round(minBpm)),
+                bpmMax: Int(round(maxBpm)),
+                sampleCount: bpms.count,
+                updatedAt: Date()
+            ))
+        }
+        return results.sorted { $0.bucketMinute < $1.bucketMinute }
+    }
+    
+    nonisolated public static func buildLeanSleepSessionRecords(
+        primarySession: SleepSession?,
+        naps: [NapSession] = [],
+        dateKey: String,
+        userId: String,
+        hostName: String = "Schmitz"
+    ) -> [HealthSleepSessionRecord] {
+        var results: [HealthSleepSessionRecord] = []
+        
+        if let primary = primarySession {
+            let sourceSlug = primary.sourceDevice
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+            let id = "sleep_\(dateKey)_primary_\(sourceSlug)"
+            let durationS = Int(primary.asleepSeconds)
+            let inBedS = Int(primary.durationSeconds)
+            let efficiency = Double(primary.efficiencyPercent)
+            let isOura = primary.sourceDevice.localizedCaseInsensitiveContains("oura")
+            let isWatch = primary.sourceDevice.localizedCaseInsensitiveContains("watch")
+            let priority = isOura ? 30 : (isWatch ? 20 : 10)
+            
+            results.append(HealthSleepSessionRecord(
+                id: id,
+                userId: userId,
+                localDate: dateKey,
+                sessionType: "primary_sleep",
+                sourceDeviceKey: primary.sourceDevice,
+                hostDeviceName: hostName,
+                startTime: primary.startTime,
+                endTime: primary.endTime,
+                durationSeconds: durationS,
+                timeInBedSeconds: inBedS,
+                efficiencyPercent: efficiency,
+                sleepScore: primary.sleepScore,
+                deepSeconds: Int(primary.deepSeconds),
+                remSeconds: Int(primary.remSeconds),
+                lightSeconds: Int(primary.lightSeconds),
+                awakeSeconds: Int(primary.awakeSeconds),
+                latencySeconds: 0,
+                qualityRating: primary.sleepQualityRating,
+                stages: primary.stages,
+                sourcePriority: priority,
+                isUserSelected: false
+            ))
+        }
+        
+        for nap in naps {
+            let sourceSlug = nap.sourceDevice
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+            let id = "sleep_\(dateKey)_nap_\(nap.id.prefix(8))_\(sourceSlug)"
+            let durationS = Int(nap.durationSeconds)
+            
+            results.append(HealthSleepSessionRecord(
+                id: id,
+                userId: userId,
+                localDate: dateKey,
+                sessionType: "nap",
+                sourceDeviceKey: nap.sourceDevice,
+                hostDeviceName: hostName,
+                startTime: nap.startTime,
+                endTime: nap.endTime,
+                durationSeconds: durationS,
+                timeInBedSeconds: durationS,
+                efficiencyPercent: 100.0,
+                sleepScore: nil,
+                deepSeconds: 0,
+                remSeconds: 0,
+                lightSeconds: durationS,
+                awakeSeconds: 0,
+                latencySeconds: 0,
+                qualityRating: "Nap",
+                stages: [],
+                sourcePriority: 10,
+                isUserSelected: false
+            ))
+        }
+        
+        return results
+    }
+    
+    nonisolated public static func buildLeanDailyVitalsRecords(
+        records: [HealthTelemetryRecord],
+        targetDate: Date,
+        dateKey: String,
+        userId: String,
+        hostName: String = "Schmitz",
+        calendar: Calendar = Calendar.current
+    ) -> [HealthDailyVitalsRecord] {
+        let bySource = Dictionary(grouping: records) { r -> String in
+            let key = r.effectiveSourceKey.isEmpty ? (r.sourceDevice ?? "\(hostName) - Apple Health") : r.effectiveSourceKey
+            return key
+        }
+        
+        var results: [HealthDailyVitalsRecord] = []
+        for (sourceKey, sourceRecords) in bySource {
+            if DeviceSource.from(name: sourceKey).isVirtualEngine { continue }
+            
+            let stepRecords = sourceRecords.filter { $0.type == "steps" }
+            let totalSteps: Int
+            let hourlyBuckets: [HourlyStepBucket]?
+            if !stepRecords.isEmpty {
+                let calc = Self.calculateDailySteps(
+                    targetDate: targetDate,
+                    telemetry: stepRecords,
+                    vitalsSummary: [:],
+                    preferredDevice: nil,
+                    preferredSource: nil,
+                    calendar: calendar
+                )
+                totalSteps = calc.totalSteps
+                hourlyBuckets = calc.hourlyBuckets.isEmpty ? nil : calc.hourlyBuckets
+            } else {
+                totalSteps = 0
+                hourlyBuckets = nil
+            }
+            
+            let activeKcal = sourceRecords.filter { $0.type == "active_energy" }.compactMap { $0.value }.reduce(0, +)
+            let rhr = sourceRecords.filter { $0.type == "resting_heart_rate" }.compactMap { $0.value }.last.map { Int(round($0)) }
+            let spo2 = sourceRecords.filter { $0.type == "oxygen_saturation" }.compactMap { $0.value }.last
+            let resp = sourceRecords.filter { $0.type == "respiratory_rate" }.compactMap { $0.value }.last
+            let temp = sourceRecords.filter { $0.type == "wrist_temperature" || $0.type == "body_temperature" }.compactMap { $0.value }.last
+            let weight = sourceRecords.filter { $0.type == "weight" }.compactMap { $0.value }.last
+            let hrv = sourceRecords.filter { $0.type == "hrv_sdnn" }.compactMap { $0.value }.last
+            
+            guard totalSteps > 0 || activeKcal > 0 || rhr != nil || spo2 != nil || resp != nil || temp != nil || weight != nil || hrv != nil else {
+                continue
+            }
+            
+            let sourceSlug = sourceKey
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+            let recordId = "vitals_\(userId)_\(dateKey)_\(sourceSlug)"
+            
+            results.append(HealthDailyVitalsRecord(
+                id: recordId,
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: sourceKey,
+                hostDeviceName: hostName,
+                steps: totalSteps,
+                activeKcal: activeKcal,
+                restingHeartRate: rhr,
+                spo2: spo2,
+                respiratoryRate: resp,
+                skinTempCelsius: temp,
+                weightKg: weight,
+                hrvSdnnNightly: hrv,
+                hrvRmssdNightly: nil,
+                hourlySteps: hourlyBuckets,
+                updatedAt: Date()
+            ))
+        }
+        return results
     }
     
     private struct HealthEngineDatePayload: Encodable {
