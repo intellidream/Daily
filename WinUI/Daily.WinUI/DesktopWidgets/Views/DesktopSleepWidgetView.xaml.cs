@@ -71,10 +71,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 {
                     var summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
                     var sleepResult = await _healthHubService.GetSleepSessionsAsync(DateTime.Today);
-                    var primarySession = sleepResult.PrimarySession ?? sleepResult.AllSessions?.OrderByDescending(s => s.DurationMinutes).FirstOrDefault();
+                    var primarySession = sleepResult.PrimarySession ?? sleepResult.AllSessions?.OrderByDescending(s => s.DurationSeconds).FirstOrDefault();
 
                     int score = summary?.SleepScore ?? 85;
-                    int durationMins = primarySession?.DurationMinutes ?? ((summary?.SleepAsleepS ?? 0) / 60);
+                    int durationMins = primarySession != null ? (int)(primarySession.DurationSeconds / 60.0) : ((summary?.SleepAsleepS ?? 0) / 60);
                     if (durationMins <= 0) durationMins = 460;
                     int hours = durationMins / 60;
                     int mins = durationMins % 60;
@@ -98,9 +98,9 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         MediumScheduleSubtitle.Text = $"Duration: {durStr}";
                     }
 
-                    int deepMins = primarySession?.DeepSleepMinutes ?? (int)(durationMins * 0.22);
-                    int remMins = primarySession?.RemSleepMinutes ?? (int)(durationMins * 0.25);
-                    int lightMins = primarySession?.LightSleepMinutes ?? (int)(durationMins * 0.45);
+                    int deepMins = primarySession != null ? (int)(primarySession.DeepSeconds / 60.0) : (int)(durationMins * 0.22);
+                    int remMins = primarySession != null ? (int)(primarySession.RemSeconds / 60.0) : (int)(durationMins * 0.25);
+                    int lightMins = primarySession != null ? (int)(primarySession.LightSeconds / 60.0) : (int)(durationMins * 0.45);
 
                     DeepStageText.Text = $"Deep {deepMins / 60}h {deepMins % 60}m";
                     RemStageText.Text = $"REM {remMins / 60}h {remMins % 60}m";
