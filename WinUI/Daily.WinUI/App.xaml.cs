@@ -386,9 +386,29 @@ public partial class App : Application
             LogDiagnostic($"PowerManager subscription warning: {ex.Message}");
         }
 
+        bool startInTray = false;
+        var cmdArgs = System.Environment.GetCommandLineArgs();
+        foreach (var arg in cmdArgs)
+        {
+            if (arg.Equals("--tray", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("--minimized", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("--background", StringComparison.OrdinalIgnoreCase))
+            {
+                startInTray = true;
+                break;
+            }
+        }
+
         _window = new MainWindow();
-        _window.Activate();
-        LogDiagnostic("MainWindow created and activated");
+        if (!startInTray)
+        {
+            _window.Activate();
+            LogDiagnostic("MainWindow created and activated");
+        }
+        else
+        {
+            LogDiagnostic("MainWindow created in tray mode (hidden)");
+        }
 
         // Initialize Windows 11 Desktop Widgets on Desktop Wallpaper layer
         try

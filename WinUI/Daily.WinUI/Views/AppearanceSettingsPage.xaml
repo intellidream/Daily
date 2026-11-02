@@ -33,7 +33,7 @@
                         <TextBlock Text="When closing the main window, keep the app running in the system tray." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                     </StackPanel>
                     
-                    <ToggleSwitch Grid.Column="1" x:Name="CloseToTraySwitch" IsOn="False" Toggled="CloseToTraySwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    <ToggleSwitch Grid.Column="1" x:Name="CloseToTraySwitch" IsOn="True" Toggled="CloseToTraySwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
                 </Grid>
             </Border>
 

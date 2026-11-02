@@ -43,7 +43,7 @@ public sealed class AppSettings
     public int WindowWidth { get; set; }
     public int WindowHeight { get; set; }
     public bool HasWindowPosition { get; set; }
-    public bool CloseToTray { get; set; } = false;
+    public bool CloseToTray { get; set; } = true;
     public bool EnableSmartBriefing { get; set; } = true;
     public string? CachedBriefingJson { get; set; }
     public DateTime? CachedBriefingTime { get; set; }
