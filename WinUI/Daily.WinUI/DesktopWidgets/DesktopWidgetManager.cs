@@ -70,6 +70,41 @@ namespace Daily_WinUI.DesktopWidgets
             }
         }
 
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
+
+        private const uint SPI_GETWORKAREA = 0x0030;
+
+        public static RectInt32 GetDesktopWorkArea()
+        {
+            try
+            {
+                if (SystemParametersInfo(SPI_GETWORKAREA, 0, out RECT r, 0))
+                {
+                    int w = r.Right - r.Left;
+                    int h = r.Bottom - r.Top;
+                    if (w > 200 && h > 200)
+                    {
+                        return new RectInt32(r.Left, r.Top, w, h);
+                    }
+                }
+            }
+            catch { }
+
+            var displayArea = DisplayArea.Primary;
+            return displayArea?.WorkArea ?? new RectInt32(0, 0, 1382, 728);
+        }
+
         private static void ClampModelToWorkArea(DesktopWidgetModel model, RectInt32 workArea)
         {
             int widgetWidth = model.Size == DesktopWidgetSize.Small ? 170 : 360;
@@ -87,14 +122,12 @@ namespace Daily_WinUI.DesktopWidgets
         private List<DesktopWidgetModel> CreateDefaultWidgets()
         {
             var list = new List<DesktopWidgetModel>();
+            var workArea = GetDesktopWorkArea();
 
-            var displayArea = DisplayArea.Primary;
-            var workArea = displayArea?.WorkArea ?? new RectInt32(0, 0, 1382, 776);
-
-            // Place on the right side of the desktop wallpaper with 20px margin
-            int padding = 20;
+            // Place on the right side of the desktop wallpaper with 24px padding
+            int padding = 24;
             int rightX = Math.Max(padding, workArea.X + workArea.Width - 360 - padding);
-            int startY = workArea.Y + 32;
+            int startY = workArea.Y + 24;
 
             // 1. Combined Widget (Medium)
             list.Add(new DesktopWidgetModel
@@ -112,7 +145,7 @@ namespace Daily_WinUI.DesktopWidgets
                 Type = DesktopWidgetType.Bubbles,
                 Size = DesktopWidgetSize.Small,
                 X = rightX,
-                Y = startY + 186,
+                Y = startY + 182,
                 IsLocked = false
             });
 
@@ -121,7 +154,7 @@ namespace Daily_WinUI.DesktopWidgets
                 Type = DesktopWidgetType.Smokes,
                 Size = DesktopWidgetSize.Small,
                 X = rightX + 180,
-                Y = startY + 186,
+                Y = startY + 182,
                 IsLocked = false
             });
 
@@ -131,7 +164,7 @@ namespace Daily_WinUI.DesktopWidgets
                 Type = DesktopWidgetType.Money,
                 Size = DesktopWidgetSize.Medium,
                 X = rightX,
-                Y = startY + 372,
+                Y = startY + 364,
                 IsLocked = false
             });
 
@@ -140,11 +173,8 @@ namespace Daily_WinUI.DesktopWidgets
 
         private DesktopWidgetWindow SpawnWidgetWindow(DesktopWidgetModel model)
         {
-            var displayArea = DisplayArea.Primary;
-            if (displayArea != null)
-            {
-                ClampModelToWorkArea(model, displayArea.WorkArea);
-            }
+            var workArea = GetDesktopWorkArea();
+            ClampModelToWorkArea(model, workArea);
 
             var window = new DesktopWidgetWindow(model);
             _activeWidgets.Add(window);
