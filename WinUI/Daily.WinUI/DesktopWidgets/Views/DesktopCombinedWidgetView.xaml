@@ -25,7 +25,7 @@
                     <TextBlock x:Name="GreetingText" Text="DayOne Executive Brief" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
                     <TextBlock x:Name="DateSubtitleText" Text="Monday · Daily Highlights" FontSize="10" Foreground="#80FFFFFF"/>
                 </StackPanel>
-            </Grid>
+            </StackPanel>
 
             <TextBlock x:Name="WeatherHeaderBadge" Text="18°C · Partly Cloudy" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
