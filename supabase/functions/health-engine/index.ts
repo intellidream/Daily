@@ -180,7 +180,96 @@ async function processDayForUser(
   }
 
   if (!telemetryRows || telemetryRows.length === 0) {
-    // If telemetry has already been pruned for this historical date, do NOT overwrite an existing summary with nulls!
+    // 1. Check if lean tables (health_daily_vitals or health_sleep_sessions) have data for this day
+    const { data: vitalsRows } = await supabase
+      .from('health_daily_vitals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('local_date', targetDate)
+      .order('updated_at', { ascending: false });
+
+    const { data: sleepRows } = await supabase
+      .from('health_sleep_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('local_date', targetDate)
+      .order('source_priority', { ascending: true });
+
+    const primaryVital = vitalsRows && vitalsRows.length > 0 ? vitalsRows[0] : null;
+    const primarySleep = sleepRows && sleepRows.length > 0 ? sleepRows[0] : null;
+
+    if (primaryVital || primarySleep) {
+      // Fetch any existing summary to merge with
+      const { data: existingSummary } = await supabase
+        .from('health_daily_summary')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('local_date', targetDate)
+        .maybeSingle();
+
+      const mergedSummary = existingSummary?.summary || {};
+      if (primarySleep) {
+        mergedSummary.sleep = {
+          duration_seconds: primarySleep.duration_seconds,
+          efficiency_percent: primarySleep.efficiency_percent,
+          sleep_score: primarySleep.sleep_score,
+          deep_seconds: primarySleep.deep_seconds,
+          rem_seconds: primarySleep.rem_seconds,
+          light_seconds: primarySleep.light_seconds,
+          awake_seconds: primarySleep.awake_seconds,
+          start_time: primarySleep.start_time,
+          end_time: primarySleep.end_time,
+          source_device: primarySleep.source_device_key,
+          stages: primarySleep.stages || []
+        };
+      }
+      if (primaryVital) {
+        mergedSummary.vitals = {
+          steps: primaryVital.steps,
+          active_calories: primaryVital.active_kcal,
+          resting_heart_rate: primaryVital.resting_heart_rate,
+          hrv_rmssd: primaryVital.hrv_rmssd_nightly,
+          hrv_sdnn: primaryVital.hrv_sdnn_nightly,
+          spo2: primaryVital.spo2,
+          respiratory_rate: primaryVital.respiratory_rate,
+          source_device: primaryVital.source_device_key
+        };
+      }
+
+      await supabase
+        .from('health_daily_summary')
+        .upsert(
+          {
+            user_id: userId,
+            local_date: targetDate,
+            computed_at: new Date().toISOString(),
+            engine_version: 2,
+            raw_watermark: new Date().toISOString(),
+            steps: primaryVital?.steps ?? existingSummary?.steps ?? null,
+            active_kcal: primaryVital?.active_kcal ?? existingSummary?.active_kcal ?? null,
+            sleep_asleep_s: primarySleep?.duration_seconds ?? existingSummary?.sleep_asleep_s ?? null,
+            sleep_score: primarySleep?.sleep_score ?? existingSummary?.sleep_score ?? null,
+            stress_avg: existingSummary?.stress_avg ?? null,
+            rhr: primaryVital?.resting_heart_rate ?? existingSummary?.rhr ?? null,
+            hrv_sdnn: primaryVital?.hrv_sdnn_nightly ?? existingSummary?.hrv_sdnn ?? null,
+            hrv_rmssd: primaryVital?.hrv_rmssd_nightly ?? existingSummary?.hrv_rmssd ?? null,
+            weight: primaryVital?.weight_kg ?? existingSummary?.weight ?? null,
+            spo2: primaryVital?.spo2 ?? existingSummary?.spo2 ?? null,
+            summary: mergedSummary
+          },
+          { onConflict: 'user_id,local_date' }
+        );
+
+      await supabase
+        .from('health_day_dirty')
+        .delete()
+        .eq('user_id', userId)
+        .eq('local_date', targetDate);
+
+      return { success: true, date: targetDate, synthesized_from_lean: true };
+    }
+
+    // 2. If neither lean records exist, check if an existing summary exists and preserve it
     const { data: existingSummary } = await supabase
       .from('health_daily_summary')
       .select('steps, sleep_asleep_s')
@@ -196,6 +285,14 @@ async function processDayForUser(
         .eq('local_date', targetDate);
       return { success: true, date: targetDate, preserved: true };
     }
+
+    // 3. Otherwise drain from dirty queue to prevent infinite retry loops
+    await supabase
+      .from('health_day_dirty')
+      .delete()
+      .eq('user_id', userId)
+      .eq('local_date', targetDate);
+    return { success: true, date: targetDate, empty: true };
   }
 
   // Infer effective timezone if caller did not supply one (0) but telemetry records contain it
@@ -216,6 +313,60 @@ async function processDayForUser(
     preferredDevice
   });
 
+  // Check if lean vitals/sleep have better/supplemental data than the raw engine output
+  const { data: vitalsRows } = await supabase
+    .from('health_daily_vitals')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('local_date', targetDate)
+    .order('updated_at', { ascending: false });
+
+  const { data: sleepRows } = await supabase
+    .from('health_sleep_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('local_date', targetDate)
+    .order('source_priority', { ascending: true });
+
+  const primaryVital = vitalsRows && vitalsRows.length > 0 ? vitalsRows[0] : null;
+  const primarySleep = sleepRows && sleepRows.length > 0 ? sleepRows[0] : null;
+
+  const finalSteps = summaryRow.steps ?? primaryVital?.steps ?? null;
+  const finalActiveKcal = summaryRow.active_kcal ?? primaryVital?.active_kcal ?? null;
+  const finalSleepAsleep = summaryRow.sleep_asleep_s ?? primarySleep?.duration_seconds ?? null;
+  const finalSleepScore = summaryRow.sleep_score ?? primarySleep?.sleep_score ?? null;
+  const finalRhr = summaryRow.rhr ?? primaryVital?.resting_heart_rate ?? null;
+  const finalHrvSdnn = summaryRow.hrv_sdnn ?? primaryVital?.hrv_sdnn_nightly ?? null;
+  const finalHrvRmssd = summaryRow.hrv_rmssd ?? primaryVital?.hrv_rmssd_nightly ?? null;
+  const finalSpo2 = summaryRow.spo2 ?? primaryVital?.spo2 ?? null;
+  const finalStress = summaryRow.stress_avg ?? null;
+
+  const finalSummaryPayload = summaryRow.summary || {};
+  if (primarySleep && (!finalSummaryPayload.sleep?.primary_session || finalSummaryPayload.sleep.primary_session.duration_seconds === 0)) {
+    finalSummaryPayload.sleep = {
+      ...(finalSummaryPayload.sleep || {}),
+      duration_seconds: primarySleep.duration_seconds,
+      efficiency_percent: primarySleep.efficiency_percent,
+      sleep_score: primarySleep.sleep_score,
+      deep_seconds: primarySleep.deep_seconds,
+      rem_seconds: primarySleep.rem_seconds,
+      light_seconds: primarySleep.light_seconds,
+      awake_seconds: primarySleep.awake_seconds,
+      start_time: primarySleep.start_time,
+      end_time: primarySleep.end_time,
+      source_device: primarySleep.source_device_key,
+      stages: primarySleep.stages || []
+    };
+  }
+  if (primaryVital && (!finalSummaryPayload.activity?.total_steps || finalSummaryPayload.activity.total_steps === 0)) {
+    finalSummaryPayload.activity = {
+      ...(finalSummaryPayload.activity || {}),
+      total_steps: primaryVital.steps ?? 0,
+      active_calories: primaryVital.active_kcal ?? 0,
+      source_device: primaryVital.source_device_key
+    };
+  }
+
   // 3. Upsert canonical summary into health_daily_summary
   const { error: upsertErr } = await supabase
     .from('health_daily_summary')
@@ -226,17 +377,17 @@ async function processDayForUser(
         computed_at: summaryRow.computed_at,
         engine_version: summaryRow.engine_version,
         raw_watermark: summaryRow.raw_watermark,
-        steps: summaryRow.steps,
-        active_kcal: summaryRow.active_kcal,
-        sleep_asleep_s: summaryRow.sleep_asleep_s,
-        sleep_score: summaryRow.sleep_score,
-        stress_avg: summaryRow.stress_avg,
-        rhr: summaryRow.rhr,
-        hrv_sdnn: summaryRow.hrv_sdnn,
-        hrv_rmssd: summaryRow.hrv_rmssd,
+        steps: finalSteps,
+        active_kcal: finalActiveKcal,
+        sleep_asleep_s: finalSleepAsleep,
+        sleep_score: finalSleepScore,
+        stress_avg: finalStress,
+        rhr: finalRhr,
+        hrv_sdnn: finalHrvSdnn,
+        hrv_rmssd: finalHrvRmssd,
         weight: summaryRow.weight,
-        spo2: summaryRow.spo2,
-        summary: summaryRow.summary
+        spo2: finalSpo2,
+        summary: finalSummaryPayload
       },
       { onConflict: 'user_id,local_date' }
     );
