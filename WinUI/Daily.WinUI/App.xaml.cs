@@ -247,6 +247,44 @@ public partial class App : Application
                                 });
                             }
                         }
+                        else if (line.Equals("widgets:toggle", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received widgets:toggle command");
+                            var app = App.Current;
+                            app?.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+                            {
+                                DesktopWidgets.DesktopWidgetManager.Instance.ToggleVisibility();
+                            });
+                        }
+                        else if (line.Equals("widgets:lock", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received widgets:lock command");
+                            var app = App.Current;
+                            app?.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+                            {
+                                var settings = Daily_WinUI.Services.SettingsService.Load();
+                                settings.DesktopWidgetsLocked = !settings.DesktopWidgetsLocked;
+                                DesktopWidgets.DesktopWidgetManager.Instance.SetAllLocked(settings.DesktopWidgetsLocked);
+                            });
+                        }
+                        else if (line.Equals("widgets:refresh", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received widgets:refresh command");
+                            var app = App.Current;
+                            app?.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+                            {
+                                DesktopWidgets.DesktopWidgetManager.Instance.RefreshAllWidgets();
+                            });
+                        }
+                        else if (line.Equals("widgets:reset", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received widgets:reset command");
+                            var app = App.Current;
+                            app?.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+                            {
+                                DesktopWidgets.DesktopWidgetManager.Instance.ResetToDefaults();
+                            });
+                        }
                         else if (Uri.TryCreate(line, UriKind.Absolute, out var uri))
                         {
                             LogDebug($"Pipe server parsed URI: {uri}. Handling...");
