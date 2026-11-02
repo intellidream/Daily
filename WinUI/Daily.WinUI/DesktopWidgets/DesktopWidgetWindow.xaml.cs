@@ -68,14 +68,19 @@ namespace Daily_WinUI.DesktopWidgets
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_SHOWWINDOW = 0x0040;
+        private const uint SWP_HIDEWINDOW = 0x0080;
 
         private const uint WM_MOUSEACTIVATE = 0x0021;
         private const uint WM_WINDOWPOSCHANGING = 0x0046;
         private const uint WM_DESTROY = 0x0002;
+        private const uint WM_SYSCOMMAND = 0x0112;
+        private const int SC_MINIMIZE = 0xF020;
         private const int MA_NOACTIVATE = 3;
 
         private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
         private const int DWMWCP_ROUND = 2;
+
+        public bool IsExplicitlyHidden { get; set; } = false;
 
         public DesktopWidgetWindow(DesktopWidgetModel model)
         {
@@ -126,19 +131,39 @@ namespace Daily_WinUI.DesktopWidgets
                 return (IntPtr)MA_NOACTIVATE;
             }
 
+            if (uMsg == WM_SYSCOMMAND && ((int)wParam & 0xFFF0) == SC_MINIMIZE)
+            {
+                // Prevent desktop widget from ever being minimized
+                return IntPtr.Zero;
+            }
+
             if (uMsg == WM_WINDOWPOSCHANGING)
             {
-                // Prevent Win + D ("Show Desktop") from pushing widgets off-screen (-32000)
+                // Prevent Win + D ("Show Desktop") from pushing widgets off-screen (-32000) or hiding them
                 try
                 {
                     if (lParam != IntPtr.Zero)
                     {
                         var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
+                        bool modified = false;
+
                         if (pos.x <= -10000 || pos.y <= -10000)
                         {
                             pos.x = Model.X;
                             pos.y = Model.Y;
                             pos.flags |= SWP_NOMOVE;
+                            modified = true;
+                        }
+
+                        if ((pos.flags & SWP_HIDEWINDOW) != 0 && !IsExplicitlyHidden)
+                        {
+                            pos.flags &= ~SWP_HIDEWINDOW;
+                            pos.flags |= SWP_SHOWWINDOW;
+                            modified = true;
+                        }
+
+                        if (modified)
+                        {
                             Marshal.StructureToPtr(pos, lParam, false);
                         }
                     }

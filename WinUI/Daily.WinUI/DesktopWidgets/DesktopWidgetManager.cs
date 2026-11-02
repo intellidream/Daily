@@ -262,6 +262,7 @@ namespace Daily_WinUI.DesktopWidgets
         {
             foreach (var w in _activeWidgets)
             {
+                w.IsExplicitlyHidden = false;
                 w.AppWindow.Show();
                 w.SendToBottom();
             }
@@ -271,6 +272,7 @@ namespace Daily_WinUI.DesktopWidgets
         {
             foreach (var w in _activeWidgets)
             {
+                w.IsExplicitlyHidden = true;
                 w.AppWindow.Hide();
             }
         }
