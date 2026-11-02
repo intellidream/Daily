@@ -889,6 +889,8 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
+    public static H.NotifyIcon.TaskbarIcon? RootedTrayIcon { get; private set; }
+
     private void InitializeTaskbarIcon()
     {
         LogTray("[TrayIcon] Initializing TaskbarIcon...");
@@ -896,9 +898,9 @@ public sealed partial class MainWindow : Window
         {
             if (TrayIcon != null)
             {
+                RootedTrayIcon = TrayIcon;
                 TrayIcon.ToolTipText = "DayOne";
                 TrayIcon.NoLeftClickDelay = true;
-                TrayIcon.ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow;
                 TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.RightClick;
                 if (TrayIcon.ContextFlyout is MenuFlyout menuFlyout)
                 {
