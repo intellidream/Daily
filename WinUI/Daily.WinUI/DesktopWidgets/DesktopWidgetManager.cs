@@ -16,7 +16,6 @@ namespace Daily_WinUI.DesktopWidgets
         private readonly List<DesktopWidgetWindow> _activeWidgets = new();
         public IReadOnlyList<DesktopWidgetWindow> ActiveWidgets => _activeWidgets;
 
-        private ISettingsService? _settingsService;
         private bool _isInitialized = false;
 
         private DesktopWidgetManager() { }
@@ -28,8 +27,8 @@ namespace Daily_WinUI.DesktopWidgets
 
             try
             {
-                _settingsService = App.Current.Services?.GetService<ISettingsService>();
-                if (_settingsService != null && !_settingsService.Settings.DesktopWidgetsEnabled)
+                var settings = SettingsService.Load();
+                if (!settings.DesktopWidgetsEnabled)
                 {
                     return;
                 }
@@ -45,7 +44,8 @@ namespace Daily_WinUI.DesktopWidgets
         private void LoadWidgets()
         {
             List<DesktopWidgetModel>? models = null;
-            string? json = _settingsService?.Settings.DesktopWidgetsConfigJson;
+            var settings = SettingsService.Load();
+            string? json = settings.DesktopWidgetsConfigJson;
 
             if (!string.IsNullOrWhiteSpace(json))
             {
@@ -170,16 +170,11 @@ namespace Daily_WinUI.DesktopWidgets
         {
             try
             {
-                if (_settingsService == null)
-                {
-                    _settingsService = App.Current.Services?.GetService<ISettingsService>();
-                }
-                if (_settingsService == null) return;
-
+                var settings = SettingsService.Load();
                 var models = _activeWidgets.Select(w => w.Model).ToList();
                 string json = JsonSerializer.Serialize(models, new JsonSerializerOptions { WriteIndented = true });
-                _settingsService.Settings.DesktopWidgetsConfigJson = json;
-                _ = _settingsService.SaveSettingsAsync();
+                settings.DesktopWidgetsConfigJson = json;
+                SettingsService.Save(settings);
             }
             catch (Exception ex)
             {
@@ -245,10 +240,9 @@ namespace Daily_WinUI.DesktopWidgets
             _activeWidgets.Clear();
 
             // Clear json
-            if (_settingsService != null)
-            {
-                _settingsService.Settings.DesktopWidgetsConfigJson = string.Empty;
-            }
+            var settings = SettingsService.Load();
+            settings.DesktopWidgetsConfigJson = string.Empty;
+            SettingsService.Save(settings);
 
             // Respawn
             LoadWidgets();

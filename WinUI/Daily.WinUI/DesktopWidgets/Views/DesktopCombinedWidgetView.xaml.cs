@@ -39,11 +39,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 // 1. Weather
                 try
                 {
-                    var settingsService = App.Current.Services?.GetService<ISettingsService>();
-                    double lat = settingsService?.Settings.LastLatitude ?? 44.4323;
-                    double lon = settingsService?.Settings.LastLongitude ?? 26.1063;
+                    var settings = SettingsService.Load();
+                    double lat = settings.LastLatitude ?? 44.4323;
+                    double lon = settings.LastLongitude ?? 26.1063;
                     var client = new WeatherClient();
-                    var weather = await client.GetWeatherDataAsync(lat, lon, settingsService?.Settings.UnitSystem ?? "metric");
+                    var weather = await client.GetWeatherDataAsync(lat, lon, settings.UnitSystem ?? "metric");
                     if (weather?.Current != null)
                     {
                         int temp = (int)Math.Round(weather.Current.Temperature);

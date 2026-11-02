@@ -10,6 +10,26 @@
     Loaded="UserControl_Loaded"
     Unloaded="UserControl_Unloaded">
 
+    <UserControl.Resources>
+        <Style TargetType="controls:LungsControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="controls:LungsControl">
+                        <Canvas x:Name="PART_Canvas">
+                            <Path x:Name="PART_LeftFill"       StrokeThickness="0" />
+                            <Path x:Name="PART_RightFill"      StrokeThickness="0" />
+                            <Path x:Name="PART_LeftOutline"    StrokeThickness="1.5" />
+                            <Path x:Name="PART_RightOutline"   StrokeThickness="1.5" />
+                            <Path x:Name="PART_Trachea"        StrokeThickness="1.5" Fill="Transparent" />
+                            <Path x:Name="PART_LeftDivision"   StrokeThickness="1.0" Fill="Transparent" />
+                            <Path x:Name="PART_RightDivision"  StrokeThickness="1.0" Fill="Transparent" />
+                        </Canvas>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid Padding="14,12,14,12">
         <!-- ── SMALL LAYOUT (170x170) ── -->
         <Grid x:Name="SmallLayout" Visibility="Collapsed">
