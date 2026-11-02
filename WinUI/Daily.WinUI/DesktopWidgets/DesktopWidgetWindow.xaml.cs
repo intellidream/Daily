@@ -106,15 +106,15 @@ namespace Daily_WinUI.DesktopWidgets
             int cornerPref = DWMWCP_ROUND;
             DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
 
-            // Subclass to enforce HWND_BOTTOM and MA_NOACTIVATE
+            // Subclass to enforce MA_NOACTIVATE and prevent off-screen minimization
             _subclassProc = new SubclassProc(SubclassCallback);
             SetWindowSubclass(_hwnd, _subclassProc, new UIntPtr(1001), IntPtr.Zero);
 
             UpdateWindowSizeAndPosition();
             LoadWidgetView();
 
-            // Push to desktop layer at start
-            SetWindowPos(_hwnd, HWND_BOTTOM, Model.X, Model.Y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            // Display window on desktop layer without stealing keyboard focus or activating foreground
+            SetWindowPos(_hwnd, IntPtr.Zero, Model.X, Model.Y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
             UpdateLockVisuals();
         }
@@ -127,16 +127,21 @@ namespace Daily_WinUI.DesktopWidgets
                 return (IntPtr)MA_NOACTIVATE;
             }
 
-            if (uMsg == WM_WINDOWPOSCHANGING && !_isDragging)
+            if (uMsg == WM_WINDOWPOSCHANGING)
             {
-                // Enforce HWND_BOTTOM so active apps don't hide behind this widget
+                // Prevent Win + D ("Show Desktop") from pushing widgets off-screen (-32000)
                 try
                 {
                     if (lParam != IntPtr.Zero)
                     {
                         var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-                        pos.hwndInsertAfter = HWND_BOTTOM;
-                        Marshal.StructureToPtr(pos, lParam, false);
+                        if (pos.x <= -10000 || pos.y <= -10000)
+                        {
+                            pos.x = Model.X;
+                            pos.y = Model.Y;
+                            pos.flags |= SWP_NOMOVE;
+                            Marshal.StructureToPtr(pos, lParam, false);
+                        }
                     }
                 }
                 catch { }
@@ -403,7 +408,9 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void SendToBottom()
         {
-            SetWindowPos(_hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            // Do NOT use HWND_BOTTOM on Windows 11 as it pushes the window beneath WorkerW (wallpaper).
+            // Retain window at desktop Z-order without stealing foreground activation.
+            SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
     }
 

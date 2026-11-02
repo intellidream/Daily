@@ -36,14 +36,64 @@
 
                 <TextBlock Grid.Column="1" Text="DayOne Glance" FontSize="14" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
 
-                <Button Grid.Column="2" x:Name="OpenFullAppButton" Click="OpenFullAppButton_Click"
-                        Background="#2600E5FF" BorderBrush="#4D00E5FF" BorderThickness="1"
-                        CornerRadius="12" Padding="8,4" ToolTipService.ToolTip="Open DayOne Window">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="Full App" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
-                        <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                    <Button x:Name="DesktopWidgetsButton"
+                            Background="#1AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1"
+                            CornerRadius="12" Padding="8,4" ToolTipService.ToolTip="Desktop Widgets">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Show / Hide Desktop Widgets" Click="GlanceToggleDesktopWidgets_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE7F4;" FontFamily="Segoe Fluent Icons" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Lock / Unlock Positions" Click="GlanceToggleLockWidgets_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE72E;" FontFamily="Segoe Fluent Icons" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Refresh All Widgets" Click="GlanceRefreshWidgets_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Reset to Default Layout" Click="GlanceResetWidgets_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE777;" FontFamily="Segoe Fluent Icons" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutSubItem Text="Add Widget">
+                                    <MenuFlyoutSubItem.Icon>
+                                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" />
+                                    </MenuFlyoutSubItem.Icon>
+                                    <MenuFlyoutItem Text="Combined Brief" Click="GlanceAddCombinedWidget_Click" />
+                                    <MenuFlyoutItem Text="Bubbles (Hydration)" Click="GlanceAddBubblesWidget_Click" />
+                                    <MenuFlyoutItem Text="Smokes (Lungs &amp; Tobacco)" Click="GlanceAddSmokesWidget_Click" />
+                                    <MenuFlyoutItem Text="Money (SmartLedger)" Click="GlanceAddMoneyWidget_Click" />
+                                    <MenuFlyoutItem Text="Sleep (Recovery &amp; Stages)" Click="GlanceAddSleepWidget_Click" />
+                                    <MenuFlyoutItem Text="Stress (HRV &amp; Vitals)" Click="GlanceAddStressWidget_Click" />
+                                    <MenuFlyoutItem Text="Cosmos (Stargazing &amp; Moon)" Click="GlanceAddCosmosWidget_Click" />
+                                    <MenuFlyoutItem Text="TagDoS (Task Pipeline)" Click="GlanceAddTagdosWidget_Click" />
+                                    <MenuFlyoutItem Text="Weather (Hourly Timeline)" Click="GlanceAddWeatherWidget_Click" />
+                                </MenuFlyoutSubItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <FontIcon Glyph="&#xE7F4;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Widgets" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="OpenFullAppButton" Click="OpenFullAppButton_Click"
+                            Background="#2600E5FF" BorderBrush="#4D00E5FF" BorderThickness="1"
+                            CornerRadius="12" Padding="8,4" ToolTipService.ToolTip="Open DayOne Window">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="Full App" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                            <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <!-- Scrollable Content -->

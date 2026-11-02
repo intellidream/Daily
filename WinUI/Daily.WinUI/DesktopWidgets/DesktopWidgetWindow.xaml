@@ -12,8 +12,8 @@
         <Border x:Name="CardBorder"
                 CornerRadius="20"
                 BorderThickness="1"
-                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
-                Background="{ThemeResource AppGlassColorBrush}"
+                BorderBrush="{ThemeResource CapsuleBorderBrush}"
+                Background="{ThemeResource CapsuleBackgroundBrush}"
                 Padding="0"
                 Margin="4">
             

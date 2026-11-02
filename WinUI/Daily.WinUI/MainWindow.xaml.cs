@@ -900,6 +900,11 @@ public sealed partial class MainWindow : Window
                 TrayIcon.NoLeftClickDelay = true;
                 TrayIcon.ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow;
                 TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.RightClick;
+                if (TrayIcon.ContextFlyout is MenuFlyout menuFlyout)
+                {
+                    menuFlyout.Opened += (s, e) => LogTray("[TrayIcon] ContextFlyout opened successfully.");
+                    menuFlyout.Closed += (s, e) => LogTray("[TrayIcon] ContextFlyout closed.");
+                }
                 TrayIcon.LeftClickCommand = new RelayCommand(() =>
                 {
                     LogTray("[TrayIcon] LeftClickCommand invoked: toggling taskbar companion.");

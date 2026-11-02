@@ -70,16 +70,31 @@ namespace Daily_WinUI.DesktopWidgets
             }
         }
 
+        private static void ClampModelToWorkArea(DesktopWidgetModel model, RectInt32 workArea)
+        {
+            int widgetWidth = model.Size == DesktopWidgetSize.Small ? 170 : 360;
+            int widgetHeight = model.Size == DesktopWidgetSize.Large ? 360 : 170;
+
+            int maxX = workArea.X + workArea.Width - widgetWidth - 16;
+            int maxY = workArea.Y + workArea.Height - widgetHeight - 16;
+
+            if (model.X > maxX) model.X = Math.Max(workArea.X + 16, maxX);
+            if (model.X < workArea.X) model.X = workArea.X + 16;
+            if (model.Y > maxY) model.Y = Math.Max(workArea.Y + 16, maxY);
+            if (model.Y < workArea.Y) model.Y = workArea.Y + 16;
+        }
+
         private List<DesktopWidgetModel> CreateDefaultWidgets()
         {
             var list = new List<DesktopWidgetModel>();
 
             var displayArea = DisplayArea.Primary;
-            var workArea = displayArea?.WorkArea ?? new RectInt32(0, 0, 1920, 1080);
+            var workArea = displayArea?.WorkArea ?? new RectInt32(0, 0, 1382, 776);
 
-            // Place on the right side of the desktop wallpaper with 24px padding
-            int rightX = workArea.X + workArea.Width - 380 - 24;
-            int startY = workArea.Y + 48;
+            // Place on the right side of the desktop wallpaper with 20px margin
+            int padding = 20;
+            int rightX = Math.Max(padding, workArea.X + workArea.Width - 360 - padding);
+            int startY = workArea.Y + 32;
 
             // 1. Combined Widget (Medium)
             list.Add(new DesktopWidgetModel
@@ -105,7 +120,7 @@ namespace Daily_WinUI.DesktopWidgets
             {
                 Type = DesktopWidgetType.Smokes,
                 Size = DesktopWidgetSize.Small,
-                X = rightX + 190,
+                X = rightX + 180,
                 Y = startY + 186,
                 IsLocked = false
             });
@@ -125,6 +140,12 @@ namespace Daily_WinUI.DesktopWidgets
 
         private DesktopWidgetWindow SpawnWidgetWindow(DesktopWidgetModel model)
         {
+            var displayArea = DisplayArea.Primary;
+            if (displayArea != null)
+            {
+                ClampModelToWorkArea(model, displayArea.WorkArea);
+            }
+
             var window = new DesktopWidgetWindow(model);
             _activeWidgets.Add(window);
 

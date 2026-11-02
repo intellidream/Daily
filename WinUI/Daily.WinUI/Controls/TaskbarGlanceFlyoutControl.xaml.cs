@@ -421,5 +421,56 @@ namespace Daily_WinUI.Controls
                 }
             }
         }
+
+        // ── Desktop Widgets Management from Taskbar Companion ──
+        private void GlanceToggleDesktopWidgets_Click(object sender, RoutedEventArgs e)
+        {
+            DesktopWidgets.DesktopWidgetManager.Instance.ToggleVisibility();
+        }
+
+        private void GlanceToggleLockWidgets_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = Services.SettingsService.Load();
+            settings.DesktopWidgetsLocked = !settings.DesktopWidgetsLocked;
+            Services.SettingsService.Save(settings);
+            DesktopWidgets.DesktopWidgetManager.Instance.SetAllLocked(settings.DesktopWidgetsLocked);
+        }
+
+        private void GlanceRefreshWidgets_Click(object sender, RoutedEventArgs e)
+        {
+            DesktopWidgets.DesktopWidgetManager.Instance.RefreshAllWidgets();
+        }
+
+        private void GlanceResetWidgets_Click(object sender, RoutedEventArgs e)
+        {
+            DesktopWidgets.DesktopWidgetManager.Instance.ResetToDefaults();
+        }
+
+        private void GlanceAddCombinedWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Combined, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100);
+
+        private void GlanceAddBubblesWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Bubbles, DesktopWidgets.DesktopWidgetSize.Small, 100, 100);
+
+        private void GlanceAddSmokesWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Smokes, DesktopWidgets.DesktopWidgetSize.Small, 100, 100);
+
+        private void GlanceAddMoneyWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Money, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100);
+
+        private void GlanceAddSleepWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Sleep, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100);
+
+        private void GlanceAddStressWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Stress, DesktopWidgets.DesktopWidgetSize.Small, 100, 100);
+
+        private void GlanceAddCosmosWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Cosmos, DesktopWidgets.DesktopWidgetSize.Small, 100, 100);
+
+        private void GlanceAddTagdosWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.TagDos, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100);
+
+        private void GlanceAddWeatherWidget_Click(object sender, RoutedEventArgs e) =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Weather, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100);
     }
 }
