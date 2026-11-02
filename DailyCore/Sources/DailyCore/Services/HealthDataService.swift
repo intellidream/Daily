@@ -198,36 +198,68 @@ public final class HealthDataService: ObservableObject {
                 await old.unsubscribe()
             }
             
-            let channel = self.supabase.channel("health-summary-\(userId)")
+            let channel = self.supabase.channel("health-sync-\(userId)")
             self.realtimeChannel = channel
             
             self.realtimeTask = Task { [weak self] in
-                let changes = channel.postgresChange(
+                let summaryChanges = channel.postgresChange(
                     AnyAction.self,
                     schema: "public",
                     table: "health_daily_summary",
                     filter: .eq("user_id", value: userId)
                 )
+                let sleepChanges = channel.postgresChange(
+                    AnyAction.self,
+                    schema: "public",
+                    table: "health_sleep_sessions",
+                    filter: .eq("user_id", value: userId)
+                )
+                let vitalsChanges = channel.postgresChange(
+                    AnyAction.self,
+                    schema: "public",
+                    table: "health_daily_vitals",
+                    filter: .eq("user_id", value: userId)
+                )
                 
-                await channel.subscribe()
+                try? await channel.subscribeWithError()
                 
-                var lastHandledTime: Date = .distantPast
-                for await _ in changes {
-                    guard !Task.isCancelled else { break }
-                    let now = Date()
-                    // Throttle realtime bursts to at most once every 3 seconds
-                    guard now.timeIntervalSince(lastHandledTime) > 3.0 else { continue }
-                    lastHandledTime = now
-                    
-                    // Silently refresh remote canonical summary without re-querying HealthKit,
-                    // uploading telemetry, toggling isLoading, or triggering health-engine!
-                    await self?.fetchRemoteSummarySilentlyForSelectedDate()
+                Task { [weak self] in
+                    var lastHandledTime: Date = .distantPast
+                    for await _ in summaryChanges {
+                        guard !Task.isCancelled else { break }
+                        let now = Date()
+                        guard now.timeIntervalSince(lastHandledTime) > 3.0 else { continue }
+                        lastHandledTime = now
+                        await self?.fetchRemoteSummarySilentlyForSelectedDate()
+                    }
+                }
+                
+                Task { [weak self] in
+                    var lastHandledTime: Date = .distantPast
+                    for await _ in sleepChanges {
+                        guard !Task.isCancelled else { break }
+                        let now = Date()
+                        guard now.timeIntervalSince(lastHandledTime) > 3.0 else { continue }
+                        lastHandledTime = now
+                        await self?.fetchRemoteSummarySilentlyForSelectedDate()
+                    }
+                }
+                
+                Task { [weak self] in
+                    var lastHandledTime: Date = .distantPast
+                    for await _ in vitalsChanges {
+                        guard !Task.isCancelled else { break }
+                        let now = Date()
+                        guard now.timeIntervalSince(lastHandledTime) > 3.0 else { continue }
+                        lastHandledTime = now
+                        await self?.fetchRemoteSummarySilentlyForSelectedDate()
+                    }
                 }
             }
         }
     }
     
-    /// Silently fetches the latest canonical summary for the selected date from Supabase
+    /// Silently fetches the latest canonical summary and lean health records for the selected date from Supabase
     /// without triggering local telemetry collection, uploading telemetry, or re-invoking health-engine.
     @MainActor
     public func fetchRemoteSummarySilentlyForSelectedDate() async {
@@ -238,14 +270,66 @@ public final class HealthDataService: ObservableObject {
         let userId = session.user.id.uuidString.lowercased()
         
         do {
-            let summaryRows: [HealthDailySummaryRecord] = try await supabase
-                .from("health_daily_summary")
-                .select()
-                .eq("user_id", value: userId)
-                .eq("local_date", value: dateKey)
-                .limit(1)
-                .execute()
-                .value
+            async let summaryFetch: [HealthDailySummaryRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_daily_summary")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .eq("local_date", value: dateKey)
+                        .limit(1)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            async let sleepFetch: [HealthSleepSessionRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_sleep_sessions")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .eq("local_date", value: dateKey)
+                        .order("source_priority", ascending: true)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            async let vitalsFetch: [HealthDailyVitalsRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_daily_vitals")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .eq("local_date", value: dateKey)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            async let hrFetch: [HealthIntradayHeartRateRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_intraday_heart_rate")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .eq("local_date", value: dateKey)
+                        .order("bucket_minute", ascending: true)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            let (summaryRows, sleepRows, vitalsRows, hrRows) = await (summaryFetch, sleepFetch, vitalsFetch, hrFetch)
             
             if let row = summaryRows.first, !row.summary.isEmpty {
                 let payload = row.summary
@@ -257,11 +341,20 @@ public final class HealthDataService: ObservableObject {
                     }
                     summaryCache[dateKey] = (timestamp: Date(), summary: payload)
                     applyCanonicalSummary(payload, dateKey: dateKey)
-                    await loadHistoricalTrends()
                 }
             }
-        } catch {
-            print("[HealthDataService] Note: Could not silently fetch health_daily_summary: \(error.localizedDescription)")
+            
+            if !sleepRows.isEmpty {
+                applyLeanSleepSessions(sleepRows)
+            }
+            if !vitalsRows.isEmpty {
+                applyLeanDailyVitals(vitalsRows)
+            }
+            if !hrRows.isEmpty {
+                applyLeanIntradayHeartRate(hrRows, targetDate: targetDate)
+            }
+            
+            await loadHistoricalTrends()
         }
     }
     
@@ -337,6 +430,7 @@ public final class HealthDataService: ObservableObject {
         selectedDeviceFilter = source?.displayName
         Task {
             await processDataForCurrentDate()
+            await loadHistoricalTrends()
         }
     }
     
@@ -346,6 +440,7 @@ public final class HealthDataService: ObservableObject {
         selectedDeviceSource = device != nil ? DeviceSource.from(name: device) : nil
         Task {
             await processDataForCurrentDate()
+            await loadHistoricalTrends()
         }
     }
     
@@ -679,12 +774,24 @@ public final class HealthDataService: ObservableObject {
     /// Unpacks lean discrete sleep sessions into published UI properties.
     public func applyLeanSleepSessions(_ rows: [HealthSleepSessionRecord]) {
         guard !rows.isEmpty else { return }
-        let mapped = rows.map { $0.toSleepSession() }
-        let primary = rows.first(where: { $0.sessionType == "primary_sleep" && $0.isUserSelected })?.toSleepSession()
-            ?? rows.first(where: { $0.sessionType == "primary_sleep" })?.toSleepSession()
+        
+        let candidateRows: [HealthSleepSessionRecord] = {
+            if let filter = selectedDeviceFilter, !filter.isEmpty {
+                let matches = rows.filter {
+                    $0.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
+                    || $0.hostDeviceName?.localizedCaseInsensitiveContains(filter) == true
+                }
+                return matches.isEmpty ? rows : matches
+            }
+            return rows
+        }()
+        
+        let mapped = candidateRows.map { $0.toSleepSession() }
+        let primary = candidateRows.first(where: { $0.sessionType == "primary_sleep" && $0.isUserSelected })?.toSleepSession()
+            ?? candidateRows.first(where: { $0.sessionType == "primary_sleep" })?.toSleepSession()
             ?? mapped.first
         
-        let naps = rows.filter { $0.sessionType == "nap" }.map { r in
+        let naps = candidateRows.filter { $0.sessionType == "nap" }.map { r in
             NapSession(
                 id: r.id,
                 startTime: r.startTime,
@@ -701,7 +808,17 @@ public final class HealthDataService: ObservableObject {
     
     /// Unpacks consolidated daily vitals into published properties.
     public func applyLeanDailyVitals(_ vitals: [HealthDailyVitalsRecord]) {
-        guard let primary = vitals.first else { return }
+        guard !vitals.isEmpty else { return }
+        
+        let primary: HealthDailyVitalsRecord = {
+            if let filter = selectedDeviceFilter, !filter.isEmpty {
+                return vitals.first(where: {
+                    $0.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
+                    || $0.hostDeviceName?.localizedCaseInsensitiveContains(filter) == true
+                }) ?? vitals.first!
+            }
+            return vitals.first!
+        }()
         if let steps = primary.hourlySteps, !steps.isEmpty {
             self.hourlySteps = steps
         }
@@ -2094,32 +2211,152 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 2. For authenticated users, query 7-day historical summaries from health_daily_summary
+        // 2. For authenticated users, query 7-day historical lean tables + canonical summaries from Supabase
         let session = try? await supabase.auth.session
         if let userId = session?.user.id.uuidString.lowercased(),
            let minDate = cal.date(byAdding: .day, value: -6, to: selectedDate) {
             let minDateStr = isoDateFormatter.string(from: minDate)
             let maxDateStr = isoDateFormatter.string(from: selectedDate)
             
-            if let summaryRows: [HealthDailySummaryRecord] = try? await supabase
-                .from("health_daily_summary")
-                .select()
-                .eq("user_id", value: userId)
-                .gte("local_date", value: minDateStr)
-                .lte("local_date", value: maxDateStr)
-                .order("local_date", ascending: true)
-                .execute()
-                .value {
-                for row in summaryRows {
-                    let dStr = row.localDate
-                    if let s = row.steps, s > 0 { historicalVitalsByDate[dStr, default: [:]][.steps] = Double(s) }
-                    if let sl = row.sleepAsleepS, sl > 0 { historicalVitalsByDate[dStr, default: [:]][.sleepDuration] = Double(sl) / 60.0 }
-                    if let r = row.rhr, r > 0 { historicalVitalsByDate[dStr, default: [:]][.heartRate] = r }
-                    if let st = row.stressAvg, st > 0 { historicalVitalsByDate[dStr, default: [:]][.stress] = Double(st) }
-                    if let h = row.hrvSdnn, h > 0 { historicalVitalsByDate[dStr, default: [:]][.hrvSdnn] = h }
-                    if let cal = row.activeKcal, cal > 0 { historicalVitalsByDate[dStr, default: [:]][.activeEnergy] = cal }
-                    if let w = row.weight, w > 0 { historicalVitalsByDate[dStr, default: [:]][.weight] = w }
-                    if let sp = row.spo2, sp > 0 { historicalVitalsByDate[dStr, default: [:]][.oxygenSaturation] = sp }
+            // A. Fetch lean daily vitals
+            async let vitalsRowsFetch: [HealthDailyVitalsRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_daily_vitals")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .gte("local_date", value: minDateStr)
+                        .lte("local_date", value: maxDateStr)
+                        .order("local_date", ascending: true)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            // B. Fetch lean sleep sessions
+            async let sleepRowsFetch: [HealthSleepSessionRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_sleep_sessions")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .gte("local_date", value: minDateStr)
+                        .lte("local_date", value: maxDateStr)
+                        .order("source_priority", ascending: true)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            // C. Fetch canonical summaries for fallback/stress
+            async let summaryRowsFetch: [HealthDailySummaryRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_daily_summary")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .gte("local_date", value: minDateStr)
+                        .lte("local_date", value: maxDateStr)
+                        .order("local_date", ascending: true)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            let (leanVitalsRows, leanSleepRows, summaryRows) = await (vitalsRowsFetch, sleepRowsFetch, summaryRowsFetch)
+            
+            let filter = selectedDeviceFilter
+            
+            // Group lean vitals by date and apply filter
+            var vitalsByDate: [String: [HealthDailyVitalsRecord]] = [:]
+            for row in leanVitalsRows {
+                if let filter = filter, !filter.isEmpty {
+                    let matches = row.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
+                        || row.hostDeviceName?.localizedCaseInsensitiveContains(filter) == true
+                    if !matches { continue }
+                }
+                vitalsByDate[row.localDate, default: []].append(row)
+            }
+            
+            for (dStr, rows) in vitalsByDate {
+                let bestSteps = rows.map(\.steps).max() ?? 0
+                let bestKcal = rows.map(\.activeKcal).max() ?? 0
+                if bestSteps > 0 { historicalVitalsByDate[dStr, default: [:]][.steps] = Double(bestSteps) }
+                if bestKcal > 0 { historicalVitalsByDate[dStr, default: [:]][.activeEnergy] = bestKcal }
+                
+                if let rhr = rows.compactMap(\.restingHeartRate).first(where: { $0 > 0 }) {
+                    historicalVitalsByDate[dStr, default: [:]][.heartRate] = Double(rhr)
+                }
+                if let spo2 = rows.compactMap(\.spo2).first(where: { $0 > 0 }) {
+                    historicalVitalsByDate[dStr, default: [:]][.oxygenSaturation] = spo2
+                }
+                if let resp = rows.compactMap(\.respiratoryRate).first(where: { $0 > 0 }) {
+                    historicalVitalsByDate[dStr, default: [:]][.respiratoryRate] = resp
+                }
+                if let temp = rows.compactMap(\.skinTempCelsius).first {
+                    historicalVitalsByDate[dStr, default: [:]][.bodyTemperature] = temp
+                }
+                if let weight = rows.compactMap(\.weightKg).first(where: { $0 > 0 }) {
+                    historicalVitalsByDate[dStr, default: [:]][.weight] = weight
+                }
+                if let hrv = rows.compactMap(\.hrvSdnnNightly).first(where: { $0 > 0 }) {
+                    historicalVitalsByDate[dStr, default: [:]][.hrvSdnn] = hrv
+                }
+            }
+            
+            // Group lean sleep by date and apply filter
+            var sleepByDate: [String: [HealthSleepSessionRecord]] = [:]
+            for row in leanSleepRows {
+                if let filter = filter, !filter.isEmpty {
+                    let matches = row.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
+                        || row.hostDeviceName?.localizedCaseInsensitiveContains(filter) == true
+                    if !matches { continue }
+                }
+                sleepByDate[row.localDate, default: []].append(row)
+            }
+            
+            for (dStr, rows) in sleepByDate {
+                let primary = rows.first(where: { $0.sessionType == "primary_sleep" && $0.isUserSelected })
+                    ?? rows.first(where: { $0.sessionType == "primary_sleep" })
+                    ?? rows.first
+                if let session = primary, session.durationSeconds > 0 {
+                    let asleepMinutes = Double(session.durationSeconds) / 60.0
+                    historicalVitalsByDate[dStr, default: [:]][.sleepDuration] = asleepMinutes
+                }
+            }
+            
+            // Fallback to health_daily_summary for stress and any older missing data
+            for row in summaryRows {
+                let dStr = row.localDate
+                if historicalVitalsByDate[dStr]?[.steps] == nil, let s = row.steps, s > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.steps] = Double(s)
+                }
+                if historicalVitalsByDate[dStr]?[.sleepDuration] == nil, let sl = row.sleepAsleepS, sl > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.sleepDuration] = Double(sl) / 60.0
+                }
+                if historicalVitalsByDate[dStr]?[.heartRate] == nil, let r = row.rhr, r > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.heartRate] = r
+                }
+                if historicalVitalsByDate[dStr]?[.stress] == nil, let st = row.stressAvg, st > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.stress] = Double(st)
+                }
+                if historicalVitalsByDate[dStr]?[.hrvSdnn] == nil, let h = row.hrvSdnn, h > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.hrvSdnn] = h
+                }
+                if historicalVitalsByDate[dStr]?[.activeEnergy] == nil, let cal = row.activeKcal, cal > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.activeEnergy] = cal
+                }
+                if historicalVitalsByDate[dStr]?[.weight] == nil, let w = row.weight, w > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.weight] = w
+                }
+                if historicalVitalsByDate[dStr]?[.oxygenSaturation] == nil, let sp = row.spo2, sp > 0 {
+                    historicalVitalsByDate[dStr, default: [:]][.oxygenSaturation] = sp
                 }
             }
             

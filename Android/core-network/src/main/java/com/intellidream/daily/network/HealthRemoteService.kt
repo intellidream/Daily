@@ -201,6 +201,29 @@ class HealthRemoteService(
         }
     }
 
+    suspend fun fetchSleepSessionsBetween(
+        userId: String,
+        startDate: String,
+        endDate: String
+    ): List<HealthSleepSessionRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_sleep_sessions"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        gte("local_date", startDate)
+                        lte("local_date", endDate)
+                    }
+                    order("local_date", Order.ASCENDING)
+                    order("source_priority", Order.ASCENDING)
+                }
+                .decodeList<HealthSleepSessionRecord>()
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to fetch sleep sessions between $startDate and $endDate: ${e.message}")
+            emptyList()
+        }
+    }
+
     suspend fun fetchDailyVitals(
         userId: String,
         date: String
@@ -216,6 +239,28 @@ class HealthRemoteService(
                 .decodeList<HealthDailyVitalsRecord>()
         } catch (e: Exception) {
             android.util.Log.w("HealthRemoteService", "Failed to fetch daily vitals: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun fetchDailyVitalsBetween(
+        userId: String,
+        startDate: String,
+        endDate: String
+    ): List<HealthDailyVitalsRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_daily_vitals"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        gte("local_date", startDate)
+                        lte("local_date", endDate)
+                    }
+                    order("local_date", Order.ASCENDING)
+                }
+                .decodeList<HealthDailyVitalsRecord>()
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to fetch daily vitals between $startDate and $endDate: ${e.message}")
             emptyList()
         }
     }

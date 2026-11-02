@@ -41,9 +41,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -270,17 +272,25 @@ class HealthDataRepository(
         realtimeJob?.cancel()
         realtimeJob = scope.launch(Dispatchers.IO) {
             try {
-                val channel = SupabaseClientManager.client.channel("health_daily_summary_sub_${currentUserId}")
-                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                val channel = SupabaseClientManager.client.channel("health_realtime_sub_${currentUserId}")
+                val summaryFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_daily_summary"
-                }.collect {
+                }
+                val vitalsFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "health_daily_vitals"
+                }
+                val sleepFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "health_sleep_sessions"
+                }
+
+                merge(summaryFlow, vitalsFlow, sleepFlow).collect {
                     val now = System.currentTimeMillis()
                     // Throttle realtime bursts to at most once every 3 seconds (1:1 parity with iOS)
                     if (now - lastRealtimeSummaryFetchMs < 3000L) {
                         return@collect
                     }
                     lastRealtimeSummaryFetchMs = now
-                    android.util.Log.d("HealthDataRepository", "Realtime update received for health_daily_summary: silently refreshing")
+                    android.util.Log.d("HealthDataRepository", "Realtime update received for health data: silently refreshing")
                     // Silently refresh remote canonical summary without re-querying Health Connect,
                     // uploading telemetry, toggling isLoading, or triggering health-engine!
                     fetchRemoteSummarySilentlyForSelectedDate()
@@ -292,7 +302,7 @@ class HealthDataRepository(
     }
 
     /**
-     * Silently fetches the latest canonical summary for the selected date from Supabase
+     * Silently fetches the latest canonical summary and lean health records for the selected date from Supabase
      * without triggering local telemetry collection, uploading telemetry, toggling isLoading,
      * or re-invoking health-engine (1:1 parity with iOS fetchRemoteSummarySilentlyForSelectedDate).
      */
@@ -305,24 +315,60 @@ class HealthDataRepository(
             val isToday = isSameDay(targetEpochMs, System.currentTimeMillis())
 
             try {
-                val remoteSummary = remoteService.fetchDailySummary(currentUserId, dateKey)
-                if (remoteSummary != null && !remoteSummary.isEmpty()) {
-                    // Avoid redundant UI re-renders if payload is identical
-                    if (_canonicalSummary.value != remoteSummary) {
-                        val entity = HealthDailySummaryEntity(
-                            id = "summary_${currentUserId}_$dateKey",
-                            userId = currentUserId,
-                            dateKey = dateKey,
-                            summaryVersion = 1,
-                            payloadJson = jsonSerializer.encodeToString(remoteSummary),
-                            computedAt = System.currentTimeMillis(),
-                            sourceDevicePrimary = remoteSummary.sources.firstOrNull()
-                        )
-                        summaryDao.upsertSummary(entity)
-                        withContext(Dispatchers.Main) {
-                            applyCanonicalSummary(remoteSummary, dateKey)
+                coroutineScope {
+                    val summaryDeferred = async {
+                        try { remoteService.fetchDailySummary(currentUserId, dateKey) } catch (e: Exception) { null }
+                    }
+                    val sleepDeferred = async {
+                        try { remoteService.fetchSleepSessions(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
+                    }
+                    val vitalsDeferred = async {
+                        try { remoteService.fetchDailyVitals(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
+                    }
+                    val hrDeferred = async {
+                        try { remoteService.fetchIntradayHeartRate(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
+                    }
+
+                    val remoteSummary = summaryDeferred.await()
+                    val remoteSleep = sleepDeferred.await()
+                    val remoteVitals = vitalsDeferred.await()
+                    val remoteHr = hrDeferred.await()
+
+                    if (remoteSummary != null && !remoteSummary.isEmpty()) {
+                        // Avoid redundant UI re-renders if payload is identical
+                        if (_canonicalSummary.value != remoteSummary) {
+                            val entity = HealthDailySummaryEntity(
+                                id = "summary_${currentUserId}_$dateKey",
+                                userId = currentUserId,
+                                dateKey = dateKey,
+                                summaryVersion = 1,
+                                payloadJson = jsonSerializer.encodeToString(remoteSummary),
+                                computedAt = System.currentTimeMillis(),
+                                sourceDevicePrimary = remoteSummary.sources.firstOrNull()
+                            )
+                            summaryDao.upsertSummary(entity)
+                            withContext(Dispatchers.Main) {
+                                applyCanonicalSummary(remoteSummary, dateKey)
+                            }
                         }
                     }
+
+                    if (remoteSleep.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            applyLeanSleepSessions(remoteSleep)
+                        }
+                    }
+                    if (remoteVitals.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            applyLeanDailyVitals(remoteVitals)
+                        }
+                    }
+                    if (remoteHr.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            applyLeanIntradayHeartRate(remoteHr, targetDate.time)
+                        }
+                    }
+
                     if (isToday && cachedTelemetry.isNotEmpty()) {
                         withContext(Dispatchers.Main) {
                             mergeLocalTelemetryWithSummary(cachedTelemetry, isToday = true)
@@ -332,7 +378,7 @@ class HealthDataRepository(
                     loadHistoricalTrends(targetDate)
                 }
             } catch (e: Exception) {
-                android.util.Log.w("HealthDataRepository", "Could not silently fetch health_daily_summary: ${e.message}")
+                android.util.Log.w("HealthDataRepository", "Could not silently fetch remote health data: ${e.message}")
             }
         }
     }
@@ -379,6 +425,7 @@ class HealthDataRepository(
         _selectedDeviceFilter.value = source?.displayName
         scope.launch {
             processDataForCurrentDate()
+            loadHistoricalTrends(Date(_selectedDate.value))
         }
     }
 
@@ -388,6 +435,7 @@ class HealthDataRepository(
         _selectedDeviceSource.value = if (device != null) DeviceSource.from(device) else null
         scope.launch {
             processDataForCurrentDate()
+            loadHistoricalTrends(Date(_selectedDate.value))
         }
     }
 
@@ -632,12 +680,23 @@ class HealthDataRepository(
 
     fun applyLeanSleepSessions(rows: List<HealthSleepSessionRecord>) {
         if (rows.isEmpty()) return
-        val mapped = rows.map { it.toSleepSession() }
-        val primary = rows.firstOrNull { it.sessionType == "primary_sleep" && it.isUserSelected }?.toSleepSession()
-            ?: rows.firstOrNull { it.sessionType == "primary_sleep" }?.toSleepSession()
+        val filter = _selectedDeviceFilter.value
+        val candidateRows = if (!filter.isNullOrEmpty()) {
+            val matches = rows.filter {
+                it.sourceDeviceKey.contains(filter, ignoreCase = true) ||
+                it.hostDeviceName?.contains(filter, ignoreCase = true) == true
+            }
+            if (matches.isNotEmpty()) matches else rows
+        } else {
+            rows
+        }
+
+        val mapped = candidateRows.map { it.toSleepSession() }
+        val primary = candidateRows.firstOrNull { it.sessionType == "primary_sleep" && it.isUserSelected }?.toSleepSession()
+            ?: candidateRows.firstOrNull { it.sessionType == "primary_sleep" }?.toSleepSession()
             ?: mapped.firstOrNull()
 
-        val naps = rows.filter { it.sessionType == "nap" }.map { r ->
+        val naps = candidateRows.filter { it.sessionType == "nap" }.map { r ->
             NapSession(
                 id = r.id,
                 startTime = r.startTime,
@@ -652,7 +711,16 @@ class HealthDataRepository(
     }
 
     fun applyLeanDailyVitals(vitals: List<HealthDailyVitalsRecord>) {
-        val primary = vitals.firstOrNull() ?: return
+        if (vitals.isEmpty()) return
+        val filter = _selectedDeviceFilter.value
+        val primary = if (!filter.isNullOrEmpty()) {
+            vitals.firstOrNull {
+                it.sourceDeviceKey.contains(filter, ignoreCase = true) ||
+                it.hostDeviceName?.contains(filter, ignoreCase = true) == true
+            } ?: vitals.first()
+        } else {
+            vitals.first()
+        }
         val steps = primary.hourlySteps
         if (!steps.isNullOrEmpty()) {
             _hourlySteps.value = steps
@@ -1377,37 +1445,141 @@ class HealthDataRepository(
             }
         }
 
-        // 3. For authenticated users, fetch remote canonical summaries from Supabase
+        // 3. For authenticated users, fetch remote canonical summaries and lean tables from Supabase
         if (currentUserId != "local_user") {
             try {
-                val remoteSummaries = remoteService.fetchDailySummariesBetween(currentUserId, minDateKey, selectedDateKey)
-                for (record in remoteSummaries) {
-                    val dKey = record.localDate
-                    val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
-                    record.steps?.takeIf { it > 0 }?.let { map[HealthMetricType.STEPS] = it.toDouble() }
-                    record.sleepAsleepS?.takeIf { it > 0 }?.let { map[HealthMetricType.SLEEP_DURATION] = it.toDouble() / 60.0 }
-                    record.rhr?.takeIf { it > 0 }?.let { map[HealthMetricType.HEART_RATE] = it }
-                    record.stressAvg?.takeIf { it > 0 }?.let { map[HealthMetricType.STRESS] = it.toDouble() }
-                    record.hrvSdnn?.takeIf { it > 0 }?.let { map[HealthMetricType.HRV_SDNN] = it }
-                    record.activeKcal?.takeIf { it > 0 }?.let { map[HealthMetricType.ACTIVE_ENERGY] = it }
-                    record.weight?.takeIf { it > 0 }?.let { map[HealthMetricType.WEIGHT] = it }
-                    record.spo2?.takeIf { it > 0 }?.let { map[HealthMetricType.OXYGEN_SATURATION] = it }
+                coroutineScope {
+                    val remoteSummariesDeferred = async(Dispatchers.IO) {
+                        try {
+                            remoteService.fetchDailySummariesBetween(currentUserId, minDateKey, selectedDateKey)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    }
+                    val remoteSleepDeferred = async(Dispatchers.IO) {
+                        try {
+                            remoteService.fetchSleepSessionsBetween(currentUserId, minDateKey, selectedDateKey)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    }
+                    val remoteVitalsDeferred = async(Dispatchers.IO) {
+                        try {
+                            remoteService.fetchDailyVitalsBetween(currentUserId, minDateKey, selectedDateKey)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    }
 
-                    // Also cache into Room if payload exists
-                    val payload = record.summary
-                    if (payload != null) {
-                        val payloadJson = jsonSerializer.encodeToString(payload)
-                        withContext(Dispatchers.IO) {
-                            summaryDao.upsertSummary(
-                                HealthDailySummaryEntity(
-                                    id = record.id.ifEmpty { "${currentUserId}_$dKey" },
-                                    userId = currentUserId,
-                                    dateKey = dKey,
-                                    summaryVersion = 1,
-                                    payloadJson = payloadJson,
-                                    computedAt = System.currentTimeMillis()
+                    val remoteSummaries = remoteSummariesDeferred.await()
+                    val remoteSleep = remoteSleepDeferred.await()
+                    val remoteVitals = remoteVitalsDeferred.await()
+
+                    val filter = _selectedDeviceFilter.value
+
+                    // Group lean vitals by date and apply device filter
+                    val vitalsByDate = remoteVitals
+                        .filter { v ->
+                            if (!filter.isNullOrEmpty()) {
+                                v.sourceDeviceKey.contains(filter, ignoreCase = true) ||
+                                v.hostDeviceName?.contains(filter, ignoreCase = true) == true
+                            } else true
+                        }
+                        .groupBy { it.localDate }
+
+                    for ((dKey, rows) in vitalsByDate) {
+                        val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
+                        val bestSteps = rows.maxOfOrNull { it.steps } ?: 0
+                        val bestKcal = rows.maxOfOrNull { it.activeKcal } ?: 0.0
+                        if (bestSteps > 0) map[HealthMetricType.STEPS] = bestSteps.toDouble()
+                        if (bestKcal > 0.0) map[HealthMetricType.ACTIVE_ENERGY] = bestKcal
+
+                        rows.mapNotNull { it.restingHeartRate }.firstOrNull { it > 0 }?.let {
+                            map[HealthMetricType.HEART_RATE] = it.toDouble()
+                        }
+                        rows.mapNotNull { it.spo2 }.firstOrNull { it > 0.0 }?.let {
+                            map[HealthMetricType.OXYGEN_SATURATION] = it
+                        }
+                        rows.mapNotNull { it.weightKg }.firstOrNull { it > 0.0 }?.let {
+                            map[HealthMetricType.WEIGHT] = it
+                        }
+                        rows.mapNotNull { it.hrvSdnnNightly }.firstOrNull { it > 0.0 }?.let {
+                            map[HealthMetricType.HRV_SDNN] = it
+                        }
+                        rows.mapNotNull { it.skinTempCelsius }.firstOrNull()?.let {
+                            map[HealthMetricType.BODY_TEMPERATURE] = it
+                        }
+                        rows.mapNotNull { it.respiratoryRate }.firstOrNull { it > 0.0 }?.let {
+                            map[HealthMetricType.RESPIRATORY_RATE] = it
+                        }
+                    }
+
+                    // Group lean sleep by date and apply device filter
+                    val sleepByDate = remoteSleep
+                        .filter { s ->
+                            if (!filter.isNullOrEmpty()) {
+                                s.sourceDeviceKey.contains(filter, ignoreCase = true) ||
+                                s.hostDeviceName?.contains(filter, ignoreCase = true) == true
+                            } else true
+                        }
+                        .groupBy { it.localDate }
+
+                    for ((dKey, rows) in sleepByDate) {
+                        val primary = rows.firstOrNull { it.sessionType == "primary_sleep" && it.isUserSelected }
+                            ?: rows.firstOrNull { it.sessionType == "primary_sleep" }
+                            ?: rows.firstOrNull()
+                        if (primary != null && primary.durationSeconds > 0) {
+                            val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
+                            val asleepMinutes = primary.durationSeconds.toDouble() / 60.0
+                            map[HealthMetricType.SLEEP_DURATION] = asleepMinutes
+                        }
+                    }
+
+                    // Fallback to health_daily_summary for stress and any older missing data
+                    for (record in remoteSummaries) {
+                        val dKey = record.localDate
+                        val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
+                        if (!map.containsKey(HealthMetricType.STEPS)) {
+                            record.steps?.takeIf { it > 0 }?.let { map[HealthMetricType.STEPS] = it.toDouble() }
+                        }
+                        if (!map.containsKey(HealthMetricType.SLEEP_DURATION)) {
+                            record.sleepAsleepS?.takeIf { it > 0 }?.let { map[HealthMetricType.SLEEP_DURATION] = it.toDouble() / 60.0 }
+                        }
+                        if (!map.containsKey(HealthMetricType.HEART_RATE)) {
+                            record.rhr?.takeIf { it > 0 }?.let { map[HealthMetricType.HEART_RATE] = it }
+                        }
+                        if (!map.containsKey(HealthMetricType.STRESS)) {
+                            record.stressAvg?.takeIf { it > 0 }?.let { map[HealthMetricType.STRESS] = it.toDouble() }
+                        }
+                        if (!map.containsKey(HealthMetricType.HRV_SDNN)) {
+                            record.hrvSdnn?.takeIf { it > 0 }?.let { map[HealthMetricType.HRV_SDNN] = it }
+                        }
+                        if (!map.containsKey(HealthMetricType.ACTIVE_ENERGY)) {
+                            record.activeKcal?.takeIf { it > 0 }?.let { map[HealthMetricType.ACTIVE_ENERGY] = it }
+                        }
+                        if (!map.containsKey(HealthMetricType.WEIGHT)) {
+                            record.weight?.takeIf { it > 0 }?.let { map[HealthMetricType.WEIGHT] = it }
+                        }
+                        if (!map.containsKey(HealthMetricType.OXYGEN_SATURATION)) {
+                            record.spo2?.takeIf { it > 0 }?.let { map[HealthMetricType.OXYGEN_SATURATION] = it }
+                        }
+
+                        // Also cache into Room if payload exists
+                        val payload = record.summary
+                        if (payload != null) {
+                            val payloadJson = jsonSerializer.encodeToString(payload)
+                            withContext(Dispatchers.IO) {
+                                summaryDao.upsertSummary(
+                                    HealthDailySummaryEntity(
+                                        id = record.id.ifEmpty { "${currentUserId}_$dKey" },
+                                        userId = currentUserId,
+                                        dateKey = dKey,
+                                        summaryVersion = 1,
+                                        payloadJson = payloadJson,
+                                        computedAt = System.currentTimeMillis()
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }
