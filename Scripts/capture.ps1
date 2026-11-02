@@ -1,3 +1,27 @@
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WinUtil {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+}
+'@
+
+# Minimize DayOne main window to tray so desktop widgets are completely visible
+$hwnd = [WinUtil]::FindWindow("WinUIDesktopWin32WindowClass", "DayOne")
+if ($hwnd -ne [IntPtr]::Zero) {
+    [WinUtil]::ShowWindow($hwnd, 6) # SW_MINIMIZE
+}
+
+# Minimize any Windows Terminal window
+Get-Process -Name "WindowsTerminal" -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.MainWindowHandle -ne [IntPtr]::Zero) {
+        [WinUtil]::ShowWindow($_.MainWindowHandle, 6)
+    }
+}
+
+Start-Sleep -Milliseconds 500
+
 & "C:\Users\mihai\source\repos\Daily\Scripts\inspect_daily_windows.ps1" | Set-Content -Path "C:\Users\mihai\windows_dump.txt"
 
 Add-Type -AssemblyName System.Windows.Forms
