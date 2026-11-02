@@ -74,8 +74,8 @@ namespace Daily_WinUI.DesktopWidgets
         {
             var list = new List<DesktopWidgetModel>();
 
-            var displayArea = DisplayArea.Primary ?? DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
-            var workArea = displayArea.WorkArea;
+            var displayArea = DisplayArea.Primary;
+            var workArea = displayArea?.WorkArea ?? new RectInt32(0, 0, 1920, 1080);
 
             // Place on the right side of the desktop wallpaper with 24px padding
             int rightX = workArea.X + workArea.Width - 380 - 24;

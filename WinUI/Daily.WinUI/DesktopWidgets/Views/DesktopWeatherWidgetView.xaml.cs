@@ -50,14 +50,14 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 double lon = settings.LastLongitude ?? 26.1063;
 
                 var client = new WeatherClient();
-                var weather = await client.GetWeatherDataAsync(lat, lon, settings.UnitSystem ?? "metric");
+                var weather = await client.GetCurrentWeatherAsync(lat, lon, settings.UnitSystem ?? "metric");
 
-                if (weather?.Current != null)
+                if (weather != null)
                 {
-                    int currentTemp = (int)Math.Round(weather.Current.Temperature);
-                    int highTemp = (int)Math.Round(weather.Daily?.Temperature2mMax?[0] ?? (currentTemp + 4));
-                    int lowTemp = (int)Math.Round(weather.Daily?.Temperature2mMin?[0] ?? (currentTemp - 5));
-                    string condition = weather.Current.ConditionText ?? "Partly Cloudy";
+                    int currentTemp = (int)Math.Round(weather.Temperature);
+                    int highTemp = (int)Math.Round(weather.TempMax);
+                    int lowTemp = (int)Math.Round(weather.TempMin);
+                    string condition = weather.Description ?? "Partly Cloudy";
 
                     SmallLocationText.Text = locName;
                     SmallTempText.Text = $"{currentTemp}°";
@@ -65,12 +65,12 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     SmallHighLowText.Text = $"H: {highTemp}° · L: {lowTemp}°";
 
                     MediumLocationText.Text = locName;
-                    MediumConditionSubtitle.Text = $"{condition} · Feels like {currentTemp}°";
+                    MediumConditionSubtitle.Text = $"{condition} · Feels like {(int)Math.Round(weather.FeelsLike)}°";
                     MediumTempText.Text = $"{currentTemp}°C";
                     MediumHighLowDetail.Text = $"High: {highTemp}° · Low: {lowTemp}°";
 
-                    int humidity = weather.Current.Humidity;
-                    double wind = weather.Current.WindSpeed;
+                    int humidity = weather.Humidity;
+                    double wind = weather.WindSpeed;
                     HumidityWindText.Text = $"💧 {humidity}% · 💨 {wind:F1} m/s";
 
                     // Hourly slots

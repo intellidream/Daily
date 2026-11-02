@@ -46,7 +46,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 var now = DateTime.UtcNow;
                 var moon = _astronomyService.GetMoonPhase(now);
                 double illumination = Math.Round(moon.IlluminatedFraction * 100.0);
-                string phaseName = moon.PhaseName ?? "Waxing Gibbous";
+                string phaseName = !string.IsNullOrWhiteSpace(moon.Description) ? moon.Description : "Waxing Gibbous";
                 string glyph = GetMoonGlyph(moon.IlluminatedFraction);
 
                 int skyScore = 84;

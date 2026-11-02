@@ -39,15 +39,15 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 // 1. Weather
                 try
                 {
-                    var settings = SettingsService.Load();
+                    var settings = Daily_WinUI.Services.SettingsService.Load();
                     double lat = settings.LastLatitude ?? 44.4323;
                     double lon = settings.LastLongitude ?? 26.1063;
                     var client = new WeatherClient();
-                    var weather = await client.GetWeatherDataAsync(lat, lon, settings.UnitSystem ?? "metric");
-                    if (weather?.Current != null)
+                    var weather = await client.GetCurrentWeatherAsync(lat, lon, settings.UnitSystem ?? "metric");
+                    if (weather != null)
                     {
-                        int temp = (int)Math.Round(weather.Current.Temperature);
-                        WeatherHeaderBadge.Text = $"{temp}°C · {weather.Current.ConditionText ?? "Partly Cloudy"}";
+                        int temp = (int)Math.Round(weather.Temperature);
+                        WeatherHeaderBadge.Text = $"{temp}°C · {weather.Description ?? "Partly Cloudy"}";
                     }
                 }
                 catch { }

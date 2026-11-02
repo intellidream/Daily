@@ -70,8 +70,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 if (_healthHubService != null)
                 {
                     var summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
-                    var sleepSessions = await _healthHubService.GetSleepSessionsAsync(DateTime.Today);
-                    var primarySession = sleepSessions?.OrderByDescending(s => s.DurationMinutes).FirstOrDefault();
+                    var sleepResult = await _healthHubService.GetSleepSessionsAsync(DateTime.Today);
+                    var primarySession = sleepResult.PrimarySession ?? sleepResult.AllSessions?.OrderByDescending(s => s.DurationMinutes).FirstOrDefault();
 
                     int score = summary?.SleepScore ?? 85;
                     int durationMins = primarySession?.DurationMinutes ?? ((summary?.SleepAsleepS ?? 0) / 60);
