@@ -1,3 +1,19 @@
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WinCloser {
+    [DllImport("user32.dll")] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+}
+'@
+
+# Close Terminal window if open
+$hTerm = [WinCloser]::FindWindow("CASCADIA_HOSTING_WINDOW_CLASS", $null)
+if ($hTerm -ne [IntPtr]::Zero) {
+    [WinCloser]::PostMessage($hTerm, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 400
+}
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
