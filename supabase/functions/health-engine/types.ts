@@ -221,3 +221,60 @@ export interface HealthDailySummaryRow {
   spo2: number | null;
   summary: DailyHealthSummaryPayload;
 }
+
+export interface LeanDailyVitalsRow {
+  id: string;
+  user_id: string;
+  local_date: string;
+  source_device_key: string;
+  host_device_name?: string | null;
+  steps?: number | null;
+  active_kcal?: number | null;
+  resting_heart_rate?: number | null;
+  spo2?: number | null;
+  respiratory_rate?: number | null;
+  skin_temp_celsius?: number | null;
+  weight_kg?: number | null;
+  hrv_sdnn_nightly?: number | null;
+  hrv_rmssd_nightly?: number | null;
+  hourly_steps?: HourlyStepBucket[] | null;
+  updated_at?: string | null;
+}
+
+export interface LeanSleepSessionRow {
+  id: string;
+  user_id: string;
+  local_date: string;
+  session_type: string;
+  source_device_key: string;
+  host_device_name?: string | null;
+  start_time: string;
+  end_time: string;
+  duration_seconds: number;
+  time_in_bed_seconds: number;
+  efficiency_percent?: number | null;
+  sleep_score?: number | null;
+  deep_seconds?: number | null;
+  rem_seconds?: number | null;
+  light_seconds?: number | null;
+  awake_seconds?: number | null;
+  latency_seconds?: number | null;
+  quality_rating?: string | null;
+  stages?: any[] | null;
+  source_priority?: number | null;
+  is_user_selected?: boolean | null;
+  ingested_at?: string | null;
+}
+
+export interface LeanIntradayHrRow {
+  id: string;
+  user_id: string;
+  local_date: string;
+  source_device_key: string;
+  bucket_minute: number;
+  bpm_avg: number;
+  bpm_min: number;
+  bpm_max: number;
+  sample_count?: number | null;
+  updated_at?: string | null;
+}

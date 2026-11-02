@@ -13,50 +13,16 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class HealthRemoteService(
     private val clientManager: SupabaseClientManager = SupabaseClientManager
 ) {
     suspend fun pushTelemetry(records: List<HealthTelemetryRecord>): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val realRecords = records.filter {
-                val dev = it.sourceDevice
-                dev == null || !DeviceSource.from(dev).isVirtualEngine
-            }
-            if (realRecords.isEmpty()) return@withContext true
-            val externalIds = realRecords.mapNotNull { it.externalId }.filter { it.isNotEmpty() }
-            val existingIds = mutableSetOf<String>()
-            
-            if (externalIds.isNotEmpty()) {
-                for (batch in externalIds.chunked(50)) {
-                    try {
-                        val existing = clientManager.client.postgrest["health_telemetry"]
-                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("external_id")) {
-                                filter {
-                                    isIn("external_id", batch)
-                                }
-                            }.decodeList<Map<String, String>>()
-                        existingIds.addAll(existing.mapNotNull { it["external_id"] })
-                    } catch (e: Exception) {
-                        android.util.Log.w("HealthRemoteService", "Failed to fetch existing external_ids batch: ${e.message}")
-                    }
-                }
-            }
-
-            val newRecords = realRecords.filter {
-                val extId = it.externalId
-                extId == null || !existingIds.contains(extId)
-            }
-
-            if (newRecords.isEmpty()) return@withContext true
-            
-            for (chunk in newRecords.chunked(200)) {
-                clientManager.client.postgrest["health_telemetry"].upsert(chunk)
-            }
-            true
-        } catch (_: Exception) {
-            false
-        }
+        // Lean Architecture v2: legacy health_telemetry is retired (strictly 0 rows).
+        true
     }
 
     suspend fun fetchTelemetryBetween(
@@ -64,21 +30,7 @@ class HealthRemoteService(
         startTimeEpochMs: Long,
         endTimeEpochMs: Long
     ): List<HealthTelemetryRecord> = withContext(Dispatchers.IO) {
-        try {
-            val startIso = java.time.Instant.ofEpochMilli(startTimeEpochMs).toString()
-            val endIso = java.time.Instant.ofEpochMilli(endTimeEpochMs).toString()
-            clientManager.client.postgrest["health_telemetry"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                        gte("start_time", startIso)
-                        lte("start_time", endIso)
-                    }
-                }
-                .decodeList<HealthTelemetryRecord>()
-        } catch (_: Exception) {
-            emptyList()
-        }
+        emptyList()
     }
 
     suspend fun pushVitals(vitals: List<VitalMetricRecord>): Boolean = withContext(Dispatchers.IO) {
@@ -107,6 +59,7 @@ class HealthRemoteService(
         userId: String,
         date: String
     ): DailyHealthSummaryPayload? = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext null
         try {
             val response = clientManager.client.postgrest["health_daily_summary"]
                 .select {
@@ -129,6 +82,7 @@ class HealthRemoteService(
         startDate: String,
         endDate: String
     ): List<HealthDailySummaryRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_daily_summary"]
                 .select {
@@ -152,17 +106,9 @@ class HealthRemoteService(
         processDirty: Boolean = false
     ): Boolean = withContext(Dispatchers.IO) {
         if (userId.isEmpty() || userId == "local_user") return@withContext false
+        clientManager.ensureSessionReady()
         try {
             val url = "${SupabaseClientManager.SUPABASE_URL}/functions/v1/health-engine"
-            val conn = (java.net.URI.create(url).toURL().openConnection() as java.net.HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 5000
-                readTimeout = 5000
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
-                setRequestProperty("Authorization", "Bearer ${SupabaseClientManager.SUPABASE_ANON_KEY}")
-                doOutput = true
-            }
             val body = if (processDirty && date.isEmpty()) {
                 """{"user_id":"$userId","process_dirty":true}"""
             } else if (processDirty) {
@@ -170,13 +116,19 @@ class HealthRemoteService(
             } else {
                 """{"user_id":"$userId","date":"$date"}"""
             }
-            conn.outputStream.use { os ->
-                os.write(body.toByteArray(Charsets.UTF_8))
+            val token = clientManager.currentAccessTokenOrAnonKey()
+            val req = Request.Builder()
+                .url(url)
+                .header("Content-Type", "application/json")
+                .header("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
+                .header("Authorization", "Bearer $token")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            SupabaseClientManager.okHttpClient.newCall(req).execute().use { resp ->
+                resp.code in 200..299
             }
-            val code = conn.responseCode
-            conn.disconnect()
-            code in 200..299
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to trigger canonical engine: ${e.message}")
             false
         }
     }
@@ -185,6 +137,7 @@ class HealthRemoteService(
         userId: String,
         date: String
     ): List<HealthSleepSessionRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_sleep_sessions"]
                 .select {
@@ -206,6 +159,7 @@ class HealthRemoteService(
         startDate: String,
         endDate: String
     ): List<HealthSleepSessionRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_sleep_sessions"]
                 .select {
@@ -228,6 +182,7 @@ class HealthRemoteService(
         userId: String,
         date: String
     ): List<HealthDailyVitalsRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_daily_vitals"]
                 .select {
@@ -248,6 +203,7 @@ class HealthRemoteService(
         startDate: String,
         endDate: String
     ): List<HealthDailyVitalsRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_daily_vitals"]
                 .select {
@@ -269,6 +225,7 @@ class HealthRemoteService(
         userId: String,
         date: String
     ): List<HealthIntradayHeartRateRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_intraday_heart_rate"]
                 .select {
@@ -288,6 +245,7 @@ class HealthRemoteService(
     suspend fun fetchHealthSources(
         userId: String
     ): List<HealthSourceRecord> = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_sources"]
                 .select {
@@ -304,8 +262,14 @@ class HealthRemoteService(
     }
 
     suspend fun pushSleepSession(session: HealthSleepSessionRecord): Boolean = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) {
+            android.util.Log.w("HealthRemoteService", "Skipping pushSleepSession: authenticated session not ready")
+            return@withContext false
+        }
         try {
-            clientManager.client.postgrest["health_sleep_sessions"].upsert(session)
+            clientManager.client.postgrest["health_sleep_sessions"].upsert(session) {
+                onConflict = "user_id,local_date,session_type,source_device_key"
+            }
             true
         } catch (e: Exception) {
             android.util.Log.w("HealthRemoteService", "Failed to push sleep session: ${e.message}")
@@ -314,8 +278,14 @@ class HealthRemoteService(
     }
 
     suspend fun pushDailyVitals(vitals: HealthDailyVitalsRecord): Boolean = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) {
+            android.util.Log.w("HealthRemoteService", "Skipping pushDailyVitals: authenticated session not ready")
+            return@withContext false
+        }
         try {
-            clientManager.client.postgrest["health_daily_vitals"].upsert(vitals)
+            clientManager.client.postgrest["health_daily_vitals"].upsert(vitals) {
+                onConflict = "user_id,local_date,source_device_key"
+            }
             true
         } catch (e: Exception) {
             android.util.Log.w("HealthRemoteService", "Failed to push daily vitals: ${e.message}")
@@ -325,9 +295,15 @@ class HealthRemoteService(
 
     suspend fun pushIntradayHeartRate(buckets: List<HealthIntradayHeartRateRecord>): Boolean = withContext(Dispatchers.IO) {
         if (buckets.isEmpty()) return@withContext true
+        if (!clientManager.ensureSessionReady()) {
+            android.util.Log.w("HealthRemoteService", "Skipping pushIntradayHeartRate: authenticated session not ready")
+            return@withContext false
+        }
         try {
             for (chunk in buckets.chunked(100)) {
-                clientManager.client.postgrest["health_intraday_heart_rate"].upsert(chunk)
+                clientManager.client.postgrest["health_intraday_heart_rate"].upsert(chunk) {
+                    onConflict = "user_id,local_date,source_device_key,bucket_minute"
+                }
             }
             true
         } catch (e: Exception) {
@@ -337,8 +313,11 @@ class HealthRemoteService(
     }
 
     suspend fun registerHealthSource(source: HealthSourceRecord): Boolean = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext false
         try {
-            clientManager.client.postgrest["health_sources"].upsert(source)
+            clientManager.client.postgrest["health_sources"].upsert(source) {
+                onConflict = "id"
+            }
             true
         } catch (e: Exception) {
             android.util.Log.w("HealthRemoteService", "Failed to register health source: ${e.message}")

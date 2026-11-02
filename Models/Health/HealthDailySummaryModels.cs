@@ -135,6 +135,25 @@ namespace Daily.Models.Health
         [JsonPropertyName("vitals")]
         [JsonProperty("vitals")]
         public Dictionary<string, CanonicalVitalSummaryItem> Vitals { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        [JsonPropertyName("all_devices_view")]
+        [JsonProperty("all_devices_view")]
+        public Dictionary<string, CanonicalAllDevicesMetricItem>? AllDevicesView { get; set; }
+    }
+
+    public class CanonicalAllDevicesMetricItem
+    {
+        [JsonPropertyName("value")]
+        [JsonProperty("value")]
+        public double? Value { get; set; }
+
+        [JsonPropertyName("unit")]
+        [JsonProperty("unit")]
+        public string? Unit { get; set; }
+
+        [JsonPropertyName("source_key")]
+        [JsonProperty("source_key")]
+        public string? SourceKey { get; set; }
     }
 
     public class CanonicalSleepSummary
@@ -252,7 +271,15 @@ namespace Daily.Models.Health
 
         [Newtonsoft.Json.JsonIgnore]
         [System.Text.Json.Serialization.JsonIgnore]
-        public string EffectiveSourceDevice => !string.IsNullOrEmpty(SourceDevice) ? SourceDevice : (Tracker ?? "Canonical");
+        public string EffectiveSourceDevice
+        {
+            get
+            {
+                var raw = !string.IsNullOrEmpty(SourceDevice) ? SourceDevice : Tracker;
+                var src = DeviceSource.From(raw);
+                return src.IsVirtualEngine ? string.Empty : src.DisplayName;
+            }
+        }
 
         [JsonPropertyName("stages")]
         [JsonProperty("stages")]
@@ -415,6 +442,10 @@ namespace Daily.Models.Health
         [JsonProperty("hourly_steps")]
         public List<HourlyStepBucket> HourlySteps { get; set; } = new();
 
+        [JsonPropertyName("source_device")]
+        [JsonProperty("source_device")]
+        public string? SourceDevice { get; set; }
+
         [JsonPropertyName("tracker_priority_order")]
         [JsonProperty("tracker_priority_order")]
         public List<string> TrackerPriorityOrder { get; set; } = new();
@@ -471,21 +502,41 @@ namespace Daily.Models.Health
         [JsonPropertyName("bpm")]
         [JsonProperty("bpm")]
         public double Bpm { get; set; }
+
+        [JsonPropertyName("source_device")]
+        [JsonProperty("source_device")]
+        public string? SourceDevice { get; set; }
     }
 
     public class CanonicalHeartRateZones
     {
+        [JsonPropertyName("resting")]
+        [JsonProperty("resting")]
+        public int Resting { get; set; }
+
         [JsonPropertyName("resting_minutes")]
         [JsonProperty("resting_minutes")]
         public int RestingMinutes { get; set; }
+
+        [JsonPropertyName("fat_burn")]
+        [JsonProperty("fat_burn")]
+        public int FatBurn { get; set; }
 
         [JsonPropertyName("fat_burn_minutes")]
         [JsonProperty("fat_burn_minutes")]
         public int FatBurnMinutes { get; set; }
 
+        [JsonPropertyName("cardio")]
+        [JsonProperty("cardio")]
+        public int Cardio { get; set; }
+
         [JsonPropertyName("cardio_minutes")]
         [JsonProperty("cardio_minutes")]
         public int CardioMinutes { get; set; }
+
+        [JsonPropertyName("peak")]
+        [JsonProperty("peak")]
+        public int Peak { get; set; }
 
         [JsonPropertyName("peak_minutes")]
         [JsonProperty("peak_minutes")]
@@ -559,13 +610,328 @@ namespace Daily.Models.Health
         [JsonProperty("timestamp")]
         public string Timestamp { get; set; } = string.Empty;
 
+        [JsonPropertyName("score")]
+        [JsonProperty("score")]
+        public int Score { get; set; }
+
         [JsonPropertyName("stress_score")]
         [JsonProperty("stress_score")]
         public int StressScore { get; set; }
 
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int EffectiveScore => Score > 0 ? Score : StressScore;
+
         [JsonPropertyName("level")]
         [JsonProperty("level")]
         public string Level { get; set; } = "calm";
+    }
+
+    // ==========================================
+    // LEAN HEALTH TABLES (SUPABASE v2)
+    // ==========================================
+
+    [Table("health_sleep_sessions")]
+    public class HealthSleepSessionRecord : BaseModel
+    {
+        [PrimaryKey("id")]
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [Column("user_id")]
+        [JsonPropertyName("user_id")]
+        [JsonProperty("user_id")]
+        public string UserId { get; set; } = string.Empty;
+
+        [Column("local_date")]
+        [JsonPropertyName("local_date")]
+        [JsonProperty("local_date")]
+        public string LocalDate { get; set; } = string.Empty;
+
+        [Column("session_type")]
+        [JsonPropertyName("session_type")]
+        [JsonProperty("session_type")]
+        public string SessionType { get; set; } = "primary_sleep";
+
+        [Column("source_device_key")]
+        [JsonPropertyName("source_device_key")]
+        [JsonProperty("source_device_key")]
+        public string SourceDeviceKey { get; set; } = string.Empty;
+
+        [Column("host_device_name")]
+        [JsonPropertyName("host_device_name")]
+        [JsonProperty("host_device_name")]
+        public string? HostDeviceName { get; set; }
+
+        [Column("start_time")]
+        [JsonPropertyName("start_time")]
+        [JsonProperty("start_time")]
+        public string StartTime { get; set; } = string.Empty;
+
+        [Column("end_time")]
+        [JsonPropertyName("end_time")]
+        [JsonProperty("end_time")]
+        public string EndTime { get; set; } = string.Empty;
+
+        [Column("duration_seconds")]
+        [JsonPropertyName("duration_seconds")]
+        [JsonProperty("duration_seconds")]
+        public int DurationSeconds { get; set; }
+
+        [Column("time_in_bed_seconds")]
+        [JsonPropertyName("time_in_bed_seconds")]
+        [JsonProperty("time_in_bed_seconds")]
+        public int? TimeInBedSeconds { get; set; }
+
+        [Column("efficiency_percent")]
+        [JsonPropertyName("efficiency_percent")]
+        [JsonProperty("efficiency_percent")]
+        public double? EfficiencyPercent { get; set; }
+
+        [Column("sleep_score")]
+        [JsonPropertyName("sleep_score")]
+        [JsonProperty("sleep_score")]
+        public int? SleepScore { get; set; }
+
+        [Column("deep_seconds")]
+        [JsonPropertyName("deep_seconds")]
+        [JsonProperty("deep_seconds")]
+        public int? DeepSeconds { get; set; }
+
+        [Column("rem_seconds")]
+        [JsonPropertyName("rem_seconds")]
+        [JsonProperty("rem_seconds")]
+        public int? RemSeconds { get; set; }
+
+        [Column("light_seconds")]
+        [JsonPropertyName("light_seconds")]
+        [JsonProperty("light_seconds")]
+        public int? LightSeconds { get; set; }
+
+        [Column("awake_seconds")]
+        [JsonPropertyName("awake_seconds")]
+        [JsonProperty("awake_seconds")]
+        public int? AwakeSeconds { get; set; }
+
+        [Column("quality_rating")]
+        [JsonPropertyName("quality_rating")]
+        [JsonProperty("quality_rating")]
+        public string? QualityRating { get; set; }
+
+        [Column("stages")]
+        [JsonPropertyName("stages")]
+        [JsonProperty("stages")]
+        public List<SleepStageRecord>? Stages { get; set; }
+
+        [Column("source_priority")]
+        [JsonPropertyName("source_priority")]
+        [JsonProperty("source_priority")]
+        public int SourcePriority { get; set; } = 10;
+
+        [Column("is_user_selected")]
+        [JsonPropertyName("is_user_selected")]
+        [JsonProperty("is_user_selected")]
+        public bool IsUserSelected { get; set; }
+
+        public SleepSession ToDomainSleepSession(DateTime fallbackDate)
+        {
+            var canonDevice = DeviceSource.From(SourceDeviceKey).DisplayName;
+            DateTimeOffset.TryParse(StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var sDto);
+            DateTimeOffset.TryParse(EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var eDto);
+            var start = sDto != default ? sDto.LocalDateTime : (DateTime.TryParse(StartTime, out var sp) ? sp : fallbackDate.Date.AddHours(-1));
+            var end = eDto != default ? eDto.LocalDateTime : (DateTime.TryParse(EndTime, out var ep) ? ep : fallbackDate.Date.AddHours(7));
+
+            int asleepS = DurationSeconds;
+            int inBedS = Math.Max(asleepS, TimeInBedSeconds ?? (asleepS + (AwakeSeconds ?? 0)));
+            bool hasGranular = Stages != null && Stages.Count > 0;
+
+            var session = new SleepSession
+            {
+                StartTime = start,
+                EndTime = end,
+                IsNap = string.Equals(SessionType, "nap", StringComparison.OrdinalIgnoreCase),
+                DurationSeconds = inBedS,
+                AsleepSeconds = asleepS,
+                DeepSeconds = DeepSeconds ?? 0,
+                RemSeconds = RemSeconds ?? 0,
+                LightSeconds = LightSeconds ?? 0,
+                AwakeSeconds = AwakeSeconds ?? 0,
+                SleepScore = SleepScore ?? 0,
+                SourceDevice = canonDevice,
+                HasGranularHypnogram = hasGranular
+            };
+
+            if (hasGranular)
+            {
+                session.Stages = Stages!.Select(st =>
+                {
+                    DateTimeOffset.TryParse(st.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var stS);
+                    DateTimeOffset.TryParse(st.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var stE);
+                    var sLocal = stS != default ? stS.LocalDateTime : (DateTime.TryParse(st.StartTime, out var sLocalP) ? sLocalP : start);
+                    var eLocal = stE != default ? stE.LocalDateTime : (DateTime.TryParse(st.EndTime, out var eLocalP) ? eLocalP : sLocal.AddSeconds(st.DurationSeconds));
+                    var stageKey = st.Stage.ToLowerInvariant() switch
+                    {
+                        "deep" => "sleep_stage_deep",
+                        "rem" => "sleep_stage_rem",
+                        "light" or "core" => "sleep_stage_light",
+                        _ => "sleep_stage_awake"
+                    };
+                    return new HealthTelemetry
+                    {
+                        TypeString = stageKey,
+                        Value = st.DurationSeconds,
+                        Unit = "sec",
+                        StartTime = sLocal,
+                        EndTime = eLocal != default ? eLocal : sLocal.AddSeconds(st.DurationSeconds),
+                        SourceDevice = canonDevice
+                    };
+                }).ToList();
+            }
+
+            return session;
+        }
+    }
+
+    [Table("health_daily_vitals")]
+    public class HealthDailyVitalsRecord : BaseModel
+    {
+        [PrimaryKey("id")]
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [Column("user_id")]
+        [JsonPropertyName("user_id")]
+        [JsonProperty("user_id")]
+        public string UserId { get; set; } = string.Empty;
+
+        [Column("local_date")]
+        [JsonPropertyName("local_date")]
+        [JsonProperty("local_date")]
+        public string LocalDate { get; set; } = string.Empty;
+
+        [Column("source_device_key")]
+        [JsonPropertyName("source_device_key")]
+        [JsonProperty("source_device_key")]
+        public string SourceDeviceKey { get; set; } = string.Empty;
+
+        [Column("host_device_name")]
+        [JsonPropertyName("host_device_name")]
+        [JsonProperty("host_device_name")]
+        public string? HostDeviceName { get; set; }
+
+        [Column("steps")]
+        [JsonPropertyName("steps")]
+        [JsonProperty("steps")]
+        public int Steps { get; set; }
+
+        [Column("active_kcal")]
+        [JsonPropertyName("active_kcal")]
+        [JsonProperty("active_kcal")]
+        public double ActiveKcal { get; set; }
+
+        [Column("resting_heart_rate")]
+        [JsonPropertyName("resting_heart_rate")]
+        [JsonProperty("resting_heart_rate")]
+        public int? RestingHeartRate { get; set; }
+
+        [Column("spo2")]
+        [JsonPropertyName("spo2")]
+        [JsonProperty("spo2")]
+        public double? Spo2 { get; set; }
+
+        [Column("respiratory_rate")]
+        [JsonPropertyName("respiratory_rate")]
+        [JsonProperty("respiratory_rate")]
+        public double? RespiratoryRate { get; set; }
+
+        [Column("skin_temp_celsius")]
+        [JsonPropertyName("skin_temp_celsius")]
+        [JsonProperty("skin_temp_celsius")]
+        public double? SkinTempCelsius { get; set; }
+
+        [Column("weight_kg")]
+        [JsonPropertyName("weight_kg")]
+        [JsonProperty("weight_kg")]
+        public double? WeightKg { get; set; }
+
+        [Column("hrv_sdnn_nightly")]
+        [JsonPropertyName("hrv_sdnn_nightly")]
+        [JsonProperty("hrv_sdnn_nightly")]
+        public double? HrvSdnnNightly { get; set; }
+
+        [Column("hrv_rmssd_nightly")]
+        [JsonPropertyName("hrv_rmssd_nightly")]
+        [JsonProperty("hrv_rmssd_nightly")]
+        public double? HrvRmssdNightly { get; set; }
+
+        [Column("hourly_steps")]
+        [JsonPropertyName("hourly_steps")]
+        [JsonProperty("hourly_steps")]
+        public List<HourlyStepBucket>? HourlySteps { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasSignal =>
+            Steps > 0 ||
+            ActiveKcal > 0 ||
+            (RestingHeartRate ?? 0) > 0 ||
+            (Spo2 ?? 0) > 0 ||
+            (RespiratoryRate ?? 0) > 0 ||
+            SkinTempCelsius != null ||
+            (WeightKg ?? 0) > 0 ||
+            (HrvSdnnNightly ?? 0) > 0 ||
+            (HrvRmssdNightly ?? 0) > 0;
+    }
+
+    [Table("health_intraday_heart_rate")]
+    public class HealthIntradayHeartRateRecord : BaseModel
+    {
+        [PrimaryKey("id")]
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [Column("user_id")]
+        [JsonPropertyName("user_id")]
+        [JsonProperty("user_id")]
+        public string UserId { get; set; } = string.Empty;
+
+        [Column("local_date")]
+        [JsonPropertyName("local_date")]
+        [JsonProperty("local_date")]
+        public string LocalDate { get; set; } = string.Empty;
+
+        [Column("source_device_key")]
+        [JsonPropertyName("source_device_key")]
+        [JsonProperty("source_device_key")]
+        public string SourceDeviceKey { get; set; } = string.Empty;
+
+        [Column("bucket_minute")]
+        [JsonPropertyName("bucket_minute")]
+        [JsonProperty("bucket_minute")]
+        public int BucketMinute { get; set; }
+
+        [Column("bpm_avg")]
+        [JsonPropertyName("bpm_avg")]
+        [JsonProperty("bpm_avg")]
+        public int BpmAvg { get; set; }
+
+        [Column("bpm_min")]
+        [JsonPropertyName("bpm_min")]
+        [JsonProperty("bpm_min")]
+        public int BpmMin { get; set; }
+
+        [Column("bpm_max")]
+        [JsonPropertyName("bpm_max")]
+        [JsonProperty("bpm_max")]
+        public int BpmMax { get; set; }
+
+        [Column("sample_count")]
+        [JsonPropertyName("sample_count")]
+        [JsonProperty("sample_count")]
+        public int SampleCount { get; set; } = 1;
     }
 
     public class CanonicalVitalSummaryItem

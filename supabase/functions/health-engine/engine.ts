@@ -23,7 +23,10 @@ import type {
   StressSummary,
   VitalSummaryItem,
   DailyHealthSummaryPayload,
-  HealthDailySummaryRow
+  HealthDailySummaryRow,
+  LeanDailyVitalsRow,
+  LeanSleepSessionRow,
+  LeanIntradayHrRow
 } from './types.ts';
 
 export interface EngineInput {
@@ -850,22 +853,7 @@ export function computeDailySteps(
   const deviceResults: DeviceStepResult[] = [];
 
   for (const [device, devRecords] of byDevice.entries()) {
-    const lower = device.toLowerCase();
-    const isPhone = lower.includes('phone') || lower.includes('pixel') || lower.includes('galaxy') || lower.includes('handset');
-    const isWearable = !isPhone && (
-      lower.includes('watch') ||
-      lower.includes('apple') ||
-      lower.includes('balance') ||
-      lower.includes('amazfit') ||
-      lower.includes('gt5') ||
-      lower.includes('oura') ||
-      lower.includes('fitbit') ||
-      lower.includes('garmin') ||
-      lower.includes('whoop') ||
-      lower.includes('polar') ||
-      lower.includes('huawei') ||
-      (lower.includes('health') && !lower.includes('phone'))
-    );
+    const isWearable = isWearableDevice(device);
 
     const cumulative = isCumulativeDevice(device, devRecords);
     const hourly = new Map<number, number>();
@@ -1483,6 +1471,623 @@ export function computeDailyHealthSummary(input: EngineInput): HealthDailySummar
     hrv_rmssd: vitalsMap['hrvrmssd']?.value ?? null,
     weight: vitalsMap['weight']?.value ?? null,
     spo2: vitalsMap['oxygensaturation']?.value ?? vitalsMap['spo2']?.value ?? null,
+    summary: payload
+  };
+}
+
+// ==========================================
+// 7. Lean Architecture Canonical Synthesizer (v2.0)
+// ==========================================
+
+export function canonicalizeDeviceName(raw?: string | null, hostName?: string | null): string {
+  const k = (raw || '').trim().toLowerCase();
+  const h = (hostName || '').trim().toLowerCase();
+
+  if (!k || k === 'unknown') {
+    if (h.includes('radar') || h.includes('fold')) return 'Radar (Galaxy Z Fold 8)';
+    if (h.includes('trapper') || h.includes('pixel')) return 'Trapper (Pixel 9 Pro)';
+    if (h.includes('schmitz') || h.includes('iphone')) return 'Schmitz (iPhone)';
+    return 'Unknown';
+  }
+
+  if (k.includes('oura')) return 'Oura Ring';
+  if (
+    k.includes('pixel watch') ||
+    k.includes('fitbit') ||
+    k.includes('google health') ||
+    k.includes('wear.companion') ||
+    k.includes('google.android.wearable') ||
+    k === 'trapper_pw5'
+  ) {
+    return 'Pixel Watch 5';
+  }
+  if (
+    k.includes('oneplus') ||
+    k.includes('heytap') ||
+    k.includes('international') ||
+    k.includes('ohealth') ||
+    k.includes('oplus')
+  ) {
+    return 'OnePlus Watch 3';
+  }
+  if (
+    k.includes('apple watch') ||
+    k.includes('watchos') ||
+    k.includes('ultra 2') ||
+    k === 'schmitz_ultra2'
+  ) {
+    return 'Apple Watch Ultra 2';
+  }
+  if (k.includes('amazfit') || k.includes('zepp') || k.includes('huami') || k.includes('balance')) {
+    return 'Amazfit Balance';
+  }
+  if (k.includes('huawei') || k.includes('harmony') || k.includes('gt 5') || k.includes('gt5')) {
+    return 'Huawei Watch GT 5 Pro';
+  }
+  if (k.includes('garmin')) return 'Garmin';
+  if (k.includes('whoop')) return 'Whoop';
+  if (k.includes('withings')) return 'Withings';
+  if (k.includes('polar')) return 'Polar';
+  if (k.includes('galaxy watch')) return 'Galaxy Watch';
+
+  if (k.includes('radar') || k.includes('fold') || k.includes('sm-f9') || k.includes('shealth') || k.includes('samsung')) {
+    return 'Radar (Galaxy Z Fold 8)';
+  }
+  if (k.includes('trapper') || k.includes('pixel 9') || k.includes('j97428') || k.includes('healthconnect') || k.includes('health connect') || k.includes('google fit') || k.includes('apps.fitness')) {
+    return h.includes('radar') ? 'Radar (Galaxy Z Fold 8)' : 'Trapper (Pixel 9 Pro)';
+  }
+  if (k.includes('schmitz') || k.includes('iphone') || k.includes('apple health') || k.includes('healthkit') || k.includes('canonical')) {
+    return 'Schmitz (iPhone)';
+  }
+
+  return (raw || '').trim();
+}
+
+export function isWearableDevice(device: string): boolean {
+  const lower = canonicalizeDeviceName(device).toLowerCase();
+  if (
+    lower.includes('oura') ||
+    lower.includes('ring') ||
+    lower.includes('watch') ||
+    lower.includes('ultra') ||
+    lower.includes('fitbit') ||
+    lower.includes('oneplus') ||
+    lower.includes('amazfit') ||
+    lower.includes('zepp') ||
+    lower.includes('balance') ||
+    lower.includes('huawei') ||
+    lower.includes('gt 5') ||
+    lower.includes('gt5') ||
+    lower.includes('garmin') ||
+    lower.includes('whoop') ||
+    lower.includes('polar') ||
+    lower.includes('withings')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function getCanonicalSleepPriority(device: string, isNap = false): number {
+  if (isNap) return 99;
+  const canon = canonicalizeDeviceName(device);
+  if (canon === 'Oura Ring') return 1;
+  if (canon === 'Apple Watch Ultra 2') return 2;
+  if (canon === 'Pixel Watch 5') return 3;
+  if (canon === 'OnePlus Watch 3') return 4;
+  if (isWearableDevice(canon)) return 5;
+  return 10;
+}
+
+export function getCanonicalVitalsPriority(device: string): number {
+  const canon = canonicalizeDeviceName(device);
+  if (canon === 'Oura Ring') return 1;
+  if (canon === 'Apple Watch Ultra 2') return 2;
+  if (canon === 'Pixel Watch 5') return 3;
+  if (canon === 'OnePlus Watch 3') return 4;
+  if (isWearableDevice(canon)) return 5;
+  return 10;
+}
+
+export function getCanonicalDeviceColor(device: string): string {
+  const canon = canonicalizeDeviceName(device);
+  switch (canon) {
+    case 'Oura Ring': return '#00D09C';
+    case 'Apple Watch Ultra 2': return '#34C759';
+    case 'Pixel Watch 5': return '#3897F0';
+    case 'OnePlus Watch 3': return '#FF6B4A';
+    case 'Schmitz (iPhone)': return '#AF52DE';
+    case 'Trapper (Pixel 9 Pro)': return '#5856D6';
+    case 'Radar (Galaxy Z Fold 8)': return '#00C7BE';
+    default: return '#3897F0';
+  }
+}
+
+export interface LeanEngineInput {
+  userId: string;
+  targetDate: string;
+  vitalsRows: LeanDailyVitalsRow[];
+  sleepRows: LeanSleepSessionRow[];
+  hrRows: LeanIntradayHrRow[];
+  tzOffsetMin?: number;
+  preferredDevice?: string;
+  baselineHrvMs?: number;
+  baselineRhrBpm?: number;
+}
+
+function vitalsRowHasSignal(v: LeanDailyVitalsRow): boolean {
+  return (
+    (v.steps ?? 0) > 0 ||
+    (v.active_kcal ?? 0) > 0 ||
+    (v.resting_heart_rate ?? 0) > 0 ||
+    (v.spo2 ?? 0) > 0 ||
+    (v.respiratory_rate ?? 0) > 0 ||
+    v.skin_temp_celsius !== null && v.skin_temp_celsius !== undefined ||
+    (v.weight_kg ?? 0) > 0 ||
+    (v.hrv_sdnn_nightly ?? 0) > 0 ||
+    (v.hrv_rmssd_nightly ?? 0) > 0
+  );
+}
+
+export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): HealthDailySummaryRow {
+  const {
+    userId,
+    targetDate,
+    vitalsRows,
+    sleepRows,
+    hrRows,
+    tzOffsetMin = 120,
+    preferredDevice,
+    baselineHrvMs,
+    baselineRhrBpm
+  } = input;
+
+  const prefCanon = preferredDevice && preferredDevice.trim().length > 0
+    ? canonicalizeDeviceName(preferredDevice)
+    : undefined;
+
+  // Collect strictly canonical devices that actually emitted signal on targetDate
+  const activeSourceSet = new Set<string>();
+  for (const s of sleepRows) {
+    if ((s.duration_seconds ?? 0) > 0) {
+      const c = canonicalizeDeviceName(s.source_device_key, s.host_device_name);
+      if (c && c !== 'Unknown') activeSourceSet.add(c);
+    }
+  }
+  for (const v of vitalsRows) {
+    if (vitalsRowHasSignal(v)) {
+      const c = canonicalizeDeviceName(v.source_device_key, v.host_device_name);
+      if (c && c !== 'Unknown') activeSourceSet.add(c);
+    }
+  }
+  for (const h of hrRows) {
+    if ((h.bpm_avg ?? 0) > 30) {
+      const c = canonicalizeDeviceName(h.source_device_key, null);
+      if (c && c !== 'Unknown') activeSourceSet.add(c);
+    }
+  }
+
+  const orderedSources = Array.from(activeSourceSet).sort((a, b) => {
+    const pa = getCanonicalSleepPriority(a, false);
+    const pb = getCanonicalSleepPriority(b, false);
+    if (pa !== pb) return pa - pb;
+    return a.localeCompare(b);
+  });
+
+  // 1. Build Sleep Sessions & Naps
+  const allSessions: SleepSession[] = [];
+  const naps: NapSession[] = [];
+  let userSelectedDevice: string | null = null;
+
+  for (const row of sleepRows) {
+    const canonDevice = canonicalizeDeviceName(row.source_device_key, row.host_device_name);
+    const isNap = row.session_type === 'nap';
+    if (isNap) {
+      naps.push({
+        id: row.id,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        duration_seconds: Math.max(0, Math.round(row.duration_seconds || 0)),
+        source_device: canonDevice
+      });
+      continue;
+    }
+
+    if (row.is_user_selected) {
+      userSelectedDevice = canonDevice;
+    }
+
+    const rawStages = Array.isArray(row.stages) ? row.stages : [];
+    const mappedStages: SleepStageRecord[] = rawStages
+      .map((st: any, idx: number) => {
+        const rawType = String(st.stage_type ?? st.stageType ?? st.stage ?? 'Light');
+        const stStart = String(st.start_time ?? st.startTime ?? row.start_time);
+        const stEnd = String(st.end_time ?? st.endTime ?? stStart);
+        let dur = Number(st.duration_seconds ?? st.durationSeconds ?? 0);
+        if (dur <= 0) {
+          dur = Math.max(0, Math.round((toEpochMs(stEnd) - toEpochMs(stStart)) / 1000));
+        }
+        return {
+          id: String(st.id ?? `${row.id}_st_${idx}`),
+          stage_type: mapSleepStageType(rawType),
+          start_time: stStart,
+          end_time: stEnd,
+          duration_seconds: Math.round(dur),
+          source_device: canonDevice
+        };
+      })
+      .filter(st => st.duration_seconds > 0);
+
+    const deepSec = Math.round(row.deep_seconds ?? mappedStages.filter(s => s.stage_type === 'Deep').reduce((a, b) => a + b.duration_seconds, 0));
+    const remSec = Math.round(row.rem_seconds ?? mappedStages.filter(s => s.stage_type === 'REM').reduce((a, b) => a + b.duration_seconds, 0));
+    const lightSec = Math.round(row.light_seconds ?? mappedStages.filter(s => s.stage_type === 'Light').reduce((a, b) => a + b.duration_seconds, 0));
+    const awakeSec = Math.round(row.awake_seconds ?? mappedStages.filter(s => s.stage_type === 'Awake').reduce((a, b) => a + b.duration_seconds, 0));
+
+    const asleepStages = deepSec + remSec + lightSec;
+    const asleepSec = Math.max(asleepStages, Math.round(row.duration_seconds || 0));
+    const totalBedSec = Math.max(asleepSec + awakeSec, Math.round(row.time_in_bed_seconds || 0));
+
+    const deepPct = asleepSec > 0 ? Math.round((deepSec / asleepSec) * 100) : 0;
+    const remPct = asleepSec > 0 ? Math.round((remSec / asleepSec) * 100) : 0;
+    const lightPct = asleepSec > 0 ? Math.round((lightSec / asleepSec) * 100) : 0;
+    const awakePct = totalBedSec > 0 ? Math.round((awakeSec / totalBedSec) * 100) : 0;
+    const restorativePct = deepPct + remPct;
+    const effPct = row.efficiency_percent && row.efficiency_percent > 0
+      ? Math.min(100, Math.round(row.efficiency_percent))
+      : (totalBedSec > 0 ? Math.min(100, Math.max(10, Math.round((asleepSec / totalBedSec) * 100))) : 85);
+    const awakeCount = mappedStages.filter(s => s.stage_type === 'Awake').length;
+
+    const computedScore = row.sleep_score && row.sleep_score > 0
+      ? Math.min(100, Math.round(row.sleep_score))
+      : calculateClinicalSleepScore({
+          asleepSeconds: asleepSec,
+          durationSeconds: totalBedSec,
+          efficiencyPercent: effPct,
+          deepPercent: deepPct,
+          remPercent: remPct,
+          awakeCount,
+          awakeSeconds: awakeSec
+        });
+
+    allSessions.push({
+      id: row.id,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      is_nap: false,
+      source_device: canonDevice,
+      has_granular_hypnogram: mappedStages.length > 0,
+      stages: mappedStages,
+      asleep_seconds: asleepSec,
+      duration_seconds: totalBedSec,
+      deep_seconds: deepSec,
+      rem_seconds: remSec,
+      light_seconds: lightSec,
+      awake_seconds: awakeSec,
+      deep_percent: deepPct,
+      rem_percent: remPct,
+      light_percent: lightPct,
+      awake_percent: awakePct,
+      restorative_percent: restorativePct,
+      efficiency_percent: effPct,
+      awake_count: awakeCount,
+      sleep_score: computedScore,
+      quality_rating: row.quality_rating || getSleepQualityRating(computedScore)
+    });
+  }
+
+  allSessions.sort((a, b) => {
+    if (prefCanon) {
+      const aPref = a.source_device === prefCanon;
+      const bPref = b.source_device === prefCanon;
+      if (aPref !== bPref) return aPref ? -1 : 1;
+    } else if (userSelectedDevice) {
+      const aSel = a.source_device === userSelectedDevice;
+      const bSel = b.source_device === userSelectedDevice;
+      if (aSel !== bSel) return aSel ? -1 : 1;
+    }
+    if (a.has_granular_hypnogram !== b.has_granular_hypnogram) {
+      return a.has_granular_hypnogram ? -1 : 1;
+    }
+    const pa = getCanonicalSleepPriority(a.source_device, false);
+    const pb = getCanonicalSleepPriority(b.source_device, false);
+    if (pa !== pb) return pa - pb;
+    return b.asleep_seconds - a.asleep_seconds;
+  });
+
+  const primarySession = prefCanon
+    ? (allSessions.find(s => s.source_device === prefCanon) ?? null)
+    : (allSessions[0] ?? null);
+  const sleepGuidance = generateSleepGuidance(primarySession, targetDate);
+
+  // 2. Build Activity Summary from health_daily_vitals
+  const normalizedVitals = vitalsRows.map(v => ({
+    ...v,
+    canonDevice: canonicalizeDeviceName(v.source_device_key, v.host_device_name)
+  }));
+
+  const candidateActivityRows = prefCanon
+    ? normalizedVitals.filter(v => v.canonDevice === prefCanon)
+    : normalizedVitals;
+
+  let chosenActivityRow: (typeof normalizedVitals)[number] | null = null;
+  const wearableStepRows = candidateActivityRows.filter(v => isWearableDevice(v.canonDevice) && (v.steps ?? 0) > 0);
+  if (wearableStepRows.length > 0) {
+    wearableStepRows.sort((a, b) => (b.steps ?? 0) - (a.steps ?? 0));
+    chosenActivityRow = wearableStepRows[0];
+  } else {
+    const anyStepRows = candidateActivityRows.filter(v => (v.steps ?? 0) > 0);
+    if (anyStepRows.length > 0) {
+      anyStepRows.sort((a, b) => (b.steps ?? 0) - (a.steps ?? 0));
+      chosenActivityRow = anyStepRows[0];
+    } else if (candidateActivityRows.length > 0) {
+      chosenActivityRow = candidateActivityRows[0];
+    }
+  }
+
+  const totalSteps = Math.max(0, Math.round(chosenActivityRow?.steps ?? 0));
+  const hourlyMap = new Map<number, number>();
+  const rawHourly = Array.isArray(chosenActivityRow?.hourly_steps) ? chosenActivityRow!.hourly_steps! : [];
+  for (const hb of rawHourly) {
+    const hr = Number((hb as any).hour);
+    const st = Number((hb as any).steps ?? 0);
+    if (hr >= 0 && hr < 24 && st > 0) {
+      hourlyMap.set(hr, Math.round(st));
+    }
+  }
+  const hourlyBuckets: HourlyStepBucket[] = [];
+  for (let h = 0; h < 24; h++) {
+    hourlyBuckets.push({ hour: h, steps: hourlyMap.get(h) ?? 0 });
+  }
+
+  let activeCal = Number(chosenActivityRow?.active_kcal ?? 0);
+  if (activeCal <= 0 && !prefCanon) {
+    const bestWearableCal = normalizedVitals
+      .filter(v => isWearableDevice(v.canonDevice) && (v.active_kcal ?? 0) > 0)
+      .sort((a, b) => (b.active_kcal ?? 0) - (a.active_kcal ?? 0))[0];
+    if (bestWearableCal) {
+      activeCal = Number(bestWearableCal.active_kcal ?? 0);
+    }
+  }
+  if (activeCal <= 0 && totalSteps > 0) {
+    activeCal = Math.round(totalSteps * 0.042 * 10) / 10;
+  }
+
+  const activitySummary: ActivitySummary = {
+    total_steps: totalSteps,
+    active_calories: Math.round(activeCal * 10) / 10,
+    source_device: chosenActivityRow?.canonDevice ?? null,
+    hourly_steps: hourlyBuckets
+  };
+
+  // 3. Merge Scalar Vitals Across Devices by Wearable Priority
+  const sortedForVitals = [...candidateActivityRows].sort((a, b) => {
+    const pa = getCanonicalVitalsPriority(a.canonDevice);
+    const pb = getCanonicalVitalsPriority(b.canonDevice);
+    if (pa !== pb) return pa - pb;
+    return (b.steps ?? 0) - (a.steps ?? 0);
+  });
+
+  const vitalsMap: Record<string, VitalSummaryItem> = {};
+  const defaultTs = new Date().toISOString();
+  const putVitalIfMissing = (
+    key: string,
+    type: string,
+    val: number | null | undefined,
+    unit: string,
+    device: string,
+    ts?: string | null,
+    allowZero = false
+  ) => {
+    if (vitalsMap[key]) return;
+    if (val === null || val === undefined) return;
+    if (!allowZero && val <= 0) return;
+    vitalsMap[key] = {
+      type,
+      value: Math.round(val * 100) / 100,
+      unit,
+      source_device: device,
+      timestamp: ts || defaultTs
+    };
+  };
+
+  for (const v of sortedForVitals) {
+    putVitalIfMissing('restingheartrate', 'resting_heart_rate', v.resting_heart_rate, 'bpm', v.canonDevice, v.updated_at);
+    putVitalIfMissing('hrvsdnn', 'hrv_sdnn', v.hrv_sdnn_nightly, 'ms', v.canonDevice, v.updated_at);
+    putVitalIfMissing('hrvrmssd', 'hrv_rmssd', v.hrv_rmssd_nightly, 'ms', v.canonDevice, v.updated_at);
+    putVitalIfMissing('oxygensaturation', 'oxygen_saturation', v.spo2, '%', v.canonDevice, v.updated_at);
+    putVitalIfMissing('respiratoryrate', 'respiratory_rate', v.respiratory_rate, 'brpm', v.canonDevice, v.updated_at);
+    putVitalIfMissing('bodytemperature', 'body_temperature', v.skin_temp_celsius, '°C', v.canonDevice, v.updated_at, true);
+    putVitalIfMissing('weight', 'weight', v.weight_kg, 'kg', v.canonDevice, v.updated_at);
+    putVitalIfMissing('activeenergy', 'active_energy', v.active_kcal, 'kcal', v.canonDevice, v.updated_at);
+  }
+
+  // 4. Build Cardiovascular Summary from health_intraday_heart_rate
+  const localMidnightMs = getLocalMidnightUtc(targetDate, tzOffsetMin).getTime();
+  const filteredHrRows = hrRows
+    .map(r => ({
+      ...r,
+      canonDevice: canonicalizeDeviceName(r.source_device_key, null)
+    }))
+    .filter(r => r.bpm_avg > 30 && r.bpm_avg < 240 && (!prefCanon || r.canonDevice === prefCanon))
+    .sort((a, b) => a.bucket_minute - b.bucket_minute);
+
+  const intradayHrPoints: IntradayHeartRatePoint[] = filteredHrRows.map(r => {
+    const tsIso = new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString();
+    return {
+      id: r.id,
+      timestamp: tsIso,
+      bpm: r.bpm_avg,
+      zone: mapHeartRateZone(r.bpm_avg),
+      source_device: r.canonDevice
+    };
+  });
+
+  const measuredRhr = vitalsMap['restingheartrate']?.value ?? null;
+  let cardioSummary: CardiovascularSummary;
+  if (filteredHrRows.length === 0) {
+    cardioSummary = {
+      average_bpm: null,
+      resting_bpm: measuredRhr !== null ? Math.round(measuredRhr) : null,
+      min_bpm: null,
+      max_bpm: null,
+      zones: { resting: 0, fat_burn: 0, cardio: 0, peak: 0 },
+      intraday_points: []
+    };
+  } else {
+    let weightedSum = 0;
+    let totalSamples = 0;
+    let minBpm = 999;
+    let maxBpm = 0;
+    const zones = { resting: 0, fat_burn: 0, cardio: 0, peak: 0 };
+
+    for (const r of filteredHrRows) {
+      const cnt = Math.max(1, r.sample_count ?? 1);
+      weightedSum += r.bpm_avg * cnt;
+      totalSamples += cnt;
+      const bMin = r.bpm_min > 30 ? r.bpm_min : r.bpm_avg;
+      const bMax = r.bpm_max > 30 ? r.bpm_max : r.bpm_avg;
+      if (bMin < minBpm) minBpm = bMin;
+      if (bMax > maxBpm) maxBpm = bMax;
+
+      const z = mapHeartRateZone(r.bpm_avg);
+      if (z === 'Resting') zones.resting++;
+      else if (z === 'Fat Burn') zones.fat_burn++;
+      else if (z === 'Cardio') zones.cardio++;
+      else if (z === 'Peak') zones.peak++;
+    }
+
+    const avgBpm = Math.round((weightedSum / Math.max(1, totalSamples)) * 10) / 10;
+    const effectiveRhr = measuredRhr !== null && measuredRhr > 0
+      ? Math.round(measuredRhr)
+      : (minBpm < 999 ? minBpm + 4 : null);
+
+    cardioSummary = {
+      average_bpm: avgBpm,
+      resting_bpm: effectiveRhr,
+      min_bpm: minBpm < 999 ? Math.round(minBpm) : null,
+      max_bpm: maxBpm > 0 ? Math.round(maxBpm) : null,
+      zones,
+      intraday_points: intradayHrPoints
+    };
+  }
+
+  // 5. Compute Autonomic Stress Summary
+  const hrvVal = vitalsMap['hrvsdnn']?.value ?? vitalsMap['hrvrmssd']?.value ?? null;
+  const stressSummary = computeStress({
+    targetDateStr: targetDate,
+    tzOffsetMin,
+    hrvMs: hrvVal,
+    hrPoints: cardioSummary.intraday_points,
+    hourlySteps: activitySummary.hourly_steps,
+    restingBpm: cardioSummary.resting_bpm,
+    priorSleepScore: primarySession ? primarySession.sleep_score : null,
+    personalBaselineHrv: baselineHrvMs,
+    personalBaselineRhr: baselineRhrBpm
+  });
+
+  // 6. Build Rich Per-Device Breakdown & All-Devices View
+  const sourcesBreakdown: Record<string, Record<string, number>> = {};
+  for (const src of orderedSources) {
+    sourcesBreakdown[src] = {};
+  }
+  for (const v of normalizedVitals) {
+    if (!vitalsRowHasSignal(v)) continue;
+    if (!sourcesBreakdown[v.canonDevice]) sourcesBreakdown[v.canonDevice] = {};
+    const b = sourcesBreakdown[v.canonDevice];
+    if ((v.steps ?? 0) > 0) b['steps'] = v.steps!;
+    if ((v.active_kcal ?? 0) > 0) b['active_calories'] = Math.round(v.active_kcal! * 10) / 10;
+    if ((v.resting_heart_rate ?? 0) > 0) b['resting_heart_rate'] = v.resting_heart_rate!;
+    if ((v.hrv_sdnn_nightly ?? 0) > 0) b['hrv_sdnn'] = v.hrv_sdnn_nightly!;
+    if ((v.hrv_rmssd_nightly ?? 0) > 0) b['hrv_rmssd'] = v.hrv_rmssd_nightly!;
+    if ((v.spo2 ?? 0) > 0) b['spo2'] = v.spo2!;
+    if ((v.respiratory_rate ?? 0) > 0) b['respiratory_rate'] = v.respiratory_rate!;
+    if (v.skin_temp_celsius !== null && v.skin_temp_celsius !== undefined) b['skin_temp_celsius'] = v.skin_temp_celsius;
+    if ((v.weight_kg ?? 0) > 0) b['weight_kg'] = v.weight_kg!;
+  }
+  for (const s of allSessions) {
+    if (!sourcesBreakdown[s.source_device]) sourcesBreakdown[s.source_device] = {};
+    sourcesBreakdown[s.source_device]['sleep_asleep_seconds'] = s.asleep_seconds;
+    sourcesBreakdown[s.source_device]['sleep_score'] = s.sleep_score;
+  }
+
+  const allDevicesView: Record<string, any> = {};
+  if (activitySummary.total_steps > 0 && activitySummary.source_device) {
+    allDevicesView['steps'] = {
+      value: activitySummary.total_steps,
+      source_key: activitySummary.source_device,
+      source_color: getCanonicalDeviceColor(activitySummary.source_device)
+    };
+  }
+  if (primarySession && primarySession.asleep_seconds > 0) {
+    allDevicesView['sleep_duration_seconds'] = {
+      value: primarySession.asleep_seconds,
+      source_key: primarySession.source_device,
+      source_color: getCanonicalDeviceColor(primarySession.source_device),
+      score: primarySession.sleep_score
+    };
+  }
+  if (cardioSummary.resting_bpm && cardioSummary.resting_bpm > 0) {
+    const rhrSrc = vitalsMap['restingheartrate']?.source_device || primarySession?.source_device || orderedSources[0] || 'Wearable';
+    allDevicesView['resting_heart_rate'] = {
+      value: cardioSummary.resting_bpm,
+      source_key: rhrSrc,
+      source_color: getCanonicalDeviceColor(rhrSrc)
+    };
+  }
+  if (activitySummary.active_calories > 0 && activitySummary.source_device) {
+    allDevicesView['active_calories'] = {
+      value: activitySummary.active_calories,
+      source_key: activitySummary.source_device,
+      source_color: getCanonicalDeviceColor(activitySummary.source_device)
+    };
+  }
+  if (stressSummary) {
+    allDevicesView['stress'] = {
+      value: stressSummary.current_score,
+      source_key: vitalsMap['hrvsdnn']?.source_device || vitalsMap['hrvrmssd']?.source_device || primarySession?.source_device || 'Biometric Engine',
+      source_color: '#AF52DE',
+      score: stressSummary.current_score
+    };
+  }
+
+  const computedAt = new Date().toISOString();
+  const payload: DailyHealthSummaryPayload = {
+    date: targetDate,
+    engine_version: 'v2.0',
+    computed_at: computedAt,
+    sources: orderedSources,
+    all_devices_view: allDevicesView,
+    sources_breakdown: sourcesBreakdown,
+    sleep: {
+      primary_session: primarySession,
+      all_sessions: allSessions,
+      naps,
+      guidance: sleepGuidance
+    },
+    activity: activitySummary,
+    cardiovascular: cardioSummary,
+    stress: stressSummary,
+    vitals: vitalsMap
+  };
+
+  return {
+    user_id: userId,
+    local_date: targetDate,
+    computed_at: computedAt,
+    engine_version: 'v2.0',
+    raw_watermark: computedAt,
+    steps: activitySummary.total_steps > 0 ? activitySummary.total_steps : null,
+    active_kcal: activitySummary.active_calories > 0 ? activitySummary.active_calories : null,
+    sleep_asleep_s: primarySession
+      ? primarySession.asleep_seconds
+      : (naps.length > 0 ? naps.reduce((sum, n) => sum + n.duration_seconds, 0) : null),
+    sleep_score: primarySession ? primarySession.sleep_score : null,
+    stress_avg: stressSummary ? stressSummary.daily_average : null,
+    rhr: cardioSummary.resting_bpm,
+    hrv_sdnn: vitalsMap['hrvsdnn']?.value ?? null,
+    hrv_rmssd: vitalsMap['hrvrmssd']?.value ?? null,
+    weight: vitalsMap['weight']?.value ?? null,
+    spo2: vitalsMap['oxygensaturation']?.value ?? null,
     summary: payload
   };
 }

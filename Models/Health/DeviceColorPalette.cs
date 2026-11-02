@@ -4,22 +4,21 @@ using System.Collections.Generic;
 namespace Daily.Models.Health
 {
     /// <summary>
-    /// Deterministic 9-color palette based on 31-multiplier polynomial UTF-8 hash.
-    /// Parity with Swift (DeviceColorPalette.swift) and Kotlin (DeviceColorPalette.kt).
+    /// Deterministic canonical color palette matching Swift & Kotlin DeviceColorPalette.
     /// </summary>
     public static class DeviceColorPalette
     {
         public static readonly IReadOnlyList<string> Palette = new List<string>
         {
-            "#00D09C", // 0: Emerald (Oura green)
-            "#3897F0", // 1: Electric Blue (Pixel / Google)
-            "#FF6B4A", // 2: Coral / Orange (Activity)
-            "#AF52DE", // 3: Violet / Purple (HealthKit)
-            "#FF2D55", // 4: Rose / Crimson
+            "#00D09C", // 0: Emerald (Oura Ring)
+            "#3897F0", // 1: Electric Blue (Pixel Watch 5)
+            "#FF6B4A", // 2: Coral / Orange (Apple Watch Ultra 2)
+            "#AF52DE", // 3: Violet / Purple (Schmitz iPhone)
+            "#FF2D55", // 4: Rose / Crimson (OnePlus Watch 3)
             "#34C759", // 5: Apple Green
             "#FF9500", // 6: Amber
-            "#5856D6", // 7: Indigo
-            "#00C7BE"  // 8: Cyan / Teal
+            "#5856D6", // 7: Indigo (Trapper Pixel 9 Pro)
+            "#00C7BE"  // 8: Cyan / Teal (Radar Galaxy Z Fold 8)
         };
 
         public static string GetColor(string? sourceKey)
@@ -29,8 +28,24 @@ namespace Daily.Models.Health
                 return "#3897F0";
             }
 
+            var canon = DeviceSource.From(sourceKey).DisplayName;
+            return canon switch
+            {
+                "Oura Ring" => "#00D09C",
+                "Pixel Watch 5" => "#3897F0",
+                "Apple Watch Ultra 2" => "#FF6B4A",
+                "OnePlus Watch 3" => "#FF2D55",
+                "Schmitz (iPhone)" => "#AF52DE",
+                "Trapper (Pixel 9 Pro)" => "#5856D6",
+                "Radar (Galaxy Z Fold 8)" => "#00C7BE",
+                _ => HashFallback(canon)
+            };
+        }
+
+        private static string HashFallback(string key)
+        {
             int hash = 0;
-            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(sourceKey);
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(key);
             foreach (byte b in bytes)
             {
                 unchecked
@@ -38,7 +53,6 @@ namespace Daily.Models.Health
                     hash = 31 * hash + b;
                 }
             }
-
             long positiveHash = Math.Abs((long)hash);
             return Palette[(int)(positiveHash % Palette.Count)];
         }

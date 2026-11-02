@@ -16,19 +16,21 @@ namespace Daily.Models.Health
 
     /// <summary>
     /// Canonical device source classification and normalization for multi-device biometrics.
-    /// Parity with Swift (DeviceSource.swift) and Kotlin (DeviceSource.kt).
+    /// 1:1 parity with Swift (HealthModels.swift) and Kotlin (HealthModels.kt) — 7 canonical physical devices.
     /// </summary>
     public class DeviceSource : IEquatable<DeviceSource>
     {
         public string RawName { get; }
         public string DisplayName { get; }
         public DeviceType Type { get; }
+        public int SortPriority { get; }
+        public bool IsWearable { get; }
         public string ColorHex => DeviceColorPalette.GetColor(DisplayName);
 
         public string SegoeGlyph => Type switch
         {
-            DeviceType.Smartwatch => "\xE95E",      // Watch / Health icon
-            DeviceType.SmartRing => "\xEA3B",       // Circle ring
+            DeviceType.Smartwatch => "\xE95E",      // Watch
+            DeviceType.SmartRing => "\xEA3B",       // Ring
             DeviceType.HealthPlatform => "\xEB51",  // Heart
             DeviceType.Smartphone => "\xE8EA",      // Phone
             DeviceType.Manual => "\xE70F",          // Edit / Pencil
@@ -39,24 +41,39 @@ namespace Daily.Models.Health
         {
             get
             {
-                var lower = RawName.ToLowerInvariant();
-                return lower.Contains("stresswatch") ||
-                       lower.Contains("stress-engine") ||
-                       lower.Contains("daily biometric") ||
-                       lower.Contains("biometric engine") ||
-                       lower.Contains("computed") ||
-                       lower.Contains("bubbles") ||
-                       lower == "unknown";
+                var lower = DisplayName.ToLowerInvariant();
+                var rawLower = RawName.ToLowerInvariant();
+                return lower == "unknown" ||
+                       lower == "canonical" ||
+                       lower == "apple health" ||
+                       lower == "health connect" ||
+                       lower == "google fit" ||
+                       lower == "mac" ||
+                       lower == "windows" ||
+                       rawLower.Contains("stresswatch") ||
+                       rawLower.Contains("stress-engine") ||
+                       rawLower.Contains("daily biometric") ||
+                       rawLower.Contains("biometric engine") ||
+                       rawLower.Contains("computed") ||
+                       rawLower.Contains("canonical") ||
+                       rawLower.Contains("bubbles") ||
+                       rawLower == "mac" ||
+                       rawLower == "macos" ||
+                       rawLower == "windows" ||
+                       rawLower == "winui" ||
+                       rawLower == "unknown";
             }
         }
 
-        public static bool IsVirtual(string? name) => DeviceSource.From(name).IsVirtualEngine;
+        public static bool IsVirtual(string? name) => From(name).IsVirtualEngine;
 
-        public DeviceSource(string rawName, string displayName, DeviceType type)
+        public DeviceSource(string rawName, string displayName, DeviceType type, int sortPriority = 10, bool isWearable = false)
         {
             RawName = rawName;
             DisplayName = displayName;
             Type = type;
+            SortPriority = sortPriority;
+            IsWearable = isWearable;
         }
 
         public static DeviceSource From(string? name)
@@ -64,88 +81,101 @@ namespace Daily.Models.Health
             var clean = name?.Trim();
             if (string.IsNullOrEmpty(clean))
             {
-                return new DeviceSource("Unknown", "Unknown", DeviceType.Sensor);
+                return new DeviceSource("Unknown", "Unknown", DeviceType.Sensor, 0, false);
             }
 
-            // Normalize compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - com.fitbit.FitbitMobile")
+            // Unwrap legacy "Host - Sensor" compound strings into bare canonical hardware names
             if (clean.Contains(" - "))
             {
                 var parts = clean.Split(new[] { " - " }, 2, StringSplitOptions.None);
-                if (parts.Length == 2)
-                {
-                    var host = parts[0].Trim();
-                    var sensor = parts[1].Trim();
-                    var resolvedSensor = From(sensor);
-                    return new DeviceSource(clean, $"{host} - {resolvedSensor.DisplayName}", resolvedSensor.Type);
-                }
+                var host = parts[0].Trim();
+                var sensor = parts.Length > 1 ? parts[1].Trim() : "";
+                var sLower = sensor.ToLowerInvariant();
+
+                if (sLower.Contains("oura"))
+                    return new DeviceSource(clean, "Oura Ring", DeviceType.SmartRing, 100, true);
+                if (sLower.Contains("pixel watch") || sLower.Contains("fitbit") || sLower.Contains("wear.companion") || sLower.Contains("google.android.wearable"))
+                    return new DeviceSource(clean, "Pixel Watch 5", DeviceType.Smartwatch, 90, true);
+                if (sLower.Contains("apple watch") || sLower.Contains("watchos") || sLower.Contains("ultra"))
+                    return new DeviceSource(clean, "Apple Watch Ultra 2", DeviceType.Smartwatch, 90, true);
+                if (sLower.Contains("oneplus") || sLower.Contains("heytap") || sLower.Contains("oppo") || sLower.Contains("wearos"))
+                    return new DeviceSource(clean, "OnePlus Watch 3", DeviceType.Smartwatch, 85, true);
+
+                // Otherwise it's a host phone sensor or obfuscated pedometer package on the host phone
+                return ResolveHostPhone(host, clean);
             }
 
             var lower = clean.ToLowerInvariant();
-            if (lower.Contains("fitbit")) return new DeviceSource(clean, "Fitbit", DeviceType.Smartwatch);
-            if (lower.Contains("shealth") || lower.Contains("samsung") || lower.Contains("galaxy watch")) return new DeviceSource(clean, "Samsung Health", DeviceType.Smartwatch);
-            if (lower.Contains("pixel watch") || lower.Contains("wear.companion") || lower.Contains("google.android.wearable")) return new DeviceSource(clean, "Pixel Watch", DeviceType.Smartwatch);
-            if (lower.Contains("google fit") || lower.Contains("google.android.apps.fitness")) return new DeviceSource(clean, "Health Connect", DeviceType.HealthPlatform);
-            if (lower.Contains("garmin")) return new DeviceSource(clean, "Garmin", DeviceType.Smartwatch);
-            if (lower.Contains("whoop")) return new DeviceSource(clean, "WHOOP", DeviceType.Smartwatch);
-            if (lower.Contains("withings")) return new DeviceSource(clean, "Withings", DeviceType.Smartwatch);
-            if (lower.Contains("polar")) return new DeviceSource(clean, "Polar", DeviceType.Smartwatch);
-            if (lower.Contains("oura")) return new DeviceSource(clean, "Oura Ring", DeviceType.SmartRing);
-            if (lower.Contains("healthkit") || lower.Contains("apple health") || lower == "ios") return new DeviceSource(clean, "Apple Health", DeviceType.HealthPlatform);
-            if (lower.Contains("apple") || lower.Contains("watchos")) return new DeviceSource(clean, "Apple Watch", DeviceType.Smartwatch);
-            if (lower.Contains("zepp") || lower.Contains("amazfit") || lower.Contains("balance")) return new DeviceSource(clean, "Amazfit Balance", DeviceType.Smartwatch);
-            if (lower.Contains("oneplus") || lower.Contains("wearos") || lower.Contains("heytap") || lower.Contains("oppo")) return new DeviceSource(clean, "OnePlus Watch", DeviceType.Smartwatch);
-            if (lower.Contains("huawei") || lower.Contains("harmony") || lower.Contains("gt5")) return new DeviceSource(clean, "Huawei Watch", DeviceType.Smartwatch);
-            if (lower.Contains("health connect") || lower.Contains("healthconnect") || lower == "android") return new DeviceSource(clean, "Health Connect", DeviceType.HealthPlatform);
-            if (lower.Contains("manual")) return new DeviceSource(clean, "Manual Entry", DeviceType.Manual);
 
-            if (clean.StartsWith("com.") || clean.StartsWith("org."))
+            if (lower == "canonical" || lower == "mac" || lower == "macos" || lower == "windows" || lower == "winui" ||
+                lower.Contains("stresswatch") || lower.Contains("stress-engine") || lower.Contains("biometric engine") ||
+                lower.Contains("daily biometric") || lower.Contains("computed") || lower.Contains("bubbles"))
             {
-                var lastSegment = clean.Split('.').Last();
-                if (!string.IsNullOrEmpty(lastSegment))
-                {
-                    var capitalized = char.ToUpperInvariant(lastSegment[0]) + (lastSegment.Length > 1 ? lastSegment.Substring(1) : "");
-                    return new DeviceSource(clean, capitalized, DeviceType.Sensor);
-                }
+                return new DeviceSource(clean, "Unknown", DeviceType.Sensor, 0, false);
             }
 
-            // Infer device type from string
-            var inferredType = DeviceType.Sensor;
-            if (lower.Contains("watch") || lower.Contains("band")) inferredType = DeviceType.Smartwatch;
-            else if (lower.Contains("ring")) inferredType = DeviceType.SmartRing;
-            else if (lower.Contains("phone") || lower.Contains("iphone") || lower.Contains("pixel") || lower.Contains("samsung")) inferredType = DeviceType.Smartphone;
-            else if (lower.Contains("health")) inferredType = DeviceType.HealthPlatform;
+            if (lower.Contains("oura"))
+                return new DeviceSource(clean, "Oura Ring", DeviceType.SmartRing, 100, true);
 
-            return new DeviceSource(clean, clean, inferredType);
+            if (lower.Contains("pixel watch") || lower.Contains("fitbit") || lower.Contains("wear.companion") || lower.Contains("google.android.wearable"))
+                return new DeviceSource(clean, "Pixel Watch 5", DeviceType.Smartwatch, 90, true);
+
+            if (lower.Contains("apple watch") || lower.Contains("watchos") || lower.Contains("watch ultra"))
+                return new DeviceSource(clean, "Apple Watch Ultra 2", DeviceType.Smartwatch, 90, true);
+
+            if (lower.Contains("oneplus") || lower.Contains("heytap") || lower.Contains("oppo") || lower.Contains("wearos"))
+                return new DeviceSource(clean, "OnePlus Watch 3", DeviceType.Smartwatch, 85, true);
+
+            if (lower.Contains("zepp") || lower.Contains("amazfit") || lower.Contains("balance"))
+                return new DeviceSource(clean, "Amazfit Balance", DeviceType.Smartwatch, 75, true);
+
+            if (lower.Contains("huawei") || lower.Contains("harmony") || lower.Contains("gt5"))
+                return new DeviceSource(clean, "Huawei Watch", DeviceType.Smartwatch, 75, true);
+
+            if (lower.Contains("schmitz") || lower.Contains("iphone"))
+                return new DeviceSource(clean, "Schmitz (iPhone)", DeviceType.Smartphone, 40, false);
+
+            if (lower.Contains("trapper") || lower.Contains("pixel 9"))
+                return new DeviceSource(clean, "Trapper (Pixel 9 Pro)", DeviceType.Smartphone, 40, false);
+
+            if (lower.Contains("radar") || lower.Contains("fold") || lower.Contains("shealth") || lower.Contains("samsung") || lower.Contains("galaxy"))
+                return new DeviceSource(clean, "Radar (Galaxy Z Fold 8)", DeviceType.Smartphone, 40, false);
+
+            if (lower.Contains("healthkit") || lower.Contains("apple health") || lower == "ios")
+                return new DeviceSource(clean, "Apple Health", DeviceType.HealthPlatform, 0, false);
+
+            if (lower.Contains("health connect") || lower.Contains("healthconnect") || lower.Contains("google fit") || lower == "android")
+                return new DeviceSource(clean, "Health Connect", DeviceType.HealthPlatform, 0, false);
+
+            if (lower.Contains("manual"))
+                return new DeviceSource(clean, "Manual Entry", DeviceType.Manual, 10, false);
+
+            return new DeviceSource(clean, "Unknown", DeviceType.Sensor, 0, false);
         }
 
-        /// <summary>
-        /// Suppresses bare un-prefixed duplicates when a compound source is present
-        /// (e.g. if 'Schmitz - Apple Health' exists, suppress bare 'Apple Health').
-        /// </summary>
+        private static DeviceSource ResolveHostPhone(string host, string raw)
+        {
+            var hLower = host.ToLowerInvariant();
+            if (hLower.Contains("schmitz") || hLower.Contains("iphone"))
+                return new DeviceSource(raw, "Schmitz (iPhone)", DeviceType.Smartphone, 40, false);
+            if (hLower.Contains("radar") || hLower.Contains("fold") || hLower.Contains("samsung") || hLower.Contains("galaxy"))
+                return new DeviceSource(raw, "Radar (Galaxy Z Fold 8)", DeviceType.Smartphone, 40, false);
+            if (hLower.Contains("trapper") || hLower.Contains("pixel"))
+                return new DeviceSource(raw, "Trapper (Pixel 9 Pro)", DeviceType.Smartphone, 40, false);
+            return new DeviceSource(raw, "Unknown", DeviceType.Sensor, 0, false);
+        }
+
         public static List<DeviceSource> FilterBareDuplicates(IEnumerable<string> rawNames)
         {
-            var sources = rawNames
+            return rawNames
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .Select(From)
                 .Where(s => !s.IsVirtualEngine)
-                .GroupBy(s => s.DisplayName)
+                .GroupBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
+                .OrderByDescending(s => s.SortPriority)
+                .ThenBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-
-            var compoundSources = sources.Where(s => s.DisplayName.Contains(" - ")).ToList();
-            if (!compoundSources.Any()) return sources;
-
-            var sensorNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var cs in compoundSources)
-            {
-                var parts = cs.DisplayName.Split(new[] { " - " }, 2, StringSplitOptions.None);
-                if (parts.Length == 2)
-                {
-                    sensorNames.Add(parts[1].Trim());
-                }
-            }
-
-            return sources.Where(s => !sensorNames.Contains(s.DisplayName)).ToList();
         }
 
         public bool Equals(DeviceSource? other) => other != null && string.Equals(DisplayName, other.DisplayName, StringComparison.OrdinalIgnoreCase);

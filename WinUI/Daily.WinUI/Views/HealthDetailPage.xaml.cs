@@ -27,6 +27,9 @@ namespace Daily_WinUI.Views
 
         private DateTime _selectedDate = DateTime.Today;
         private HealthDailySummaryRecord? _currentSummary;
+        private List<HealthSleepSessionRecord> _leanSleepSessions = new();
+        private List<HealthDailyVitalsRecord> _leanDailyVitals = new();
+        private List<HealthIntradayHeartRateRecord> _leanIntradayHr = new();
         private List<VitalMetric> _metrics = new();
         private List<VitalMetric> _rawMetrics = new();
         private List<HealthTelemetry> _telemetryData = new();
@@ -34,6 +37,17 @@ namespace Daily_WinUI.Views
         private SleepSession? _rawPrimarySleepSession;
         private List<SleepSession> _allSleepSessions = new();
         private List<SleepSession> _rawSleepSessions = new();
+
+        // Per-device derived biometric cache when _selectedDeviceFilter != null
+        private int? _filteredStressScore = null;
+        private double? _filteredHrvMs = null;
+        private double? _filteredRhrBpm = null;
+        private int? _filteredSteps = null;
+        private double? _filteredActiveKcal = null;
+        private double? _filteredSpo2 = null;
+        private double? _filteredRespRate = null;
+        private double? _filteredWeightKg = null;
+        private double? _filteredSleepEfficiency = null;
 
         // Multi-Device Filter State
         private string? _selectedDeviceFilter = null; // null = All Devices
@@ -161,8 +175,12 @@ namespace Daily_WinUI.Views
         {
             DispatcherQueue.TryEnqueue(async () =>
             {
-                _currentSummary = record;
-                await RefreshDerivedDataAsync();
+                var targetDateStr = _selectedDate.ToString("yyyy-MM-dd");
+                if (record != null && !string.IsNullOrEmpty(record.LocalDate) && record.LocalDate != targetDateStr)
+                {
+                    return;
+                }
+                await LoadDataAsync();
             });
         }
 
@@ -197,14 +215,37 @@ namespace Daily_WinUI.Views
         // DATA LOADING & DERIVATIONS
         // ==========================================
 
+        private bool MatchesSelectedDevice(string? sourceName)
+        {
+            if (string.IsNullOrEmpty(_selectedDeviceFilter) || string.IsNullOrEmpty(sourceName)) return false;
+            var targetCanon = DeviceSource.From(_selectedDeviceFilter).DisplayName;
+            var candidateCanon = DeviceSource.From(sourceName).DisplayName;
+            return string.Equals(candidateCanon, targetCanon, StringComparison.OrdinalIgnoreCase);
+        }
+
         public async Task LoadDataAsync()
         {
             try
             {
-                // 1. Load canonical daily summary record from HealthHubService
+                // 1. Load canonical daily summary + lean per-device tables from HealthHubService
                 if (_healthHubService != null)
                 {
-                    _currentSummary = await _healthHubService.GetDailySummaryAsync(_selectedDate);
+                    var summaryTask = _healthHubService.GetDailySummaryAsync(_selectedDate);
+                    var sleepTask = _healthHubService.GetLeanSleepSessionsAsync(_selectedDate);
+                    var vitalsTask = _healthHubService.GetLeanDailyVitalsAsync(_selectedDate);
+                    var hrTask = _healthHubService.GetLeanIntradayHeartRateAsync(_selectedDate);
+                    await Task.WhenAll(summaryTask, sleepTask, vitalsTask, hrTask);
+
+                    _currentSummary = summaryTask.Result;
+                    _leanSleepSessions = sleepTask.Result ?? new();
+                    _leanDailyVitals = vitalsTask.Result ?? new();
+                    _leanIntradayHr = hrTask.Result ?? new();
+                }
+                else
+                {
+                    _leanSleepSessions = new();
+                    _leanDailyVitals = new();
+                    _leanIntradayHr = new();
                 }
 
                 // 2. Load metrics list
@@ -233,8 +274,9 @@ namespace Daily_WinUI.Views
                 _rawSleepSessions = _allSleepSessions;
                 _rawPrimarySleepSession = _primarySleepSession;
 
-                ApplyDeviceFilter();
+                // PopulateAvailableDevices FIRST so stale device filter auto-resets to All Devices when switching dates
                 PopulateAvailableDevices();
+                ApplyDeviceFilter();
                 await LoadTrendsHistoryAsync();
 
                 await RefreshDerivedDataAsync();
@@ -247,17 +289,70 @@ namespace Daily_WinUI.Views
 
         private void ApplyDeviceFilter()
         {
+            _selectedStage = null;
+            _filteredStressScore = null;
+            _filteredHrvMs = null;
+            _filteredRhrBpm = null;
+            _filteredSteps = null;
+            _filteredActiveKcal = null;
+            _filteredSpo2 = null;
+            _filteredRespRate = null;
+            _filteredWeightKg = null;
+            _filteredSleepEfficiency = null;
+
             if (!string.IsNullOrEmpty(_selectedDeviceFilter))
             {
-                var matchedSleep = _rawSleepSessions
-                    .Where(s => !string.IsNullOrEmpty(s.SourceDevice) && s.SourceDevice.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase))
+                var matchedLeanSleep = _leanSleepSessions
+                    .Where(s => MatchesSelectedDevice(s.SourceDeviceKey) && s.DurationSeconds > 0)
                     .ToList();
+
+                List<SleepSession> matchedSleep;
+                if (matchedLeanSleep.Any())
+                {
+                    matchedSleep = matchedLeanSleep
+                        .Select(s => s.ToDomainSleepSession(_selectedDate))
+                        .ToList();
+
+                    var primaryLean = matchedLeanSleep
+                        .OrderByDescending(s => !string.Equals(s.SessionType, "nap", StringComparison.OrdinalIgnoreCase))
+                        .ThenByDescending(s => s.DurationSeconds)
+                        .FirstOrDefault();
+                    _filteredSleepEfficiency = primaryLean?.EfficiencyPercent;
+                }
+                else
+                {
+                    matchedSleep = _rawSleepSessions
+                        .Where(s => MatchesSelectedDevice(s.SourceDevice))
+                        .ToList();
+                }
+
                 _allSleepSessions = matchedSleep;
-                _primarySleepSession = matchedSleep.FirstOrDefault(s => !s.IsNap) ?? matchedSleep.FirstOrDefault();
+                _primarySleepSession = matchedSleep
+                    .OrderByDescending(s => !s.IsNap)
+                    .ThenByDescending(s => s.AsleepSeconds > 0 ? s.AsleepSeconds : s.DurationSeconds)
+                    .FirstOrDefault();
 
                 _metrics = _rawMetrics
-                    .Where(m => !string.IsNullOrEmpty(m.SourceDevice) && m.SourceDevice.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase))
+                    .Where(m => MatchesSelectedDevice(m.SourceDevice))
                     .ToList();
+
+                var matchedVitals = _leanDailyVitals
+                    .Where(v => MatchesSelectedDevice(v.SourceDeviceKey))
+                    .ToList();
+
+                if (matchedVitals.Any())
+                {
+                    _filteredSteps = matchedVitals.Max(v => v.Steps);
+                    _filteredActiveKcal = matchedVitals.Max(v => v.ActiveKcal);
+                    _filteredRhrBpm = matchedVitals.Where(v => (v.RestingHeartRate ?? 0) > 0).Select(v => (double?)v.RestingHeartRate).FirstOrDefault();
+                    _filteredHrvMs = matchedVitals.Where(v => (v.HrvSdnnNightly ?? 0) > 0).Select(v => v.HrvSdnnNightly).FirstOrDefault()
+                                  ?? matchedVitals.Where(v => (v.HrvRmssdNightly ?? 0) > 0).Select(v => v.HrvRmssdNightly).FirstOrDefault();
+                    _filteredSpo2 = matchedVitals.Where(v => (v.Spo2 ?? 0) > 0).Select(v => v.Spo2).FirstOrDefault();
+                    _filteredRespRate = matchedVitals.Where(v => (v.RespiratoryRate ?? 0) > 0).Select(v => v.RespiratoryRate).FirstOrDefault();
+                    _filteredWeightKg = matchedVitals.Where(v => (v.WeightKg ?? 0) > 0).Select(v => v.WeightKg).FirstOrDefault();
+                }
+
+                ComputeFilteredDeviceStress();
             }
             else
             {
@@ -269,6 +364,64 @@ namespace Daily_WinUI.Views
             PopulateHourlySteps();
             PopulateHeartRate();
             PopulateDaytimeNaps();
+        }
+
+        private void ComputeFilteredDeviceStress()
+        {
+            double? hrv = _filteredHrvMs
+                       ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value
+                       ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value;
+            double? rhr = _filteredRhrBpm
+                       ?? GetMetric(VitalType.RestingHeartRate)?.Value;
+
+            var matchedHr = _leanIntradayHr
+                .Where(h => MatchesSelectedDevice(h.SourceDeviceKey) && h.BpmAvg > 0)
+                .ToList();
+
+            double? meanHr = matchedHr.Any() ? matchedHr.Average(h => (double)h.BpmAvg) : null;
+            if (!meanHr.HasValue)
+            {
+                var fallbackHr = _telemetryData
+                    .Where(x => x.IsHeartRate && x.LocalStartTime.Date == _selectedDate.Date && x.Value > 0 && MatchesSelectedDevice(x.SourceDevice))
+                    .ToList();
+                if (fallbackHr.Any())
+                {
+                    meanHr = fallbackHr.Average(x => x.Value!.Value);
+                }
+            }
+
+            // If a device recorded neither HRV, RHR, nor continuous HR (e.g. phone pedometer only), stress is No Data
+            if ((hrv ?? 0) <= 0 && (rhr ?? 0) <= 0 && (meanHr ?? 0) <= 0)
+            {
+                _filteredStressScore = null;
+                return;
+            }
+
+            double baselineHrv = _currentSummary?.Summary?.Stress?.BiometricDrivers?.BaselineHrvMs ?? 45.0;
+            if (baselineHrv <= 0) baselineHrv = 45.0;
+
+            double score = 32.0;
+            if (hrv.HasValue && hrv.Value > 0)
+            {
+                double hrvDelta = (baselineHrv - hrv.Value) / baselineHrv;
+                score += hrvDelta * 35.0;
+            }
+
+            double effectiveHr = rhr.HasValue && rhr.Value > 0 ? rhr.Value : (meanHr ?? 62.0);
+            score += (effectiveHr - 58.0) * 0.85;
+
+            if (meanHr.HasValue && rhr.HasValue && meanHr.Value > rhr.Value)
+            {
+                score += Math.Min(18.0, (meanHr.Value - rhr.Value) * 0.55);
+            }
+
+            int sleepScore = _primarySleepSession?.SleepScore ?? 0;
+            if (sleepScore > 0)
+            {
+                score += (80.0 - sleepScore) * 0.25;
+            }
+
+            _filteredStressScore = (int)Math.Round(Math.Clamp(score, 5.0, 95.0));
         }
 
         public async Task RefreshFromTitleBarAsync()
@@ -303,10 +456,39 @@ namespace Daily_WinUI.Views
 
             if (!string.IsNullOrEmpty(_selectedDeviceFilter))
             {
+                var matchedVitalsWithHourly = _leanDailyVitals
+                    .Where(v => MatchesSelectedDevice(v.SourceDeviceKey) && v.HourlySteps != null && v.HourlySteps.Any())
+                    .ToList();
+
+                if (matchedVitalsWithHourly.Any())
+                {
+                    var byHour = new Dictionary<int, double>();
+                    foreach (var v in matchedVitalsWithHourly)
+                    {
+                        foreach (var b in v.HourlySteps!)
+                        {
+                            if (b.Hour >= 0 && b.Hour < 24)
+                            {
+                                byHour[b.Hour] = byHour.TryGetValue(b.Hour, out var prev) ? Math.Max(prev, b.Steps) : b.Steps;
+                            }
+                        }
+                    }
+
+                    for (int h = 0; h < 24; h++)
+                    {
+                        double steps = byHour.TryGetValue(h, out var s) ? s : 0;
+                        HourlyStepsCollection.Add(new HealthChartData
+                        {
+                            Label = $"{h:D2}",
+                            Value = steps,
+                            FormattedValue = steps > 0 ? steps.ToString("N0") : ""
+                        });
+                    }
+                    return;
+                }
+
                 var stepsTelemetry = _telemetryData
-                    .Where(x => x.IsSteps && x.LocalStartTime.Date == _selectedDate.Date &&
-                                !string.IsNullOrEmpty(x.SourceDevice) &&
-                                x.SourceDevice.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase))
+                    .Where(x => x.IsSteps && x.LocalStartTime.Date == _selectedDate.Date && MatchesSelectedDevice(x.SourceDevice))
                     .GroupBy(x => x.LocalStartTime.Hour)
                     .ToDictionary(g => g.Key, g => g.Sum(x => x.Value ?? 0));
 
@@ -330,6 +512,25 @@ namespace Daily_WinUI.Views
                 {
                     var bucket = hourlyBuckets.FirstOrDefault(b => b.Hour == h);
                     double steps = bucket?.Steps ?? 0;
+                    HourlyStepsCollection.Add(new HealthChartData
+                    {
+                        Label = $"{h:D2}",
+                        Value = steps,
+                        FormattedValue = steps > 0 ? steps.ToString("N0") : ""
+                    });
+                }
+            }
+            else if (_leanDailyVitals.Any(v => v.HourlySteps != null && v.HourlySteps.Any()))
+            {
+                var bestVital = _leanDailyVitals
+                    .Where(v => v.HourlySteps != null && v.HourlySteps.Any())
+                    .OrderByDescending(v => DeviceSource.From(v.SourceDeviceKey).SortPriority)
+                    .ThenByDescending(v => v.Steps)
+                    .First();
+
+                for (int h = 0; h < 24; h++)
+                {
+                    double steps = bestVital.HourlySteps!.FirstOrDefault(b => b.Hour == h)?.Steps ?? 0;
                     HourlyStepsCollection.Add(new HealthChartData
                     {
                         Label = $"{h:D2}",
@@ -364,10 +565,33 @@ namespace Daily_WinUI.Views
 
             if (!string.IsNullOrEmpty(_selectedDeviceFilter))
             {
+                var matchedLeanHr = _leanIntradayHr
+                    .Where(h => MatchesSelectedDevice(h.SourceDeviceKey) && h.BpmAvg > 0)
+                    .OrderBy(h => h.BucketMinute)
+                    .ToList();
+
+                if (matchedLeanHr.Any())
+                {
+                    var canonDev = DeviceSource.From(_selectedDeviceFilter).DisplayName;
+                    foreach (var pt in matchedLeanHr)
+                    {
+                        var ts = _selectedDate.Date.AddMinutes(Math.Clamp(pt.BucketMinute, 0, 1439));
+                        HeartRateCollection.Add(new HealthTelemetry
+                        {
+                            TypeString = "heart_rate",
+                            Value = pt.BpmAvg,
+                            Unit = "bpm",
+                            StartTime = ts,
+                            EndTime = ts,
+                            SourceDevice = canonDev
+                        });
+                    }
+                    return;
+                }
+
                 var hrPoints = _telemetryData
                     .Where(x => x.IsHeartRate && x.LocalStartTime.Date == _selectedDate.Date && x.Value.HasValue && x.Value > 0 &&
-                                !string.IsNullOrEmpty(x.SourceDevice) &&
-                                x.SourceDevice.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase))
+                                MatchesSelectedDevice(x.SourceDevice))
                     .OrderBy(x => x.LocalStartTime)
                     .ToList();
 
@@ -385,6 +609,10 @@ namespace Daily_WinUI.Views
                 {
                     if (DateTime.TryParse(pt.Timestamp, out var ts) && pt.Bpm > 0)
                     {
+                        var srcName = !string.IsNullOrEmpty(pt.SourceDevice) && !DeviceSource.IsVirtual(pt.SourceDevice)
+                            ? DeviceSource.From(pt.SourceDevice).DisplayName
+                            : DominantDeviceName;
+
                         HeartRateCollection.Add(new HealthTelemetry
                         {
                             TypeString = "heart_rate",
@@ -392,9 +620,31 @@ namespace Daily_WinUI.Views
                             Unit = "bpm",
                             StartTime = ts,
                             EndTime = ts,
-                            SourceDevice = "Canonical"
+                            SourceDevice = srcName
                         });
                     }
+                }
+            }
+            else if (_leanIntradayHr.Any(h => h.BpmAvg > 0))
+            {
+                var groupedByMinute = _leanIntradayHr
+                    .Where(h => h.BpmAvg > 0)
+                    .GroupBy(h => h.BucketMinute)
+                    .OrderBy(g => g.Key);
+
+                foreach (var grp in groupedByMinute)
+                {
+                    var best = grp.OrderByDescending(x => DeviceSource.From(x.SourceDeviceKey).SortPriority).First();
+                    var ts = _selectedDate.Date.AddMinutes(Math.Clamp(best.BucketMinute, 0, 1439));
+                    HeartRateCollection.Add(new HealthTelemetry
+                    {
+                        TypeString = "heart_rate",
+                        Value = best.BpmAvg,
+                        Unit = "bpm",
+                        StartTime = ts,
+                        EndTime = ts,
+                        SourceDevice = DeviceSource.From(best.SourceDeviceKey).DisplayName
+                    });
                 }
             }
             else
@@ -430,7 +680,7 @@ namespace Daily_WinUI.Views
                         TimeRange = timeRange,
                         DurationText = $"{mins} minutes restorative nap",
                         NapMinutesText = $"{mins} min",
-                        DeviceName = nap.SourceDevice ?? _selectedDeviceFilter
+                        DeviceName = DeviceSource.From(nap.SourceDevice ?? _selectedDeviceFilter).DisplayName
                     });
                 }
                 return;
@@ -447,13 +697,17 @@ namespace Daily_WinUI.Views
                     string timeRange = sDto != default && eDto != default
                         ? $"{sDto.LocalDateTime:HH:mm} - {eDto.LocalDateTime:HH:mm}"
                         : "--:--";
+                    var rawDev = nap.SourceDevice ?? nap.Tracker;
+                    var cleanDev = !string.IsNullOrEmpty(rawDev) && !DeviceSource.IsVirtual(rawDev)
+                        ? DeviceSource.From(rawDev).DisplayName
+                        : "Wearable";
 
                     DaytimeNapsList.Add(new NapDisplayItem
                     {
                         TimeRange = timeRange,
                         DurationText = $"{mins} minutes restorative nap",
                         NapMinutesText = $"{mins} min",
-                        DeviceName = nap.SourceDevice ?? nap.Tracker ?? "Device"
+                        DeviceName = cleanDev
                     });
                 }
             }
@@ -462,6 +716,97 @@ namespace Daily_WinUI.Views
         private void PopulateAvailableDevices()
         {
             AvailableDevices.Clear();
+
+            var discoveredCanon = new Dictionary<string, DeviceSource>(StringComparer.OrdinalIgnoreCase);
+
+            void AddCandidate(string? rawName)
+            {
+                if (string.IsNullOrWhiteSpace(rawName)) return;
+                var src = DeviceSource.From(rawName);
+                if (src.IsVirtualEngine) return;
+                if (!discoveredCanon.ContainsKey(src.DisplayName))
+                {
+                    discoveredCanon[src.DisplayName] = src;
+                }
+            }
+
+            bool hasAnyLeanSignal = false;
+
+            foreach (var s in _leanSleepSessions)
+            {
+                if (s.DurationSeconds > 0)
+                {
+                    AddCandidate(s.SourceDeviceKey);
+                    hasAnyLeanSignal = true;
+                }
+            }
+
+            foreach (var v in _leanDailyVitals)
+            {
+                if (v.HasSignal)
+                {
+                    AddCandidate(v.SourceDeviceKey);
+                    hasAnyLeanSignal = true;
+                }
+            }
+
+            foreach (var h in _leanIntradayHr)
+            {
+                if (h.BpmAvg > 0)
+                {
+                    AddCandidate(h.SourceDeviceKey);
+                    hasAnyLeanSignal = true;
+                }
+            }
+
+            // Fallback to summary / domain records ONLY if lean tables returned nothing (e.g. offline cache)
+            if (!hasAnyLeanSignal)
+            {
+                if (!string.IsNullOrEmpty(_rawPrimarySleepSession?.SourceDevice))
+                {
+                    AddCandidate(_rawPrimarySleepSession.SourceDevice);
+                }
+
+                foreach (var s in _rawSleepSessions)
+                {
+                    if (s.DurationSeconds > 0) AddCandidate(s.SourceDevice);
+                }
+
+                if (_currentSummary?.Summary?.Vitals != null)
+                {
+                    foreach (var v in _currentSummary.Summary.Vitals.Values)
+                    {
+                        if (v.Value > 0) AddCandidate(v.SourceDevice);
+                    }
+                }
+
+                if (_currentSummary?.Summary?.Sources != null)
+                {
+                    foreach (var srcName in _currentSummary.Summary.Sources)
+                    {
+                        AddCandidate(srcName);
+                    }
+                }
+
+                foreach (var m in _rawMetrics)
+                {
+                    if (m.Value > 0) AddCandidate(m.SourceDevice);
+                }
+            }
+
+            // Auto-reset device filter to All Devices if previously selected device has no data on _selectedDate
+            if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+            {
+                var selectedCanon = DeviceSource.From(_selectedDeviceFilter).DisplayName;
+                if (!discoveredCanon.ContainsKey(selectedCanon))
+                {
+                    _selectedDeviceFilter = null;
+                }
+                else
+                {
+                    _selectedDeviceFilter = selectedCanon;
+                }
+            }
 
             // First entry: All Devices (Consolidated)
             AvailableDevices.Add(new DeviceFilterItem
@@ -473,58 +818,27 @@ namespace Daily_WinUI.Views
                 IsSelected = string.IsNullOrEmpty(_selectedDeviceFilter)
             });
 
-            var discovered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sortedDevices = discoveredCanon.Values
+                .OrderByDescending(d => d.SortPriority)
+                .ThenBy(d => d.DisplayName)
+                .ToList();
 
-            // From sleep session
-            if (!string.IsNullOrEmpty(_rawPrimarySleepSession?.SourceDevice) && !DeviceSource.IsVirtual(_rawPrimarySleepSession.SourceDevice))
+            foreach (var src in sortedDevices)
             {
-                discovered.Add(_rawPrimarySleepSession.SourceDevice);
-            }
-
-            // From all sleep sessions
-            foreach (var s in _rawSleepSessions)
-            {
-                if (!string.IsNullOrEmpty(s.SourceDevice) && !DeviceSource.IsVirtual(s.SourceDevice))
-                {
-                    discovered.Add(s.SourceDevice);
-                }
-            }
-
-            // From vitals
-            if (_currentSummary?.Summary?.Vitals != null)
-            {
-                foreach (var v in _currentSummary.Summary.Vitals.Values)
-                {
-                    if (!string.IsNullOrEmpty(v.SourceDevice) && !DeviceSource.IsVirtual(v.SourceDevice))
-                    {
-                        discovered.Add(v.SourceDevice);
-                    }
-                }
-            }
-
-            // From metrics
-            foreach (var m in _rawMetrics)
-            {
-                if (!string.IsNullOrEmpty(m.SourceDevice) && !DeviceSource.IsVirtual(m.SourceDevice))
-                {
-                    discovered.Add(m.SourceDevice);
-                }
-            }
-
-            foreach (var dev in discovered)
-            {
-                var src = DeviceSource.From(dev);
                 AvailableDevices.Add(new DeviceFilterItem
                 {
-                    DeviceName = dev,
+                    DeviceName = src.DisplayName,
                     DisplayName = src.DisplayName,
                     SegoeGlyph = src.SegoeGlyph,
-                    ColorBrush = GetDeviceColorBrush(dev),
-                    IsSelected = string.Equals(_selectedDeviceFilter, dev, StringComparison.OrdinalIgnoreCase)
+                    ColorBrush = GetDeviceColorBrush(src.DisplayName),
+                    IsSelected = string.Equals(_selectedDeviceFilter, src.DisplayName, StringComparison.OrdinalIgnoreCase)
                 });
             }
 
             RebuildDeviceMenuFlyout();
+            OnPropertyChanged(nameof(SelectedDeviceLabel));
+            OnPropertyChanged(nameof(SelectedDeviceDotBrush));
+            OnPropertyChanged(nameof(SelectedDeviceGlyph));
         }
 
         private void RebuildDeviceMenuFlyout()
@@ -548,9 +862,6 @@ namespace Daily_WinUI.Views
                         string? target = mi.Tag as string;
                         _selectedDeviceFilter = string.IsNullOrEmpty(target) ? null : target;
                         PopulateAvailableDevices();
-                        OnPropertyChanged(nameof(SelectedDeviceLabel));
-                        OnPropertyChanged(nameof(SelectedDeviceDotBrush));
-                        OnPropertyChanged(nameof(SelectedDeviceGlyph));
 
                         ApplyDeviceFilter();
                         await LoadTrendsHistoryAsync();
@@ -575,9 +886,25 @@ namespace Daily_WinUI.Views
             var startDate = endDate.AddDays(-6);
 
             List<HealthDailySummaryRecord> rangeSummaries = new();
+            List<HealthDailyVitalsRecord> rangeVitals = new();
+            List<HealthSleepSessionRecord> rangeSleeps = new();
+
             if (_healthHubService != null)
             {
-                rangeSummaries = await _healthHubService.GetDailySummariesRangeAsync(startDate, endDate);
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    var sTask = _healthHubService.GetDailySummariesRangeAsync(startDate, endDate);
+                    var vTask = _healthHubService.GetLeanDailyVitalsRangeAsync(startDate, endDate);
+                    var slTask = _healthHubService.GetLeanSleepSessionsRangeAsync(startDate, endDate);
+                    await Task.WhenAll(sTask, vTask, slTask);
+                    rangeSummaries = sTask.Result ?? new();
+                    rangeVitals = vTask.Result ?? new();
+                    rangeSleeps = slTask.Result ?? new();
+                }
+                else
+                {
+                    rangeSummaries = await _healthHubService.GetDailySummariesRangeAsync(startDate, endDate);
+                }
             }
 
             for (int i = 6; i >= 0; i--)
@@ -597,20 +924,53 @@ namespace Daily_WinUI.Views
 
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    var vitals = summary?.Summary?.Vitals;
-                    if (vitals != null)
+                    var dayVitals = rangeVitals
+                        .Where(v => v.LocalDate == dayStr && MatchesSelectedDevice(v.SourceDeviceKey))
+                        .ToList();
+
+                    if (dayVitals.Any())
                     {
-                        if (vitals.TryGetValue("steps", out var st) && st.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) steps = st.Value;
-                        if (vitals.TryGetValue("resting_heart_rate", out var rh) && rh.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) rhr = rh.Value;
-                        if (vitals.TryGetValue("active_energy", out var ae) && ae.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) cal = ae.Value;
-                        if (vitals.TryGetValue("weight", out var we) && we.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) wt = we.Value;
-                        if (vitals.TryGetValue("hrv_sdnn", out var hs) && hs.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) hrv = hs.Value;
-                        else if (vitals.TryGetValue("hrv_rmssd", out var hr) && hr.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) hrv = hr.Value;
+                        steps = dayVitals.Max(v => v.Steps);
+                        cal = dayVitals.Max(v => v.ActiveKcal);
+                        rhr = dayVitals.Where(v => (v.RestingHeartRate ?? 0) > 0).Select(v => (double)v.RestingHeartRate!.Value).FirstOrDefault();
+                        wt = dayVitals.Where(v => (v.WeightKg ?? 0) > 0).Select(v => v.WeightKg!.Value).FirstOrDefault();
+                        hrv = dayVitals.Where(v => (v.HrvSdnnNightly ?? 0) > 0).Select(v => v.HrvSdnnNightly!.Value).FirstOrDefault();
+                        if (hrv <= 0)
+                        {
+                            hrv = dayVitals.Where(v => (v.HrvRmssdNightly ?? 0) > 0).Select(v => v.HrvRmssdNightly!.Value).FirstOrDefault();
+                        }
                     }
-                    var matchedSleep = summary?.Summary?.Sleep?.AllSessions?.FirstOrDefault(ss => ss.EffectiveSourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true);
-                    if (matchedSleep != null)
+                    else
                     {
-                        sleepHours = matchedSleep.AsleepSeconds > 0 ? Math.Round(matchedSleep.AsleepSeconds / 3600.0, 1) : Math.Round(matchedSleep.DurationSeconds / 3600.0, 1);
+                        var vitals = summary?.Summary?.Vitals;
+                        if (vitals != null)
+                        {
+                            if (vitals.TryGetValue("steps", out var st) && MatchesSelectedDevice(st.SourceDevice)) steps = st.Value;
+                            if (vitals.TryGetValue("resting_heart_rate", out var rh) && MatchesSelectedDevice(rh.SourceDevice)) rhr = rh.Value;
+                            if (vitals.TryGetValue("active_energy", out var ae) && MatchesSelectedDevice(ae.SourceDevice)) cal = ae.Value;
+                            if (vitals.TryGetValue("weight", out var we) && MatchesSelectedDevice(we.SourceDevice)) wt = we.Value;
+                            if (vitals.TryGetValue("hrv_sdnn", out var hs) && MatchesSelectedDevice(hs.SourceDevice)) hrv = hs.Value;
+                            else if (vitals.TryGetValue("hrv_rmssd", out var hr) && MatchesSelectedDevice(hr.SourceDevice)) hrv = hr.Value;
+                        }
+                    }
+
+                    var daySleep = rangeSleeps
+                        .Where(s => s.LocalDate == dayStr && MatchesSelectedDevice(s.SourceDeviceKey) &&
+                                    !string.Equals(s.SessionType, "nap", StringComparison.OrdinalIgnoreCase))
+                        .OrderByDescending(s => s.DurationSeconds)
+                        .FirstOrDefault();
+
+                    if (daySleep != null && daySleep.DurationSeconds > 0)
+                    {
+                        sleepHours = Math.Round(daySleep.DurationSeconds / 3600.0, 1);
+                    }
+                    else
+                    {
+                        var matchedSleep = summary?.Summary?.Sleep?.AllSessions?.FirstOrDefault(ss => MatchesSelectedDevice(ss.EffectiveSourceDevice));
+                        if (matchedSleep != null)
+                        {
+                            sleepHours = matchedSleep.AsleepSeconds > 0 ? Math.Round(matchedSleep.AsleepSeconds / 3600.0, 1) : Math.Round(matchedSleep.DurationSeconds / 3600.0, 1);
+                        }
                     }
                 }
                 else
@@ -748,7 +1108,7 @@ namespace Daily_WinUI.Views
             {
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    double s = GetMetric(VitalType.Steps)?.Value ?? 0;
+                    double s = _filteredSteps ?? GetMetric(VitalType.Steps)?.Value ?? 0;
                     return s > 0 ? s.ToString("N0") : "--";
                 }
                 double steps = _currentSummary?.Steps ?? GetMetric(VitalType.Steps)?.Value ?? 0;
@@ -762,7 +1122,7 @@ namespace Daily_WinUI.Views
             {
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    double s = GetMetric(VitalType.Steps)?.Value ?? 0;
+                    double s = _filteredSteps ?? GetMetric(VitalType.Steps)?.Value ?? 0;
                     return Math.Min(100.0, Math.Max(0.0, (s / 10000.0) * 100.0));
                 }
                 double steps = _currentSummary?.Steps ?? GetMetric(VitalType.Steps)?.Value ?? 0;
@@ -776,7 +1136,7 @@ namespace Daily_WinUI.Views
             {
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    double cal = GetMetric(VitalType.ActiveEnergy)?.Value ?? 0;
+                    double cal = _filteredActiveKcal ?? GetMetric(VitalType.ActiveEnergy)?.Value ?? 0;
                     return cal > 0 ? $"{cal:N0}" : "--";
                 }
                 double kcal = _currentSummary?.ActiveKcal ?? GetMetric(VitalType.ActiveEnergy)?.Value ?? 0;
@@ -824,7 +1184,9 @@ namespace Daily_WinUI.Views
             {
                 var m = GetMetric(VitalType.Distance);
                 if (m?.Value > 0) return $"{m.Value / 1000.0:F1} km";
-                double steps = _currentSummary?.Steps ?? 0;
+                double steps = !string.IsNullOrEmpty(_selectedDeviceFilter)
+                    ? (_filteredSteps ?? GetMetric(VitalType.Steps)?.Value ?? 0)
+                    : (_currentSummary?.Steps ?? GetMetric(VitalType.Steps)?.Value ?? 0);
                 if (steps > 0) return $"{steps * 0.00075:F1} km";
                 return "-- km";
             }
@@ -895,7 +1257,7 @@ namespace Daily_WinUI.Views
                     if (s >= 70) return "GOOD";
                     if (s >= 50) return "FAIR";
                     if (s > 0) return "NEEDS ATTENTION";
-                    return "NO DATA";
+                    return "RECORDED";
                 }
                 var rating = _currentSummary?.Summary?.Sleep?.PrimarySession?.QualityRating;
                 if (!string.IsNullOrEmpty(rating)) return rating.ToUpperInvariant();
@@ -952,12 +1314,30 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                if (!string.IsNullOrEmpty(_selectedDeviceFilter) && _primarySleepSession == null)
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    return "--%";
+                    if (_primarySleepSession == null || _primarySleepSession.DurationSeconds <= 0)
+                    {
+                        return "--%";
+                    }
+                    if (_filteredSleepEfficiency.HasValue && _filteredSleepEfficiency.Value > 0)
+                    {
+                        return $"{_filteredSleepEfficiency.Value:F0}% eff";
+                    }
+                    double asleep = _primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds;
+                    double inBed = Math.Max(asleep, _primarySleepSession.DurationSeconds);
+                    int computedEff = (int)Math.Round(Math.Clamp((asleep / inBed) * 100.0, 1.0, 100.0));
+                    return $"{computedEff}% eff";
                 }
+
                 int eff = _currentSummary?.Summary?.Sleep?.PrimarySession?.EfficiencyPercent ?? 0;
                 if (eff > 0) return $"{eff}% eff";
+
+                if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0 && _primarySleepSession.AsleepSeconds > 0)
+                {
+                    int computedEff = (int)Math.Round(Math.Clamp((_primarySleepSession.AsleepSeconds / _primarySleepSession.DurationSeconds) * 100.0, 1.0, 100.0));
+                    return $"{computedEff}% eff";
+                }
                 return "--%";
             }
         }
@@ -966,17 +1346,26 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                if (!string.IsNullOrEmpty(_selectedDeviceFilter) && _primarySleepSession == null)
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
+                    if (_primarySleepSession == null) return "--%";
+                    double d = _primarySleepSession.DeepSeconds;
+                    double r = _primarySleepSession.RemSeconds;
+                    double a = _primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds;
+                    if (a > 0 && (d + r) > 0)
+                    {
+                        return $"{((d + r) / a) * 100:F0}%";
+                    }
                     return "--%";
                 }
+
                 int rest = _currentSummary?.Summary?.Sleep?.PrimarySession?.RestorativePercent ?? 0;
                 if (rest > 0) return $"{rest}%";
 
                 double deep = _primarySleepSession?.DeepSeconds ?? 0;
                 double rem = _primarySleepSession?.RemSeconds ?? 0;
                 double asleep = _primarySleepSession?.AsleepSeconds ?? 0;
-                if (asleep > 0)
+                if (asleep > 0 && (deep + rem) > 0)
                 {
                     return $"{((deep + rem) / asleep) * 100:F0}%";
                 }
@@ -990,6 +1379,28 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    var devLabel = DeviceSource.From(_selectedDeviceFilter).DisplayName;
+                    if (_primarySleepSession == null || _primarySleepSession.DurationSeconds <= 0)
+                    {
+                        return $"No sleep session recorded by {devLabel} for this date.";
+                    }
+
+                    double asleepSec = _primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds;
+                    var ts = TimeSpan.FromSeconds(asleepSec);
+                    double restPct = asleepSec > 0 ? ((_primarySleepSession.DeepSeconds + _primarySleepSession.RemSeconds) / asleepSec) * 100.0 : 0;
+                    int s = _primarySleepSession.SleepScore;
+
+                    if (s >= 85)
+                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of optimal restorative sleep ({restPct:F0}% Deep + REM architecture).";
+                    if (s >= 70)
+                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of solid sleep with {restPct:F0}% restorative Deep + REM stages.";
+                    if (s > 0)
+                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of sleep ({restPct:F0}% restorative). Mild fragmentation or shorter recovery detected.";
+                    return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of sleep.";
+                }
+
                 var narrative = _currentSummary?.Summary?.Sleep?.Guidance?.Verdict?.Narrative;
                 if (!string.IsNullOrEmpty(narrative)) return narrative;
                 var headline = _currentSummary?.Summary?.Sleep?.Guidance?.Verdict?.Headline;
@@ -1280,13 +1691,15 @@ namespace Daily_WinUI.Views
         // TAB 2: STRESS STUDIO PROPERTIES
         // ==========================================
 
+        private int EffectiveStressScore => !string.IsNullOrEmpty(_selectedDeviceFilter)
+            ? (_filteredStressScore ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0))
+            : (_currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0));
+
         public string StressScoreText
         {
             get
             {
-                int score = !string.IsNullOrEmpty(_selectedDeviceFilter)
-                    ? (int)(GetMetric(VitalType.Stress)?.Value ?? 0)
-                    : (_currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0));
+                int score = EffectiveStressScore;
                 return score > 0 ? score.ToString() : "--";
             }
         }
@@ -1295,9 +1708,7 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                int score = !string.IsNullOrEmpty(_selectedDeviceFilter)
-                    ? (int)(GetMetric(VitalType.Stress)?.Value ?? 0)
-                    : (_currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0));
+                int score = EffectiveStressScore;
                 if (score <= 0) return new SolidColorBrush(Color.FromArgb(180, 255, 255, 255));
                 if (score <= 25) return new SolidColorBrush(Color.FromArgb(255, 52, 199, 89));
                 if (score <= 50) return new SolidColorBrush(Color.FromArgb(255, 56, 151, 240));
@@ -1312,7 +1723,7 @@ namespace Daily_WinUI.Views
             {
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    int s = (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                    int s = EffectiveStressScore;
                     if (s <= 0) return "No Data";
                     if (s <= 25) return "Calm";
                     if (s <= 50) return "Low";
@@ -1322,7 +1733,7 @@ namespace Daily_WinUI.Views
                 var lvl = _currentSummary?.Summary?.Stress?.CurrentLevel;
                 if (!string.IsNullOrEmpty(lvl)) return lvl;
 
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveStressScore;
                 if (score <= 0) return "No Data";
                 if (score <= 25) return "Calm";
                 if (score <= 50) return "Low";
@@ -1335,22 +1746,27 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                var mood = _currentSummary?.Summary?.Stress?.MonkeyMood;
-                if (!string.IsNullOrEmpty(mood))
+                if (string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    return mood.ToLowerInvariant() switch
+                    var mood = _currentSummary?.Summary?.Stress?.MonkeyMood;
+                    if (!string.IsNullOrEmpty(mood))
                     {
-                        "zen" => "🧘",
-                        "happy" => "🐵",
-                        "curious" => "🐒",
-                        "alert" => "👀",
-                        "wired" => "⚡",
-                        "exhausted" => "💤",
-                        _ => "🐵"
-                    };
+                        return mood.ToLowerInvariant() switch
+                        {
+                            "zen" => "🧘",
+                            "happy" => "🐵",
+                            "curious" => "🐒",
+                            "alert" => "👀",
+                            "wired" => "⚡",
+                            "busy" => "⚡",
+                            "overheated" => "💤",
+                            "exhausted" => "💤",
+                            _ => "🐵"
+                        };
+                    }
                 }
 
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveStressScore;
                 if (score <= 0) return "🐵";
                 if (score <= 25) return "🧘";
                 if (score <= 50) return "🐵";
@@ -1376,12 +1792,17 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveStressScore;
+                if (score <= 0)
+                {
+                    return !string.IsNullOrEmpty(_selectedDeviceFilter)
+                        ? $"No HRV or heart rate telemetry recorded by {DeviceSource.From(_selectedDeviceFilter).DisplayName} for this date."
+                        : "No real-time stress data recorded for this period.";
+                }
                 if (score <= 25) return "Zen mode. Autonomic parasympathetic dominance indicates excellent recovery.";
                 if (score <= 50) return "Balanced homeostasis. Physiological strain remains within normal limits.";
                 if (score <= 75) return "Elevated sympathetic activation. Recommended: 5 minutes of box breathing.";
-                if (score > 75) return "High autonomic strain. Consider resting, hydrating, and avoiding intensive stimuli.";
-                return "No real-time stress data recorded for this period.";
+                return "High autonomic strain. Consider resting, hydrating, and avoiding intensive stimuli.";
             }
         }
 
@@ -1389,7 +1810,11 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                int para = _currentSummary?.Summary?.Stress?.AutonomicBalance?.ParasympatheticPercent ?? 50;
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter) && EffectiveStressScore <= 0)
+                {
+                    return "No Autonomic Telemetry";
+                }
+                double para = ParasympatheticRatioPct;
                 return para >= 50 ? "Parasympathetic Dominant" : "Sympathetic Dominant";
             }
         }
@@ -1398,10 +1823,16 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    int s = EffectiveStressScore;
+                    if (s <= 0) return 50.0;
+                    return Math.Max(10.0, Math.Min(90.0, 100.0 - s));
+                }
                 var balance = _currentSummary?.Summary?.Stress?.AutonomicBalance;
                 if (balance != null) return balance.ParasympatheticPercent;
-                int score = _currentSummary?.StressAvg ?? 0;
-                return Math.Max(10, Math.Min(90, 100 - score));
+                int score = EffectiveStressScore;
+                return score > 0 ? Math.Max(10, Math.Min(90, 100 - score)) : 50;
             }
         }
 
@@ -1414,8 +1845,10 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                double steps = _currentSummary?.Steps ?? 0;
-                return Math.Min(100.0, Math.Max(10.0, (steps / 10000.0) * 100.0));
+                double steps = !string.IsNullOrEmpty(_selectedDeviceFilter)
+                    ? (_filteredSteps ?? GetMetric(VitalType.Steps)?.Value ?? 0)
+                    : (_currentSummary?.Steps ?? 0);
+                return Math.Min(100.0, Math.Max(5.0, (steps / 10000.0) * 100.0));
             }
         }
 
@@ -1424,7 +1857,9 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                int score = !string.IsNullOrEmpty(_selectedDeviceFilter)
+                    ? (_primarySleepSession?.SleepScore ?? 0)
+                    : (_primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0);
                 return score > 0 ? Math.Max(5.0, 100.0 - score) : 25.0;
             }
         }
@@ -1434,6 +1869,22 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                double baseline = _currentSummary?.Summary?.Stress?.BiometricDrivers?.BaselineHrvMs ?? 45.0;
+                if (baseline <= 0) baseline = 45.0;
+
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    double? hrv = _filteredHrvMs
+                               ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value
+                               ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value;
+                    if (hrv.HasValue && hrv.Value > 0)
+                    {
+                        double ratio = hrv.Value / baseline;
+                        return Math.Min(100.0, Math.Max(0.0, (1.0 - ratio) * 100.0));
+                    }
+                    return 20.0;
+                }
+
                 var drivers = _currentSummary?.Summary?.Stress?.BiometricDrivers;
                 if (drivers?.CurrentHrvMs.HasValue == true && drivers.BaselineHrvMs > 0)
                 {
@@ -1445,7 +1896,7 @@ namespace Daily_WinUI.Views
         }
 
         public string DriverSpikesText => $"{DriverSpikesPct:F0}%";
-        public double DriverSpikesPct => Math.Min(100.0, Math.Max(5.0, (_currentSummary?.StressAvg ?? 25) * 0.4));
+        public double DriverSpikesPct => Math.Min(100.0, Math.Max(5.0, (EffectiveStressScore > 0 ? EffectiveStressScore : 25) * 0.4));
 
         // Box Breathing Player
         public string BreathingButtonText => _isBreathingActive ? "Stop" : "Start Exercise";
@@ -1534,11 +1985,28 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    var lastFilteredPt = HeartRateCollection.LastOrDefault(p => (p.Value ?? 0) > 0);
+                    if (lastFilteredPt != null) return $"{lastFilteredPt.Value:N0} bpm";
+
+                    var mf = GetMetric(VitalType.HeartRate);
+                    if (mf?.Value > 0) return $"{mf.Value:N0} bpm";
+
+                    double rhrF = _filteredRhrBpm ?? GetMetric(VitalType.RestingHeartRate)?.Value ?? 0;
+                    return rhrF > 0 ? $"{rhrF:N0} bpm" : "-- bpm";
+                }
+
                 var intraday = _currentSummary?.Summary?.Cardiovascular?.IntradayHeartRate;
                 if (intraday != null && intraday.Any())
                 {
                     var lastPt = intraday.LastOrDefault(p => p.Bpm > 0);
                     if (lastPt != null) return $"{lastPt.Bpm:N0} bpm";
+                }
+                if (HeartRateCollection.Any())
+                {
+                    var lastColl = HeartRateCollection.LastOrDefault(p => (p.Value ?? 0) > 0);
+                    if (lastColl != null) return $"{lastColl.Value:N0} bpm";
                 }
                 var m = GetMetric(VitalType.HeartRate);
                 if (m?.Value > 0) return $"{m.Value:N0} bpm";
@@ -1551,6 +2019,15 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    if (HeartRateCollection.Any())
+                    {
+                        return $"{HeartRateCollection.Average(x => x.Value ?? 0):F0} bpm avg";
+                    }
+                    return "-- bpm avg";
+                }
+
                 double? avg = _currentSummary?.Summary?.Cardiovascular?.AverageHeartRateBpm;
                 if (avg.HasValue && avg.Value > 0) return $"{avg.Value:F0} bpm avg";
                 if (HeartRateCollection.Any()) return $"{HeartRateCollection.Average(x => x.Value ?? 0):F0} bpm avg";
@@ -1563,7 +2040,7 @@ namespace Daily_WinUI.Views
             get
             {
                 double rhr = !string.IsNullOrEmpty(_selectedDeviceFilter)
-                    ? (GetMetric(VitalType.RestingHeartRate)?.Value ?? 0)
+                    ? (_filteredRhrBpm ?? GetMetric(VitalType.RestingHeartRate)?.Value ?? 0)
                     : (_currentSummary?.Rhr ?? GetMetric(VitalType.RestingHeartRate)?.Value ?? 0);
                 return rhr > 0 ? $"{rhr:F0} bpm" : "-- bpm";
             }
@@ -1574,7 +2051,7 @@ namespace Daily_WinUI.Views
             get
             {
                 double hrv = !string.IsNullOrEmpty(_selectedDeviceFilter)
-                    ? (GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value ?? 0)
+                    ? (_filteredHrvMs ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value ?? 0)
                     : (_currentSummary?.HrvSdnn ?? _currentSummary?.HrvRmssd ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value ?? 0);
                 return hrv > 0 ? $"{hrv:F0} ms" : "-- ms";
             }
@@ -1585,7 +2062,7 @@ namespace Daily_WinUI.Views
             get
             {
                 double spo2 = !string.IsNullOrEmpty(_selectedDeviceFilter)
-                    ? (GetMetric(VitalType.OxygenSaturation)?.Value ?? 0)
+                    ? (_filteredSpo2 ?? GetMetric(VitalType.OxygenSaturation)?.Value ?? 0)
                     : (_currentSummary?.Spo2 ?? GetMetric(VitalType.OxygenSaturation)?.Value ?? 0);
                 return spo2 > 0 ? $"{spo2:F0}%" : "--%";
             }
@@ -1606,8 +2083,10 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                var m = GetMetric(VitalType.RespiratoryRate);
-                return m?.Value > 0 ? $"{m.Value:F0} br/m" : "-- br/m";
+                double resp = !string.IsNullOrEmpty(_selectedDeviceFilter)
+                    ? (_filteredRespRate ?? GetMetric(VitalType.RespiratoryRate)?.Value ?? 0)
+                    : (GetMetric(VitalType.RespiratoryRate)?.Value ?? 0);
+                return resp > 0 ? $"{resp:F0} br/m" : "-- br/m";
             }
         }
 
@@ -1625,7 +2104,7 @@ namespace Daily_WinUI.Views
             get
             {
                 double wt = !string.IsNullOrEmpty(_selectedDeviceFilter)
-                    ? (GetMetric(VitalType.Weight)?.Value ?? 0)
+                    ? (_filteredWeightKg ?? GetMetric(VitalType.Weight)?.Value ?? 0)
                     : (_currentSummary?.Weight ?? GetMetric(VitalType.Weight)?.Value ?? 0);
                 return wt > 0 ? $"{wt:F1} kg" : "-- kg";
             }
@@ -1642,10 +2121,32 @@ namespace Daily_WinUI.Views
 
         private string CalculateHrZonePercent(double min, double max)
         {
-            if (!HeartRateCollection.Any()) return "--%";
-            int total = HeartRateCollection.Count;
-            int count = HeartRateCollection.Count(x => (x.Value ?? 0) >= min && (x.Value ?? 0) < max);
-            return total > 0 ? $"{((double)count / total) * 100:F0}%" : "0%";
+            if (HeartRateCollection.Any())
+            {
+                int total = HeartRateCollection.Count;
+                int count = HeartRateCollection.Count(x => (x.Value ?? 0) >= min && (x.Value ?? 0) < max);
+                return total > 0 ? $"{((double)count / total) * 100:F0}%" : "0%";
+            }
+
+            if (string.IsNullOrEmpty(_selectedDeviceFilter))
+            {
+                var z = _currentSummary?.Summary?.Cardiovascular?.HeartRateZones;
+                if (z != null)
+                {
+                    int r = z.Resting > 0 ? z.Resting : z.RestingMinutes;
+                    int fb = z.FatBurn > 0 ? z.FatBurn : z.FatBurnMinutes;
+                    int c = z.Cardio > 0 ? z.Cardio : z.CardioMinutes;
+                    int p = z.Peak > 0 ? z.Peak : z.PeakMinutes;
+                    int sum = r + fb + c + p;
+                    if (sum > 0)
+                    {
+                        int bucket = min < 100 ? r : (min < 120 ? fb : (min < 150 ? c : p));
+                        return $"{((double)bucket / sum) * 100:F0}%";
+                    }
+                }
+            }
+
+            return "--%";
         }
 
         // ==========================================
@@ -1721,8 +2222,7 @@ namespace Daily_WinUI.Views
             if (!string.IsNullOrEmpty(_selectedDeviceFilter))
             {
                 return _metrics.FirstOrDefault(x => x.MatchesType(type) && x.Value > 0 &&
-                    !string.IsNullOrEmpty(x.SourceDevice) &&
-                    x.SourceDevice.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase));
+                    MatchesSelectedDevice(x.SourceDevice));
             }
             return _metrics.FirstOrDefault(x => x.MatchesType(type) && x.Value > 0);
         }

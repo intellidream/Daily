@@ -1081,7 +1081,39 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
     public var id: String { displayName }
     
     public static func < (lhs: DeviceSource, rhs: DeviceSource) -> Bool {
-        lhs.displayName < rhs.displayName
+        if lhs.sortPriority != rhs.sortPriority {
+            return lhs.sortPriority < rhs.sortPriority
+        }
+        return lhs.displayName < rhs.displayName
+    }
+    
+    public var sortPriority: Int {
+        switch self {
+        case .oura: return 1
+        case .appleWatch: return 2
+        case .pixelWatch, .fitbit: return 3
+        case .oneplus: return 4
+        case .amazfit, .huawei, .garmin, .whoop, .withings, .polar, .samsungHealth: return 5
+        case .other(let name):
+            let l = name.lowercased()
+            if l.contains("schmitz") || l.contains("iphone") { return 10 }
+            if l.contains("trapper") || l.contains("pixel 9") { return 11 }
+            if l.contains("radar") || l.contains("fold") { return 12 }
+            return 20
+        case .healthKit, .healthConnect, .manual: return 50
+        }
+    }
+    
+    public var isWearable: Bool {
+        switch self {
+        case .oura, .appleWatch, .pixelWatch, .fitbit, .oneplus, .amazfit, .huawei, .garmin, .whoop, .withings, .polar:
+            return true
+        case .other(let name):
+            let l = name.lowercased()
+            return l.contains("oura") || l.contains("ring") || l.contains("watch") || l.contains("ultra")
+        default:
+            return false
+        }
     }
     
     public var colorHex: String {
@@ -1089,55 +1121,83 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
     }
 
     public static func from(name: String?) -> DeviceSource {
-        guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+        guard let raw = name?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return .other("Unknown")
         }
-        // Normalize compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - com.fitbit.FitbitMobile")
-        if name.contains(" - ") {
-            let parts = name.components(separatedBy: " - ")
-            if parts.count == 2 {
-                let host = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                let sensor = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                let resolvedSensor = DeviceSource.from(name: sensor).displayName
-                return .other("\(host) - \(resolvedSensor)")
-            }
-            return .other(name)
+        let lower = raw.lowercased()
+        
+        // 1. Virtual / Desktop / Computational engines first
+        if lower.contains("stresswatch") ||
+           lower.contains("stress-engine") ||
+           lower.contains("daily biometric") ||
+           lower.contains("biometric engine") ||
+           lower.contains("canonical") ||
+           lower.contains("computed") ||
+           lower.contains("bubbles") ||
+           lower.contains("macos") ||
+           lower.contains("mac (") ||
+           lower == "mac" ||
+           lower.contains("windows") ||
+           lower.contains("winui") ||
+           lower.contains("desktop") ||
+           lower.contains("google fit") ||
+           lower.contains("apps.fitness") ||
+           lower.contains("google health") ||
+           lower == "unknown" {
+            return .other("Virtual Engine")
         }
-        let lower = name.lowercased()
-        if lower.contains("fitbit") { return .fitbit }
-        if lower.contains("shealth") || lower.contains("samsung") || lower.contains("galaxy watch") { return .samsungHealth }
-        if lower.contains("pixel watch") || lower.contains("wear.companion") { return .pixelWatch }
+        
+        // 2. Smart Rings & Smartwatches (checked BEFORE host phone names!)
+        if lower.contains("oura") { return .oura }
+        if lower.contains("pixel watch") || lower.contains("fitbit") || lower.contains("wear.companion") || lower.contains("google.android.wearable") || lower == "trapper_pw5" {
+            return .pixelWatch
+        }
+        if lower.contains("oneplus") || lower.contains("heytap") || lower.contains("international") || lower.contains("ohealth") || lower.contains("oplus") {
+            return .oneplus
+        }
+        if lower.contains("apple watch") || lower.contains("watchos") || lower.contains("ultra 2") || lower == "schmitz_ultra2" || (lower.contains("watch") && !lower.contains("galaxy") && !lower.contains("pixel") && !lower.contains("oneplus") && !lower.contains("huawei")) {
+            return .appleWatch
+        }
+        if lower.contains("zepp") || lower.contains("amazfit") || lower.contains("huami") || lower.contains("balance") {
+            return .amazfit
+        }
+        if lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt 5") || lower.contains("gt5") {
+            return .huawei
+        }
         if lower.contains("garmin") { return .garmin }
         if lower.contains("whoop") { return .whoop }
         if lower.contains("withings") { return .withings }
         if lower.contains("polar") { return .polar }
-        if lower.contains("oura") { return .oura }
-        if lower.contains("healthkit") || lower.contains("apple health") || lower == "ios" { return .healthKit }
-        if lower.contains("apple") || lower.contains("watchos") { return .appleWatch }
-        if lower.contains("zepp") || lower.contains("amazfit") || lower.contains("balance") { return .amazfit }
-        if lower.contains("oneplus") || lower.contains("wearos") { return .oneplus }
-        if lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt5") { return .huawei }
-        if lower.contains("health connect") || lower.contains("healthconnect") || lower == "android" { return .healthConnect }
-        if lower.contains("manual") { return .manual }
-        if name.hasPrefix("com.") || name.hasPrefix("org.") {
-            let lastSegment = name.components(separatedBy: ".").last?.capitalized ?? name
-            return .other(lastSegment)
+        if lower.contains("galaxy watch") { return .samsungHealth }
+        
+        // 3. Canonical Host Phones
+        if lower.contains("radar") || lower.contains("fold") || lower.contains("sm-f9") || lower.contains("shealth") || lower.contains("samsung") {
+            return .other("Radar (Galaxy Z Fold 8)")
         }
-        return .other(name)
+        if lower.contains("trapper") || lower.contains("pixel 9") || lower.contains("j97428") {
+            return .other("Trapper (Pixel 9 Pro)")
+        }
+        if lower.contains("schmitz") || lower.contains("iphone") || lower.contains("apple health") || lower.contains("healthkit") || lower == "ios" {
+            return .other("Schmitz (iPhone)")
+        }
+        if lower.contains("health connect") || lower.contains("healthconnect") || lower == "android" {
+            return .healthConnect
+        }
+        if lower.contains("manual") { return .manual }
+        return .other(raw)
     }
     
     public var displayName: String {
         switch self {
-        case .appleWatch: return "Apple Watch"
+        case .appleWatch: return "Apple Watch Ultra 2"
         case .amazfit: return "Amazfit Balance"
         case .oneplus: return "OnePlus Watch 3"
         case .huawei: return "Huawei Watch GT 5 Pro"
         case .oura: return "Oura Ring"
-        case .healthKit: return "Apple Health"
+        case .healthKit: return "Schmitz (iPhone)"
         case .healthConnect: return "Health Connect"
-        case .fitbit: return "Fitbit"
-        case .pixelWatch: return "Pixel Watch"
-        case .samsungHealth: return "Samsung Health"
+        case .fitbit, .pixelWatch: return "Pixel Watch 5"
+        case .samsungHealth: return "Galaxy Watch"
         case .garmin: return "Garmin"
         case .whoop: return "WHOOP"
         case .withings: return "Withings"
@@ -1151,37 +1211,42 @@ public enum DeviceSource: Hashable, Sendable, Identifiable, Comparable {
         switch self {
         case .appleWatch, .amazfit, .oneplus, .huawei, .fitbit, .pixelWatch, .samsungHealth, .garmin, .whoop, .withings, .polar: return "applewatch"
         case .oura: return "circle.circle"
-        case .healthKit, .healthConnect: return "heart.text.square.fill"
+        case .healthKit: return "iphone"
+        case .healthConnect: return "heart.text.square.fill"
         case .manual: return "hand.tap.fill"
         case .other(let name):
             let lower = name.lowercased()
             if lower.contains("oura") || lower.contains("ring") {
                 return "circle.circle"
             }
-            if lower.contains("apple watch") || lower.contains("watch") || lower.contains("pixel watch") || lower.contains("galaxy watch") || lower.contains("fitbit") || lower.contains("band") {
+            if lower.contains("watch") || lower.contains("fitbit") || lower.contains("band") {
                 return "applewatch"
             }
-            if lower.contains("health") || lower.contains("healthkit") || lower.contains("health connect") {
-                return "heart.text.square.fill"
-            }
-            if lower.contains("phone") || lower.contains("iphone") || lower.contains("pixel") || lower.contains("samsung") {
+            if lower.contains("schmitz") || lower.contains("trapper") || lower.contains("radar") || lower.contains("phone") || lower.contains("iphone") || lower.contains("pixel") || lower.contains("fold") || lower.contains("samsung") {
                 return "iphone"
             }
             return "sensor.fill"
         }
     }
     
-    /// Identifies computational/software engines or placeholder strings that are not real physical wearables.
+    /// Identifies computational/software engines or placeholder strings that are not real physical wearables/phones.
     public var isVirtualEngine: Bool {
         switch self {
+        case .healthConnect, .manual:
+            return true
         case .other(let name):
             let lower = name.lowercased()
-            return lower.contains("stresswatch") ||
+            return lower == "virtual engine" ||
+                   lower.contains("stresswatch") ||
                    lower.contains("stress-engine") ||
                    lower.contains("daily biometric") ||
                    lower.contains("biometric engine") ||
+                   lower.contains("canonical") ||
                    lower.contains("computed") ||
                    lower.contains("bubbles") ||
+                   lower.contains("macos") ||
+                   lower.contains("windows") ||
+                   lower.contains("desktop") ||
                    lower == "unknown"
         default:
             return false
@@ -1195,20 +1260,31 @@ public struct DeviceColorPalette: Sendable {
     public static let palette: [String] = [
         "#00D09C", // Emerald (Oura green)
         "#3897F0", // Electric Blue (Pixel / Google)
-        "#FF6B4A", // Coral / Orange (Activity)
-        "#AF52DE", // Violet / Purple (HealthKit)
+        "#FF6B4A", // Coral / Orange (OnePlus / Activity)
+        "#AF52DE", // Violet / Purple (Schmitz iPhone)
         "#FF2D55", // Rose / Crimson
-        "#34C759", // Apple Green
+        "#34C759", // Apple Green (Apple Watch Ultra 2)
         "#FF9500", // Amber
-        "#5856D6", // Indigo
-        "#00C7BE"  // Cyan / Teal
+        "#5856D6", // Indigo (Trapper Pixel 9 Pro)
+        "#00C7BE"  // Cyan / Teal (Radar Galaxy Z Fold 8)
     ]
 
     public static func getColor(for sourceKey: String) -> String {
         guard !sourceKey.isEmpty else { return "#3897F0" }
+        let canon = DeviceSource.from(name: sourceKey).displayName
+        switch canon {
+        case "Oura Ring": return "#00D09C"
+        case "Apple Watch Ultra 2": return "#34C759"
+        case "Pixel Watch 5": return "#3897F0"
+        case "OnePlus Watch 3": return "#FF6B4A"
+        case "Schmitz (iPhone)": return "#AF52DE"
+        case "Trapper (Pixel 9 Pro)": return "#5856D6"
+        case "Radar (Galaxy Z Fold 8)": return "#00C7BE"
+        default: break
+        }
         // Deterministic 31-multiplier hash matching standard Java/Kotlin String.hashCode()
         var hash: Int32 = 0
-        for byte in sourceKey.utf8 {
+        for byte in canon.utf8 {
             hash = 31 &* hash &+ Int32(byte)
         }
         let positiveHash = abs(Int64(hash))

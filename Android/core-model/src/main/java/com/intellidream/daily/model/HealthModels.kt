@@ -368,17 +368,17 @@ enum class SleepStageType(val rawValue: String, val hexColor: String, val sortOr
 @Serializable
 data class SleepStageRecord(
     val id: String = UUID.randomUUID().toString(),
-    @JsonNames("stage_type", "stageType")
+    @SerialName("stage_type") @JsonNames("stage_type", "stageType")
     val stageType: SleepStageType,
-    @Serializable(with = FlexibleTimestampSerializer::class)
-    @JsonNames("start_time", "startTime")
+    @Serializable(with = TimestampSerializer::class)
+    @SerialName("start_time") @JsonNames("start_time", "startTime")
     val startTime: Long, // Epoch ms
-    @Serializable(with = FlexibleTimestampSerializer::class)
-    @JsonNames("end_time", "endTime")
+    @Serializable(with = TimestampSerializer::class)
+    @SerialName("end_time") @JsonNames("end_time", "endTime")
     val endTime: Long,   // Epoch ms
-    @JsonNames("duration_seconds", "durationSeconds")
+    @SerialName("duration_seconds") @JsonNames("duration_seconds", "durationSeconds")
     val durationSeconds: Double = max(0.0, (endTime - startTime) / 1000.0),
-    @JsonNames("source_device", "sourceDevice")
+    @SerialName("source_device") @JsonNames("source_device", "sourceDevice")
     val sourceDevice: String? = null
 ) {
     val durationMinutes: Double
@@ -673,39 +673,61 @@ data class DailyMetricTrendPoint(
 // MARK: - Device Classification
 
 sealed class DeviceSource(val displayName: String, val identifier: String) {
-    object AppleWatch : DeviceSource("Apple Watch", "applewatch")
+    object Oura : DeviceSource("Oura Ring", "oura_ring")
+    object AppleWatch : DeviceSource("Apple Watch Ultra 2", "apple_watch_ultra_2")
+    object PixelWatch : DeviceSource("Pixel Watch 5", "pixel_watch_5")
+    object Fitbit : DeviceSource("Pixel Watch 5", "pixel_watch_5")
+    object OnePlus : DeviceSource("OnePlus Watch 3", "oneplus_watch_3")
     object Amazfit : DeviceSource("Amazfit Balance", "amazfit")
-    object OnePlus : DeviceSource("OnePlus Watch 3", "oneplus")
     object Huawei : DeviceSource("Huawei Watch GT 5 Pro", "huawei")
-    object Oura : DeviceSource("Oura Ring", "oura")
-    object HealthKit : DeviceSource("Apple Health", "healthkit")
-    object HealthConnect : DeviceSource("Health Connect", "healthconnect")
-    object Fitbit : DeviceSource("Fitbit", "fitbit")
-    object SamsungHealth : DeviceSource("Samsung Health", "samsunghealth")
-    object PixelWatch : DeviceSource("Pixel Watch", "pixelwatch")
     object Garmin : DeviceSource("Garmin", "garmin")
     object Whoop : DeviceSource("Whoop", "whoop")
     object Withings : DeviceSource("Withings", "withings")
     object Polar : DeviceSource("Polar", "polar")
+    object HealthKit : DeviceSource("Schmitz (iPhone)", "schmitz_iphone")
+    object HealthConnect : DeviceSource("Trapper (Pixel 9 Pro)", "trapper_pixel9")
+    object SamsungHealth : DeviceSource("Radar (Galaxy Z Fold 8)", "radar_fold8")
     object Manual : DeviceSource("Manual Entry", "manual")
     data class Other(val name: String) : DeviceSource(name, name)
+
+    val sortPriority: Int
+        get() = when (this) {
+            is Oura -> 1
+            is AppleWatch -> 2
+            is PixelWatch, is Fitbit -> 3
+            is OnePlus -> 4
+            is Amazfit, is Huawei, is Garmin, is Whoop, is Withings, is Polar -> 5
+            is HealthKit, is HealthConnect, is SamsungHealth -> 10
+            is Manual -> 20
+            is Other -> 15
+        }
+
+    val isWearable: Boolean
+        get() = when (this) {
+            is Oura, is AppleWatch, is PixelWatch, is Fitbit, is OnePlus,
+            is Amazfit, is Huawei, is Garmin, is Whoop, is Withings, is Polar -> true
+            is HealthKit, is HealthConnect, is SamsungHealth, is Manual -> false
+            is Other -> {
+                val lower = name.lowercase()
+                lower.contains("watch") || lower.contains("oura") || lower.contains("ring") || lower.contains("fitbit")
+            }
+        }
 
     val colorHex: String
         get() = DeviceColorPalette.getColorForSource(displayName)
 
     val iconType: DeviceIconType
         get() = when (this) {
-            is AppleWatch, is Amazfit, is OnePlus, is Huawei, is Fitbit, is SamsungHealth, is PixelWatch, is Garmin, is Whoop, is Polar, is Withings -> DeviceIconType.WATCH
+            is AppleWatch, is Amazfit, is OnePlus, is Huawei, is Fitbit, is PixelWatch, is Garmin, is Whoop, is Polar, is Withings -> DeviceIconType.WATCH
             is Oura -> DeviceIconType.RING
-            is HealthKit, is HealthConnect -> DeviceIconType.HEALTH
+            is HealthKit, is HealthConnect, is SamsungHealth -> DeviceIconType.PHONE
             is Manual -> DeviceIconType.MANUAL
             is Other -> {
                 val lower = name.lowercase()
                 when {
                     lower.contains("oura") || lower.contains("ring") -> DeviceIconType.RING
                     lower.contains("watch") || lower.contains("fitbit") || lower.contains("band") -> DeviceIconType.WATCH
-                    lower.contains("health") || lower.contains("healthkit") || lower.contains("health connect") -> DeviceIconType.HEALTH
-                    lower.contains("phone") || lower.contains("pixel") || lower.contains("samsung") || lower.contains("iphone") -> DeviceIconType.PHONE
+                    lower.contains("phone") || lower.contains("pixel") || lower.contains("samsung") || lower.contains("fold") || lower.contains("iphone") || lower.contains("schmitz") || lower.contains("trapper") || lower.contains("radar") -> DeviceIconType.PHONE
                     else -> DeviceIconType.SENSOR
                 }
             }
@@ -713,15 +735,23 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
 
     val isVirtualEngine: Boolean
         get() = when (this) {
+            is Manual -> true
             is Other -> {
-                val lower = name.lowercase()
+                val lower = name.lowercase().trim()
+                lower.isEmpty() ||
+                lower == "unknown" ||
+                lower == "canonical" ||
+                lower.contains("canonical engine") ||
                 lower.contains("stresswatch") ||
                 lower.contains("stress-engine") ||
                 lower.contains("daily biometric") ||
                 lower.contains("biometric engine") ||
                 lower.contains("computed") ||
                 lower.contains("bubbles") ||
-                lower == "unknown"
+                lower.contains("macos") ||
+                lower == "mac" ||
+                lower.contains("windows") ||
+                lower.contains("desktop")
             }
             else -> false
         }
@@ -730,39 +760,43 @@ sealed class DeviceSource(val displayName: String, val identifier: String) {
         fun from(name: String?): DeviceSource {
             val clean = name?.trim() ?: return Other("Unknown")
             if (clean.isEmpty()) return Other("Unknown")
-            // Normalize compound key if already qualified with host device (e.g. "Schmitz - Oura Ring", "TRAPPER - com.fitbit.FitbitMobile")
-            if (clean.contains(" - ")) {
-                val parts = clean.split(" - ")
-                if (parts.size == 2) {
-                    val host = parts[0].trim()
-                    val sensor = parts[1].trim()
-                    val resolvedSensor = from(sensor).displayName
-                    return Other("$host - $resolvedSensor")
-                }
+            val lower = clean.lowercase()
+
+            // 1. Virtual / Desktop / Non-Hardware Filters
+            if (lower == "unknown" || lower == "canonical" || lower.contains("canonical engine") ||
+                lower.contains("stresswatch") || lower.contains("stress-engine") ||
+                lower.contains("biometric engine") || lower.contains("daily biometric") ||
+                lower.contains("computed") || lower.contains("bubbles") ||
+                lower == "mac" || lower.contains("macos") || lower.contains("windows") || lower.contains("desktop")
+            ) {
                 return Other(clean)
             }
-            val lower = clean.lowercase()
+
+            // 2. Smart Rings & Smartwatches (checked BEFORE host phone names like Trapper/Pixel/Schmitz/Radar!)
             return when {
-                lower.contains("fitbit") -> Fitbit
-                lower.contains("shealth") || lower.contains("samsung") || lower.contains("galaxy watch") -> SamsungHealth
-                lower.contains("wear.companion") || lower.contains("pixel watch") || lower.contains("google.android.wearable") -> PixelWatch
-                lower.contains("google.android.apps.fitness") || lower.contains("google fit") -> HealthConnect
+                lower.contains("oura") -> Oura
+                lower.contains("pixel watch") || lower.contains("fitbit") || lower.contains("google health") ||
+                    lower.contains("wear.companion") || lower.contains("google.android.wearable") || lower == "trapper_pw5" -> PixelWatch
+                lower.contains("oneplus") || lower.contains("heytap") || lower.contains("international") ||
+                    lower.contains("ohealth") || lower.contains("oplus") -> OnePlus
+                lower.contains("apple watch") || lower.contains("watchos") || lower.contains("ultra 2") || lower == "schmitz_ultra2" -> AppleWatch
+                lower.contains("zepp") || lower.contains("amazfit") || lower.contains("huami") || lower.contains("balance") -> Amazfit
+                lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt 5") || lower.contains("gt5") -> Huawei
                 lower.contains("garmin") -> Garmin
                 lower.contains("whoop") -> Whoop
                 lower.contains("withings") -> Withings
                 lower.contains("polar") -> Polar
-                lower.contains("oura") -> Oura
-                lower.contains("healthkit") || lower.contains("apple health") || lower == "ios" -> HealthKit
-                lower.contains("apple") || lower.contains("watchos") -> AppleWatch
-                lower.contains("zepp") || lower.contains("amazfit") || lower.contains("huami") || lower.contains("balance") -> Amazfit
-                lower.contains("oneplus") || lower.contains("wearos") || lower.contains("heytap") || lower.contains("oppo") -> OnePlus
-                lower.contains("huawei") || lower.contains("harmony") || lower.contains("gt5") -> Huawei
-                lower.contains("health connect") || lower.contains("healthconnect") || lower == "android" -> HealthConnect
+
+                // 3. Phones & On-Device System Sensors
+                lower.contains("radar") || lower.contains("fold") || lower.contains("sm-f9") ||
+                    lower.contains("shealth") || lower.contains("samsung") -> SamsungHealth
+                lower.contains("trapper") || lower.contains("pixel 9") || lower.contains("j97428") ||
+                    lower.contains("health connect") || lower.contains("healthconnect") ||
+                    lower.contains("google.android.apps.fitness") || lower.contains("google fit") ||
+                    lower == "android" -> HealthConnect
+                lower.contains("schmitz") || lower.contains("iphone") || lower.contains("healthkit") ||
+                    lower.contains("apple health") || lower == "ios" -> HealthKit
                 lower.contains("manual") -> Manual
-                clean.startsWith("com.") || clean.startsWith("org.") -> {
-                    val lastSegment = clean.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-                    Other(lastSegment)
-                }
                 else -> Other(clean)
             }
         }
@@ -833,13 +867,27 @@ object DeviceColorPalette {
     )
 
     fun getColorForSource(sourceKey: String): String {
-        if (sourceKey.isEmpty()) return "#3897F0"
-        var hash = 0
-        for (byte in sourceKey.toByteArray(Charsets.UTF_8)) {
-            hash = 31 * hash + byte.toInt()
+        val lower = sourceKey.lowercase().trim()
+        if (lower.isEmpty()) return "#3897F0"
+        return when {
+            lower.contains("oura") -> "#00D09C"
+            lower.contains("apple watch") || lower.contains("ultra 2") -> "#34C759"
+            lower.contains("pixel watch") || lower.contains("fitbit") -> "#3897F0"
+            lower.contains("oneplus") -> "#FF6B4A"
+            lower.contains("schmitz") || lower.contains("iphone") -> "#AF52DE"
+            lower.contains("trapper") || lower.contains("pixel 9") -> "#5856D6"
+            lower.contains("radar") || lower.contains("fold") -> "#00C7BE"
+            lower.contains("amazfit") || lower.contains("balance") -> "#FF9500"
+            lower.contains("huawei") || lower.contains("gt 5") -> "#FF2D55"
+            else -> {
+                var hash = 0
+                for (byte in sourceKey.toByteArray(Charsets.UTF_8)) {
+                    hash = 31 * hash + byte.toInt()
+                }
+                val positiveHash = kotlin.math.abs(hash.toLong())
+                PALETTE[(positiveHash % PALETTE.size).toInt()]
+            }
         }
-        val positiveHash = kotlin.math.abs(hash.toLong())
-        return PALETTE[(positiveHash % PALETTE.size).toInt()]
     }
 }
 

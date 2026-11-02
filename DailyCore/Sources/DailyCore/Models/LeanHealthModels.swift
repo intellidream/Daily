@@ -166,13 +166,37 @@ public struct HealthSleepSessionRecord: Identifiable, Codable, Hashable, Sendabl
     
     /// Converts this lean database record directly to the UI-facing `SleepSession`.
     public func toSleepSession() -> SleepSession {
-        SleepSession(
+        let canonDevice = DeviceSource.from(name: sourceDeviceKey).displayName
+        var effectiveStages = stages
+        if effectiveStages.isEmpty && (deepSeconds + remSeconds + lightSeconds + awakeSeconds) > 0 {
+            var cursor = startTime
+            if deepSeconds > 0 {
+                let end = cursor.addingTimeInterval(Double(deepSeconds))
+                effectiveStages.append(SleepStageRecord(id: "\(id)_deep", stageType: .deep, startTime: cursor, endTime: end, durationSeconds: Double(deepSeconds), sourceDevice: canonDevice))
+                cursor = end
+            }
+            if remSeconds > 0 {
+                let end = cursor.addingTimeInterval(Double(remSeconds))
+                effectiveStages.append(SleepStageRecord(id: "\(id)_rem", stageType: .rem, startTime: cursor, endTime: end, durationSeconds: Double(remSeconds), sourceDevice: canonDevice))
+                cursor = end
+            }
+            if lightSeconds > 0 {
+                let end = cursor.addingTimeInterval(Double(lightSeconds))
+                effectiveStages.append(SleepStageRecord(id: "\(id)_light", stageType: .light, startTime: cursor, endTime: end, durationSeconds: Double(lightSeconds), sourceDevice: canonDevice))
+                cursor = end
+            }
+            if awakeSeconds > 0 {
+                let end = cursor.addingTimeInterval(Double(awakeSeconds))
+                effectiveStages.append(SleepStageRecord(id: "\(id)_awake", stageType: .awake, startTime: cursor, endTime: end, durationSeconds: Double(awakeSeconds), sourceDevice: canonDevice))
+            }
+        }
+        return SleepSession(
             id: id,
             startTime: startTime,
             endTime: endTime,
             isNap: sessionType == "nap",
-            stages: stages,
-            sourceDevice: sourceDeviceKey,
+            stages: effectiveStages,
+            sourceDevice: canonDevice,
             hasGranularHypnogram: !stages.isEmpty
         )
     }
@@ -251,6 +275,18 @@ public struct HealthDailyVitalsRecord: Identifiable, Codable, Hashable, Sendable
         self.hourlySteps = hourlySteps
         self.updatedAt = updatedAt
     }
+    
+    public var hasSignal: Bool {
+        steps > 0 ||
+        activeKcal > 0 ||
+        (restingHeartRate ?? 0) > 0 ||
+        (spo2 ?? 0) > 0 ||
+        (respiratoryRate ?? 0) > 0 ||
+        skinTempCelsius != nil ||
+        (weightKg ?? 0) > 0 ||
+        (hrvSdnnNightly ?? 0) > 0 ||
+        (hrvRmssdNightly ?? 0) > 0
+    }
 }
 
 /// 5-minute bucketed heart rate record stored in `health_intraday_heart_rate`.
@@ -312,9 +348,10 @@ public struct HealthIntradayHeartRateRecord: Identifiable, Codable, Hashable, Se
         comps.second = 0
         let timestamp = calendar.date(from: comps) ?? date
         return IntradayHeartRatePoint(
+            id: id,
             timestamp: timestamp,
             bpm: Double(bpmAvg),
-            sourceDevice: sourceDeviceKey
+            sourceDevice: DeviceSource.from(name: sourceDeviceKey).displayName
         )
     }
 }

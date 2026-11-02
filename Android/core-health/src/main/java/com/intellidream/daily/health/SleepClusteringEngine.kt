@@ -1,5 +1,6 @@
 package com.intellidream.daily.health
 
+import com.intellidream.daily.model.DeviceSource
 import com.intellidream.daily.model.HealthMetricType
 import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.NapSession
@@ -69,9 +70,10 @@ object SleepClusteringEngine {
             record.isSleep && record.startTime in windowStart..windowEnd
         }
 
-        // 2. Partition by source device to prevent cross-device stage collision
+        // 2. Partition by canonical source device to prevent cross-device stage collision
         val groupedByDevice = sleepTelemetry.groupBy { record ->
-            record.sourceDevice?.trim() ?: "Unknown"
+            val raw = record.sourceDevice?.trim()
+            if (raw.isNullOrEmpty()) "Unknown" else DeviceSource.from(raw).displayName
         }
 
         for ((device, deviceRecords) in groupedByDevice) {
@@ -266,10 +268,10 @@ object SleepClusteringEngine {
             )
         }
 
-        // 5. Select Primary Nocturnal Session
+        // 5. Select Primary Nocturnal Session (strict canonical device filter, zero cross-device fallback)
         val eligibleSessions = if (!preferredDevice.isNullOrEmpty()) {
-            val filtered = allNocturnalSessions.filter { it.sourceDevice.contains(preferredDevice, ignoreCase = true) }
-            if (filtered.isEmpty()) allNocturnalSessions else filtered
+            val targetCanon = DeviceSource.from(preferredDevice).displayName
+            allNocturnalSessions.filter { DeviceSource.from(it.sourceDevice).displayName == targetCanon }
         } else {
             allNocturnalSessions
         }

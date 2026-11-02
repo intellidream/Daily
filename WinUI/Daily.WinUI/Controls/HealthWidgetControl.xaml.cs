@@ -182,7 +182,7 @@ namespace Daily_WinUI.Controls
             // 1. Try from primary sleep session source device
             if (!string.IsNullOrEmpty(_primarySleepSession?.SourceDevice) && !DeviceSource.IsVirtual(_primarySleepSession.SourceDevice))
             {
-                _dominantDeviceName = _primarySleepSession.SourceDevice;
+                _dominantDeviceName = DeviceSource.From(_primarySleepSession.SourceDevice).DisplayName;
                 return;
             }
 
@@ -191,9 +191,10 @@ namespace Daily_WinUI.Controls
             {
                 var vitalDevices = _currentSummary.Summary.Vitals.Values
                     .Where(v => !string.IsNullOrEmpty(v.SourceDevice) && !DeviceSource.IsVirtual(v.SourceDevice))
-                    .Select(v => v.SourceDevice!)
+                    .Select(v => DeviceSource.From(v.SourceDevice).DisplayName)
                     .GroupBy(d => d)
-                    .OrderByDescending(g => g.Count())
+                    .OrderByDescending(g => DeviceSource.From(g.Key).SortPriority)
+                    .ThenByDescending(g => g.Count())
                     .FirstOrDefault();
 
                 if (vitalDevices != null)
@@ -206,9 +207,10 @@ namespace Daily_WinUI.Controls
             // 3. Fallback from metrics collection
             var metricDev = _metrics
                 .Where(m => !string.IsNullOrEmpty(m.SourceDevice) && !DeviceSource.IsVirtual(m.SourceDevice))
-                .Select(m => m.SourceDevice!)
+                .Select(m => DeviceSource.From(m.SourceDevice).DisplayName)
                 .GroupBy(d => d)
-                .OrderByDescending(g => g.Count())
+                .OrderByDescending(g => DeviceSource.From(g.Key).SortPriority)
+                .ThenByDescending(g => g.Count())
                 .FirstOrDefault();
 
             if (metricDev != null)

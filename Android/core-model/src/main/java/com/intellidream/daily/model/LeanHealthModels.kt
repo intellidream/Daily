@@ -40,9 +40,9 @@ data class HealthSleepSessionRecord(
     @SerialName("session_type") @JsonNames("sessionType") val sessionType: String = "primary_sleep",
     @SerialName("source_device_key") @JsonNames("sourceDeviceKey") val sourceDeviceKey: String,
     @SerialName("host_device_name") @JsonNames("hostDeviceName") val hostDeviceName: String? = null,
-    @Serializable(with = FlexibleTimestampSerializer::class)
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("start_time") @JsonNames("startTime") val startTime: Long,
-    @Serializable(with = FlexibleTimestampSerializer::class)
+    @Serializable(with = TimestampSerializer::class)
     @SerialName("end_time") @JsonNames("endTime") val endTime: Long,
     @SerialName("duration_seconds") @JsonNames("durationSeconds") val durationSeconds: Int,
     @SerialName("time_in_bed_seconds") @JsonNames("timeInBedSeconds") val timeInBedSeconds: Int,
@@ -59,15 +59,50 @@ data class HealthSleepSessionRecord(
     @SerialName("is_user_selected") @JsonNames("isUserSelected") val isUserSelected: Boolean = false,
     @SerialName("ingested_at") @JsonNames("ingestedAt") val ingestedAt: String? = null
 ) {
-    fun toSleepSession(): SleepSession = SleepSession(
-        id = id,
-        startTime = startTime,
-        endTime = endTime,
-        isNap = sessionType == "nap",
-        stages = stages,
-        sourceDevice = sourceDeviceKey,
-        hasGranularHypnogram = stages.isNotEmpty()
-    )
+    fun toSleepSession(): SleepSession {
+        val canonDevice = DeviceSource.from(sourceDeviceKey).displayName
+        val effectiveStages: List<SleepStageRecord> = if (stages.isNotEmpty()) {
+            stages.map { it.copy(sourceDevice = canonDevice) }
+        } else {
+            val synthesized = mutableListOf<SleepStageRecord>()
+            var cursorMs = startTime
+            fun appendBlock(type: SleepStageType, secs: Int) {
+                if (secs <= 0) return
+                val endMs = cursorMs + secs * 1000L
+                synthesized.add(
+                    SleepStageRecord(
+                        id = "${id}_${type.rawValue}_$cursorMs",
+                        stageType = type,
+                        startTime = cursorMs,
+                        endTime = endMs,
+                        durationSeconds = secs.toDouble(),
+                        sourceDevice = canonDevice
+                    )
+                )
+                cursorMs = endMs
+            }
+            val knownStages = deepSeconds + remSeconds + lightSeconds + awakeSeconds
+            if (knownStages > 0) {
+                appendBlock(SleepStageType.LIGHT, lightSeconds)
+                appendBlock(SleepStageType.DEEP, deepSeconds)
+                appendBlock(SleepStageType.REM, remSeconds)
+                appendBlock(SleepStageType.AWAKE, awakeSeconds)
+            } else if (durationSeconds > 0) {
+                appendBlock(SleepStageType.LIGHT, durationSeconds)
+            }
+            synthesized
+        }
+
+        return SleepSession(
+            id = id,
+            startTime = startTime,
+            endTime = endTime,
+            isNap = sessionType == "nap",
+            stages = effectiveStages,
+            sourceDevice = canonDevice,
+            hasGranularHypnogram = stages.isNotEmpty()
+        )
+    }
 }
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -89,7 +124,18 @@ data class HealthDailyVitalsRecord(
     @SerialName("hrv_rmssd_nightly") @JsonNames("hrvRmssdNightly") val hrvRmssdNightly: Double? = null,
     @SerialName("hourly_steps") @JsonNames("hourlySteps") val hourlySteps: List<HourlyStepBucket>? = null,
     @SerialName("updated_at") @JsonNames("updatedAt") val updatedAt: String? = null
-)
+) {
+    val hasSignal: Boolean
+        get() = steps > 0 ||
+                activeKcal > 0.0 ||
+                (restingHeartRate ?: 0) > 0 ||
+                (spo2 ?: 0.0) > 0.0 ||
+                (respiratoryRate ?: 0.0) > 0.0 ||
+                skinTempCelsius != null ||
+                (weightKg ?: 0.0) > 0.0 ||
+                (hrvSdnnNightly ?: 0.0) > 0.0 ||
+                (hrvRmssdNightly ?: 0.0) > 0.0
+}
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -116,7 +162,7 @@ data class HealthIntradayHeartRateRecord(
         return IntradayHeartRatePoint(
             timestamp = cal.timeInMillis,
             bpm = bpmAvg.toDouble(),
-            sourceDevice = sourceDeviceKey
+            sourceDevice = DeviceSource.from(sourceDeviceKey).displayName
         )
     }
 }

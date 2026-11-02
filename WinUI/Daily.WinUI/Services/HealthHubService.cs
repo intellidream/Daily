@@ -15,8 +15,9 @@ using Supabase.Realtime;
 namespace Daily_WinUI.Services
 {
     /// <summary>
-    /// Pure canonical renderer data service for WinUI 3 Health Hub.
+    /// Pure canonical & per-device lean renderer data service for WinUI 3 Health Hub.
     /// Provides instant local SQLite loading (<300ms), live Supabase Realtime synchronization,
+    /// per-device lean queries (health_sleep_sessions, health_daily_vitals, health_intraday_heart_rate),
     /// and strict adherence to zero-synthetic honest health metrics.
     /// </summary>
     public class HealthHubService : IHealthHubService
@@ -26,6 +27,9 @@ namespace Daily_WinUI.Services
         private readonly ILogger<HealthHubService>? _logger;
         private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
         private readonly ConcurrentDictionary<string, HealthDailySummaryRecord> _memoryCache = new();
+        private readonly ConcurrentDictionary<string, List<HealthSleepSessionRecord>> _sleepCache = new();
+        private readonly ConcurrentDictionary<string, List<HealthDailyVitalsRecord>> _vitalsCache = new();
+        private readonly ConcurrentDictionary<string, List<HealthIntradayHeartRateRecord>> _hrCache = new();
         private readonly ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches = new();
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
 
@@ -33,6 +37,9 @@ namespace Daily_WinUI.Services
         private string _currentViewType = "Overview";
         private HealthDailySummaryRecord? _currentSummary;
         private RealtimeChannel? _realtimeChannel;
+        private RealtimeChannel? _vitalsRealtimeChannel;
+        private RealtimeChannel? _sleepRealtimeChannel;
+        private long _lastRealtimeFetchTicks = 0;
         private bool _isInitialized = false;
 
         public HealthHubService(
@@ -137,18 +144,29 @@ namespace Daily_WinUI.Services
 
             try
             {
-                // 1. Guarantee local database table is initialized (<5ms)
                 await _dbService.InitializeAsync().ConfigureAwait(false);
 
-                // 2. Load initial date summary from FAST local SQLite/memory cache (<10ms)
+                // Purge pre-v2 cached summaries so canonical v2 unified data loads cleanly
+                try
+                {
+                    await _dbService.Connection.ExecuteAsync(
+                        "DELETE FROM health_daily_summary_cache WHERE EngineVersion IS NULL OR EngineVersion <> '2.0'"
+                    ).ConfigureAwait(false);
+                }
+                catch { }
+
                 await LoadSummaryFromLocalCacheAsync(_selectedDate).ConfigureAwait(false);
 
-                // 3. Fire-and-forget remote synchronization in background - NEVER block startup
                 _ = Task.Run(async () =>
                 {
                     try
                     {
                         await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                        await Task.WhenAll(
+                            GetLeanSleepSessionsAsync(_selectedDate, forceRefresh: true),
+                            GetLeanDailyVitalsAsync(_selectedDate, forceRefresh: true),
+                            GetLeanIntradayHeartRateAsync(_selectedDate, forceRefresh: true)
+                        ).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -156,7 +174,6 @@ namespace Daily_WinUI.Services
                     }
                 });
 
-                // 4. Fire-and-forget Realtime setup with timeout protection - NEVER block startup
                 _ = Task.Run(async () =>
                 {
                     try
@@ -190,7 +207,7 @@ namespace Daily_WinUI.Services
             try
             {
                 var entity = await _dbService.Connection.FindAsync<HealthDailySummaryEntity>(dateStr).ConfigureAwait(false);
-                if (entity != null)
+                if (entity != null && entity.EngineVersion == "2.0")
                 {
                     var record = MapEntityToRecord(entity);
                     _memoryCache[dateStr] = record;
@@ -211,10 +228,8 @@ namespace Daily_WinUI.Services
         {
             try
             {
-                // First load instantly from local SQLite/memory cache
-                var cached = await LoadSummaryFromLocalCacheAsync(_selectedDate).ConfigureAwait(false);
+                await LoadSummaryFromLocalCacheAsync(_selectedDate).ConfigureAwait(false);
 
-                // Asynchronously pull latest from remote in background
                 _ = Task.Run(async () =>
                 {
                     try
@@ -233,14 +248,19 @@ namespace Daily_WinUI.Services
             }
         }
 
-        private async Task<HealthDailySummaryRecord?> RefreshSummaryFromRemoteAsync(DateTime date)
+        private async Task<string?> EnsureUserIdAsync()
         {
-            var dateStr = date.ToString("yyyy-MM-dd");
             if (_sessionGuardian != null)
             {
                 try { await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false); } catch { }
             }
-            var currentUserId = _supabaseClient.Auth.CurrentSession?.User?.Id;
+            return _supabaseClient.Auth.CurrentSession?.User?.Id;
+        }
+
+        private async Task<HealthDailySummaryRecord?> RefreshSummaryFromRemoteAsync(DateTime date)
+        {
+            var dateStr = date.ToString("yyyy-MM-dd");
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
             if (string.IsNullOrEmpty(currentUserId))
             {
                 return _memoryCache.TryGetValue(dateStr, out var fallback) ? fallback : null;
@@ -295,19 +315,17 @@ namespace Daily_WinUI.Services
         {
             var dateStr = date.ToString("yyyy-MM-dd");
 
-            // 1. Fast memory cache (<0.1ms)
             if (!forceRefresh && _memoryCache.TryGetValue(dateStr, out var cached))
             {
                 return cached;
             }
 
-            // 2. Offline SQLite cache (<10ms)
             if (!forceRefresh)
             {
                 try
                 {
                     var entity = await _dbService.Connection.FindAsync<HealthDailySummaryEntity>(dateStr).ConfigureAwait(false);
-                    if (entity != null)
+                    if (entity != null && entity.EngineVersion == "2.0")
                     {
                         var record = MapEntityToRecord(entity);
                         _memoryCache[dateStr] = record;
@@ -320,7 +338,6 @@ namespace Daily_WinUI.Services
                 }
             }
 
-            // 3. Remote Supabase fetch with single-flight deduplication (prevents parallel storm)
             var key = dateStr + (forceRefresh ? "_force" : "");
             return await _inFlightFetches.GetOrAdd(key, _ => Task.Run(async () =>
             {
@@ -335,17 +352,248 @@ namespace Daily_WinUI.Services
             })).ConfigureAwait(false);
         }
 
+        // ==========================================
+        // LEAN PER-DEVICE QUERIES (SUPABASE v2)
+        // ==========================================
+
+        public async Task<List<HealthSleepSessionRecord>> GetLeanSleepSessionsAsync(DateTime date, bool forceRefresh = false)
+        {
+            var dateStr = date.ToString("yyyy-MM-dd");
+            if (!forceRefresh && _sleepCache.TryGetValue(dateStr, out var cached))
+            {
+                return cached;
+            }
+
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return cached ?? new List<HealthSleepSessionRecord>();
+            }
+
+            try
+            {
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthSleepSessionRecord>()
+                            .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                            .Get(),
+                        "HealthHubService.GetLeanSleepSessions")
+                    : _supabaseClient.From<HealthSleepSessionRecord>()
+                        .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                        .Get();
+
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
+                if (completed == fetchTask)
+                {
+                    var resp = await fetchTask.ConfigureAwait(false);
+                    var list = resp.Models
+                        .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.DurationSeconds > 0)
+                        .ToList();
+                    _sleepCache[dateStr] = list;
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] GetLeanSleepSessions failed for {Date}: {Message}", dateStr, ex.Message);
+            }
+
+            return cached ?? new List<HealthSleepSessionRecord>();
+        }
+
+        public async Task<List<HealthDailyVitalsRecord>> GetLeanDailyVitalsAsync(DateTime date, bool forceRefresh = false)
+        {
+            var dateStr = date.ToString("yyyy-MM-dd");
+            if (!forceRefresh && _vitalsCache.TryGetValue(dateStr, out var cached))
+            {
+                return cached;
+            }
+
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return cached ?? new List<HealthDailyVitalsRecord>();
+            }
+
+            try
+            {
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthDailyVitalsRecord>()
+                            .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                            .Get(),
+                        "HealthHubService.GetLeanDailyVitals")
+                    : _supabaseClient.From<HealthDailyVitalsRecord>()
+                        .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                        .Get();
+
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
+                if (completed == fetchTask)
+                {
+                    var resp = await fetchTask.ConfigureAwait(false);
+                    var list = resp.Models
+                        .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.HasSignal)
+                        .ToList();
+                    _vitalsCache[dateStr] = list;
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] GetLeanDailyVitals failed for {Date}: {Message}", dateStr, ex.Message);
+            }
+
+            return cached ?? new List<HealthDailyVitalsRecord>();
+        }
+
+        public async Task<List<HealthIntradayHeartRateRecord>> GetLeanIntradayHeartRateAsync(DateTime date, bool forceRefresh = false)
+        {
+            var dateStr = date.ToString("yyyy-MM-dd");
+            if (!forceRefresh && _hrCache.TryGetValue(dateStr, out var cached))
+            {
+                return cached;
+            }
+
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return cached ?? new List<HealthIntradayHeartRateRecord>();
+            }
+
+            try
+            {
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthIntradayHeartRateRecord>()
+                            .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                            .Order("bucket_minute", Supabase.Postgrest.Constants.Ordering.Ascending)
+                            .Get(),
+                        "HealthHubService.GetLeanIntradayHeartRate")
+                    : _supabaseClient.From<HealthIntradayHeartRateRecord>()
+                        .Where(x => x.UserId == currentUserId && x.LocalDate == dateStr)
+                        .Order("bucket_minute", Supabase.Postgrest.Constants.Ordering.Ascending)
+                        .Get();
+
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
+                if (completed == fetchTask)
+                {
+                    var resp = await fetchTask.ConfigureAwait(false);
+                    var list = resp.Models
+                        .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.BpmAvg > 0)
+                        .OrderBy(r => r.BucketMinute)
+                        .ToList();
+                    _hrCache[dateStr] = list;
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] GetLeanIntradayHeartRate failed for {Date}: {Message}", dateStr, ex.Message);
+            }
+
+            return cached ?? new List<HealthIntradayHeartRateRecord>();
+        }
+
+        public async Task<List<HealthSleepSessionRecord>> GetLeanSleepSessionsRangeAsync(DateTime startDate, DateTime endDate)
+        {
+            var startStr = startDate.ToString("yyyy-MM-dd");
+            var endStr = endDate.ToString("yyyy-MM-dd");
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId)) return new List<HealthSleepSessionRecord>();
+
+            try
+            {
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthSleepSessionRecord>()
+                            .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                            .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                            .Where(x => x.UserId == currentUserId)
+                            .Get(),
+                        "HealthHubService.GetLeanSleepSessionsRange")
+                    : _supabaseClient.From<HealthSleepSessionRecord>()
+                        .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                        .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                        .Where(x => x.UserId == currentUserId)
+                        .Get();
+
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
+                if (completed == fetchTask)
+                {
+                    var resp = await fetchTask.ConfigureAwait(false);
+                    var list = resp.Models
+                        .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.DurationSeconds > 0)
+                        .ToList();
+                    foreach (var g in list.GroupBy(r => r.LocalDate))
+                    {
+                        _sleepCache[g.Key] = g.ToList();
+                    }
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] GetLeanSleepSessionsRange failed: {Message}", ex.Message);
+            }
+
+            return new List<HealthSleepSessionRecord>();
+        }
+
+        public async Task<List<HealthDailyVitalsRecord>> GetLeanDailyVitalsRangeAsync(DateTime startDate, DateTime endDate)
+        {
+            var startStr = startDate.ToString("yyyy-MM-dd");
+            var endStr = endDate.ToString("yyyy-MM-dd");
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId)) return new List<HealthDailyVitalsRecord>();
+
+            try
+            {
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthDailyVitalsRecord>()
+                            .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                            .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                            .Where(x => x.UserId == currentUserId)
+                            .Get(),
+                        "HealthHubService.GetLeanDailyVitalsRange")
+                    : _supabaseClient.From<HealthDailyVitalsRecord>()
+                        .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
+                        .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
+                        .Where(x => x.UserId == currentUserId)
+                        .Get();
+
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
+                if (completed == fetchTask)
+                {
+                    var resp = await fetchTask.ConfigureAwait(false);
+                    var list = resp.Models
+                        .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.HasSignal)
+                        .ToList();
+                    foreach (var g in list.GroupBy(r => r.LocalDate))
+                    {
+                        _vitalsCache[g.Key] = g.ToList();
+                    }
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] GetLeanDailyVitalsRange failed: {Message}", ex.Message);
+            }
+
+            return new List<HealthDailyVitalsRecord>();
+        }
+
         public async Task<List<HealthDailySummaryRecord>> GetDailySummariesRangeAsync(DateTime startDate, DateTime endDate)
         {
             var startStr = startDate.ToString("yyyy-MM-dd");
             var endStr = endDate.ToString("yyyy-MM-dd");
             var results = new Dictionary<string, HealthDailySummaryRecord>(StringComparer.OrdinalIgnoreCase);
 
-            // Read from SQLite first (<20ms)
             try
             {
                 var cached = await _dbService.Connection.QueryAsync<HealthDailySummaryEntity>(
-                    "SELECT * FROM health_daily_summary_cache WHERE LocalDate >= ? AND LocalDate <= ? ORDER BY LocalDate",
+                    "SELECT * FROM health_daily_summary_cache WHERE LocalDate >= ? AND LocalDate <= ? AND EngineVersion = '2.0' ORDER BY LocalDate",
                     startStr, endStr).ConfigureAwait(false);
 
                 foreach (var entity in cached)
@@ -360,12 +608,7 @@ namespace Daily_WinUI.Services
                 _logger?.LogWarning(ex, "[HealthHubService] Range cache read error: {Message}", ex.Message);
             }
 
-            // Sync missing from remote with timeout
-            if (_sessionGuardian != null)
-            {
-                try { await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false); } catch { }
-            }
-            var currentUserId = _supabaseClient.Auth.CurrentSession?.User?.Id;
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
             if (!string.IsNullOrEmpty(currentUserId))
             {
                 try
@@ -425,25 +668,38 @@ namespace Daily_WinUI.Services
             {
                 if (_realtimeChannel != null && !forceRecreate && _realtimeChannel.IsJoined) return;
 
-                if (_realtimeChannel != null)
+                void Cleanup(ref RealtimeChannel? ch)
                 {
-                    try { _realtimeChannel.Unsubscribe(); } catch { }
-                    try { _supabaseClient.Realtime.Remove(_realtimeChannel); } catch { }
-                    _realtimeChannel = null;
+                    if (ch != null)
+                    {
+                        try { ch.Unsubscribe(); } catch { }
+                        try { _supabaseClient.Realtime.Remove(ch); } catch { }
+                        ch = null;
+                    }
                 }
+
+                Cleanup(ref _realtimeChannel);
+                Cleanup(ref _vitalsRealtimeChannel);
+                Cleanup(ref _sleepRealtimeChannel);
 
                 _realtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_daily_summary", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                 _realtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeSummaryReceived);
 
-                var subscribeTask = _realtimeChannel.Subscribe();
+                _vitalsRealtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_daily_vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                _vitalsRealtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeLeanTableReceived);
+
+                _sleepRealtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_sleep_sessions", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                _sleepRealtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeLeanTableReceived);
+
+                var subscribeTask = Task.WhenAll(
+                    _realtimeChannel.Subscribe(),
+                    _vitalsRealtimeChannel.Subscribe(),
+                    _sleepRealtimeChannel.Subscribe()
+                );
                 var completed = await Task.WhenAny(subscribeTask, Task.Delay(3000)).ConfigureAwait(false);
                 if (completed != subscribeTask)
                 {
                     _logger?.LogWarning("[HealthHubService] Realtime channel subscribe timed out after 3000ms. Will retry on socket open.");
-                }
-                else
-                {
-                    _logger?.LogInformation("[HealthHubService] Realtime channel subscribed to health_daily_summary");
                 }
             }
             catch (Exception ex)
@@ -464,6 +720,9 @@ namespace Daily_WinUI.Services
                 if (record != null && !string.IsNullOrEmpty(record.LocalDate))
                 {
                     _memoryCache[record.LocalDate] = record;
+                    _sleepCache.TryRemove(record.LocalDate, out _);
+                    _vitalsCache.TryRemove(record.LocalDate, out _);
+                    _hrCache.TryRemove(record.LocalDate, out _);
                     _ = SaveRecordToSqliteAsync(record);
 
                     if (record.LocalDate == _selectedDate.ToString("yyyy-MM-dd"))
@@ -481,6 +740,33 @@ namespace Daily_WinUI.Services
             {
                 _logger?.LogError(ex, "[HealthHubService] Realtime change processing error: {Message}", ex.Message);
             }
+        }
+
+        private void OnRealtimeLeanTableReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            var nowTicks = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var prev = System.Threading.Interlocked.Read(ref _lastRealtimeFetchTicks);
+            if (nowTicks - prev < 3000) return;
+            System.Threading.Interlocked.Exchange(ref _lastRealtimeFetchTicks, nowTicks);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var dateStr = _selectedDate.ToString("yyyy-MM-dd");
+                    _sleepCache.TryRemove(dateStr, out _);
+                    _vitalsCache.TryRemove(dateStr, out _);
+                    _hrCache.TryRemove(dateStr, out _);
+                    await Task.WhenAll(
+                        RefreshSummaryFromRemoteAsync(_selectedDate),
+                        GetLeanSleepSessionsAsync(_selectedDate, forceRefresh: true),
+                        GetLeanDailyVitalsAsync(_selectedDate, forceRefresh: true),
+                        GetLeanIntradayHeartRateAsync(_selectedDate, forceRefresh: true)
+                    ).ConfigureAwait(false);
+                    DispatchToUI(() => OnDailySummaryChanged?.Invoke(_currentSummary));
+                }
+                catch { }
+            });
         }
 
         private void DispatchToUI(Action action)
@@ -518,7 +804,7 @@ namespace Daily_WinUI.Services
                     LocalDate = record.LocalDate,
                     UserId = record.UserId,
                     ComputedAt = record.ComputedAt,
-                    EngineVersion = record.EngineVersion,
+                    EngineVersion = string.IsNullOrEmpty(record.EngineVersion) ? "2.0" : record.EngineVersion,
                     Steps = record.Steps,
                     ActiveKcal = record.ActiveKcal,
                     SleepAsleepS = record.SleepAsleepS,
@@ -584,58 +870,64 @@ namespace Daily_WinUI.Services
 
         public async Task<List<VitalMetric>> FetchMetricsForDateAsync(DateTime date)
         {
-            var summary = await GetDailySummaryAsync(date);
-            if (summary == null) return new List<VitalMetric>();
+            var summaryTask = GetDailySummaryAsync(date);
+            var leanVitalsTask = GetLeanDailyVitalsAsync(date);
+            var leanSleepTask = GetLeanSleepSessionsAsync(date);
+            await Task.WhenAll(summaryTask, leanVitalsTask, leanSleepTask).ConfigureAwait(false);
 
+            var summary = summaryTask.Result;
+            var leanVitals = leanVitalsTask.Result;
+            var leanSleep = leanSleepTask.Result;
             var list = new List<VitalMetric>();
             var dateOnly = date.Date;
 
-            if (summary.Steps.HasValue)
+            // Emit per-device metrics from lean vitals first (ordered by canonical priority)
+            foreach (var v in leanVitals.OrderByDescending(r => DeviceSource.From(r.SourceDeviceKey).SortPriority))
             {
-                list.Add(new VitalMetric { Type = VitalType.Steps, Value = summary.Steps.Value, Unit = "steps", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.ActiveKcal.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.ActiveEnergy, Value = summary.ActiveKcal.Value, Unit = "kcal", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.SleepAsleepS.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.SleepDuration, Value = summary.SleepAsleepS.Value / 60.0, Unit = "min", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.Rhr.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.RestingHeartRate, Value = summary.Rhr.Value, Unit = "bpm", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.HrvSdnn.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.HeartRateVariabilitySDNN, Value = summary.HrvSdnn.Value, Unit = "ms", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.HrvRmssd.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.HeartRateVariabilityRMSSD, Value = summary.HrvRmssd.Value, Unit = "ms", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.Weight.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.Weight, Value = summary.Weight.Value, Unit = "kg", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.Spo2.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.OxygenSaturation, Value = summary.Spo2.Value, Unit = "%", Date = dateOnly, SourceDevice = "Canonical" });
-            }
-            if (summary.StressAvg.HasValue)
-            {
-                list.Add(new VitalMetric { Type = VitalType.Stress, Value = summary.StressAvg.Value, Unit = "score", Date = dateOnly, SourceDevice = "Canonical" });
+                var canon = DeviceSource.From(v.SourceDeviceKey).DisplayName;
+                if (DeviceSource.IsVirtual(canon)) continue;
+
+                if (v.Steps > 0)
+                    list.Add(new VitalMetric { Type = VitalType.Steps, Value = v.Steps, Unit = "steps", Date = dateOnly, SourceDevice = canon });
+                if (v.ActiveKcal > 0)
+                    list.Add(new VitalMetric { Type = VitalType.ActiveEnergy, Value = v.ActiveKcal, Unit = "kcal", Date = dateOnly, SourceDevice = canon });
+                if ((v.RestingHeartRate ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.RestingHeartRate, Value = v.RestingHeartRate!.Value, Unit = "bpm", Date = dateOnly, SourceDevice = canon });
+                if ((v.HrvSdnnNightly ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.HeartRateVariabilitySDNN, Value = v.HrvSdnnNightly!.Value, Unit = "ms", Date = dateOnly, SourceDevice = canon });
+                if ((v.HrvRmssdNightly ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.HeartRateVariabilityRMSSD, Value = v.HrvRmssdNightly!.Value, Unit = "ms", Date = dateOnly, SourceDevice = canon });
+                if ((v.Spo2 ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.OxygenSaturation, Value = v.Spo2!.Value, Unit = "%", Date = dateOnly, SourceDevice = canon });
+                if ((v.RespiratoryRate ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.RespiratoryRate, Value = v.RespiratoryRate!.Value, Unit = "br/min", Date = dateOnly, SourceDevice = canon });
+                if ((v.WeightKg ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.Weight, Value = v.WeightKg!.Value, Unit = "kg", Date = dateOnly, SourceDevice = canon });
+                if (v.SkinTempCelsius.HasValue)
+                    list.Add(new VitalMetric { Type = VitalType.BodyTemperature, Value = v.SkinTempCelsius.Value, Unit = "°C", Date = dateOnly, SourceDevice = canon });
             }
 
-            // Extract extra items from vitals dictionary
-            if (summary.Summary?.Vitals != null)
+            foreach (var s in leanSleep.Where(s => s.SessionType == "primary_sleep" && s.DurationSeconds > 0)
+                                       .OrderByDescending(s => DeviceSource.From(s.SourceDeviceKey).SortPriority))
+            {
+                var canon = DeviceSource.From(s.SourceDeviceKey).DisplayName;
+                if (!DeviceSource.IsVirtual(canon))
+                {
+                    list.Add(new VitalMetric { Type = VitalType.SleepDuration, Value = s.DurationSeconds / 60.0, Unit = "min", Date = dateOnly, SourceDevice = canon });
+                }
+            }
+
+            // Fallback to canonical summary vitals with honest source attribution (never "Canonical")
+            if (summary?.Summary?.Vitals != null)
             {
                 foreach (var (k, v) in summary.Summary.Vitals)
                 {
                     if (HealthMetricRegistry.TryResolve(k, out var canMetric))
                     {
                         var vt = VitalMetric.ParseVitalType(canMetric.ToKey());
-                        if (!list.Any(x => x.Type == vt))
+                        var src = DeviceSource.From(v.SourceDevice);
+                        var canonSrc = src.IsVirtualEngine ? "" : src.DisplayName;
+                        if (!list.Any(x => x.Type == vt && string.Equals(x.SourceDevice, canonSrc, StringComparison.OrdinalIgnoreCase)))
                         {
                             list.Add(new VitalMetric
                             {
@@ -643,7 +935,7 @@ namespace Daily_WinUI.Services
                                 Value = v.Value,
                                 Unit = v.Unit ?? "",
                                 Date = dateOnly,
-                                SourceDevice = v.SourceDevice ?? "Canonical"
+                                SourceDevice = canonSrc
                             });
                         }
                     }
@@ -680,12 +972,13 @@ namespace Daily_WinUI.Services
 
                 if (val.HasValue)
                 {
+                    var dom = s.Summary?.Sources?.Select(DeviceSource.From).FirstOrDefault(x => !x.IsVirtualEngine)?.DisplayName ?? "";
                     result.Add(new VitalMetric
                     {
                         Type = type,
                         Value = val.Value,
                         Date = dt.Date,
-                        SourceDevice = "Canonical"
+                        SourceDevice = dom
                     });
                 }
             }
@@ -695,7 +988,22 @@ namespace Daily_WinUI.Services
 
         public async Task<(SleepSession? PrimarySession, List<SleepSession> AllSessions)> GetSleepSessionsAsync(DateTime date)
         {
-            var summary = await GetDailySummaryAsync(date);
+            var leanRows = await GetLeanSleepSessionsAsync(date).ConfigureAwait(false);
+            if (leanRows.Any())
+            {
+                var ordered = leanRows
+                    .OrderByDescending(r => r.IsUserSelected)
+                    .ThenByDescending(r => r.Stages != null && r.Stages.Count > 0)
+                    .ThenByDescending(r => DeviceSource.From(r.SourceDeviceKey).SortPriority)
+                    .ThenByDescending(r => r.DurationSeconds)
+                    .ToList();
+
+                var allDomain = ordered.Select(r => r.ToDomainSleepSession(date)).ToList();
+                var primaryDomain = allDomain.FirstOrDefault(s => !s.IsNap) ?? allDomain.FirstOrDefault();
+                return (primaryDomain, allDomain);
+            }
+
+            var summary = await GetDailySummaryAsync(date).ConfigureAwait(false);
             var primary = summary?.Summary?.Sleep?.PrimarySession;
 
             if (primary == null || primary.DurationSeconds <= 0)
@@ -740,6 +1048,7 @@ namespace Daily_WinUI.Services
                         _ => "sleep_stage_awake"
                     };
 
+                    var stSrc = !string.IsNullOrEmpty(st.SourceDevice) ? DeviceSource.From(st.SourceDevice).DisplayName : primary.EffectiveSourceDevice;
                     return new HealthTelemetry
                     {
                         TypeString = stageKey,
@@ -747,7 +1056,7 @@ namespace Daily_WinUI.Services
                         Unit = "sec",
                         StartTime = sTime,
                         EndTime = eTime != default ? eTime : sTime.AddSeconds(st.DurationSeconds),
-                        SourceDevice = !string.IsNullOrEmpty(st.SourceDevice) ? st.SourceDevice : primary.EffectiveSourceDevice
+                        SourceDevice = stSrc
                     };
                 }).ToList();
             }
@@ -781,9 +1090,57 @@ namespace Daily_WinUI.Services
 
         public async Task<List<HealthTelemetry>> GetHealthTelemetryAsync(DateTime start, DateTime end)
         {
-            var summaries = await GetDailySummariesRangeAsync(start.Date, end.Date);
             var list = new List<HealthTelemetry>();
 
+            // Single-day view: pull directly from lean per-device tables so device switching has exact HR & hourly steps
+            if (start.Date == end.Date)
+            {
+                var hrBucketsTask = GetLeanIntradayHeartRateAsync(start.Date);
+                var vitalsTask = GetLeanDailyVitalsAsync(start.Date);
+                await Task.WhenAll(hrBucketsTask, vitalsTask).ConfigureAwait(false);
+
+                foreach (var b in hrBucketsTask.Result)
+                {
+                    var canon = DeviceSource.From(b.SourceDeviceKey).DisplayName;
+                    if (DeviceSource.IsVirtual(canon)) continue;
+                    var ts = start.Date.AddMinutes(b.BucketMinute);
+                    list.Add(new HealthTelemetry
+                    {
+                        TypeString = "heart_rate",
+                        Value = b.BpmAvg,
+                        Unit = "bpm",
+                        StartTime = ts,
+                        EndTime = ts.AddMinutes(5),
+                        SourceDevice = canon
+                    });
+                }
+
+                foreach (var v in vitalsTask.Result)
+                {
+                    var canon = DeviceSource.From(v.SourceDeviceKey).DisplayName;
+                    if (DeviceSource.IsVirtual(canon)) continue;
+                    if (v.HourlySteps != null)
+                    {
+                        foreach (var hb in v.HourlySteps.Where(hb => hb.Steps > 0))
+                        {
+                            var hTime = start.Date.AddHours(hb.Hour);
+                            list.Add(new HealthTelemetry
+                            {
+                                TypeString = "steps",
+                                Value = hb.Steps,
+                                Unit = "steps",
+                                StartTime = hTime,
+                                EndTime = hTime.AddHours(1),
+                                SourceDevice = canon
+                            });
+                        }
+                    }
+                }
+
+                if (list.Any()) return list;
+            }
+
+            var summaries = await GetDailySummariesRangeAsync(start.Date, end.Date).ConfigureAwait(false);
             foreach (var s in summaries)
             {
                 if (s.Summary?.Cardiovascular?.IntradayHeartRate != null)
@@ -792,6 +1149,7 @@ namespace Daily_WinUI.Services
                     {
                         if (DateTime.TryParse(pt.Timestamp, out var ts))
                         {
+                            var src = DeviceSource.From(pt.SourceDevice);
                             list.Add(new HealthTelemetry
                             {
                                 TypeString = "heart_rate",
@@ -799,29 +1157,28 @@ namespace Daily_WinUI.Services
                                 Unit = "bpm",
                                 StartTime = ts,
                                 EndTime = ts,
-                                SourceDevice = "Canonical"
+                                SourceDevice = src.IsVirtualEngine ? "" : src.DisplayName
                             });
                         }
                     }
                 }
 
-                if (s.Summary?.Activity?.HourlySteps != null)
+                if (s.Summary?.Activity?.HourlySteps != null && DateTime.TryParse(s.LocalDate, out var ld))
                 {
-                    if (DateTime.TryParse(s.LocalDate, out var ld))
+                    var actSrc = DeviceSource.From(s.Summary.Activity.SourceDevice);
+                    var actCanon = actSrc.IsVirtualEngine ? "" : actSrc.DisplayName;
+                    foreach (var b in s.Summary.Activity.HourlySteps)
                     {
-                        foreach (var b in s.Summary.Activity.HourlySteps)
+                        var hTime = ld.Date.AddHours(b.Hour);
+                        list.Add(new HealthTelemetry
                         {
-                            var hTime = ld.Date.AddHours(b.Hour);
-                            list.Add(new HealthTelemetry
-                            {
-                                TypeString = "steps",
-                                Value = b.Steps,
-                                Unit = "steps",
-                                StartTime = hTime,
-                                EndTime = hTime.AddHours(1),
-                                SourceDevice = "Canonical"
-                            });
-                        }
+                            TypeString = "steps",
+                            Value = b.Steps,
+                            Unit = "steps",
+                            StartTime = hTime,
+                            EndTime = hTime.AddHours(1),
+                            SourceDevice = actCanon
+                        });
                     }
                 }
             }
@@ -851,13 +1208,15 @@ namespace Daily_WinUI.Services
 
         public Task SyncNativeHealthDataAsync()
         {
-            // Desktop renderer - pulls latest from Supabase
             return PullDeltasAsync();
         }
 
         public async Task PullDeltasAsync()
         {
             _memoryCache.Clear();
+            _sleepCache.Clear();
+            _vitalsCache.Clear();
+            _hrCache.Clear();
             await LoadSummaryForSelectedDateAsync();
         }
     }
