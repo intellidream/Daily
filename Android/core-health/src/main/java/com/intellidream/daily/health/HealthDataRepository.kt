@@ -213,6 +213,12 @@ class HealthDataRepository(
     private var cachedTelemetry: List<HealthTelemetryRecord> = emptyList()
     private var cachedVitals: List<VitalMetricRecord> = emptyList()
 
+    // Lean Cache for Selected Date
+    private var cachedLeanSleepSessions: List<HealthSleepSessionRecord> = emptyList()
+    private var cachedLeanDailyVitals: List<HealthDailyVitalsRecord> = emptyList()
+    private var cachedLeanIntradayHeartRate: List<HealthIntradayHeartRateRecord> = emptyList()
+    private var cachedLeanSources: List<HealthSourceRecord> = emptyList()
+
     private val isoDateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     private var periodicActiveSyncJob: kotlinx.coroutines.Job? = null
@@ -328,11 +334,49 @@ class HealthDataRepository(
                     val hrDeferred = async {
                         try { remoteService.fetchIntradayHeartRate(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
                     }
+                    val sourcesDeferred = async {
+                        try { remoteService.fetchHealthSources(currentUserId) } catch (e: Exception) { emptyList() }
+                    }
 
                     val remoteSummary = summaryDeferred.await()
                     val remoteSleep = sleepDeferred.await()
                     val remoteVitals = vitalsDeferred.await()
                     val remoteHr = hrDeferred.await()
+                    val remoteSources = sourcesDeferred.await()
+
+                    cachedLeanSleepSessions = remoteSleep
+                    cachedLeanDailyVitals = remoteVitals
+                    cachedLeanIntradayHeartRate = remoteHr
+                    if (remoteSources.isNotEmpty()) {
+                        cachedLeanSources = remoteSources
+                        withContext(Dispatchers.Main) {
+                            applyLeanHealthSources(remoteSources)
+                        }
+                    }
+
+                    val devSet = _availableDevices.value.toMutableSet()
+                    val srcSet = _availableSources.value.toMutableSet()
+                    for (s in remoteSleep) {
+                        devSet.add(s.sourceDeviceKey)
+                        val src = DeviceSource.from(s.sourceDeviceKey)
+                        if (!src.isVirtualEngine) srcSet.add(src)
+                    }
+                    for (v in remoteVitals) {
+                        devSet.add(v.sourceDeviceKey)
+                        val src = DeviceSource.from(v.sourceDeviceKey)
+                        if (!src.isVirtualEngine) srcSet.add(src)
+                    }
+                    for (h in remoteHr) {
+                        if (h.sourceDeviceKey.isNotEmpty()) {
+                            devSet.add(h.sourceDeviceKey)
+                            val src = DeviceSource.from(h.sourceDeviceKey)
+                            if (!src.isVirtualEngine) srcSet.add(src)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        _availableDevices.value = devSet.toList().sorted()
+                        _availableSources.value = srcSet.toList().sortedBy { it.displayName }
+                    }
 
                     if (remoteSummary != null && !remoteSummary.isEmpty()) {
                         // Avoid redundant UI re-renders if payload is identical
@@ -423,8 +467,8 @@ class HealthDataRepository(
         if (_selectedDeviceSource.value == source) return
         _selectedDeviceSource.value = source
         _selectedDeviceFilter.value = source?.displayName
+        reapplyCurrentDeviceFilter()
         scope.launch {
-            processDataForCurrentDate()
             loadHistoricalTrends(Date(_selectedDate.value))
         }
     }
@@ -433,8 +477,8 @@ class HealthDataRepository(
         if (_selectedDeviceFilter.value == device) return
         _selectedDeviceFilter.value = device
         _selectedDeviceSource.value = if (device != null) DeviceSource.from(device) else null
+        reapplyCurrentDeviceFilter()
         scope.launch {
-            processDataForCurrentDate()
             loadHistoricalTrends(Date(_selectedDate.value))
         }
     }
@@ -564,9 +608,35 @@ class HealthDataRepository(
                 val remoteHr = remoteHrDeferred.await()
                 val remoteSources = remoteSourcesDeferred.await()
 
+                cachedLeanSleepSessions = remoteSleep
+                cachedLeanDailyVitals = remoteVitals
+                cachedLeanIntradayHeartRate = remoteHr
                 if (remoteSources.isNotEmpty()) {
+                    cachedLeanSources = remoteSources
                     applyLeanHealthSources(remoteSources)
                 }
+
+                val devSet = _availableDevices.value.toMutableSet()
+                val srcSet = _availableSources.value.toMutableSet()
+                for (s in remoteSleep) {
+                    devSet.add(s.sourceDeviceKey)
+                    val src = DeviceSource.from(s.sourceDeviceKey)
+                    if (!src.isVirtualEngine) srcSet.add(src)
+                }
+                for (v in remoteVitals) {
+                    devSet.add(v.sourceDeviceKey)
+                    val src = DeviceSource.from(v.sourceDeviceKey)
+                    if (!src.isVirtualEngine) srcSet.add(src)
+                }
+                for (h in remoteHr) {
+                    if (h.sourceDeviceKey.isNotEmpty()) {
+                        devSet.add(h.sourceDeviceKey)
+                        val src = DeviceSource.from(h.sourceDeviceKey)
+                        if (!src.isVirtualEngine) srcSet.add(src)
+                    }
+                }
+                _availableDevices.value = devSet.toList().sorted()
+                _availableSources.value = srcSet.toList().sortedBy { it.displayName }
 
                 if (localTelemetry.isNotEmpty()) {
                     withContext(Dispatchers.IO) {
@@ -679,16 +749,22 @@ class HealthDataRepository(
     }
 
     fun applyLeanSleepSessions(rows: List<HealthSleepSessionRecord>) {
-        if (rows.isEmpty()) return
+        cachedLeanSleepSessions = rows
         val filter = _selectedDeviceFilter.value
         val candidateRows = if (!filter.isNullOrEmpty()) {
-            val matches = rows.filter {
+            rows.filter {
                 it.sourceDeviceKey.contains(filter, ignoreCase = true) ||
                 it.hostDeviceName?.contains(filter, ignoreCase = true) == true
             }
-            if (matches.isNotEmpty()) matches else rows
         } else {
             rows
+        }
+
+        if (candidateRows.isEmpty()) {
+            _primarySleepSession.value = null
+            _allSleepSessions.value = emptyList()
+            _daytimeNaps.value = emptyList()
+            return
         }
 
         val mapped = candidateRows.map { it.toSleepSession() }
@@ -707,23 +783,42 @@ class HealthDataRepository(
         }
 
         _primarySleepSession.value = primary
+        _allSleepSessions.value = mapped
         _daytimeNaps.value = naps
     }
 
     fun applyLeanDailyVitals(vitals: List<HealthDailyVitalsRecord>) {
-        if (vitals.isEmpty()) return
+        cachedLeanDailyVitals = vitals
         val filter = _selectedDeviceFilter.value
         val primary = if (!filter.isNullOrEmpty()) {
             vitals.firstOrNull {
                 it.sourceDeviceKey.contains(filter, ignoreCase = true) ||
                 it.hostDeviceName?.contains(filter, ignoreCase = true) == true
-            } ?: vitals.first()
+            }
         } else {
-            vitals.first()
+            vitals.maxByOrNull { it.steps } ?: vitals.firstOrNull()
         }
+
+        val map = if (!filter.isNullOrEmpty()) mutableMapOf() else _currentVitals.value.toMutableMap()
+        val nowMs = System.currentTimeMillis()
+
+        if (primary == null) {
+            if (!filter.isNullOrEmpty()) {
+                _hourlySteps.value = emptyList()
+                _totalStepsToday.value = 0
+                _totalActiveCalories.value = 0.0
+                _stepsSourceDevice.value = filter
+                _restingBpm.value = 0.0
+                _currentVitals.value = emptyMap()
+            }
+            return
+        }
+
         val steps = primary.hourlySteps
         if (!steps.isNullOrEmpty()) {
             _hourlySteps.value = steps
+        } else {
+            _hourlySteps.value = emptyList()
         }
         val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
         if (isToday) {
@@ -733,14 +828,11 @@ class HealthDataRepository(
             _totalStepsToday.value = primary.steps
             _totalActiveCalories.value = primary.activeKcal
         }
+        _stepsSourceDevice.value = primary.sourceDeviceKey
+
         val rhr = primary.restingHeartRate
         if (rhr != null && rhr > 0) {
             _restingBpm.value = rhr.toDouble()
-        }
-
-        val map = _currentVitals.value.toMutableMap()
-        val nowMs = System.currentTimeMillis()
-        if (rhr != null && rhr > 0) {
             map[HealthMetricType.RESTING_HEART_RATE] = VitalMetricRecord(
                 userId = primary.userId,
                 type = HealthMetricType.RESTING_HEART_RATE.rawKey,
@@ -750,7 +842,11 @@ class HealthDataRepository(
                 sourceDevice = primary.sourceDeviceKey,
                 createdAt = nowMs
             )
+        } else if (!filter.isNullOrEmpty()) {
+            _restingBpm.value = 0.0
+            map.remove(HealthMetricType.RESTING_HEART_RATE)
         }
+
         val spo2 = primary.spo2
         if (spo2 != null && spo2 > 0) {
             map[HealthMetricType.OXYGEN_SATURATION] = VitalMetricRecord(
@@ -762,7 +858,10 @@ class HealthDataRepository(
                 sourceDevice = primary.sourceDeviceKey,
                 createdAt = nowMs
             )
+        } else if (!filter.isNullOrEmpty()) {
+            map.remove(HealthMetricType.OXYGEN_SATURATION)
         }
+
         val resp = primary.respiratoryRate
         if (resp != null && resp > 0) {
             map[HealthMetricType.RESPIRATORY_RATE] = VitalMetricRecord(
@@ -774,7 +873,10 @@ class HealthDataRepository(
                 sourceDevice = primary.sourceDeviceKey,
                 createdAt = nowMs
             )
+        } else if (!filter.isNullOrEmpty()) {
+            map.remove(HealthMetricType.RESPIRATORY_RATE)
         }
+
         val temp = primary.skinTempCelsius
         if (temp != null) {
             map[HealthMetricType.BODY_TEMPERATURE] = VitalMetricRecord(
@@ -786,7 +888,10 @@ class HealthDataRepository(
                 sourceDevice = primary.sourceDeviceKey,
                 createdAt = nowMs
             )
+        } else if (!filter.isNullOrEmpty()) {
+            map.remove(HealthMetricType.BODY_TEMPERATURE)
         }
+
         val weight = primary.weightKg
         if (weight != null && weight > 0) {
             map[HealthMetricType.WEIGHT] = VitalMetricRecord(
@@ -798,8 +903,12 @@ class HealthDataRepository(
                 sourceDevice = primary.sourceDeviceKey,
                 createdAt = nowMs
             )
+        } else if (!filter.isNullOrEmpty()) {
+            map.remove(HealthMetricType.WEIGHT)
         }
+
         val hrv = primary.hrvSdnnNightly
+        val rmssd = primary.hrvRmssdNightly
         if (hrv != null && hrv > 0) {
             map[HealthMetricType.HRV_SDNN] = VitalMetricRecord(
                 userId = primary.userId,
@@ -810,24 +919,53 @@ class HealthDataRepository(
                 sourceDevice = primary.sourceDeviceKey,
                 createdAt = nowMs
             )
+        } else if (rmssd != null && rmssd > 0) {
+            map[HealthMetricType.HRV_RMSSD] = VitalMetricRecord(
+                userId = primary.userId,
+                type = HealthMetricType.HRV_RMSSD.rawKey,
+                value = rmssd,
+                unit = "ms",
+                date = primary.localDate,
+                sourceDevice = primary.sourceDeviceKey,
+                createdAt = nowMs
+            )
+        } else if (!filter.isNullOrEmpty()) {
+            map.remove(HealthMetricType.HRV_SDNN)
+            map.remove(HealthMetricType.HRV_RMSSD)
         }
+
         _currentVitals.value = map
     }
 
     fun applyLeanIntradayHeartRate(buckets: List<HealthIntradayHeartRateRecord>, targetDateEpochMs: Long) {
-        if (buckets.isEmpty()) return
-        val points = buckets.map { it.toPoint(targetDateEpochMs) }.sortedBy { it.timestamp }
+        cachedLeanIntradayHeartRate = buckets
+        val filter = _selectedDeviceFilter.value
+        val filtered = if (!filter.isNullOrEmpty()) {
+            buckets.filter {
+                it.sourceDeviceKey.contains(filter, ignoreCase = true)
+            }
+        } else {
+            buckets
+        }
+
+        val points = filtered.map { it.toPoint(targetDateEpochMs) }.sortedBy { it.timestamp }
         _intradayHeartRate.value = points
-        val bpms = buckets.map { it.bpmAvg.toDouble() }
+        val bpms = filtered.map { it.bpmAvg.toDouble() }
         if (bpms.isNotEmpty()) {
             _averageBpm.value = bpms.sum() / bpms.size
-            _minBpm.value = (buckets.minOfOrNull { it.bpmMin } ?: 0).toDouble()
-            _maxBpm.value = (buckets.maxOfOrNull { it.bpmMax } ?: 0).toDouble()
+            _minBpm.value = (filtered.minOfOrNull { it.bpmMin } ?: 0).toDouble()
+            _maxBpm.value = (filtered.maxOfOrNull { it.bpmMax } ?: 0).toDouble()
             _latestBpm.value = points.lastOrNull()?.bpm
+        } else {
+            _averageBpm.value = 0.0
+            _minBpm.value = 0.0
+            _maxBpm.value = 0.0
+            _latestBpm.value = null
         }
     }
 
     fun applyLeanHealthSources(sources: List<HealthSourceRecord>) {
+        cachedLeanSources = sources
         if (sources.isEmpty()) return
         val devSet = _availableDevices.value.toMutableSet()
         val srcSet = _availableSources.value.toMutableSet()
@@ -840,6 +978,77 @@ class HealthDataRepository(
         }
         _availableDevices.value = devSet.toList().sorted()
         _availableSources.value = srcSet.toList().sortedBy { it.displayName }
+    }
+
+    fun reapplyCurrentDeviceFilter() {
+        val filter = _selectedDeviceFilter.value
+        if (filter.isNullOrEmpty()) {
+            val canonical = _canonicalSummary.value
+            if (canonical != null) {
+                applyCanonicalSummary(canonical, isoDateFormatter.format(Date(_selectedDate.value)))
+            }
+        }
+
+        if (cachedLeanSleepSessions.isNotEmpty()) {
+            applyLeanSleepSessions(cachedLeanSleepSessions)
+        } else {
+            _primarySleepSession.value = null
+            _allSleepSessions.value = emptyList()
+            _daytimeNaps.value = emptyList()
+        }
+
+        if (cachedLeanDailyVitals.isNotEmpty()) {
+            applyLeanDailyVitals(cachedLeanDailyVitals)
+        }
+
+        if (cachedLeanIntradayHeartRate.isNotEmpty()) {
+            applyLeanIntradayHeartRate(cachedLeanIntradayHeartRate, _selectedDate.value)
+        }
+
+        recalculateStressForCurrentDevice()
+    }
+
+    private fun recalculateStressForCurrentDevice() {
+        val canonical = _canonicalSummary.value
+        val filter = _selectedDeviceFilter.value
+
+        val stress = canonical?.stress
+        if (filter.isNullOrEmpty() && stress != null) {
+            _stressAnalysis.value = stress.toDomainAnalysis()
+            _currentStressScore.value = stress.currentScore
+            _currentStressLevel.value = stress.toDomainLevel()
+            _intradayStress.value = stress.intradayStress
+            return
+        }
+
+        val vitalsMap = _currentVitals.value
+        val hrvVal = vitalsMap[HealthMetricType.HRV_SDNN]?.value ?: vitalsMap[HealthMetricType.HRV_RMSSD]?.value
+        val rhrVal = if (_restingBpm.value > 0) _restingBpm.value else vitalsMap[HealthMetricType.RESTING_HEART_RATE]?.value
+        val hrPoints = _intradayHeartRate.value
+
+        if (hrvVal != null || hrPoints.isNotEmpty() || (rhrVal != null && rhrVal > 0)) {
+            val stressCalc = StressAnalysisEngine.calculateStress(
+                targetDate = Date(_selectedDate.value),
+                hrvMs = hrvVal,
+                hrTelemetry = hrPoints,
+                hourlySteps = _hourlySteps.value,
+                restingBpm = rhrVal?.takeIf { it > 0 },
+                priorSleepScore = _primarySleepSession.value?.sleepScore
+            )
+            if (stressCalc != null) {
+                val (stressResult, intradayPoints) = stressCalc
+                _currentStressScore.value = stressResult.currentScore
+                _currentStressLevel.value = stressResult.currentLevel
+                _stressAnalysis.value = stressResult
+                _intradayStress.value = intradayPoints
+                return
+            }
+        }
+
+        _stressAnalysis.value = null
+        _intradayStress.value = emptyList()
+        _currentStressScore.value = 0
+        _currentStressLevel.value = StressLevel.CALM
     }
 
     private fun applyCanonicalSummary(payload: DailyHealthSummaryPayload, dateKey: String) {

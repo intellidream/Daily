@@ -87,6 +87,12 @@ public final class HealthDataService: ObservableObject {
     private var periodicActiveSyncTask: Task<Void, Never>?
     private var lastSuccessfulLoadTime: [String: Date] = [:]
     
+    // Lean Cache for Selected Date
+    private var currentLeanSleepSessions: [HealthSleepSessionRecord] = []
+    private var currentLeanDailyVitals: [HealthDailyVitalsRecord] = []
+    private var currentLeanIntradayHeartRate: [HealthIntradayHeartRateRecord] = []
+    private var currentLeanSources: [HealthSourceRecord] = []
+    
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -428,8 +434,8 @@ public final class HealthDataService: ObservableObject {
         guard selectedDeviceSource != source else { return }
         selectedDeviceSource = source
         selectedDeviceFilter = source?.displayName
+        reapplyCurrentDeviceFilter()
         Task {
-            await processDataForCurrentDate()
             await loadHistoricalTrends()
         }
     }
@@ -438,8 +444,8 @@ public final class HealthDataService: ObservableObject {
         guard selectedDeviceFilter != device else { return }
         selectedDeviceFilter = device
         selectedDeviceSource = device != nil ? DeviceSource.from(name: device) : nil
+        reapplyCurrentDeviceFilter()
         Task {
-            await processDataForCurrentDate()
             await loadHistoricalTrends()
         }
     }
@@ -639,9 +645,36 @@ public final class HealthDataService: ObservableObject {
         let leanHr = await remoteHrFetch
         let leanSources = await remoteSourcesFetch
         
+        self.currentLeanSleepSessions = leanSleep
+        self.currentLeanDailyVitals = leanVitals
+        self.currentLeanIntradayHeartRate = leanHr
         if !leanSources.isEmpty {
+            self.currentLeanSources = leanSources
             applyLeanHealthSources(leanSources)
         }
+        
+        var discoveredDevices = Set(self.availableDevices)
+        var discoveredSources = Set(self.availableSources)
+        for s in leanSleep {
+            discoveredDevices.insert(s.sourceDeviceKey)
+            let src = DeviceSource.from(name: s.sourceDeviceKey)
+            if !src.isVirtualEngine { discoveredSources.insert(src) }
+        }
+        for v in leanVitals {
+            discoveredDevices.insert(v.sourceDeviceKey)
+            let src = DeviceSource.from(name: v.sourceDeviceKey)
+            if !src.isVirtualEngine { discoveredSources.insert(src) }
+        }
+        for h in leanHr {
+            let dev = h.sourceDeviceKey
+            if !dev.isEmpty {
+                discoveredDevices.insert(dev)
+                let src = DeviceSource.from(name: dev)
+                if !src.isVirtualEngine { discoveredSources.insert(src) }
+            }
+        }
+        self.availableDevices = Array(discoveredDevices).sorted()
+        self.availableSources = Array(discoveredSources).sorted(by: { $0.displayName < $1.displayName })
         
         // 4. If canonical summary was found, apply and merge local sensor data atomically to eliminate UI flickering
         if let payload = remotePayload {
@@ -773,15 +806,14 @@ public final class HealthDataService: ObservableObject {
     
     /// Unpacks lean discrete sleep sessions into published UI properties.
     public func applyLeanSleepSessions(_ rows: [HealthSleepSessionRecord]) {
-        guard !rows.isEmpty else { return }
+        self.currentLeanSleepSessions = rows
         
         let candidateRows: [HealthSleepSessionRecord] = {
             if let filter = selectedDeviceFilter, !filter.isEmpty {
-                let matches = rows.filter {
+                return rows.filter {
                     $0.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
                     || $0.hostDeviceName?.localizedCaseInsensitiveContains(filter) == true
                 }
-                return matches.isEmpty ? rows : matches
             }
             return rows
         }()
@@ -808,118 +840,159 @@ public final class HealthDataService: ObservableObject {
     
     /// Unpacks consolidated daily vitals into published properties.
     public func applyLeanDailyVitals(_ vitals: [HealthDailyVitalsRecord]) {
-        guard !vitals.isEmpty else { return }
+        self.currentLeanDailyVitals = vitals
         
-        let primary: HealthDailyVitalsRecord = {
+        let primary: HealthDailyVitalsRecord? = {
             if let filter = selectedDeviceFilter, !filter.isEmpty {
                 return vitals.first(where: {
                     $0.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
                     || $0.hostDeviceName?.localizedCaseInsensitiveContains(filter) == true
-                }) ?? vitals.first!
+                })
             }
-            return vitals.first!
+            return vitals.first
         }()
-        if let steps = primary.hourlySteps, !steps.isEmpty {
-            self.hourlySteps = steps
-        }
-        let isToday = Calendar.current.isDateInToday(selectedDate)
-        if isToday {
-            self.totalStepsToday = max(self.totalStepsToday, primary.steps)
-            self.totalActiveCalories = max(self.totalActiveCalories, primary.activeKcal)
-        } else {
-            self.totalStepsToday = primary.steps
-            self.totalActiveCalories = primary.activeKcal
-        }
-        if let rhr = primary.restingHeartRate, rhr > 0 {
-            self.restingBpm = Double(rhr)
-        }
         
-        let dateKey = primary.localDate
-        var updatedVitals = self.currentVitals
-        if let rhr = primary.restingHeartRate, rhr > 0 {
-            updatedVitals[.restingHeartRate] = VitalMetricRecord(
-                userId: primary.userId,
-                type: HealthMetricType.restingHeartRate.rawValue,
-                value: Double(rhr),
-                unit: "bpm",
-                date: dateKey,
-                sourceDevice: primary.sourceDeviceKey,
-                createdAt: primary.updatedAt ?? Date()
-            )
+        if let primary = primary {
+            if let steps = primary.hourlySteps, !steps.isEmpty {
+                self.hourlySteps = steps
+            } else {
+                self.hourlySteps = []
+            }
+            let isToday = Calendar.current.isDateInToday(selectedDate)
+            if isToday && selectedDeviceFilter == nil {
+                self.totalStepsToday = max(self.totalStepsToday, primary.steps)
+                self.totalActiveCalories = max(self.totalActiveCalories, primary.activeKcal)
+            } else {
+                self.totalStepsToday = primary.steps
+                self.totalActiveCalories = primary.activeKcal
+            }
+            self.stepsSourceDevice = primary.sourceDeviceKey
+            if let rhr = primary.restingHeartRate, rhr > 0 {
+                self.restingBpm = Double(rhr)
+            } else {
+                self.restingBpm = 0
+            }
+            
+            let dateKey = primary.localDate
+            var updatedVitals: [HealthMetricType: VitalMetricRecord] = selectedDeviceFilter == nil ? self.currentVitals : [:]
+            if let rhr = primary.restingHeartRate, rhr > 0 {
+                updatedVitals[.restingHeartRate] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.restingHeartRate.rawValue,
+                    value: Double(rhr),
+                    unit: "bpm",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            }
+            if let spo2 = primary.spo2, spo2 > 0 {
+                updatedVitals[.oxygenSaturation] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.oxygenSaturation.rawValue,
+                    value: spo2,
+                    unit: "%",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            }
+            if let resp = primary.respiratoryRate, resp > 0 {
+                updatedVitals[.respiratoryRate] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.respiratoryRate.rawValue,
+                    value: resp,
+                    unit: "br/min",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            }
+            if let temp = primary.skinTempCelsius {
+                updatedVitals[.bodyTemperature] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.bodyTemperature.rawValue,
+                    value: temp,
+                    unit: "°C",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            }
+            if let weight = primary.weightKg, weight > 0 {
+                updatedVitals[.weight] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.weight.rawValue,
+                    value: weight,
+                    unit: "kg",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            }
+            if let hrv = primary.hrvSdnnNightly, hrv > 0 {
+                updatedVitals[.hrvSdnn] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.hrvSdnn.rawValue,
+                    value: hrv,
+                    unit: "ms",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            } else if let hrv = primary.hrvRmssdNightly, hrv > 0 {
+                updatedVitals[.hrvRmssd] = VitalMetricRecord(
+                    userId: primary.userId,
+                    type: HealthMetricType.hrvRmssd.rawValue,
+                    value: hrv,
+                    unit: "ms",
+                    date: dateKey,
+                    sourceDevice: primary.sourceDeviceKey,
+                    createdAt: primary.updatedAt ?? Date()
+                )
+            }
+            self.currentVitals = updatedVitals
+        } else if selectedDeviceFilter != nil {
+            // Selected device has no vitals recorded for this date
+            self.hourlySteps = []
+            self.totalStepsToday = 0
+            self.totalActiveCalories = 0
+            self.stepsSourceDevice = selectedDeviceFilter
+            self.restingBpm = 0
+            self.currentVitals = [:]
         }
-        if let spo2 = primary.spo2, spo2 > 0 {
-            updatedVitals[.oxygenSaturation] = VitalMetricRecord(
-                userId: primary.userId,
-                type: HealthMetricType.oxygenSaturation.rawValue,
-                value: spo2,
-                unit: "%",
-                date: dateKey,
-                sourceDevice: primary.sourceDeviceKey,
-                createdAt: primary.updatedAt ?? Date()
-            )
-        }
-        if let resp = primary.respiratoryRate, resp > 0 {
-            updatedVitals[.respiratoryRate] = VitalMetricRecord(
-                userId: primary.userId,
-                type: HealthMetricType.respiratoryRate.rawValue,
-                value: resp,
-                unit: "br/min",
-                date: dateKey,
-                sourceDevice: primary.sourceDeviceKey,
-                createdAt: primary.updatedAt ?? Date()
-            )
-        }
-        if let temp = primary.skinTempCelsius {
-            updatedVitals[.bodyTemperature] = VitalMetricRecord(
-                userId: primary.userId,
-                type: HealthMetricType.bodyTemperature.rawValue,
-                value: temp,
-                unit: "°C",
-                date: dateKey,
-                sourceDevice: primary.sourceDeviceKey,
-                createdAt: primary.updatedAt ?? Date()
-            )
-        }
-        if let weight = primary.weightKg, weight > 0 {
-            updatedVitals[.weight] = VitalMetricRecord(
-                userId: primary.userId,
-                type: HealthMetricType.weight.rawValue,
-                value: weight,
-                unit: "kg",
-                date: dateKey,
-                sourceDevice: primary.sourceDeviceKey,
-                createdAt: primary.updatedAt ?? Date()
-            )
-        }
-        if let hrv = primary.hrvSdnnNightly, hrv > 0 {
-            updatedVitals[.hrvSdnn] = VitalMetricRecord(
-                userId: primary.userId,
-                type: HealthMetricType.hrvSdnn.rawValue,
-                value: hrv,
-                unit: "ms",
-                date: dateKey,
-                sourceDevice: primary.sourceDeviceKey,
-                createdAt: primary.updatedAt ?? Date()
-            )
-        }
-        self.currentVitals = updatedVitals
     }
     
     /// Unpacks 5-minute bucketed heart rate into published curve.
     public func applyLeanIntradayHeartRate(_ buckets: [HealthIntradayHeartRateRecord], targetDate: Date) {
-        guard !buckets.isEmpty else { return }
-        let points = buckets.map { $0.toPoint(for: targetDate) }
+        self.currentLeanIntradayHeartRate = buckets
+        
+        let filteredBuckets: [HealthIntradayHeartRateRecord] = {
+            if let filter = selectedDeviceFilter, !filter.isEmpty {
+                return buckets.filter {
+                    $0.sourceDeviceKey.localizedCaseInsensitiveContains(filter)
+                }
+            }
+            return buckets
+        }()
+        
+        let points = filteredBuckets.map { $0.toPoint(for: targetDate) }
         self.intradayHeartRate = points.sorted(by: { $0.timestamp < $1.timestamp })
-        let bpms = buckets.map { Double($0.bpmAvg) }
+        let bpms = filteredBuckets.map { Double($0.bpmAvg) }
         if !bpms.isEmpty {
             self.averageBpm = bpms.reduce(0, +) / Double(bpms.count)
-            self.minBpm = Double(buckets.map { $0.bpmMin }.min() ?? 0)
-            self.maxBpm = Double(buckets.map { $0.bpmMax }.max() ?? 0)
+            self.minBpm = Double(filteredBuckets.map { $0.bpmMin }.min() ?? 0)
+            self.maxBpm = Double(filteredBuckets.map { $0.bpmMax }.max() ?? 0)
+        } else {
+            self.averageBpm = 0
+            self.minBpm = 0
+            self.maxBpm = 0
         }
     }
     
     /// Registers canonical device catalog from health_sources into available sources.
     public func applyLeanHealthSources(_ sources: [HealthSourceRecord]) {
+        self.currentLeanSources = sources
         guard !sources.isEmpty else { return }
         var devicesSet = Set(self.availableDevices)
         var sourcesSet = Set(self.availableSources)
@@ -932,6 +1005,91 @@ public final class HealthDataService: ObservableObject {
         }
         self.availableDevices = Array(devicesSet).sorted()
         self.availableSources = Array(sourcesSet).sorted(by: { $0.displayName < $1.displayName })
+    }
+
+    /// Re-evaluates current cached lean telemetry for the active device filter without network roundtrips.
+    public func reapplyCurrentDeviceFilter() {
+        if !currentLeanSleepSessions.isEmpty {
+            applyLeanSleepSessions(currentLeanSleepSessions)
+        } else {
+            self.primarySleepSession = nil
+            self.allSleepSessions = []
+            self.daytimeNaps = []
+        }
+        
+        if !currentLeanDailyVitals.isEmpty {
+            applyLeanDailyVitals(currentLeanDailyVitals)
+        }
+        
+        if !currentLeanIntradayHeartRate.isEmpty {
+            applyLeanIntradayHeartRate(currentLeanIntradayHeartRate, targetDate: selectedDate)
+        }
+        
+        recalculateStressForCurrentDevice()
+    }
+    
+    /// Calculates or retrieves stress specifically for the active device filter.
+    private func recalculateStressForCurrentDevice() {
+        let cal = Calendar.current
+        
+        // If All Devices and canonicalSummary has stress, use it
+        if selectedDeviceFilter == nil, let stress = canonicalSummary?.stress {
+            self.currentStressScore = stress.currentScore
+            self.currentStressLevel = stress.currentLevel
+            self.intradayStress = stress.intradayPoints
+            let breathing = BreathingProtocol(rawValue: stress.recommendedBreathing) ?? .boxBreathing
+            self.stressAnalysis = StressAnalysisResult(
+                currentScore: stress.currentScore,
+                currentLevel: stress.currentLevel,
+                dailyAverageScore: stress.dailyAverage,
+                peakHour: stress.peakHour,
+                peakScore: stress.peakScore,
+                lowestHour: stress.lowestHour,
+                lowestScore: stress.lowestScore,
+                parasympatheticPercent: stress.parasympatheticPercent,
+                sympatheticPercent: stress.sympatheticPercent,
+                baselineHrvMs: stress.baselineHrvMs,
+                currentHrvMs: stress.currentHrvMs,
+                hrvDeltaPercent: stress.hrvDeltaPercent,
+                restingHeartRateBpm: stress.restingHeartRateBpm,
+                currentSedentaryBpm: stress.currentSedentaryBpm,
+                heartRateElevationBpm: stress.heartRateElevationBpm,
+                monkeyMood: stress.monkeyMood,
+                adviceQuote: stress.adviceQuote,
+                recommendedBreathing: breathing,
+                lastUpdated: canonicalSummary?.computedAt ?? Date()
+            )
+            return
+        }
+        
+        let hrvVal = currentVitals[.hrvSdnn]?.value ?? currentVitals[.hrvRmssd]?.value
+        let rhrVal = restingBpm > 0 ? restingBpm : currentVitals[.restingHeartRate]?.value
+        
+        if hrvVal != nil || !intradayHeartRate.isEmpty || (rhrVal != nil && rhrVal! > 0) {
+            let stressCalc = StressAnalysisEngine.calculateStress(
+                targetDate: selectedDate,
+                hrvMs: hrvVal,
+                hrTelemetry: intradayHeartRate,
+                hourlySteps: hourlySteps,
+                restingBpm: rhrVal,
+                priorSleepScore: primarySleepSession?.sleepScore,
+                personalBaselineHrv: nil,
+                personalBaselineRhr: nil,
+                calendar: cal
+            )
+            if let stressCalc = stressCalc {
+                self.stressAnalysis = stressCalc.result
+                self.intradayStress = stressCalc.intradayPoints
+                self.currentStressScore = stressCalc.result.currentScore
+                self.currentStressLevel = stressCalc.result.currentLevel
+                return
+            }
+        }
+        
+        self.stressAnalysis = nil
+        self.intradayStress = []
+        self.currentStressScore = 0
+        self.currentStressLevel = .calm
     }
     
     /// Unpacks canonical DailyHealthSummaryPayload into published properties.
