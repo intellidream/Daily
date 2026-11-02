@@ -600,11 +600,12 @@ namespace Daily_WinUI.Views
                     var vitals = summary?.Summary?.Vitals;
                     if (vitals != null)
                     {
-                        steps = vitals.Values.FirstOrDefault(v => v.Type == "steps" && v.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true)?.Value ?? 0;
-                        rhr = vitals.Values.FirstOrDefault(v => v.Type == "resting_heart_rate" && v.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true)?.Value ?? 0;
-                        cal = vitals.Values.FirstOrDefault(v => v.Type == "active_energy" && v.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true)?.Value ?? 0;
-                        wt = vitals.Values.FirstOrDefault(v => v.Type == "weight" && v.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true)?.Value ?? 0;
-                        hrv = vitals.Values.FirstOrDefault(v => (v.Type == "hrv_sdnn" || v.Type == "hrv_rmssd") && v.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true)?.Value ?? 0;
+                        if (vitals.TryGetValue("steps", out var st) && st.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) steps = st.Value;
+                        if (vitals.TryGetValue("resting_heart_rate", out var rh) && rh.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) rhr = rh.Value;
+                        if (vitals.TryGetValue("active_energy", out var ae) && ae.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) cal = ae.Value;
+                        if (vitals.TryGetValue("weight", out var we) && we.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) wt = we.Value;
+                        if (vitals.TryGetValue("hrv_sdnn", out var hs) && hs.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) hrv = hs.Value;
+                        else if (vitals.TryGetValue("hrv_rmssd", out var hr) && hr.SourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true) hrv = hr.Value;
                     }
                     var matchedSleep = summary?.Summary?.Sleep?.AllSessions?.FirstOrDefault(ss => ss.EffectiveSourceDevice?.Contains(_selectedDeviceFilter, StringComparison.OrdinalIgnoreCase) == true);
                     if (matchedSleep != null)
