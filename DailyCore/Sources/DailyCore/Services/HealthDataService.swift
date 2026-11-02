@@ -438,7 +438,7 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 3. Concurrently fetch Supabase canonical summary while reading local on-device provider (HealthKit)
+        // 3. Concurrently fetch Supabase lean health data & canonical summary while reading local on-device provider (HealthKit)
         let session = try? await supabase.auth.session
         let userId = session?.user.id.uuidString.lowercased()
         
@@ -462,6 +462,68 @@ public final class HealthDataService: ObservableObject {
             return nil
         }()
         
+        async let remoteSleepFetch: [HealthSleepSessionRecord] = {
+            guard let userId = userId else { return [] }
+            do {
+                return try await supabase
+                    .from("health_sleep_sessions")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .eq("local_date", value: dateKey)
+                    .order("source_priority", ascending: true)
+                    .execute()
+                    .value
+            } catch {
+                return []
+            }
+        }()
+        
+        async let remoteVitalsFetch: [HealthDailyVitalsRecord] = {
+            guard let userId = userId else { return [] }
+            do {
+                return try await supabase
+                    .from("health_daily_vitals")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .eq("local_date", value: dateKey)
+                    .execute()
+                    .value
+            } catch {
+                return []
+            }
+        }()
+        
+        async let remoteHrFetch: [HealthIntradayHeartRateRecord] = {
+            guard let userId = userId else { return [] }
+            do {
+                return try await supabase
+                    .from("health_intraday_heart_rate")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .eq("local_date", value: dateKey)
+                    .order("bucket_minute", ascending: true)
+                    .execute()
+                    .value
+            } catch {
+                return []
+            }
+        }()
+        
+        async let remoteSourcesFetch: [HealthSourceRecord] = {
+            guard let userId = userId else { return [] }
+            do {
+                return try await supabase
+                    .from("health_sources")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .order("priority_sleep", ascending: true)
+                    .execute()
+                    .value
+            } catch {
+                return []
+            }
+        }()
+        
         var localTelemetry: [HealthTelemetryRecord] = []
         if let provider = localDataProvider {
             let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
@@ -477,6 +539,14 @@ public final class HealthDataService: ObservableObject {
         }
         
         let remotePayload = await remoteSummaryFetch
+        let leanSleep = await remoteSleepFetch
+        let leanVitals = await remoteVitalsFetch
+        let leanHr = await remoteHrFetch
+        let leanSources = await remoteSourcesFetch
+        
+        if !leanSources.isEmpty {
+            applyLeanHealthSources(leanSources)
+        }
         
         // 4. If canonical summary was found, apply and merge local sensor data atomically to eliminate UI flickering
         if let payload = remotePayload {
@@ -489,6 +559,36 @@ public final class HealthDataService: ObservableObject {
                 applyCanonicalSummary(payload, dateKey: dateKey)
             }
             
+            // Supplement with dedicated sleep sessions if available
+            if !leanSleep.isEmpty {
+                applyLeanSleepSessions(leanSleep)
+            }
+            if !leanVitals.isEmpty {
+                applyLeanDailyVitals(leanVitals)
+            }
+            if !leanHr.isEmpty {
+                applyLeanIntradayHeartRate(leanHr, targetDate: targetDate)
+            }
+            
+            if !localTelemetry.isEmpty {
+                mergeLocalTelemetryWithSummary(telemetry: localTelemetry, isToday: isToday)
+            }
+            ensureLocalDeviceSourcesPopulated()
+            await loadHistoricalTrends()
+            return
+        }
+        
+        // 5. If canonical summary is absent but lean tables have data, apply them directly!
+        if !leanSleep.isEmpty || !leanVitals.isEmpty || !leanHr.isEmpty {
+            if !leanSleep.isEmpty {
+                applyLeanSleepSessions(leanSleep)
+            }
+            if !leanVitals.isEmpty {
+                applyLeanDailyVitals(leanVitals)
+            }
+            if !leanHr.isEmpty {
+                applyLeanIntradayHeartRate(leanHr, targetDate: targetDate)
+            }
             if !localTelemetry.isEmpty {
                 mergeLocalTelemetryWithSummary(telemetry: localTelemetry, isToday: isToday)
             }
@@ -572,6 +672,79 @@ public final class HealthDataService: ObservableObject {
                 }
             }
         }
+    }
+    
+    // MARK: - Lean Health Architecture Applicators
+    
+    /// Unpacks lean discrete sleep sessions into published UI properties.
+    public func applyLeanSleepSessions(_ rows: [HealthSleepSessionRecord]) {
+        guard !rows.isEmpty else { return }
+        let mapped = rows.map { $0.toSleepSession() }
+        let primary = rows.first(where: { $0.sessionType == "primary_sleep" && $0.isUserSelected })?.toSleepSession()
+            ?? rows.first(where: { $0.sessionType == "primary_sleep" })?.toSleepSession()
+            ?? mapped.first
+        
+        let naps = rows.filter { $0.sessionType == "nap" }.map { r in
+            NapSession(
+                id: r.id,
+                startTime: r.startTime,
+                endTime: r.endTime,
+                durationSeconds: Double(r.durationSeconds),
+                sourceDevice: r.sourceDeviceKey
+            )
+        }
+        
+        self.primarySleepSession = primary
+        self.allSleepSessions = mapped
+        self.daytimeNaps = naps
+    }
+    
+    /// Unpacks consolidated daily vitals into published properties.
+    public func applyLeanDailyVitals(_ vitals: [HealthDailyVitalsRecord]) {
+        guard let primary = vitals.first else { return }
+        if let steps = primary.hourlySteps, !steps.isEmpty {
+            self.hourlySteps = steps
+        }
+        let isToday = Calendar.current.isDateInToday(selectedDate)
+        if isToday {
+            self.totalStepsToday = max(self.totalStepsToday, primary.steps)
+            self.totalActiveCalories = max(self.totalActiveCalories, primary.activeKcal)
+        } else {
+            self.totalStepsToday = primary.steps
+            self.totalActiveCalories = primary.activeKcal
+        }
+        if let rhr = primary.restingHeartRate, rhr > 0 {
+            self.restingBpm = Double(rhr)
+        }
+    }
+    
+    /// Unpacks 5-minute bucketed heart rate into published curve.
+    public func applyLeanIntradayHeartRate(_ buckets: [HealthIntradayHeartRateRecord], targetDate: Date) {
+        guard !buckets.isEmpty else { return }
+        let points = buckets.map { $0.toPoint(for: targetDate) }
+        self.intradayHeartRate = points.sorted(by: { $0.timestamp < $1.timestamp })
+        let bpms = buckets.map { Double($0.bpmAvg) }
+        if !bpms.isEmpty {
+            self.averageBpm = bpms.reduce(0, +) / Double(bpms.count)
+            self.minBpm = Double(buckets.map { $0.bpmMin }.min() ?? 0)
+            self.maxBpm = Double(buckets.map { $0.bpmMax }.max() ?? 0)
+        }
+    }
+    
+    /// Registers canonical device catalog from health_sources into available sources.
+    public func applyLeanHealthSources(_ sources: [HealthSourceRecord]) {
+        guard !sources.isEmpty else { return }
+        var devicesSet = Set(self.availableDevices)
+        var sourcesSet = Set(self.availableSources)
+        for s in sources {
+            devicesSet.insert(s.displayName)
+            let src = DeviceSource.from(name: s.displayName)
+            if !src.isVirtualEngine {
+                sourcesSet.insert(src)
+            }
+        }
+        self.availableDevices = Array(devicesSet).sorted()
+        self.availableSources = Array(sourcesSet).sorted(by: { $0.displayName < $1.displayName })
     }
     
     /// Unpacks canonical DailyHealthSummaryPayload into published properties.

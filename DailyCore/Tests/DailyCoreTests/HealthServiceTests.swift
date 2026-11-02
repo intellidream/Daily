@@ -788,6 +788,66 @@ struct HealthServiceTests {
         #expect(verdict.readinessScore == 80)
         #expect(verdict.physicalRepairRating == "High")
     }
+
+    @Test func testLeanHealthModelsAndSessionConversion() async throws {
+        let now = Date()
+        let bedTime = now.addingTimeInterval(-28800)
+        let stages: [SleepStageRecord] = [
+            SleepStageRecord(id: "s1", stageType: .light, startTime: bedTime, endTime: bedTime.addingTimeInterval(3600), sourceDevice: "Oura Ring"),
+            SleepStageRecord(id: "s2", stageType: .deep, startTime: bedTime.addingTimeInterval(3600), endTime: bedTime.addingTimeInterval(7200), sourceDevice: "Oura Ring"),
+            SleepStageRecord(id: "s3", stageType: .rem, startTime: bedTime.addingTimeInterval(7200), endTime: bedTime.addingTimeInterval(10800), sourceDevice: "Oura Ring"),
+            SleepStageRecord(id: "s4", stageType: .awake, startTime: bedTime.addingTimeInterval(10800), endTime: bedTime.addingTimeInterval(12600), sourceDevice: "Oura Ring"),
+            SleepStageRecord(id: "s5", stageType: .light, startTime: bedTime.addingTimeInterval(12600), endTime: now, sourceDevice: "Oura Ring")
+        ]
+        
+        let record = HealthSleepSessionRecord(
+            id: "sleep_test_1",
+            userId: "user-123",
+            localDate: "2026-11-02",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Oura Ring",
+            hostDeviceName: "Schmitz",
+            startTime: bedTime,
+            endTime: now,
+            durationSeconds: 28800,
+            timeInBedSeconds: 28800,
+            efficiencyPercent: 93.7,
+            sleepScore: 85,
+            deepSeconds: 3600,
+            remSeconds: 3600,
+            lightSeconds: 19800,
+            awakeSeconds: 1800,
+            stages: stages,
+            sourcePriority: 1,
+            isUserSelected: true
+        )
+        
+        let session = record.toSleepSession()
+        #expect(session.id == "sleep_test_1")
+        #expect(session.sourceDevice == "Oura Ring")
+        #expect(session.hasGranularHypnogram == true)
+        #expect(session.deepSeconds == 3600)
+        #expect(session.remSeconds == 3600)
+        #expect(session.awakeSeconds == 1800)
+        #expect(session.stages.count == 5)
+        #expect(session.sleepScore > 70)
+        
+        // Intraday Heart Rate Bucket to Point
+        let bucket = HealthIntradayHeartRateRecord(
+            id: "hr_1",
+            userId: "user-123",
+            localDate: "2026-11-02",
+            sourceDeviceKey: "Pixel Watch 5",
+            bucketMinute: 120, // 02:00 AM
+            bpmAvg: 62,
+            bpmMin: 58,
+            bpmMax: 68,
+            sampleCount: 5
+        )
+        let point = bucket.toPoint(for: now)
+        #expect(point.bpm == 62)
+        #expect(point.sourceDevice == "Pixel Watch 5")
+    }
 }
 
 

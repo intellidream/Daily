@@ -11,6 +11,11 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
 import com.intellidream.daily.model.DailyHealthSummaryPayload
 import com.intellidream.daily.model.DailyMetricTrendPoint
 import com.intellidream.daily.model.DeviceSource
+import com.intellidream.daily.model.HealthDailySummaryRecord
+import com.intellidream.daily.model.HealthDailyVitalsRecord
+import com.intellidream.daily.model.HealthIntradayHeartRateRecord
+import com.intellidream.daily.model.HealthSleepSessionRecord
+import com.intellidream.daily.model.HealthSourceRecord
 import com.intellidream.daily.model.HealthMetricType
 import com.intellidream.daily.model.HealthSubTab
 import com.intellidream.daily.model.HealthTelemetryRecord
@@ -452,7 +457,7 @@ class HealthDataRepository(
             }
 
             try {
-                // 2. Concurrently fetch Supabase canonical summary and local Health Connect
+                // 2. Concurrently fetch Supabase lean data, canonical summary and local Health Connect
                 val localTelemetryDeferred = async(Dispatchers.IO) {
                     if (healthConnectManager.isAvailable && healthConnectManager.hasAnyPermissions()) {
                         healthConnectManager.fetchTelemetryForDate(targetDate, currentUserId)
@@ -471,8 +476,48 @@ class HealthDataRepository(
                     }
                 }
 
+                val remoteSleepDeferred = async(Dispatchers.IO) {
+                    if (currentUserId != "local_user") {
+                        remoteService.fetchSleepSessions(currentUserId, dateKey)
+                    } else {
+                        emptyList()
+                    }
+                }
+
+                val remoteVitalsDeferred = async(Dispatchers.IO) {
+                    if (currentUserId != "local_user") {
+                        remoteService.fetchDailyVitals(currentUserId, dateKey)
+                    } else {
+                        emptyList()
+                    }
+                }
+
+                val remoteHrDeferred = async(Dispatchers.IO) {
+                    if (currentUserId != "local_user") {
+                        remoteService.fetchIntradayHeartRate(currentUserId, dateKey)
+                    } else {
+                        emptyList()
+                    }
+                }
+
+                val remoteSourcesDeferred = async(Dispatchers.IO) {
+                    if (currentUserId != "local_user") {
+                        remoteService.fetchHealthSources(currentUserId)
+                    } else {
+                        emptyList()
+                    }
+                }
+
                 val localTelemetry = localTelemetryDeferred.await()
                 val remoteSummary = remoteSummaryDeferred.await()
+                val remoteSleep = remoteSleepDeferred.await()
+                val remoteVitals = remoteVitalsDeferred.await()
+                val remoteHr = remoteHrDeferred.await()
+                val remoteSources = remoteSourcesDeferred.await()
+
+                if (remoteSources.isNotEmpty()) {
+                    applyLeanHealthSources(remoteSources)
+                }
 
                 if (localTelemetry.isNotEmpty()) {
                     withContext(Dispatchers.IO) {
@@ -501,6 +546,33 @@ class HealthDataRepository(
                             summaryDao.upsertSummary(entity)
                         }
                         applyCanonicalSummary(remoteSummary, dateKey)
+                    }
+
+                    if (remoteSleep.isNotEmpty()) {
+                        applyLeanSleepSessions(remoteSleep)
+                    }
+                    if (remoteVitals.isNotEmpty()) {
+                        applyLeanDailyVitals(remoteVitals)
+                    }
+                    if (remoteHr.isNotEmpty()) {
+                        applyLeanIntradayHeartRate(remoteHr, targetDate.time)
+                    }
+
+                    if (localTelemetry.isNotEmpty()) {
+                        mergeLocalTelemetryWithSummary(localTelemetry, isToday = isToday)
+                    }
+                    ensureLocalDeviceSourcesPopulated()
+                    loadHistoricalTrends(targetDate)
+                    return@launch
+                } else if (remoteSleep.isNotEmpty() || remoteVitals.isNotEmpty() || remoteHr.isNotEmpty()) {
+                    if (remoteSleep.isNotEmpty()) {
+                        applyLeanSleepSessions(remoteSleep)
+                    }
+                    if (remoteVitals.isNotEmpty()) {
+                        applyLeanDailyVitals(remoteVitals)
+                    }
+                    if (remoteHr.isNotEmpty()) {
+                        applyLeanIntradayHeartRate(remoteHr, targetDate.time)
                     }
 
                     if (localTelemetry.isNotEmpty()) {
@@ -555,6 +627,75 @@ class HealthDataRepository(
                 }
             }
         }
+    }
+
+    fun applyLeanSleepSessions(rows: List<HealthSleepSessionRecord>) {
+        if (rows.isEmpty()) return
+        val mapped = rows.map { it.toSleepSession() }
+        val primary = rows.firstOrNull { it.sessionType == "primary_sleep" && it.isUserSelected }?.toSleepSession()
+            ?: rows.firstOrNull { it.sessionType == "primary_sleep" }?.toSleepSession()
+            ?: mapped.firstOrNull()
+
+        val naps = rows.filter { it.sessionType == "nap" }.map { r ->
+            NapSession(
+                id = r.id,
+                startTime = r.startTime,
+                endTime = r.endTime,
+                durationSeconds = r.durationSeconds.toDouble(),
+                sourceDevice = r.sourceDeviceKey
+            )
+        }
+
+        _primarySleepSession.value = primary
+        _daytimeNaps.value = naps
+    }
+
+    fun applyLeanDailyVitals(vitals: List<HealthDailyVitalsRecord>) {
+        val primary = vitals.firstOrNull() ?: return
+        val steps = primary.hourlySteps
+        if (!steps.isNullOrEmpty()) {
+            _hourlySteps.value = steps
+        }
+        val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
+        if (isToday) {
+            _totalStepsToday.value = maxOf(_totalStepsToday.value, primary.steps)
+            _totalActiveCalories.value = maxOf(_totalActiveCalories.value, primary.activeKcal)
+        } else {
+            _totalStepsToday.value = primary.steps
+            _totalActiveCalories.value = primary.activeKcal
+        }
+        val rhr = primary.restingHeartRate
+        if (rhr != null && rhr > 0) {
+            _restingBpm.value = rhr.toDouble()
+        }
+    }
+
+    fun applyLeanIntradayHeartRate(buckets: List<HealthIntradayHeartRateRecord>, targetDateEpochMs: Long) {
+        if (buckets.isEmpty()) return
+        val points = buckets.map { it.toPoint(targetDateEpochMs) }.sortedBy { it.timestamp }
+        _intradayHeartRate.value = points
+        val bpms = buckets.map { it.bpmAvg.toDouble() }
+        if (bpms.isNotEmpty()) {
+            _averageBpm.value = bpms.sum() / bpms.size
+            _minBpm.value = (buckets.minOfOrNull { it.bpmMin } ?: 0).toDouble()
+            _maxBpm.value = (buckets.maxOfOrNull { it.bpmMax } ?: 0).toDouble()
+            _latestBpm.value = points.lastOrNull()?.bpm
+        }
+    }
+
+    fun applyLeanHealthSources(sources: List<HealthSourceRecord>) {
+        if (sources.isEmpty()) return
+        val devSet = _availableDevices.value.toMutableSet()
+        val srcSet = _availableSources.value.toMutableSet()
+        for (s in sources) {
+            devSet.add(s.displayName)
+            val src = DeviceSource.from(s.displayName)
+            if (!src.isVirtualEngine) {
+                srcSet.add(src)
+            }
+        }
+        _availableDevices.value = devSet.toList().sorted()
+        _availableSources.value = srcSet.toList().sortedBy { it.displayName }
     }
 
     private fun applyCanonicalSummary(payload: DailyHealthSummaryPayload, dateKey: String) {

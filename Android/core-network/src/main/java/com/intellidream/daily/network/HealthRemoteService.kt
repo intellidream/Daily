@@ -3,6 +3,10 @@ package com.intellidream.daily.network
 import com.intellidream.daily.model.DailyHealthSummaryPayload
 import com.intellidream.daily.model.DeviceSource
 import com.intellidream.daily.model.HealthDailySummaryRecord
+import com.intellidream.daily.model.HealthDailyVitalsRecord
+import com.intellidream.daily.model.HealthIntradayHeartRateRecord
+import com.intellidream.daily.model.HealthSleepSessionRecord
+import com.intellidream.daily.model.HealthSourceRecord
 import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.VitalMetricRecord
 import io.github.jan.supabase.postgrest.postgrest
@@ -173,6 +177,116 @@ class HealthRemoteService(
             conn.disconnect()
             code in 200..299
         } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun fetchSleepSessions(
+        userId: String,
+        date: String
+    ): List<HealthSleepSessionRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_sleep_sessions"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        eq("local_date", date)
+                    }
+                    order("source_priority", Order.ASCENDING)
+                }
+                .decodeList<HealthSleepSessionRecord>()
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to fetch sleep sessions: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun fetchDailyVitals(
+        userId: String,
+        date: String
+    ): List<HealthDailyVitalsRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_daily_vitals"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        eq("local_date", date)
+                    }
+                }
+                .decodeList<HealthDailyVitalsRecord>()
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to fetch daily vitals: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun fetchIntradayHeartRate(
+        userId: String,
+        date: String
+    ): List<HealthIntradayHeartRateRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_intraday_heart_rate"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        eq("local_date", date)
+                    }
+                    order("bucket_minute", Order.ASCENDING)
+                }
+                .decodeList<HealthIntradayHeartRateRecord>()
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to fetch intraday heart rate: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun fetchHealthSources(
+        userId: String
+    ): List<HealthSourceRecord> = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_sources"]
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                    order("priority_sleep", Order.ASCENDING)
+                }
+                .decodeList<HealthSourceRecord>()
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to fetch health sources: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun pushSleepSession(session: HealthSleepSessionRecord): Boolean = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_sleep_sessions"].upsert(session)
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to push sleep session: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun pushDailyVitals(vitals: HealthDailyVitalsRecord): Boolean = withContext(Dispatchers.IO) {
+        try {
+            clientManager.client.postgrest["health_daily_vitals"].upsert(vitals)
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to push daily vitals: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun pushIntradayHeartRate(buckets: List<HealthIntradayHeartRateRecord>): Boolean = withContext(Dispatchers.IO) {
+        if (buckets.isEmpty()) return@withContext true
+        try {
+            for (chunk in buckets.chunked(100)) {
+                clientManager.client.postgrest["health_intraday_heart_rate"].upsert(chunk)
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to push intraday heart rate buckets: ${e.message}")
             false
         }
     }
