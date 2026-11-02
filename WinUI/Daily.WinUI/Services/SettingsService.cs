@@ -84,6 +84,11 @@ public sealed class AppSettings
     public bool WidgetAgingEnabled { get; set; } = true;
     public int WidgetAgingDurationSeconds { get; set; } = 30;
     public double WidgetAgingGrainIntensity { get; set; } = 50.0;
+
+    // ── Desktop Widgets (Windows 11 Desktop Layer) ──
+    public bool DesktopWidgetsEnabled { get; set; } = true;
+    public bool DesktopWidgetsLocked { get; set; } = false;
+    public string DesktopWidgetsConfigJson { get; set; } = string.Empty;
 }
 
 public sealed class SavedLocation

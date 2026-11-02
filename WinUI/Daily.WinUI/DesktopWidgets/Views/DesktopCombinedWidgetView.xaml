@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Daily_WinUI.DesktopWidgets.Views.DesktopCombinedWidgetView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Loaded="UserControl_Loaded">
+
+    <Grid Padding="14,12,14,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Width="26" Height="26" CornerRadius="13" Background="#2500E5FF">
+                    <FontIcon Glyph="&#xE737;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel>
+                    <TextBlock x:Name="GreetingText" Text="DayOne Executive Brief" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                    <TextBlock x:Name="DateSubtitleText" Text="Monday · Daily Highlights" FontSize="10" Foreground="#80FFFFFF"/>
+                </StackPanel>
+            </Grid>
+
+            <TextBlock x:Name="WeatherHeaderBadge" Text="18°C · Partly Cloudy" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+        </Grid>
+
+        <!-- Center 4-Module Matrix -->
+        <Grid Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 1. Hydration -->
+            <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,4" Background="#1238BDF8" CornerRadius="10" Padding="8,6,8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE909;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Hydration" FontSize="9" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="HydrationMetricText" Text="1,750 / 2,500 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 2. Smoke-Free -->
+            <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,4" Background="#12FB7185" CornerRadius="10" Padding="8,6,8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE9E9;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FB7185" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Smokes" FontSize="9" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="SmokesMetricText" Text="Smoke-Free 🌟" FontSize="11" FontWeight="SemiBold" Foreground="#34D399"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 3. SmartLedger -->
+            <Border Grid.Row="1" Grid.Column="0" Margin="0,4,4,0" Background="#1210B981" CornerRadius="10" Padding="8,6,8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#10B981" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Net Worth" FontSize="9" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="MoneyMetricText" Text="14,250 Lei" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 4. Sleep Recovery -->
+            <Border Grid.Row="1" Grid.Column="1" Margin="4,4,0,0" Background="#12818CF8" CornerRadius="10" Padding="8,6,8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#818CF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Recovery" FontSize="9" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="SleepMetricText" Text="88/100 · 7h 45m" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Bottom Executive Status -->
+        <Border Grid.Row="2" Background="#1500E5FF" CornerRadius="8" Padding="10,4,10,4">
+            <Grid>
+                <TextBlock x:Name="BottomSummaryText" Text="All systems nominal · Offline cache synced" FontSize="10" Foreground="#A5F3FC" HorizontalAlignment="Left"/>
+                <TextBlock Text="⚡ DayOne Orbit" FontSize="10" Foreground="#00E5FF" HorizontalAlignment="Right"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

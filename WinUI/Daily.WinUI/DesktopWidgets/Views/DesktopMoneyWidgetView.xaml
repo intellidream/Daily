@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Daily_WinUI.DesktopWidgets.Views.DesktopMoneyWidgetView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Loaded="UserControl_Loaded">
+
+    <Grid Padding="14,12,14,12">
+        <!-- ── SMALL LAYOUT (170x170) ── -->
+        <Grid x:Name="SmallLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#10B981"/>
+                <TextBlock Text="SmartLedger" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+            </StackPanel>
+
+            <!-- Net Worth Value -->
+            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                <TextBlock x:Name="SmallNetWorthText" Text="0 Lei" FontSize="16" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="SmallNetWorthEurText" Text="~0 €" FontSize="11" Foreground="#10B981" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Card / Cash Summary Pill -->
+            <Border Grid.Row="2" Background="#1510B981" CornerRadius="8" Padding="6,4,6,4" HorizontalAlignment="Stretch">
+                <TextBlock x:Name="SmallBalancePillText" Text="Card &amp; Cash Synced" FontSize="9" Foreground="#34D399" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
+        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Width="26" Height="26" CornerRadius="13" Background="#2510B981">
+                        <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#10B981" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Finances &amp; SmartLedger" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="MediumEurSubtitle" Text="~0 € Net Balance" FontSize="10" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock x:Name="MediumNetWorthText" Text="0 Lei" FontSize="18" FontWeight="Bold" Foreground="#10B981" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Center Content: Card vs Cash Balances -->
+            <Grid Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Card Account -->
+                <Border Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#38BDF8"/>
+                            <TextBlock Text="Card Account" FontSize="10" Foreground="#A0FFFFFF"/>
+                        </StackPanel>
+                        <TextBlock x:Name="CardBalanceText" Text="0 Lei" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Cash Account -->
+                <Border Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FBBF24"/>
+                            <TextBlock Text="Cash Balance" FontSize="10" Foreground="#A0FFFFFF"/>
+                        </StackPanel>
+                        <TextBlock x:Name="CashBalanceText" Text="0 Lei" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Quick Adjustment Buttons -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Margin="0,0,4,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#2010B981" BorderBrush="#3510B981" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCardPlus100_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#10B981"/>
+                        <TextBlock Text="+100 Card" FontSize="11" FontWeight="SemiBold" Foreground="#10B981"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="1" Margin="2,0,2,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20EF4444" BorderBrush="#35EF4444" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCardMinus100_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE738;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#EF4444"/>
+                        <TextBlock Text="-100 Card" FontSize="11" FontWeight="SemiBold" Foreground="#EF4444"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="2" Margin="4,0,0,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20F59E0B" BorderBrush="#35F59E0B" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCashPlus100_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FBBF24"/>
+                        <TextBlock Text="+100 Cash" FontSize="11" FontWeight="SemiBold" Foreground="#FBBF24"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

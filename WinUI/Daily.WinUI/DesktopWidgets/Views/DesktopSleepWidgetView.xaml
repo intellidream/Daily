@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Daily_WinUI.DesktopWidgets.Views.DesktopSleepWidgetView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Loaded="UserControl_Loaded">
+
+    <Grid Padding="14,12,14,12">
+        <!-- ── SMALL LAYOUT (170x170) ── -->
+        <Grid x:Name="SmallLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#818CF8"/>
+                <TextBlock Text="Sleep &amp; Recovery" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+            </StackPanel>
+
+            <!-- Circular Score Ring & Duration -->
+            <Grid Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Width="72" Height="72">
+                <ProgressRing x:Name="SmallProgressRing" Width="72" Height="72" Value="0" Maximum="100" IsIndeterminate="False"
+                              Foreground="#818CF8" Background="#20818CF8" />
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock x:Name="SmallScoreText" Text="85" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#FFFFFFFF"/>
+                    <TextBlock x:Name="SmallDurationText" Text="7h 30m" FontSize="9" Foreground="#A0FFFFFF" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Recovery Pill -->
+            <Border Grid.Row="2" Background="#15818CF8" CornerRadius="8" Padding="6,4,6,4" HorizontalAlignment="Stretch">
+                <TextBlock x:Name="SmallQualityText" Text="Optimal Recovery" FontSize="10" Foreground="#A5B4FC" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
+        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Width="26" Height="26" CornerRadius="13" Background="#25818CF8">
+                        <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#818CF8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Sleep &amp; Recovery" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="MediumScheduleSubtitle" Text="23:30 → 07:15 (7h 45m)" FontSize="10" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="MediumScoreText" Text="88" FontSize="18" FontWeight="Bold" Foreground="#818CF8"/>
+                    <TextBlock Text="/100" FontSize="11" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Center Content: Score Ring & Sleep Stages -->
+            <Grid Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Score Ring -->
+                <Grid Width="64" Height="64" Margin="4,0,14,0" VerticalAlignment="Center">
+                    <ProgressRing x:Name="MediumProgressRing" Width="64" Height="64" Value="0" Maximum="100" IsIndeterminate="False"
+                                  Foreground="#818CF8" Background="#20818CF8" />
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock x:Name="MediumCenterDurationText" Text="7h 45m" FontSize="10" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Hypnogram Stages Summary -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                    <TextBlock x:Name="MediumQualityHeader" Text="Restorative Sleep Quality (High)" FontSize="12" FontWeight="SemiBold" Foreground="#A5B4FC"/>
+
+                    <!-- Proportional Stages Bar -->
+                    <Grid Height="8" CornerRadius="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="4*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="#4F46E5" CornerRadius="4,0,0,4" ToolTipService.ToolTip="Deep Sleep"/>
+                        <Border Grid.Column="1" Background="#818CF8" ToolTipService.ToolTip="REM Sleep"/>
+                        <Border Grid.Column="2" Background="#A5B4FC" ToolTipService.ToolTip="Light Sleep"/>
+                        <Border Grid.Column="3" Background="#F43F5E" CornerRadius="0,4,4,0" ToolTipService.ToolTip="Awake"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock x:Name="DeepStageText" Text="Deep 1h 40m" FontSize="10" Foreground="#C7D2FE"/>
+                        <TextBlock x:Name="RemStageText" Text="REM 2h 10m" FontSize="10" Foreground="#A5B4FC"/>
+                        <TextBlock x:Name="LightStageText" Text="Light 3h 25m" FontSize="10" Foreground="#818CF8"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+
+            <!-- Bottom Metrics Pill -->
+            <Border Grid.Row="2" Background="#15818CF8" CornerRadius="8" Padding="10,4,10,4">
+                <Grid>
+                    <TextBlock x:Name="RestingHrText" Text="Resting HR: 58 bpm" FontSize="10" Foreground="#E0E7FF" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="HrvBalanceText" Text="HRV Balance: 62 ms" FontSize="10" Foreground="#34D399" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

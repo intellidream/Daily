@@ -258,6 +258,25 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- Default style and template for LungsControl -->
+            <Style TargetType="controls:LungsControl">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="controls:LungsControl">
+                            <Canvas x:Name="PART_Canvas">
+                                <Path x:Name="PART_LeftFill"       StrokeThickness="0" />
+                                <Path x:Name="PART_RightFill"      StrokeThickness="0" />
+                                <Path x:Name="PART_LeftOutline"    StrokeThickness="1.5" />
+                                <Path x:Name="PART_RightOutline"   StrokeThickness="1.5" />
+                                <Path x:Name="PART_Trachea"        StrokeThickness="1.5" Fill="Transparent" />
+                                <Path x:Name="PART_LeftDivision"   StrokeThickness="1.0" Fill="Transparent" />
+                                <Path x:Name="PART_RightDivision"  StrokeThickness="1.0" Fill="Transparent" />
+                            </Canvas>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

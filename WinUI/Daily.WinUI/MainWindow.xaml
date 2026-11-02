@@ -394,6 +394,27 @@
                             <FontIcon Glyph="&#xE737;" FontFamily="Segoe Fluent Icons" />
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
+                    <MenuFlyoutSubItem Text="Desktop Widgets">
+                        <MenuFlyoutSubItem.Icon>
+                            <FontIcon Glyph="&#xE7F4;" FontFamily="Segoe Fluent Icons" />
+                        </MenuFlyoutSubItem.Icon>
+                        <MenuFlyoutItem Text="Show / Hide Desktop Widgets" Click="TrayToggleDesktopWidgets_Click" />
+                        <MenuFlyoutItem Text="Lock / Unlock Positions" Click="TrayToggleLockWidgets_Click" />
+                        <MenuFlyoutItem Text="Refresh All Widgets" Click="TrayRefreshWidgets_Click" />
+                        <MenuFlyoutItem Text="Reset to Default Layout" Click="TrayResetWidgets_Click" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutSubItem Text="Add Widget">
+                            <MenuFlyoutItem Text="Combined Brief" Click="TrayAddCombinedWidget_Click" />
+                            <MenuFlyoutItem Text="Bubbles (Hydration)" Click="TrayAddBubblesWidget_Click" />
+                            <MenuFlyoutItem Text="Smokes (Lungs &amp; Tobacco)" Click="TrayAddSmokesWidget_Click" />
+                            <MenuFlyoutItem Text="Money (SmartLedger)" Click="TrayAddMoneyWidget_Click" />
+                            <MenuFlyoutItem Text="Sleep (Recovery &amp; Stages)" Click="TrayAddSleepWidget_Click" />
+                            <MenuFlyoutItem Text="Stress (HRV &amp; Vitals)" Click="TrayAddStressWidget_Click" />
+                            <MenuFlyoutItem Text="Cosmos (Stargazing &amp; Moon)" Click="TrayAddCosmosWidget_Click" />
+                            <MenuFlyoutItem Text="TagDoS (Task Pipeline)" Click="TrayAddTagdosWidget_Click" />
+                            <MenuFlyoutItem Text="Weather (Hourly Timeline)" Click="TrayAddWeatherWidget_Click" />
+                        </MenuFlyoutSubItem>
+                    </MenuFlyoutSubItem>
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem Text="Exit" Click="TrayExit_Click">
                         <MenuFlyoutItem.Icon>

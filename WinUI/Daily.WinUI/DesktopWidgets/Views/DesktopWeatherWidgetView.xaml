@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Daily_WinUI.DesktopWidgets.Views.DesktopWeatherWidgetView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Loaded="UserControl_Loaded">
+
+    <Grid Padding="14,12,14,12">
+        <!-- ── SMALL LAYOUT (170x170) ── -->
+        <Grid x:Name="SmallLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header: Location -->
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8"/>
+                <TextBlock x:Name="SmallLocationText" Text="Bucharest" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+            </StackPanel>
+
+            <!-- Temperature & Weather Icon -->
+            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                <TextBlock x:Name="SmallTempText" Text="18°" FontSize="32" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="SmallConditionText" Text="Partly Cloudy" FontSize="11" Foreground="#BAE6FD" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- High / Low Pill -->
+            <Border Grid.Row="2" Background="#1538BDF8" CornerRadius="8" Padding="6,4,6,4" HorizontalAlignment="Stretch">
+                <TextBlock x:Name="SmallHighLowText" Text="H: 21° · L: 12°" FontSize="10" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
+        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Width="26" Height="26" CornerRadius="13" Background="#2538BDF8">
+                        <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#38BDF8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock x:Name="MediumLocationText" Text="Bucharest, Romania" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="MediumConditionSubtitle" Text="Partly Cloudy · Feels like 18°" FontSize="10" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock x:Name="MediumTempText" Text="18°C" FontSize="20" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Center Content: 5-Hour Forecast Timeline -->
+            <Grid Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Hour 1 -->
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Now" FontSize="10" Foreground="#80FFFFFF" HorizontalAlignment="Center"/>
+                    <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8" HorizontalAlignment="Center" Margin="0,2,0,2"/>
+                    <TextBlock x:Name="Hour1Temp" Text="18°" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Hour 2 -->
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="+1h" FontSize="10" Foreground="#80FFFFFF" HorizontalAlignment="Center"/>
+                    <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8" HorizontalAlignment="Center" Margin="0,2,0,2"/>
+                    <TextBlock x:Name="Hour2Temp" Text="19°" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Hour 3 -->
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="+2h" FontSize="10" Foreground="#80FFFFFF" HorizontalAlignment="Center"/>
+                    <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FBBF24" HorizontalAlignment="Center" Margin="0,2,0,2"/>
+                    <TextBlock x:Name="Hour3Temp" Text="20°" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Hour 4 -->
+                <StackPanel Grid.Column="3" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="+3h" FontSize="10" Foreground="#80FFFFFF" HorizontalAlignment="Center"/>
+                    <FontIcon Glyph="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FBBF24" HorizontalAlignment="Center" Margin="0,2,0,2"/>
+                    <TextBlock x:Name="Hour4Temp" Text="19°" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Hour 5 -->
+                <StackPanel Grid.Column="4" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="+4h" FontSize="10" Foreground="#80FFFFFF" HorizontalAlignment="Center"/>
+                    <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#818CF8" HorizontalAlignment="Center" Margin="0,2,0,2"/>
+                    <TextBlock x:Name="Hour5Temp" Text="17°" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Bottom Weather Details Pill -->
+            <Border Grid.Row="2" Background="#1538BDF8" CornerRadius="8" Padding="10,4,10,4">
+                <Grid>
+                    <TextBlock x:Name="MediumHighLowDetail" Text="High: 21° · Low: 12°" FontSize="10" Foreground="#BAE6FD" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="HumidityWindText" Text="💧 54% · 💨 3.2 m/s" FontSize="10" Foreground="#93C5FD" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -352,6 +352,17 @@ public partial class App : Application
         _window.Activate();
         LogDiagnostic("MainWindow created and activated");
 
+        // Initialize Windows 11 Desktop Widgets on Desktop Wallpaper layer
+        try
+        {
+            DesktopWidgets.DesktopWidgetManager.Instance.Initialize();
+            LogDiagnostic("DesktopWidgetManager initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic($"DesktopWidgetManager initialization warning: {ex.Message}");
+        }
+
         // Handle initial launch activation (covers cold-start via protocol click)
         var appActivatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
         HandleActivation(appActivatedArgs);
