@@ -234,6 +234,19 @@ public partial class App : Application
                                 });
                             }
                         }
+                        else if (line.Equals("hide", StringComparison.OrdinalIgnoreCase) ||
+                                 line.Equals("minimize", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received hide/minimize command");
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.AppWindow.Hide();
+                                });
+                            }
+                        }
                         else if (line.Equals("settings", StringComparison.OrdinalIgnoreCase))
                         {
                             System.Diagnostics.Debug.WriteLine("[Pipe] Received settings command");
