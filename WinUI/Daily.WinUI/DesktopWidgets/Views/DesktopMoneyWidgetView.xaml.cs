@@ -85,18 +85,18 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     var cardAcc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("card") == true);
                     var cashAcc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("cash") == true);
 
-                    decimal cardBal = cardAcc?.Balance ?? 0;
-                    decimal cashBal = cashAcc?.Balance ?? 0;
+                    decimal cardBal = cardAcc?.CurrentBalance ?? 0;
+                    decimal cashBal = cashAcc?.CurrentBalance ?? 0;
 
                     if (accounts.Count > 0)
                     {
-                        totalNet = accounts.Sum(a => a.Balance);
+                        totalNet = accounts.Sum(a => a.CurrentBalance);
                     }
                     else if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
                     {
                         var parsed = SmartLedgerParser.Parse(ledger.LedgerText);
                         totalNet = parsed.NetWorth;
-                        cardBal = parsed.Cash;
+                        cardBal = parsed.BalanceTotal;
                     }
 
                     decimal eurEst = totalNet > 0 ? totalNet / 4.97m : 0;
@@ -129,8 +129,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
             var cardAcc = snapshot.Accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("card") == true);
             var cashAcc = snapshot.Accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("cash") == true);
 
-            CardBalanceText.Text = cardAcc != null ? $"{cardAcc.Balance:N0} Lei" : snapshot.SmartBalanceDisplay;
-            CashBalanceText.Text = cashAcc != null ? $"{cashAcc.Balance:N0} Lei" : $"{snapshot.Cash:N0} Lei";
+            CardBalanceText.Text = cardAcc != null ? $"{cardAcc.CurrentBalance:N0} Lei" : snapshot.SmartBalanceDisplay;
+            CashBalanceText.Text = cashAcc != null ? $"{cashAcc.CurrentBalance:N0} Lei" : $"{snapshot.Cash:N0} Lei";
         }
 
         private async void AdjustCardPlus100_Click(object sender, RoutedEventArgs e)
@@ -157,7 +157,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 var acc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains(accountName.ToLowerInvariant()) == true);
                 if (acc != null)
                 {
-                    acc.Balance += delta;
+                    acc.CurrentBalance += delta;
                     await _financesService.AddTransactionAsync(new LocalTransaction
                     {
                         AccountId = acc.Id,
