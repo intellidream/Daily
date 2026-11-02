@@ -130,6 +130,7 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
     public let vitals: [String: CanonicalVitalSummaryItem]
     public let sources: [String]
     public let allDevicesView: [String: DeviceMetricItem]?
+    public let sourcesBreakdown: [String: [String: Double]]?
     
     enum CodingKeys: String, CodingKey {
         case date
@@ -142,6 +143,7 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         case vitals
         case sources
         case allDevicesView = "all_devices_view"
+        case sourcesBreakdown = "sources_breakdown"
     }
     
     public init(
@@ -154,7 +156,8 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         stress: CanonicalStressSummary? = nil,
         vitals: [String: CanonicalVitalSummaryItem] = [:],
         sources: [String] = [],
-        allDevicesView: [String: DeviceMetricItem]? = nil
+        allDevicesView: [String: DeviceMetricItem]? = nil,
+        sourcesBreakdown: [String: [String: Double]]? = nil
     ) {
         self.date = date
         self.engineVersion = engineVersion
@@ -166,6 +169,7 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         self.vitals = vitals
         self.sources = sources
         self.allDevicesView = allDevicesView
+        self.sourcesBreakdown = sourcesBreakdown
     }
 
     public init(from decoder: Decoder) throws {
@@ -180,6 +184,7 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         self.vitals = try container.decodeIfPresent([String: CanonicalVitalSummaryItem].self, forKey: .vitals) ?? [:]
         self.sources = try container.decodeIfPresent([String].self, forKey: .sources) ?? []
         self.allDevicesView = try container.decodeIfPresent([String: DeviceMetricItem].self, forKey: .allDevicesView)
+        self.sourcesBreakdown = try container.decodeIfPresent([String: [String: Double]].self, forKey: .sourcesBreakdown)
     }
     
     public var isEmpty: Bool {

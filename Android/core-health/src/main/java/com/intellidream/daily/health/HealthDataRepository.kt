@@ -8,6 +8,7 @@ import com.intellidream.daily.database.dao.VitalMetricDao
 import com.intellidream.daily.database.entity.HealthDailySummaryEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
+import com.intellidream.daily.model.BreathingProtocol
 import com.intellidream.daily.model.DailyHealthSummaryPayload
 import com.intellidream.daily.model.DailyMetricTrendPoint
 import com.intellidream.daily.model.DeviceColorPalette
@@ -23,6 +24,7 @@ import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.HeartRateZone
 import com.intellidream.daily.model.HourlyStepBucket
 import com.intellidream.daily.model.IntradayHeartRatePoint
+import com.intellidream.daily.model.MonkeyMood
 import com.intellidream.daily.model.NapSession
 import com.intellidream.daily.model.SleepAIContext
 import com.intellidream.daily.model.SleepActionableTip
@@ -1131,6 +1133,28 @@ class HealthDataRepository(
         val filtered = if (!filter.isNullOrEmpty()) {
             val targetCanon = DeviceSource.from(filter).displayName
             buckets.filter { DeviceSource.from(it.sourceDeviceKey).displayName == targetCanon }
+        } else if (buckets.size > 1) {
+            buckets.groupBy { it.bucketMinute }
+                .toSortedMap()
+                .map { (bm, group) ->
+                    if (group.size == 1) {
+                        group[0]
+                    } else {
+                        val sortedGrp = group.sortedBy { DeviceSource.from(it.sourceDeviceKey).sortPriority }
+                        val primary = sortedGrp[0]
+                        val totalCnt = sortedGrp.sumOf { maxOf(1, it.sampleCount) }
+                        val weightedSum = sortedGrp.sumOf { it.bpmAvg * maxOf(1, it.sampleCount) }
+                        val minV = sortedGrp.minOf { if (it.bpmMin > 30) it.bpmMin else it.bpmAvg }
+                        val maxV = sortedGrp.maxOf { if (it.bpmMax > 30) it.bpmMax else it.bpmAvg }
+                        primary.copy(
+                            bucketMinute = bm,
+                            bpmAvg = (weightedSum.toDouble() / maxOf(1, totalCnt)).toInt(),
+                            bpmMin = minV,
+                            bpmMax = maxV,
+                            sampleCount = totalCnt
+                        )
+                    }
+                }
         } else {
             buckets
         }
@@ -1141,9 +1165,17 @@ class HealthDataRepository(
             val totalSamples = filtered.sumOf { maxOf(1, it.sampleCount) }
             val weightedSum = filtered.sumOf { it.bpmAvg.toDouble() * maxOf(1, it.sampleCount) }
             _averageBpm.value = round(weightedSum / totalSamples)
-            _minBpm.value = (filtered.minOfOrNull { it.bpmMin } ?: 0).toDouble()
-            _maxBpm.value = (filtered.maxOfOrNull { it.bpmMax } ?: 0).toDouble()
+            _minBpm.value = (filtered.minOfOrNull { if (it.bpmMin > 30) it.bpmMin else it.bpmAvg } ?: 0).toDouble()
+            _maxBpm.value = (filtered.maxOfOrNull { if (it.bpmMax > 30) it.bpmMax else it.bpmAvg } ?: 0).toDouble()
             _latestBpm.value = points.lastOrNull()?.bpm
+            if (_restingBpm.value <= 0.0) {
+                val derived = StressAnalysisEngine.deriveNocturnalRhr(points, Date(targetDateEpochMs))
+                if (derived != null) {
+                    _restingBpm.value = derived
+                } else if (_minBpm.value > 0.0) {
+                    _restingBpm.value = minOf(85.0, maxOf(45.0, _minBpm.value + 6.0))
+                }
+            }
 
             val zones = mutableMapOf(
                 HeartRateZone.RESTING to 0,
@@ -1231,21 +1263,55 @@ class HealthDataRepository(
         }
 
         val vitalsMap = _currentVitals.value.toMutableMap()
-        val hrvVal = vitalsMap[HealthMetricType.HRV_SDNN]?.value ?: vitalsMap[HealthMetricType.HRV_RMSSD]?.value
-        val rhrVal = if (_restingBpm.value > 0) _restingBpm.value else vitalsMap[HealthMetricType.RESTING_HEART_RATE]?.value
+        val hasSdnn = (vitalsMap[HealthMetricType.HRV_SDNN]?.value ?: 0.0) > 0.0
+        val hasRmssd = !hasSdnn && (vitalsMap[HealthMetricType.HRV_RMSSD]?.value ?: 0.0) > 0.0
+        val hrvVal = when {
+            hasSdnn -> vitalsMap[HealthMetricType.HRV_SDNN]?.value
+            hasRmssd -> vitalsMap[HealthMetricType.HRV_RMSSD]?.value
+            else -> null
+        }
+        val canonFilter = filter?.takeIf { it.isNotEmpty() }?.let { DeviceSource.from(it).displayName }
+        val serverDerivedRhr = canonFilter?.let { canonical?.sourcesBreakdown?.get(it)?.get("derived_rhr") }
+        val rhrVal = vitalsMap[HealthMetricType.RESTING_HEART_RATE]?.value ?: serverDerivedRhr
         val hrPoints = _intradayHeartRate.value
+
+        val summaryUsedRmssd = (canonical?.vitals?.get("hrvsdnn") == null) && (canonical?.vitals?.get("hrvrmssd") != null)
+        val matchedBaselineHrv = canonical?.stress?.biometricDrivers?.baselineHrvMs?.takeIf { base ->
+            base > 0.0 && ((hasRmssd && summaryUsedRmssd && base >= 35.0) || (hasSdnn && !summaryUsedRmssd && base <= 120.0))
+        }
 
         if (hrvVal != null || hrPoints.isNotEmpty() || (rhrVal != null && rhrVal > 0)) {
             val stressCalc = StressAnalysisEngine.calculateStress(
                 targetDate = Date(_selectedDate.value),
                 hrvMs = hrvVal,
+                isRmssd = hasRmssd,
                 hrTelemetry = hrPoints,
                 hourlySteps = _hourlySteps.value,
                 restingBpm = rhrVal?.takeIf { it > 0 },
-                priorSleepScore = _primarySleepSession.value?.sleepScore
+                priorSleepScore = _primarySleepSession.value?.sleepScore,
+                personalBaselineHrv = matchedBaselineHrv
             )
             if (stressCalc != null) {
-                val (stressResult, intradayPoints) = stressCalc
+                var (stressResult, intradayPoints) = stressCalc
+                val srvScoreDouble = canonFilter?.let { canonical?.sourcesBreakdown?.get(it)?.get("stress_score") }
+                if (srvScoreDouble != null) {
+                    val srvScore = round(srvScoreDouble).toInt()
+                    val srvAvg = canonFilter.let { canonical?.sourcesBreakdown?.get(it)?.get("stress_daily_avg") }
+                        ?.let { round(it).toInt() } ?: stressResult.dailyAverageScore
+                    val srvLevel = StressLevel.from(srvScore)
+                    val para = minOf(90, maxOf(10, 100 - srvScore))
+                    val mood = MonkeyMood.fromLevel(srvLevel)
+                    stressResult = stressResult.copy(
+                        currentScore = srvScore,
+                        currentLevel = srvLevel,
+                        dailyAverageScore = srvAvg,
+                        parasympatheticPercent = para,
+                        sympatheticPercent = 100 - para,
+                        monkeyMood = mood,
+                        adviceQuote = mood.adviceQuote,
+                        recommendedBreathing = BreathingProtocol.defaultForLevel(srvLevel)
+                    )
+                }
                 _currentStressScore.value = stressResult.currentScore
                 _currentStressLevel.value = stressResult.currentLevel
                 _stressAnalysis.value = stressResult
@@ -1569,14 +1635,21 @@ class HealthDataRepository(
             vitalsValues[HealthMetricType.RESTING_HEART_RATE] = _restingBpm.value
         }
 
-        // 4. Process Stress using StressAnalysisEngine
-        val hrvVal = vitalsValues[HealthMetricType.HRV_SDNN] ?: vitalsValues[HealthMetricType.HRV_RMSSD]
+        // 4. Process Stress using StressAnalysisEngine v2.0
+        val hasSdnnRaw = (vitalsValues[HealthMetricType.HRV_SDNN] ?: 0.0) > 0.0
+        val hasRmssdRaw = !hasSdnnRaw && (vitalsValues[HealthMetricType.HRV_RMSSD] ?: 0.0) > 0.0
+        val hrvVal = when {
+            hasSdnnRaw -> vitalsValues[HealthMetricType.HRV_SDNN]
+            hasRmssdRaw -> vitalsValues[HealthMetricType.HRV_RMSSD]
+            else -> null
+        }
         val stressCalculation = StressAnalysisEngine.calculateStress(
             targetDate = targetDate,
             hrvMs = hrvVal,
+            isRmssd = hasRmssdRaw,
             hrTelemetry = sortedHrPoints,
             hourlySteps = stepsResult.hourlyBuckets,
-            restingBpm = _restingBpm.value.takeIf { it > 0 },
+            restingBpm = vitalsValues[HealthMetricType.RESTING_HEART_RATE] ?: _restingBpm.value.takeIf { it > 0 },
             priorSleepScore = _primarySleepSession.value?.sleepScore
         )
 

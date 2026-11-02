@@ -339,32 +339,24 @@ namespace Daily.Services.Health
                     var userId = _supabase.Auth.CurrentUser?.Id ?? _supabase.Auth.CurrentSession?.User?.Id;
                     if (!string.IsNullOrEmpty(userId))
                     {
-                        _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
-                        _healthVitalsChannel = _supabase.Realtime.Channel("realtime_health", "public", "health_vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
-                        _telemetryChannel = _supabase.Realtime.Channel("realtime_telemetry", "public", "health_telemetry", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                        _vitalsChannel = _supabase.Realtime.Channel("realtime_summary", "public", "health_daily_summary", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                        _healthVitalsChannel = _supabase.Realtime.Channel("realtime_daily_vitals", "public", "health_daily_vitals", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                     }
                     else
                     {
-                        _vitalsChannel = _supabase.Realtime.Channel("realtime", "public", "vitals", null, null, new Dictionary<string, string>());
-                        _healthVitalsChannel = _supabase.Realtime.Channel("realtime_health", "public", "health_vitals", null, null, new Dictionary<string, string>());
-                        _telemetryChannel = _supabase.Realtime.Channel("realtime_telemetry", "public", "health_telemetry", null, null, new Dictionary<string, string>());
+                        _vitalsChannel = _supabase.Realtime.Channel("realtime_summary", "public", "health_daily_summary", null, null, new Dictionary<string, string>());
+                        _healthVitalsChannel = _supabase.Realtime.Channel("realtime_daily_vitals", "public", "health_daily_vitals", null, null, new Dictionary<string, string>());
                     }
-                    _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnVitalReceived);
+                    _vitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnTelemetryReceived);
                     await _vitalsChannel.Subscribe();
                     
                     if (_healthVitalsChannel != null)
                     {
-                        _healthVitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnHealthVitalReceived);
+                        _healthVitalsChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnTelemetryReceived);
                         await _healthVitalsChannel.Subscribe();
                     }
-
-                    if (_telemetryChannel != null)
-                    {
-                        _telemetryChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnTelemetryReceived);
-                        await _telemetryChannel.Subscribe();
-                    }
                     
-                    Console.WriteLine($"[SupabaseHealthService] Realtime subscribed to vitals, health_vitals, and health_telemetry. Filtered user: {userId}");
+                    Console.WriteLine($"[SupabaseHealthService] Realtime subscribed to canonical health_daily_summary and health_daily_vitals. Filtered user: {userId}");
                 }
             }
             catch (Exception ex)
@@ -573,64 +565,55 @@ namespace Daily.Services.Health
 
                 await _databaseService.InitializeAsync();
 
-                // Find latest Local Vital Metric update time
-                var latestLocal = await _databaseService.Connection.Table<LocalVitalMetric>()
-                                      .Where(v => v.UserId == userIdStr)
-                                      .OrderByDescending(v => v.UpdatedAt)
-                                      .FirstOrDefaultAsync();
+                // Pull canonical health_daily_summary (last 14 days) instead of retired legacy vitals/health_vitals tables
+                var minDateKey = DateTime.UtcNow.AddDays(-14).ToString("yyyy-MM-dd");
+                var summaryRes = await _supabase.From<HealthDailySummaryRecord>()
+                                                .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                                .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, minDateKey)
+                                                .Order("local_date", Supabase.Postgrest.Constants.Ordering.Descending)
+                                                .Limit(20)
+                                                .Get();
 
-                List<VitalMetric> remoteRecords = new();
-                if (latestLocal != null)
+                var remoteRecords = new List<VitalMetric>();
+                if (summaryRes.Models != null)
                 {
-                    var lastLocalUpdate = DateTime.SpecifyKind(latestLocal.UpdatedAt, DateTimeKind.Utc).AddMinutes(-5);
-                    Console.WriteLine($"[SupabaseHealthService] Pulling vitals deltas for user {userIdStr} since {lastLocalUpdate:O} (with 5m skew buffer)");
-                    var result = await _supabase.From<VitalMetric>()
-                                              .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
-                                              .Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, lastLocalUpdate.ToString("O"))
-                                              .Get();
-                    if (result.Models != null) remoteRecords.AddRange(result.Models);
+                    foreach (var s in summaryRes.Models)
+                    {
+                        if (!DateTime.TryParse(s.LocalDate, out var parsedDate)) continue;
+                        var normDate = parsedDate.Date.NormalizeToUtcMidnight();
+                        var updatedAt = DateTime.UtcNow;
 
-                    try
-                    {
-                        var hvResult = await _supabase.From<HealthVitalMetric>()
-                                                  .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
-                                                  .Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, lastLocalUpdate.ToString("O"))
-                                                  .Get();
-                        if (hvResult.Models != null && hvResult.Models.Any())
+                        void AddScalar(VitalType vt, double? val, string unit, string? src = null)
                         {
-                            remoteRecords.AddRange(hvResult.Models.Select(hv => hv.ToVitalMetric()));
+                            if (!val.HasValue || val.Value <= 0) return;
+                            var typeStr = vt.ToString();
+                            remoteRecords.Add(new VitalMetric
+                            {
+                                Id = Mappers.GenerateGuid($"{userIdStr}_{typeStr}_{s.LocalDate}"),
+                                UserId = uid,
+                                Type = vt,
+                                Value = val.Value,
+                                Unit = unit,
+                                Date = normDate,
+                                SourceDevice = src ?? "Wearable",
+                                CreatedAt = updatedAt,
+                                UpdatedAt = updatedAt,
+                                SyncedAt = updatedAt
+                            });
                         }
-                    }
-                    catch (Exception hvex)
-                    {
-                        Console.WriteLine($"[SupabaseHealthService] Non-fatal error pulling health_vitals deltas: {hvex.Message}");
-                    }
-                }
-                else
-                {
-                    // Fallback to fetch the last 30 days of data
-                    var dateThreshold = DateTime.UtcNow.AddDays(-30);
-                    Console.WriteLine($"[SupabaseHealthService] Cache empty. Pulling last 30 days of vitals for user {userIdStr} since {dateThreshold:O}");
-                    var result = await _supabase.From<VitalMetric>()
-                                              .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
-                                              .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, dateThreshold.ToString("O"))
-                                              .Get();
-                    if (result.Models != null) remoteRecords.AddRange(result.Models);
 
-                    try
-                    {
-                        var hvResult = await _supabase.From<HealthVitalMetric>()
-                                                  .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
-                                                  .Filter("date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, dateThreshold.ToString("O"))
-                                                  .Get();
-                        if (hvResult.Models != null && hvResult.Models.Any())
-                        {
-                            remoteRecords.AddRange(hvResult.Models.Select(hv => hv.ToVitalMetric()));
-                        }
-                    }
-                    catch (Exception hvex)
-                    {
-                        Console.WriteLine($"[SupabaseHealthService] Non-fatal error pulling health_vitals initial: {hvex.Message}");
+                        AddScalar(VitalType.Steps, s.Steps, "count", s.Summary?.Activity?.SourceDevice);
+                        AddScalar(VitalType.ActiveEnergy, s.ActiveKcal, "kcal", s.Summary?.Activity?.SourceDevice);
+                        AddScalar(VitalType.RestingHeartRate, s.Rhr, "bpm");
+                        AddScalar(VitalType.HeartRateVariabilitySDNN, s.HrvSdnn, "ms");
+                        AddScalar(VitalType.HeartRateVariabilityRMSSD, s.HrvRmssd, "ms");
+                        AddScalar(VitalType.OxygenSaturation, s.Spo2, "%");
+                        AddScalar(VitalType.Weight, s.Weight, "kg");
+                        if (s.SleepAsleepS.HasValue && s.SleepAsleepS.Value > 0)
+                            AddScalar(VitalType.SleepDuration, Math.Round(s.SleepAsleepS.Value / 60.0, 1), "min", s.Summary?.Sleep?.PrimarySession?.EffectiveSourceDevice);
+                        var stressVal = s.Summary?.Stress?.CurrentScore ?? s.StressAvg;
+                        if (stressVal.HasValue && stressVal.Value > 0)
+                            AddScalar(VitalType.Stress, stressVal.Value, "score", "Biometric Engine");
                     }
                 }
 
@@ -1653,26 +1636,34 @@ namespace Daily.Services.Health
                     }
                 }
 
-                // Convert to UTC strings for PostgREST
-                var startStr = startUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                var endStr = endUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-
-                Console.WriteLine($"[SupabaseHealthService] Fetching telemetry for user {userIdStr} between {startStr} and {endStr}...");
+                // Map from canonical health_intraday_heart_rate (legacy health_telemetry retired in Lean v2.0)
+                var startDateStr = start.ToLocalTime().ToString("yyyy-MM-dd");
+                var endDateStr = end.ToLocalTime().ToString("yyyy-MM-dd");
 
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3.5));
 
-                var result = await _supabase.From<HealthTelemetry>()
-                                          .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
-                                          .Filter("start_time", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startStr)
-                                          .Filter("start_time", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endStr)
-                                          .Order("start_time", Supabase.Postgrest.Constants.Ordering.Ascending)
-                                          .Limit(5000)
-                                          .Get()
-                                          .WaitAsync(cts.Token);
+                var hrRes = await _supabase.From<HealthIntradayHeartRateRecord>()
+                                           .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userIdStr)
+                                           .Filter("local_date", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, startDateStr)
+                                           .Filter("local_date", Supabase.Postgrest.Constants.Operator.LessThanOrEqual, endDateStr)
+                                           .Order("bucket_minute", Supabase.Postgrest.Constants.Ordering.Ascending)
+                                           .Limit(2000)
+                                           .Get()
+                                           .WaitAsync(cts.Token);
 
-                var list = result.Models ?? new List<HealthTelemetry>();
+                var list = new List<HealthTelemetry>();
+                if (hrRes.Models != null)
+                {
+                    foreach (var r in hrRes.Models)
+                    {
+                        var pt = r.ToTelemetryPoint();
+                        if (pt.StartTime >= startUtc && pt.StartTime <= endUtc)
+                        {
+                            list.Add(pt);
+                        }
+                    }
+                }
                 _telemetryCache[cacheKey] = (DateTime.UtcNow, list);
-                Console.WriteLine($"[SupabaseHealthService] Fetched {list.Count} telemetry records from Supabase.");
                 return list;
             }
             catch (OperationCanceledException)

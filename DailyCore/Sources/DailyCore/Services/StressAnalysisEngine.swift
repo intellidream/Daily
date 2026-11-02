@@ -1,18 +1,21 @@
 import Foundation
 
-/// Autonomic nervous system (ANS) stress estimation engine modeled after clinical HRV algorithms
-/// and mobile biometric standards.
+/// Autonomic nervous system (ANS) stress estimation engine v2.0 modeled after clinical HRV algorithms
+/// and mobile biometric standards, unified 1:1 with Supabase `health-engine`.
 public enum StressAnalysisEngine {
     
     /// Default population benchmarks for healthy adults when personal longitudinal history is sparse.
-    public static let defaultBaselineHrv: Double = 45.0 // ms SDNN
-    public static let defaultBaselineRhr: Double = 62.0 // bpm
+    public static let defaultBaselineHrv: Double = 45.0 // ms SDNN (Apple Watch / clinical short-term SDNN)
+    public static let defaultBaselineHrvSdnn: Double = 45.0
+    public static let defaultBaselineHrvRmssd: Double = 62.0 // ms RMSSD (Wear OS / Fitbit / Oura nocturnal RMSSD)
+    public static let defaultBaselineRhr: Double = 60.0 // bpm
     
     /// Evaluates physiological telemetry and produces a unified `StressAnalysisResult`
     /// along with an intraday hourly curve, or `nil` if no biometric telemetry is available for the day.
     public static func calculateStress(
         targetDate: Date,
         hrvMs: Double?,
+        isRmssd: Bool = false,
         hrTelemetry: [IntradayHeartRatePoint],
         hourlySteps: [HourlyStepBucket],
         restingBpm: Double?,
@@ -22,15 +25,28 @@ public enum StressAnalysisEngine {
         calendar: Calendar = .current
     ) -> (result: StressAnalysisResult, intradayPoints: [IntradayStressPoint])? {
         
+        let validHrv = (hrvMs != nil && hrvMs! > 0) ? hrvMs : nil
+        
         // Guard against missing biometric telemetry:
         // Valid stress calculation requires at least one genuine physiological signal (HRV or heart rate samples).
-        guard hrvMs != nil || !hrTelemetry.isEmpty else {
+        guard validHrv != nil || !hrTelemetry.isEmpty else {
             return nil
         }
         
-        let baselineHrv = personalBaselineHrv ?? defaultBaselineHrv
-        let baselineRhr = restingBpm ?? personalBaselineRhr ?? defaultBaselineRhr
-        let sleepScore = priorSleepScore ?? 80
+        let metricDefaultHrv = isRmssd ? defaultBaselineHrvRmssd : defaultBaselineHrvSdnn
+        let baselineHrv = (personalBaselineHrv != nil && personalBaselineHrv! > 0)
+            ? (round(personalBaselineHrv! * 10.0) / 10.0)
+            : metricDefaultHrv
+        
+        let derivedRhr = deriveNocturnalRhr(from: hrTelemetry, targetDate: targetDate, calendar: calendar)
+        let baselineRhr: Double = {
+            if let rhr = restingBpm, rhr > 0 { return rhr }
+            if let derived = derivedRhr { return derived }
+            if let personal = personalBaselineRhr, personal > 0 { return personal }
+            return defaultBaselineRhr
+        }()
+        
+        let sleepScore = (priorSleepScore != nil && priorSleepScore! > 0) ? priorSleepScore! : 80
         
         // 1. Build Hourly Map of Steps (to isolate physical movement vs sedentary arousal)
         var stepsByHour: [Int: Int] = [:]
@@ -54,6 +70,9 @@ public enum StressAnalysisEngine {
         let maxHourToEvaluate = isToday ? currentHour : 23
         
         let sleepPenalty = max(0.0, min(100.0, 100.0 - Double(sleepScore)))
+        let dayHrvScore: Double? = validHrv.map { scoreFromHrv(hrv: $0, baseline: baselineHrv) }
+        var lastSedentaryHrScore: Double? = nil
+        var latestSedentaryHrBpm: Double? = nil
         
         for hour in 0...maxHourToEvaluate {
             let steps = stepsByHour[hour] ?? 0
@@ -61,28 +80,34 @@ public enum StressAnalysisEngine {
             
             let hrSamples = hrByHour[hour] ?? []
             // Only generate an intraday point if this hour had actual biometric samples
-            guard !hrSamples.isEmpty || (hrvMs != nil && steps > 0) else {
+            guard !hrSamples.isEmpty || (validHrv != nil && steps > 0) else {
                 continue
             }
             let avgHr: Double? = !hrSamples.isEmpty ? (hrSamples.reduce(0, +) / Double(hrSamples.count)) : nil
             
-            // Hourly HRV estimation: if daytime samples exist or fallback to day baseline
-            let hourHrv = hrvMs ?? baselineHrv
-            
-            // A. HRV Component (50% weight): High HRV -> Low Stress, Low HRV -> High Stress
-            let hrvScore = scoreFromHrv(hrv: hourHrv, baseline: baselineHrv)
-            
-            // B. Heart Rate Elevation Component (30% weight)
+            // B. Calibrated Sedentary HR Arousal Component (with inertia carry-forward during movement hours)
             let hrScore: Double
             if let hr = avgHr, isSedentary {
-                let delta = max(0.0, hr - baselineRhr)
-                hrScore = min(100.0, (delta / 25.0) * 100.0)
+                let s = scoreFromSedentaryHr(avgHr: hr, baselineRhr: baselineRhr)
+                hrScore = s
+                lastSedentaryHrScore = s
+                latestSedentaryHrBpm = hr
+            } else if let lastSed = lastSedentaryHrScore {
+                hrScore = 0.85 * lastSed + 0.15 * 32.0
+            } else if let dHrv = dayHrvScore {
+                hrScore = 0.70 * dHrv + 0.30 * 32.0
             } else {
-                hrScore = hrvScore * 0.8
+                hrScore = 32.0
             }
             
-            // C. Recovery factor (20% weight)
-            let rawHourlyStress = (0.50 * hrvScore) + (0.30 * hrScore) + (0.20 * sleepPenalty)
+            // C. Blended hourly stress (honest re-normalization when device has no HRV, e.g. Oura via HealthKit)
+            let rawHourlyStress: Double
+            if let dHrv = dayHrvScore {
+                rawHourlyStress = (0.45 * dHrv) + (0.35 * hrScore) + (0.20 * sleepPenalty)
+            } else {
+                rawHourlyStress = (0.70 * hrScore) + (0.30 * sleepPenalty)
+            }
+            
             let finalHourlyScore = Int(round(min(max(rawHourlyStress, 5.0), 98.0)))
             let level = StressLevel.from(score: finalHourlyScore)
             
@@ -92,35 +117,43 @@ public enum StressAnalysisEngine {
                 hour: hour,
                 score: finalHourlyScore,
                 level: level,
-                hrvMs: hourHrv,
-                heartRateBpm: avgHr,
+                hrvMs: validHrv,
+                heartRateBpm: avgHr.map { round($0 * 10.0) / 10.0 },
                 isSedentary: isSedentary
             ))
         }
         
-        // 4. Resolve Current / Master Stress Score
-        let currentScore: Int
-        let currentHrv = hrvMs ?? baselineHrv
-        let currentHrvScore = scoreFromHrv(hrv: currentHrv, baseline: baselineHrv)
-        
-        // Derive recent sedentary HR
+        // 4. Resolve Current / Master Stress Score from genuine sedentary tone (immune to active-hour step collapse)
         let recentHr = hrTelemetry.last?.bpm
-        let currentHrElevation: Double?
-        let currentHrScore: Double
-        if let hr = recentHr {
-            let elevation = max(0.0, hr - baselineRhr)
-            currentHrElevation = elevation
-            currentHrScore = min(100.0, (elevation / 25.0) * 100.0)
-        } else {
-            currentHrElevation = nil
-            currentHrScore = currentHrvScore * 0.8
-        }
+        let effectiveSedentaryBpm = latestSedentaryHrBpm ?? recentHr
+        let currentHrElevation: Double? = effectiveSedentaryBpm.map { max(0.0, $0 - baselineRhr) }
         
-        if let lastPoint = intraday.last {
+        let currentScore: Int
+        let sedentaryPoints = intraday.filter { $0.isSedentary && $0.heartRateBpm != nil }
+        if sedentaryPoints.count >= 2 {
+            let lastSed = Double(sedentaryPoints[sedentaryPoints.count - 1].score)
+            let prevSed = Double(sedentaryPoints[sedentaryPoints.count - 2].score)
+            currentScore = Int(round(0.70 * lastSed + 0.30 * prevSed))
+        } else if let onlySed = sedentaryPoints.first {
+            currentScore = onlySed.score
+        } else if let lastPoint = intraday.last {
             currentScore = lastPoint.score
         } else {
-            let blended = (0.50 * currentHrvScore) + (0.30 * currentHrScore) + (0.20 * sleepPenalty)
-            currentScore = Int(round(min(max(blended, 10.0), 95.0)))
+            let fallbackHrScore: Double
+            if let sedBpm = effectiveSedentaryBpm {
+                fallbackHrScore = scoreFromSedentaryHr(avgHr: sedBpm, baselineRhr: baselineRhr)
+            } else if let dHrv = dayHrvScore {
+                fallbackHrScore = 0.70 * dHrv + 0.30 * 32.0
+            } else {
+                fallbackHrScore = 32.0
+            }
+            let blended: Double
+            if let dHrv = dayHrvScore {
+                blended = (0.45 * dHrv) + (0.35 * fallbackHrScore) + (0.20 * sleepPenalty)
+            } else {
+                blended = (0.70 * fallbackHrScore) + (0.30 * sleepPenalty)
+            }
+            currentScore = Int(round(min(max(blended, 8.0), 95.0)))
         }
         
         let currentLevel = StressLevel.from(score: currentScore)
@@ -142,7 +175,7 @@ public enum StressAnalysisEngine {
         let sympathetic = 100 - parasympathetic
         
         // 7. HRV Delta Percentage
-        let hrvDeltaPercent = hrvMs != nil ? (((hrvMs! - baselineHrv) / baselineHrv) * 100.0) : nil
+        let hrvDeltaPercent = validHrv.map { (($0 - baselineHrv) / baselineHrv) * 100.0 }
         
         // 8. Persona Mood & Guidance
         let mood: MonkeyMood
@@ -173,11 +206,11 @@ public enum StressAnalysisEngine {
             parasympatheticPercent: parasympathetic,
             sympatheticPercent: sympathetic,
             baselineHrvMs: baselineHrv,
-            currentHrvMs: hrvMs,
+            currentHrvMs: validHrv,
             hrvDeltaPercent: hrvDeltaPercent,
-            restingHeartRateBpm: baselineRhr,
-            currentSedentaryBpm: recentHr,
-            heartRateElevationBpm: currentHrElevation,
+            restingHeartRateBpm: round(baselineRhr),
+            currentSedentaryBpm: effectiveSedentaryBpm.map { round($0) },
+            heartRateElevationBpm: currentHrElevation.map { round($0 * 10.0) / 10.0 },
             monkeyMood: mood,
             adviceQuote: mood.adviceQuote,
             recommendedBreathing: breathing,
@@ -189,15 +222,61 @@ public enum StressAnalysisEngine {
     
     // MARK: - Mathematical Sub-routines
     
-    /// Normalizes HRV using a sigmoid/tanh transfer function around baseline.
-    /// High HRV yields lower stress (< 30), while depressed HRV yields high stress (> 70).
+    /// Normalizes HRV using a metric-calibrated sigmoid/tanh transfer function around baseline.
+    /// High HRV yields lower stress (< 25), baseline yields 50, depressed HRV yields high stress (> 75).
     public static func scoreFromHrv(hrv: Double, baseline: Double) -> Double {
         guard baseline > 0 else { return 50.0 }
-        let z = (hrv - baseline) / 16.0
-        // tanh(z) ranges from -1 to +1.
-        // When z is +2 (high HRV, +32ms above baseline), tanh is ~0.96 -> Score = 50 - 45 = 5 (Deep Rest)
-        // When z is -2 (low HRV, -32ms below baseline), tanh is ~ -0.96 -> Score = 50 + 45 = 95 (High Stress)
+        let scale = max(14.0, baseline * 0.35)
+        let z = (hrv - baseline) / scale
         let normalized = 50.0 - (tanh(z) * 45.0)
         return min(max(normalized, 0.0), 100.0)
+    }
+    
+    /// Calibrated sedentary waking HR arousal curve relative to clinical resting heart rate.
+    /// Accounts for natural upright waking orthostatic + metabolic offset (+10..20 bpm above RHR)
+    /// without saturating at 100/100 during normal desk work or conversation.
+    public static func scoreFromSedentaryHr(avgHr: Double, baselineRhr: Double) -> Double {
+        let delta = avgHr - baselineRhr
+        let z = (delta - 22.0) / 16.0
+        let score = 46.0 + (tanh(z) * 44.0)
+        return min(max(score, 6.0), 95.0)
+    }
+    
+    /// Derives a clinical resting HR baseline from nocturnal 5-min HR buckets when a wearable
+    /// (e.g. Oura Ring via Apple HealthKit) does not export a standalone RHR metric.
+    public static func deriveNocturnalRhr(
+        from hrTelemetry: [IntradayHeartRatePoint],
+        targetDate: Date,
+        calendar: Calendar = .current
+    ) -> Double? {
+        var nocturnalBpms: [Double] = []
+        var daytimeBpms: [Double] = []
+        
+        for pt in hrTelemetry {
+            guard pt.bpm > 35.0 && pt.bpm < 220.0 else { continue }
+            guard calendar.isDate(pt.timestamp, inSameDayAs: targetDate) else { continue }
+            let h = calendar.component(.hour, from: pt.timestamp)
+            if h < 8 && pt.bpm <= 95.0 {
+                nocturnalBpms.append(pt.bpm)
+            } else if h >= 8 {
+                daytimeBpms.append(pt.bpm)
+            }
+        }
+        
+        if nocturnalBpms.count >= 3 {
+            nocturnalBpms.sort()
+            let mid = nocturnalBpms.count / 2
+            let nocturnalMedian = (nocturnalBpms.count % 2 == 1)
+                ? nocturnalBpms[mid]
+                : (nocturnalBpms[mid - 1] + nocturnalBpms[mid]) / 2.0
+            let clinicalRhr = nocturnalMedian + 5.5
+            return round(min(max(clinicalRhr, 45.0), 85.0))
+        }
+        
+        if daytimeBpms.count >= 3, let minDay = daytimeBpms.min() {
+            return round(min(max(minDay - 2.0, 48.0), 72.0))
+        }
+        
+        return nil
     }
 }

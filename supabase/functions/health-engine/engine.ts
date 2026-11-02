@@ -1080,15 +1080,78 @@ export function computeCardiovascular(
 }
 
 // ==========================================
-// 5. Autonomic Nervous System & Stress Engine
+// 5. Autonomic Nervous System & Stress Engine v2.0
 // ==========================================
+
+export const DEFAULT_BASELINE_HRV_SDNN = 45.0; // ms (Apple Watch / clinical short-term SDNN)
+export const DEFAULT_BASELINE_HRV_RMSSD = 62.0; // ms (Wear OS / Fitbit / Oura nocturnal RMSSD)
+export const DEFAULT_BASELINE_RHR = 60.0; // bpm
 
 export function scoreFromHrv(hrv: number, baseline: number): number {
   if (baseline <= 0) return 50.0;
-  const z = (hrv - baseline) / 16.0;
-  // tanh(z) transfer function: high HRV -> low stress (< 30), depressed HRV -> high stress (> 70)
+  const scale = Math.max(14.0, baseline * 0.35);
+  const z = (hrv - baseline) / scale;
+  // Smooth sigmoid/tanh transfer around personal/metric-calibrated baseline:
+  // High HRV -> low stress (< 25), baseline HRV -> 50, suppressed HRV -> high stress (> 75)
   const normalized = 50.0 - Math.tanh(z) * 45.0;
   return Math.min(100.0, Math.max(0.0, normalized));
+}
+
+/**
+ * Calibrated sedentary waking HR arousal curve relative to sleeping/resting RHR.
+ * Accounts for natural upright waking orthostatic + metabolic offset (+10..20 bpm above sleeping RHR)
+ * without saturating at 100/100 during normal desk work or conversation.
+ */
+export function scoreFromSedentaryHr(avgHr: number, baselineRhr: number): number {
+  const delta = avgHr - baselineRhr;
+  const z = (delta - 22.0) / 16.0;
+  const score = 46.0 + Math.tanh(z) * 44.0;
+  return Math.min(95.0, Math.max(6.0, score));
+}
+
+/**
+ * Derives an authentic sleeping/resting HR baseline from nocturnal 5-min HR buckets
+ * when a wearable (e.g. Oura Ring via Apple HealthKit) does not export a standalone RHR metric.
+ */
+export function deriveNocturnalRhrFromHrPoints(
+  hrPoints: IntradayHeartRatePoint[],
+  targetDateStr: string,
+  tzOffsetMin: number
+): number | null {
+  const nocturnalBpms: number[] = [];
+  const daytimeBpms: number[] = [];
+
+  for (const pt of hrPoints) {
+    if (pt.bpm <= 35 || pt.bpm >= 220) continue;
+    const s = parseUtcDate(pt.timestamp);
+    if (!isSameLocalDate(s, targetDateStr, tzOffsetMin)) continue;
+    const h = getLocalHour(s, tzOffsetMin);
+    if (h < 8 && pt.bpm <= 95) {
+      nocturnalBpms.push(pt.bpm);
+    } else if (h >= 8) {
+      daytimeBpms.push(pt.bpm);
+    }
+  }
+
+  if (nocturnalBpms.length >= 3) {
+    nocturnalBpms.sort((a, b) => a - b);
+    const mid = Math.floor(nocturnalBpms.length / 2);
+    const nocturnalMedian =
+      nocturnalBpms.length % 2 === 1
+        ? nocturnalBpms[mid]
+        : (nocturnalBpms[mid - 1] + nocturnalBpms[mid]) / 2;
+    // Clinical RHR (Fitbit / Apple Health standard) reflects quiet waking resting HR,
+    // which sits ~5.5 bpm above nocturnal sleep HR median (rather than 4 AM sleep nadir).
+    const clinicalRhr = nocturnalMedian + 5.5;
+    return Math.round(Math.min(85, Math.max(45, clinicalRhr)));
+  }
+
+  if (daytimeBpms.length >= 3) {
+    const minDay = Math.min(...daytimeBpms);
+    return Math.round(Math.min(72, Math.max(48, minDay - 2)));
+  }
+
+  return null;
 }
 
 export function mapStressLevel(score: number): StressLevelName {
@@ -1102,6 +1165,7 @@ export function computeStress(params: {
   targetDateStr: string;
   tzOffsetMin: number;
   hrvMs: number | null;
+  isRmssd?: boolean;
   hrPoints: IntradayHeartRatePoint[];
   hourlySteps: HourlyStepBucket[];
   restingBpm: number | null;
@@ -1113,6 +1177,7 @@ export function computeStress(params: {
     targetDateStr,
     tzOffsetMin,
     hrvMs,
+    isRmssd = false,
     hrPoints,
     hourlySteps,
     restingBpm,
@@ -1121,14 +1186,29 @@ export function computeStress(params: {
     personalBaselineRhr
   } = params;
 
+  const hasHrv = hrvMs !== null && hrvMs !== undefined && hrvMs > 0;
+
   // Valid stress calculation requires genuine physiological signal (HRV or heart rate samples)
-  if (hrvMs === null && hrPoints.length === 0) {
+  if (!hasHrv && hrPoints.length === 0) {
     return null;
   }
 
-  const baselineHrv = personalBaselineHrv ?? 45.0;
-  const baselineRhr = restingBpm ?? personalBaselineRhr ?? 62.0;
-  const sleepScore = priorSleepScore ?? 80;
+  const defaultHrvBaseline = isRmssd ? DEFAULT_BASELINE_HRV_RMSSD : DEFAULT_BASELINE_HRV_SDNN;
+  const baselineHrv =
+    personalBaselineHrv !== undefined && personalBaselineHrv > 0
+      ? Math.round(personalBaselineHrv * 10) / 10
+      : defaultHrvBaseline;
+
+  const derivedRhr = deriveNocturnalRhrFromHrPoints(hrPoints, targetDateStr, tzOffsetMin);
+  const baselineRhr =
+    restingBpm !== null && restingBpm !== undefined && restingBpm > 0
+      ? restingBpm
+      : derivedRhr ??
+        (personalBaselineRhr !== undefined && personalBaselineRhr > 0
+          ? personalBaselineRhr
+          : DEFAULT_BASELINE_RHR);
+
+  const sleepScore = priorSleepScore !== null && priorSleepScore > 0 ? priorSleepScore : 80;
 
   // Build map of steps by hour
   const stepsByHour = new Map<number, number>();
@@ -1149,33 +1229,41 @@ export function computeStress(params: {
 
   const intradayPoints: IntradayStressPoint[] = [];
   const sleepPenalty = Math.max(0.0, Math.min(100.0, 100.0 - sleepScore));
+  const dayHrvScore = hasHrv ? scoreFromHrv(hrvMs!, baselineHrv) : null;
+  let lastSedentaryHrScore: number | null = null;
+  let latestSedentaryHrBpm: number | null = null;
 
   for (let hour = 0; hour < 24; hour++) {
     const steps = stepsByHour.get(hour) ?? 0;
     const isSedentary = steps < 300;
 
     const hrSamples = hrByHour.get(hour) ?? [];
-    if (hrSamples.length === 0 && (hrvMs === null || steps === 0)) {
+    if (hrSamples.length === 0 && (!hasHrv || steps === 0)) {
       continue;
     }
 
     const avgHr = hrSamples.length > 0 ? hrSamples.reduce((a, b) => a + b, 0) / hrSamples.length : null;
-    const hourHrv = hrvMs ?? baselineHrv;
 
-    // A. HRV Component (50%)
-    const hrvScore = scoreFromHrv(hourHrv, baselineHrv);
-
-    // B. HR Elevation Component (30%)
+    // B. Calibrated Sedentary HR Arousal Component (with inertia carry-forward during movement hours)
     let hrScore: number;
     if (avgHr !== null && isSedentary) {
-      const delta = Math.max(0.0, avgHr - baselineRhr);
-      hrScore = Math.min(100.0, (delta / 25.0) * 100.0);
+      hrScore = scoreFromSedentaryHr(avgHr, baselineRhr);
+      lastSedentaryHrScore = hrScore;
+      latestSedentaryHrBpm = avgHr;
+    } else if (lastSedentaryHrScore !== null) {
+      hrScore = 0.85 * lastSedentaryHrScore + 0.15 * 32.0;
+    } else if (dayHrvScore !== null) {
+      hrScore = 0.70 * dayHrvScore + 0.30 * 32.0;
     } else {
-      hrScore = hrvScore * 0.8;
+      hrScore = 32.0;
     }
 
-    // C. Blended hourly stress
-    const rawHourly = 0.5 * hrvScore + 0.3 * hrScore + 0.2 * sleepPenalty;
+    // C. Blended hourly stress (honest re-normalization when device has no HRV, e.g. Oura via HealthKit)
+    const rawHourly =
+      dayHrvScore !== null
+        ? 0.45 * dayHrvScore + 0.35 * hrScore + 0.20 * sleepPenalty
+        : 0.70 * hrScore + 0.30 * sleepPenalty;
+
     const finalScore = Math.round(Math.min(98.0, Math.max(5.0, rawHourly)));
     const level = mapStressLevel(finalScore);
 
@@ -1187,32 +1275,40 @@ export function computeStress(params: {
       hour,
       score: finalScore,
       level,
-      hrv_ms: hourHrv,
+      hrv_ms: hasHrv ? hrvMs : null,
       heart_rate_bpm: avgHr !== null ? Math.round(avgHr * 10) / 10 : null,
       is_sedentary: isSedentary
     });
   }
 
-  // Resolve current / master stress score
-  let currentScore: number;
-  const currentHrv = hrvMs ?? baselineHrv;
-  const currentHrvScore = scoreFromHrv(currentHrv, baselineHrv);
-
+  // Resolve current / master stress score from genuine sedentary tone (immune to active-hour step collapse)
   const lastHr = hrPoints.length > 0 ? hrPoints[hrPoints.length - 1].bpm : null;
-  let currentElevation: number | null = null;
-  let currentHrScore: number;
-  if (lastHr !== null) {
-    currentElevation = Math.max(0.0, lastHr - baselineRhr);
-    currentHrScore = Math.min(100.0, (currentElevation / 25.0) * 100.0);
-  } else {
-    currentHrScore = currentHrvScore * 0.8;
-  }
+  const effectiveSedentaryBpm = latestSedentaryHrBpm ?? lastHr;
+  const currentElevation =
+    effectiveSedentaryBpm !== null ? Math.max(0.0, effectiveSedentaryBpm - baselineRhr) : null;
 
-  if (intradayPoints.length > 0) {
+  let currentScore: number;
+  const sedentaryPoints = intradayPoints.filter(p => p.is_sedentary && p.heart_rate_bpm !== null);
+  if (sedentaryPoints.length >= 2) {
+    const lastSed = sedentaryPoints[sedentaryPoints.length - 1].score;
+    const prevSed = sedentaryPoints[sedentaryPoints.length - 2].score;
+    currentScore = Math.round(0.70 * lastSed + 0.30 * prevSed);
+  } else if (sedentaryPoints.length === 1) {
+    currentScore = sedentaryPoints[0].score;
+  } else if (intradayPoints.length > 0) {
     currentScore = intradayPoints[intradayPoints.length - 1].score;
   } else {
-    const blended = 0.5 * currentHrvScore + 0.3 * currentHrScore + 0.2 * sleepPenalty;
-    currentScore = Math.round(Math.min(95.0, Math.max(10.0, blended)));
+    const fallbackHrScore =
+      effectiveSedentaryBpm !== null
+        ? scoreFromSedentaryHr(effectiveSedentaryBpm, baselineRhr)
+        : dayHrvScore !== null
+          ? 0.70 * dayHrvScore + 0.30 * 32.0
+          : 32.0;
+    const blended =
+      dayHrvScore !== null
+        ? 0.45 * dayHrvScore + 0.35 * fallbackHrScore + 0.20 * sleepPenalty
+        : 0.70 * fallbackHrScore + 0.30 * sleepPenalty;
+    currentScore = Math.round(Math.min(95.0, Math.max(8.0, blended)));
   }
 
   const currentLevel = mapStressLevel(currentScore);
@@ -1296,7 +1392,7 @@ export function computeStress(params: {
     current_hrv_ms: hrvMs,
     hrv_delta_percent: hrvDelta,
     resting_heart_rate_bpm: Math.round(baselineRhr),
-    current_sedentary_bpm: lastHr !== null ? Math.round(lastHr) : null,
+    current_sedentary_bpm: effectiveSedentaryBpm !== null ? Math.round(effectiveSedentaryBpm) : null,
     heart_rate_elevation_bpm: currentElevation !== null ? Math.round(currentElevation * 10) / 10 : null,
     monkey_mood: monkeyMood,
     advice_quote: adviceQuote,
@@ -1609,10 +1705,21 @@ export interface LeanEngineInput {
   vitalsRows: LeanDailyVitalsRow[];
   sleepRows: LeanSleepSessionRow[];
   hrRows: LeanIntradayHrRow[];
+  historyVitalsRows?: LeanDailyVitalsRow[];
   tzOffsetMin?: number;
   preferredDevice?: string;
   baselineHrvMs?: number;
   baselineRhrBpm?: number;
+}
+
+function computeRollingMedianOrMean(values: number[]): number | undefined {
+  const valid = values.filter(v => Number.isFinite(v) && v > 0);
+  if (valid.length < 2) return undefined;
+  const sorted = [...valid].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return Math.round(median * 10) / 10;
 }
 
 function vitalsRowHasSignal(v: LeanDailyVitalsRow): boolean {
@@ -1636,6 +1743,7 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     vitalsRows,
     sleepRows,
     hrRows,
+    historyVitalsRows = [],
     tzOffsetMin = 120,
     preferredDevice,
     baselineHrvMs,
@@ -1903,13 +2011,56 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
 
   // 4. Build Cardiovascular Summary from health_intraday_heart_rate
   const localMidnightMs = getLocalMidnightUtc(targetDate, tzOffsetMin).getTime();
-  const filteredHrRows = hrRows
+  const rawFilteredHrRows = hrRows
     .map(r => ({
       ...r,
       canonDevice: canonicalizeDeviceName(r.source_device_key, null)
     }))
     .filter(r => r.bpm_avg > 30 && r.bpm_avg < 240 && (!prefCanon || r.canonDevice === prefCanon))
     .sort((a, b) => a.bucket_minute - b.bucket_minute);
+
+  // Deduplicate same 5-minute bucket across simultaneous wearables in All Devices mode
+  // so cardiovascular zone minutes and Stress intraday averages never double-count or sawtooth.
+  const filteredHrRows: Array<LeanIntradayHrRow & { canonDevice: string }> = (() => {
+    if (prefCanon || rawFilteredHrRows.length <= 1) return rawFilteredHrRows;
+    const byBucket = new Map<number, Array<LeanIntradayHrRow & { canonDevice: string }>>();
+    for (const r of rawFilteredHrRows) {
+      if (!byBucket.has(r.bucket_minute)) byBucket.set(r.bucket_minute, []);
+      byBucket.get(r.bucket_minute)!.push(r);
+    }
+    const merged: Array<LeanIntradayHrRow & { canonDevice: string }> = [];
+    const sortedMinutes = Array.from(byBucket.keys()).sort((a, b) => a - b);
+    for (const bm of sortedMinutes) {
+      const group = byBucket.get(bm)!;
+      if (group.length === 1) {
+        merged.push(group[0]);
+      } else {
+        group.sort((a, b) => getCanonicalVitalsPriority(a.canonDevice) - getCanonicalVitalsPriority(b.canonDevice));
+        const primary = group[0];
+        let wSum = 0;
+        let wCnt = 0;
+        let minV = 999;
+        let maxV = 0;
+        for (const g of group) {
+          const c = Math.max(1, g.sample_count ?? 1);
+          wSum += g.bpm_avg * c;
+          wCnt += c;
+          const gMin = g.bpm_min > 30 ? g.bpm_min : g.bpm_avg;
+          const gMax = g.bpm_max > 30 ? g.bpm_max : g.bpm_avg;
+          if (gMin < minV) minV = gMin;
+          if (gMax > maxV) maxV = gMax;
+        }
+        merged.push({
+          ...primary,
+          bpm_avg: Math.round(wSum / Math.max(1, wCnt)),
+          bpm_min: minV < 999 ? minV : primary.bpm_avg,
+          bpm_max: maxV > 0 ? maxV : primary.bpm_avg,
+          sample_count: wCnt
+        });
+      }
+    }
+    return merged;
+  })();
 
   const intradayHrPoints: IntradayHeartRatePoint[] = filteredHrRows.map(r => {
     const tsIso = new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString();
@@ -1923,6 +2074,7 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
   });
 
   const measuredRhr = vitalsMap['restingheartrate']?.value ?? null;
+  const derivedAllRhr = deriveNocturnalRhrFromHrPoints(intradayHrPoints, targetDate, tzOffsetMin);
   let cardioSummary: CardiovascularSummary;
   if (filteredHrRows.length === 0) {
     cardioSummary = {
@@ -1959,7 +2111,9 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     const avgBpm = Math.round((weightedSum / Math.max(1, totalSamples)) * 10) / 10;
     const effectiveRhr = measuredRhr !== null && measuredRhr > 0
       ? Math.round(measuredRhr)
-      : (minBpm < 999 ? minBpm + 4 : null);
+      : derivedAllRhr !== null
+        ? Math.round(derivedAllRhr)
+        : (minBpm < 999 ? minBpm + 4 : null);
 
     cardioSummary = {
       average_bpm: avgBpm,
@@ -1971,21 +2125,53 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     };
   }
 
-  // 5. Compute Autonomic Stress Summary
-  const hrvVal = vitalsMap['hrvsdnn']?.value ?? vitalsMap['hrvrmssd']?.value ?? null;
+  // 5. Compute Rolling Personal Baselines (SDNN vs RMSSD separated & cleaned of legacy cross-unit outliers!)
+  const rollingSdnn = computeRollingMedianOrMean(
+    historyVitalsRows.map(h => h.hrv_sdnn_nightly ?? 0).filter(v => v > 0 && v <= 120)
+  );
+  // Nocturnal RMSSD on wearables (Pixel Watch / Oura / Garmin) physiologically sits >= 35ms for healthy adults;
+  // filtering >= 35ms prevents legacy SDNN (~20-28ms) backfill rows from skewing RMSSD personal baselines.
+  const rmssdSourceDevice = vitalsMap['hrvrmssd']?.source_device;
+  const sameDeviceRmssdHistory = rmssdSourceDevice
+    ? historyVitalsRows
+        .filter(h => canonicalizeDeviceName(h.source_device_key, h.host_device_name) === rmssdSourceDevice)
+        .map(h => h.hrv_rmssd_nightly ?? 0)
+        .filter(v => v >= 35)
+    : [];
+  const rollingRmssd =
+    computeRollingMedianOrMean(sameDeviceRmssdHistory) ??
+    computeRollingMedianOrMean(
+      historyVitalsRows.map(h => h.hrv_rmssd_nightly ?? 0).filter(v => v >= 35)
+    );
+  const rollingRhr = computeRollingMedianOrMean(
+    historyVitalsRows.map(h => h.resting_heart_rate ?? 0).filter(v => v >= 40 && v <= 95)
+  );
+
+  const hasSdnnToday = (vitalsMap['hrvsdnn']?.value ?? 0) > 0;
+  const hasRmssdToday = !hasSdnnToday && (vitalsMap['hrvrmssd']?.value ?? 0) > 0;
+  const hrvVal = hasSdnnToday
+    ? vitalsMap['hrvsdnn']!.value
+    : hasRmssdToday
+      ? vitalsMap['hrvrmssd']!.value
+      : null;
+  const effectiveBaselineHrv =
+    baselineHrvMs ?? (hasRmssdToday ? rollingRmssd : rollingSdnn);
+  const effectiveBaselineRhr = baselineRhrBpm ?? rollingRhr;
+
   const stressSummary = computeStress({
     targetDateStr: targetDate,
     tzOffsetMin,
     hrvMs: hrvVal,
+    isRmssd: hasRmssdToday,
     hrPoints: cardioSummary.intraday_points,
     hourlySteps: activitySummary.hourly_steps,
     restingBpm: cardioSummary.resting_bpm,
     priorSleepScore: primarySession ? primarySession.sleep_score : null,
-    personalBaselineHrv: baselineHrvMs,
-    personalBaselineRhr: baselineRhrBpm
+    personalBaselineHrv: effectiveBaselineHrv,
+    personalBaselineRhr: effectiveBaselineRhr
   });
 
-  // 6. Build Rich Per-Device Breakdown & All-Devices View
+  // 6. Build Rich Per-Device Breakdown (including coherent per-device Stress v2.0!) & All-Devices View
   const sourcesBreakdown: Record<string, Record<string, number>> = {};
   for (const src of orderedSources) {
     sourcesBreakdown[src] = {};
@@ -2008,6 +2194,65 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     if (!sourcesBreakdown[s.source_device]) sourcesBreakdown[s.source_device] = {};
     sourcesBreakdown[s.source_device]['sleep_asleep_seconds'] = s.asleep_seconds;
     sourcesBreakdown[s.source_device]['sleep_score'] = s.sleep_score;
+  }
+
+  // Compute per-device stress_score & derived resting_heart_rate for every active canonical device
+  for (const src of orderedSources) {
+    const devVitals = normalizedVitals.find(v => v.canonDevice === src);
+    const devSleep = allSessions.find(s => s.source_device === src);
+    const devHrPoints: IntradayHeartRatePoint[] = rawFilteredHrRows
+      .filter(r => r.canonDevice === src)
+      .map(r => ({
+        id: r.id,
+        timestamp: new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString(),
+        bpm: r.bpm_avg,
+        zone: mapHeartRateZone(r.bpm_avg),
+        source_device: src
+      }));
+
+    const devHasSdnn = (devVitals?.hrv_sdnn_nightly ?? 0) > 0;
+    const devHasRmssd = !devHasSdnn && (devVitals?.hrv_rmssd_nightly ?? 0) > 0;
+    const devHrv = devHasSdnn
+      ? devVitals!.hrv_sdnn_nightly!
+      : devHasRmssd
+        ? devVitals!.hrv_rmssd_nightly!
+        : null;
+
+    const devHistRows = historyVitalsRows.filter(
+      h => canonicalizeDeviceName(h.source_device_key, h.host_device_name) === src
+    );
+    const devBaseSdnn =
+      computeRollingMedianOrMean(devHistRows.map(h => h.hrv_sdnn_nightly ?? 0).filter(v => v > 0 && v <= 120)) ?? rollingSdnn;
+    const devBaseRmssd =
+      computeRollingMedianOrMean(devHistRows.map(h => h.hrv_rmssd_nightly ?? 0).filter(v => v >= 35)) ?? rollingRmssd;
+    const devBaseRhr =
+      computeRollingMedianOrMean(devHistRows.map(h => h.resting_heart_rate ?? 0).filter(v => v >= 40 && v <= 95)) ?? rollingRhr;
+
+    const devHourlySteps: HourlyStepBucket[] = Array.isArray(devVitals?.hourly_steps)
+      ? devVitals!.hourly_steps!
+      : [];
+
+    const devStress = computeStress({
+      targetDateStr: targetDate,
+      tzOffsetMin,
+      hrvMs: devHrv,
+      isRmssd: devHasRmssd,
+      hrPoints: devHrPoints,
+      hourlySteps: devHourlySteps,
+      restingBpm: (devVitals?.resting_heart_rate ?? 0) > 0 ? devVitals!.resting_heart_rate! : null,
+      priorSleepScore: devSleep ? devSleep.sleep_score : null,
+      personalBaselineHrv: devHasRmssd ? devBaseRmssd : devBaseSdnn,
+      personalBaselineRhr: devBaseRhr
+    });
+
+    if (devStress) {
+      if (!sourcesBreakdown[src]) sourcesBreakdown[src] = {};
+      sourcesBreakdown[src]['stress_score'] = devStress.current_score;
+      sourcesBreakdown[src]['stress_daily_avg'] = devStress.daily_average;
+      if (!sourcesBreakdown[src]['resting_heart_rate'] && devStress.resting_heart_rate_bpm) {
+        sourcesBreakdown[src]['derived_rhr'] = devStress.resting_heart_rate_bpm;
+      }
+    }
   }
 
   const allDevicesView: Record<string, any> = {};

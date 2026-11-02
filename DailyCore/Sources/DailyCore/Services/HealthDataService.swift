@@ -1155,7 +1155,34 @@ public final class HealthDataService: ObservableObject {
                     DeviceSource.from(name: $0.sourceDeviceKey).displayName == targetCanon
                 }
             }
-            return buckets
+            guard buckets.count > 1 else { return buckets }
+            var byBucket: [Int: [HealthIntradayHeartRateRecord]] = [:]
+            for b in buckets {
+                byBucket[b.bucketMinute, default: []].append(b)
+            }
+            return byBucket.keys.sorted().compactMap { bm -> HealthIntradayHeartRateRecord? in
+                guard var group = byBucket[bm], !group.isEmpty else { return nil }
+                if group.count == 1 { return group[0] }
+                group.sort {
+                    DeviceSource.from(name: $0.sourceDeviceKey).sortPriority < DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+                }
+                let primary = group[0]
+                let totalCnt = group.reduce(0) { $0 + max(1, $1.sampleCount) }
+                let weightedSum = group.reduce(0) { $0 + ($1.bpmAvg * max(1, $1.sampleCount)) }
+                let minV = group.map { $0.bpmMin > 30 ? $0.bpmMin : $0.bpmAvg }.min() ?? primary.bpmAvg
+                let maxV = group.map { $0.bpmMax > 30 ? $0.bpmMax : $0.bpmAvg }.max() ?? primary.bpmAvg
+                return HealthIntradayHeartRateRecord(
+                    id: primary.id,
+                    userId: primary.userId,
+                    localDate: primary.localDate,
+                    sourceDeviceKey: primary.sourceDeviceKey,
+                    bucketMinute: bm,
+                    bpmAvg: Int(round(Double(weightedSum) / Double(max(1, totalCnt)))),
+                    bpmMin: minV,
+                    bpmMax: maxV,
+                    sampleCount: totalCnt
+                )
+            }
         }()
         
         let points = filteredBuckets.map { $0.toPoint(for: targetDate) }.sorted(by: { $0.timestamp < $1.timestamp })
@@ -1167,8 +1194,12 @@ public final class HealthDataService: ObservableObject {
             self.averageBpm = round((weightedSum / Double(max(1, totalSamples))) * 10) / 10
             self.minBpm = Double(filteredBuckets.map { $0.bpmMin > 30 ? $0.bpmMin : $0.bpmAvg }.min() ?? 0)
             self.maxBpm = Double(filteredBuckets.map { $0.bpmMax > 30 ? $0.bpmMax : $0.bpmAvg }.max() ?? 0)
-            if self.restingBpm <= 0 && self.minBpm > 0 {
-                self.restingBpm = self.minBpm + 4
+            if self.restingBpm <= 0 {
+                if let derived = StressAnalysisEngine.deriveNocturnalRhr(from: points, targetDate: targetDate, calendar: Calendar.current) {
+                    self.restingBpm = derived
+                } else if self.minBpm > 0 {
+                    self.restingBpm = round(min(max(self.minBpm + 6, 45), 85))
+                }
             }
             var zones: [HeartRateZone: Int] = [.resting: 0, .fatBurn: 0, .cardio: 0, .peak: 0]
             for pt in points {
@@ -1251,26 +1282,69 @@ public final class HealthDataService: ObservableObject {
             return
         }
         
-        let hrvVal = currentVitals[.hrvSdnn]?.value ?? currentVitals[.hrvRmssd]?.value
-        let rhrVal = restingBpm > 0 ? restingBpm : currentVitals[.restingHeartRate]?.value
+        let hasSdnn = (currentVitals[.hrvSdnn]?.value ?? 0) > 0
+        let hasRmssd = !hasSdnn && (currentVitals[.hrvRmssd]?.value ?? 0) > 0
+        let hrvVal = hasSdnn ? currentVitals[.hrvSdnn]?.value : (hasRmssd ? currentVitals[.hrvRmssd]?.value : nil)
+        let canonFilter = selectedDeviceFilter.map { DeviceSource.from(name: $0).displayName }
+        let serverDerivedRhr = canonFilter.flatMap { canonicalSummary?.sourcesBreakdown?[$0]?["derived_rhr"] }
+        let rhrVal = currentVitals[.restingHeartRate]?.value ?? serverDerivedRhr
+        
+        let summaryUsedRmssd = (canonicalSummary?.vitals["hrvsdnn"] == nil) && (canonicalSummary?.vitals["hrvrmssd"] != nil)
+        let matchedBaselineHrv: Double? = {
+            guard let base = canonicalSummary?.stress?.baselineHrvMs, base > 0 else { return nil }
+            if hasRmssd && summaryUsedRmssd && base >= 35 { return base }
+            if hasSdnn && !summaryUsedRmssd && base <= 120 { return base }
+            return nil
+        }()
         
         if hrvVal != nil || !intradayHeartRate.isEmpty || (rhrVal != nil && rhrVal! > 0) {
             let stressCalc = StressAnalysisEngine.calculateStress(
                 targetDate: selectedDate,
                 hrvMs: hrvVal,
+                isRmssd: hasRmssd,
                 hrTelemetry: intradayHeartRate,
                 hourlySteps: hourlySteps,
                 restingBpm: rhrVal,
                 priorSleepScore: primarySleepSession?.sleepScore,
-                personalBaselineHrv: nil,
+                personalBaselineHrv: matchedBaselineHrv,
                 personalBaselineRhr: nil,
                 calendar: cal
             )
             if let stressCalc = stressCalc {
-                self.stressAnalysis = stressCalc.result
+                var resolvedResult = stressCalc.result
+                // Prefer exact server-precomputed per-device stress_score when present in sources_breakdown
+                if let canon = canonFilter,
+                   let srvScoreDouble = canonicalSummary?.sourcesBreakdown?[canon]?["stress_score"] {
+                    let srvScore = Int(round(srvScoreDouble))
+                    let srvAvg = canonicalSummary?.sourcesBreakdown?[canon]?["stress_daily_avg"].map { Int(round($0)) } ?? resolvedResult.dailyAverageScore
+                    let srvLevel = StressLevel.from(score: srvScore)
+                    let para = min(max(100 - srvScore, 10), 90)
+                    resolvedResult = StressAnalysisResult(
+                        currentScore: srvScore,
+                        currentLevel: srvLevel,
+                        dailyAverageScore: srvAvg,
+                        peakHour: resolvedResult.peakHour,
+                        peakScore: resolvedResult.peakScore,
+                        lowestHour: resolvedResult.lowestHour,
+                        lowestScore: resolvedResult.lowestScore,
+                        parasympatheticPercent: para,
+                        sympatheticPercent: 100 - para,
+                        baselineHrvMs: resolvedResult.baselineHrvMs,
+                        currentHrvMs: resolvedResult.currentHrvMs,
+                        hrvDeltaPercent: resolvedResult.hrvDeltaPercent,
+                        restingHeartRateBpm: resolvedResult.restingHeartRateBpm,
+                        currentSedentaryBpm: resolvedResult.currentSedentaryBpm,
+                        heartRateElevationBpm: resolvedResult.heartRateElevationBpm,
+                        monkeyMood: resolvedResult.monkeyMood,
+                        adviceQuote: resolvedResult.adviceQuote,
+                        recommendedBreathing: resolvedResult.recommendedBreathing,
+                        lastUpdated: resolvedResult.lastUpdated
+                    )
+                }
+                self.stressAnalysis = resolvedResult
                 self.intradayStress = stressCalc.intradayPoints
-                self.currentStressScore = stressCalc.result.currentScore
-                self.currentStressLevel = stressCalc.result.currentLevel
+                self.currentStressScore = resolvedResult.currentScore
+                self.currentStressLevel = resolvedResult.currentLevel
                 return
             }
         }
@@ -1828,14 +1902,17 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 4. Process Stress Level (Autonomic tone physiological model)
-        let hrvVal = vitalsValues[.hrvSdnn] ?? vitalsValues[.hrvRmssd]
+        // 4. Process Stress Level (Autonomic tone physiological model v2.0)
+        let hasSdnnRaw = (vitalsValues[.hrvSdnn] ?? 0) > 0
+        let hasRmssdRaw = !hasSdnnRaw && (vitalsValues[.hrvRmssd] ?? 0) > 0
+        let hrvVal = hasSdnnRaw ? vitalsValues[.hrvSdnn] : (hasRmssdRaw ? vitalsValues[.hrvRmssd] : nil)
         let stressCalculation = StressAnalysisEngine.calculateStress(
             targetDate: selectedDate,
             hrvMs: hrvVal,
+            isRmssd: hasRmssdRaw,
             hrTelemetry: self.intradayHeartRate,
             hourlySteps: self.hourlySteps,
-            restingBpm: self.restingBpm > 0 ? self.restingBpm : vitalsValues[.restingHeartRate],
+            restingBpm: vitalsValues[.restingHeartRate] ?? (self.restingBpm > 0 ? self.restingBpm : nil),
             priorSleepScore: self.primarySleepSession?.sleepScore,
             personalBaselineHrv: nil,
             personalBaselineRhr: nil,

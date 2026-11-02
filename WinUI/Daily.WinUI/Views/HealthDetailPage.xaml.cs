@@ -41,6 +41,7 @@ namespace Daily_WinUI.Views
         // Per-device derived biometric cache when _selectedDeviceFilter != null
         private int? _filteredStressScore = null;
         private double? _filteredHrvMs = null;
+        private bool _filteredHrvIsRmssd = false;
         private double? _filteredRhrBpm = null;
         private int? _filteredSteps = null;
         private double? _filteredActiveKcal = null;
@@ -292,6 +293,7 @@ namespace Daily_WinUI.Views
             _selectedStage = null;
             _filteredStressScore = null;
             _filteredHrvMs = null;
+            _filteredHrvIsRmssd = false;
             _filteredRhrBpm = null;
             _filteredSteps = null;
             _filteredActiveKcal = null;
@@ -345,8 +347,10 @@ namespace Daily_WinUI.Views
                     _filteredSteps = matchedVitals.Max(v => v.Steps);
                     _filteredActiveKcal = matchedVitals.Max(v => v.ActiveKcal);
                     _filteredRhrBpm = matchedVitals.Where(v => (v.RestingHeartRate ?? 0) > 0).Select(v => (double?)v.RestingHeartRate).FirstOrDefault();
-                    _filteredHrvMs = matchedVitals.Where(v => (v.HrvSdnnNightly ?? 0) > 0).Select(v => v.HrvSdnnNightly).FirstOrDefault()
-                                  ?? matchedVitals.Where(v => (v.HrvRmssdNightly ?? 0) > 0).Select(v => v.HrvRmssdNightly).FirstOrDefault();
+                    var sdnn = matchedVitals.Where(v => (v.HrvSdnnNightly ?? 0) > 0).Select(v => v.HrvSdnnNightly).FirstOrDefault();
+                    var rmssd = matchedVitals.Where(v => (v.HrvRmssdNightly ?? 0) > 0).Select(v => v.HrvRmssdNightly).FirstOrDefault();
+                    _filteredHrvIsRmssd = (!sdnn.HasValue || sdnn.Value <= 0) && rmssd.HasValue && rmssd.Value > 0;
+                    _filteredHrvMs = (sdnn.HasValue && sdnn.Value > 0) ? sdnn : rmssd;
                     _filteredSpo2 = matchedVitals.Where(v => (v.Spo2 ?? 0) > 0).Select(v => v.Spo2).FirstOrDefault();
                     _filteredRespRate = matchedVitals.Where(v => (v.RespiratoryRate ?? 0) > 0).Select(v => v.RespiratoryRate).FirstOrDefault();
                     _filteredWeightKg = matchedVitals.Where(v => (v.WeightKg ?? 0) > 0).Select(v => v.WeightKg).FirstOrDefault();
@@ -366,62 +370,195 @@ namespace Daily_WinUI.Views
             PopulateDaytimeNaps();
         }
 
+        private static double ScoreFromHrvV2(double hrv, double baseline)
+        {
+            if (baseline <= 0) return 50.0;
+            double scale = Math.Max(14.0, baseline * 0.35);
+            double z = (hrv - baseline) / scale;
+            return Math.Clamp(50.0 - Math.Tanh(z) * 45.0, 0.0, 100.0);
+        }
+
+        private static double ScoreFromSedentaryHrV2(double avgHr, double baselineRhr)
+        {
+            double delta = avgHr - baselineRhr;
+            double z = (delta - 22.0) / 16.0;
+            return Math.Clamp(46.0 + Math.Tanh(z) * 44.0, 6.0, 95.0);
+        }
+
+        private static double? DeriveNocturnalRhrV2(List<HealthIntradayHeartRateRecord> buckets)
+        {
+            var nocturnal = buckets
+                .Where(b => b.BpmAvg > 35 && b.BpmAvg <= 95 && (b.BucketMinute / 60) < 8)
+                .Select(b => (double)b.BpmAvg)
+                .OrderBy(v => v)
+                .ToList();
+            if (nocturnal.Count >= 3)
+            {
+                int mid = nocturnal.Count / 2;
+                double med = (nocturnal.Count % 2 == 1)
+                    ? nocturnal[mid]
+                    : (nocturnal[mid - 1] + nocturnal[mid]) / 2.0;
+                return Math.Round(Math.Clamp(med + 5.5, 45.0, 85.0));
+            }
+            var daytime = buckets
+                .Where(b => b.BpmAvg > 35 && b.BpmAvg < 220 && (b.BucketMinute / 60) >= 8)
+                .Select(b => (double)b.BpmAvg)
+                .ToList();
+            if (daytime.Count >= 3)
+            {
+                return Math.Round(Math.Clamp(daytime.Min() - 2.0, 48.0, 72.0));
+            }
+            return null;
+        }
+
         private void ComputeFilteredDeviceStress()
         {
-            double? hrv = _filteredHrvMs
-                       ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value
-                       ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value;
-            double? rhr = _filteredRhrBpm
-                       ?? GetMetric(VitalType.RestingHeartRate)?.Value;
+            var canonFilter = !string.IsNullOrEmpty(_selectedDeviceFilter)
+                ? DeviceSource.From(_selectedDeviceFilter).DisplayName
+                : null;
 
-            var matchedHr = _leanIntradayHr
-                .Where(h => MatchesSelectedDevice(h.SourceDeviceKey) && h.BpmAvg > 0)
-                .ToList();
-
-            double? meanHr = matchedHr.Any() ? matchedHr.Average(h => (double)h.BpmAvg) : null;
-            if (!meanHr.HasValue)
+            Dictionary<string, double>? srvBreakdown = null;
+            if (!string.IsNullOrEmpty(canonFilter) && _currentSummary?.Summary?.SourcesBreakdown != null)
             {
-                var fallbackHr = _telemetryData
-                    .Where(x => x.IsHeartRate && x.LocalStartTime.Date == _selectedDate.Date && x.Value > 0 && MatchesSelectedDevice(x.SourceDevice))
-                    .ToList();
-                if (fallbackHr.Any())
+                foreach (var kv in _currentSummary.Summary.SourcesBreakdown)
                 {
-                    meanHr = fallbackHr.Average(x => x.Value!.Value);
+                    if (string.Equals(DeviceSource.From(kv.Key).DisplayName, canonFilter, StringComparison.OrdinalIgnoreCase))
+                    {
+                        srvBreakdown = kv.Value;
+                        break;
+                    }
                 }
             }
 
-            // If a device recorded neither HRV, RHR, nor continuous HR (e.g. phone pedometer only), stress is No Data
-            if ((hrv ?? 0) <= 0 && (rhr ?? 0) <= 0 && (meanHr ?? 0) <= 0)
+            if (!_filteredRhrBpm.HasValue && srvBreakdown != null)
+            {
+                if (srvBreakdown.TryGetValue("resting_heart_rate", out var srvRhr) && srvRhr > 0)
+                    _filteredRhrBpm = srvRhr;
+                else if (srvBreakdown.TryGetValue("derived_rhr", out var srvDerivedRhr) && srvDerivedRhr > 0)
+                    _filteredRhrBpm = srvDerivedRhr;
+            }
+
+            var matchedHr = _leanIntradayHr
+                .Where(h => MatchesSelectedDevice(h.SourceDeviceKey) && h.BpmAvg > 30 && h.BpmAvg < 240)
+                .OrderBy(h => h.BucketMinute)
+                .ToList();
+
+            if (!_filteredRhrBpm.HasValue && matchedHr.Count > 0)
+            {
+                _filteredRhrBpm = DeriveNocturnalRhrV2(matchedHr);
+            }
+
+            // Prefer server-precomputed canonical per-device stress_score when present
+            if (srvBreakdown != null && srvBreakdown.TryGetValue("stress_score", out var precomputedScore) && precomputedScore > 0)
+            {
+                _filteredStressScore = (int)Math.Round(precomputedScore);
+                return;
+            }
+
+            // Strictly use filtered device biometrics — NEVER leak unfiltered SQLite vitals across devices!
+            double? hrv = (_filteredHrvMs.HasValue && _filteredHrvMs.Value > 0) ? _filteredHrvMs : null;
+
+            if (!hrv.HasValue && matchedHr.Count == 0)
             {
                 _filteredStressScore = null;
                 return;
             }
 
-            double baselineHrv = _currentSummary?.Summary?.Stress?.BiometricDrivers?.BaselineHrvMs ?? 45.0;
-            if (baselineHrv <= 0) baselineHrv = 45.0;
-
-            double score = 32.0;
-            if (hrv.HasValue && hrv.Value > 0)
+            double defaultHrvBase = _filteredHrvIsRmssd ? 62.0 : 45.0;
+            bool summaryUsedRmssd = (_currentSummary?.HrvSdnn == null || _currentSummary.HrvSdnn <= 0)
+                                 && (_currentSummary?.HrvRmssd != null && _currentSummary.HrvRmssd > 0);
+            double? srvBaseHrv = _currentSummary?.Summary?.Stress?.BiometricDrivers?.BaselineHrvMs;
+            double baselineHrv = defaultHrvBase;
+            if (srvBaseHrv.HasValue && srvBaseHrv.Value > 0)
             {
-                double hrvDelta = (baselineHrv - hrv.Value) / baselineHrv;
-                score += hrvDelta * 35.0;
+                if ((_filteredHrvIsRmssd && summaryUsedRmssd && srvBaseHrv.Value >= 35.0) ||
+                    (!_filteredHrvIsRmssd && !summaryUsedRmssd && srvBaseHrv.Value <= 120.0))
+                {
+                    baselineHrv = srvBaseHrv.Value;
+                }
             }
 
-            double effectiveHr = rhr.HasValue && rhr.Value > 0 ? rhr.Value : (meanHr ?? 62.0);
-            score += (effectiveHr - 58.0) * 0.85;
+            double baselineRhr = (_filteredRhrBpm.HasValue && _filteredRhrBpm.Value > 0)
+                ? _filteredRhrBpm.Value
+                : 60.0;
 
-            if (meanHr.HasValue && rhr.HasValue && meanHr.Value > rhr.Value)
+            int sleepScore = (_primarySleepSession?.SleepScore ?? 0) > 0 ? _primarySleepSession!.SleepScore : 80;
+            double sleepPenalty = Math.Clamp(100.0 - sleepScore, 0.0, 100.0);
+            double? dayHrvScore = hrv.HasValue ? ScoreFromHrvV2(hrv.Value, baselineHrv) : null;
+
+            var matchedVitals = _leanDailyVitals.Where(v => MatchesSelectedDevice(v.SourceDeviceKey)).FirstOrDefault();
+            var stepsByHour = new Dictionary<int, int>();
+            if (matchedVitals?.HourlySteps != null)
             {
-                score += Math.Min(18.0, (meanHr.Value - rhr.Value) * 0.55);
+                foreach (var hb in matchedVitals.HourlySteps)
+                    stepsByHour[hb.Hour] = hb.Steps;
             }
 
-            int sleepScore = _primarySleepSession?.SleepScore ?? 0;
-            if (sleepScore > 0)
+            var hrByHour = matchedHr
+                .GroupBy(h => h.BucketMinute / 60)
+                .ToDictionary(g => g.Key, g => g.Average(x => (double)x.BpmAvg));
+
+            int maxHour = (_selectedDate.Date == DateTime.Today) ? DateTime.Now.Hour : 23;
+            double? lastSedHrScore = null;
+            var sedScores = new List<int>();
+            var allScores = new List<int>();
+
+            for (int hour = 0; hour <= maxHour; hour++)
             {
-                score += (80.0 - sleepScore) * 0.25;
+                int st = stepsByHour.TryGetValue(hour, out var sv) ? sv : 0;
+                bool isSed = st < 300;
+                bool hasHr = hrByHour.TryGetValue(hour, out var avgHr);
+                if (!hasHr && (!hrv.HasValue || st == 0)) continue;
+
+                double hrScore;
+                if (hasHr && isSed)
+                {
+                    hrScore = ScoreFromSedentaryHrV2(avgHr, baselineRhr);
+                    lastSedHrScore = hrScore;
+                }
+                else if (lastSedHrScore.HasValue)
+                {
+                    hrScore = 0.85 * lastSedHrScore.Value + 0.15 * 32.0;
+                }
+                else if (dayHrvScore.HasValue)
+                {
+                    hrScore = 0.70 * dayHrvScore.Value + 0.30 * 32.0;
+                }
+                else
+                {
+                    hrScore = 32.0;
+                }
+
+                double rawHourly = dayHrvScore.HasValue
+                    ? (0.45 * dayHrvScore.Value + 0.35 * hrScore + 0.20 * sleepPenalty)
+                    : (0.70 * hrScore + 0.30 * sleepPenalty);
+
+                int hrFinal = (int)Math.Round(Math.Clamp(rawHourly, 5.0, 98.0));
+                allScores.Add(hrFinal);
+                if (isSed && hasHr) sedScores.Add(hrFinal);
             }
 
-            _filteredStressScore = (int)Math.Round(Math.Clamp(score, 5.0, 95.0));
+            if (sedScores.Count >= 2)
+            {
+                _filteredStressScore = (int)Math.Round(0.70 * sedScores[^1] + 0.30 * sedScores[^2]);
+            }
+            else if (sedScores.Count == 1)
+            {
+                _filteredStressScore = sedScores[0];
+            }
+            else if (allScores.Count > 0)
+            {
+                _filteredStressScore = allScores[^1];
+            }
+            else if (dayHrvScore.HasValue)
+            {
+                double fallbackHr = 0.70 * dayHrvScore.Value + 0.30 * 32.0;
+                _filteredStressScore = (int)Math.Round(Math.Clamp(0.45 * dayHrvScore.Value + 0.35 * fallbackHr + 0.20 * sleepPenalty, 8.0, 95.0));
+            }
+            else
+            {
+                _filteredStressScore = null;
+            }
         }
 
         public async Task RefreshFromTitleBarAsync()
@@ -1691,9 +1828,19 @@ namespace Daily_WinUI.Views
         // TAB 2: STRESS STUDIO PROPERTIES
         // ==========================================
 
-        private int EffectiveStressScore => !string.IsNullOrEmpty(_selectedDeviceFilter)
-            ? (_filteredStressScore ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0))
-            : (_currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0));
+        private int EffectiveStressScore
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(_selectedDeviceFilter))
+                {
+                    return _filteredStressScore ?? 0;
+                }
+                int canonicalCurrent = _currentSummary?.Summary?.Stress?.CurrentScore ?? 0;
+                if (canonicalCurrent > 0) return canonicalCurrent;
+                return _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+            }
+        }
 
         public string StressScoreText
         {
@@ -1725,8 +1872,8 @@ namespace Daily_WinUI.Views
                 {
                     int s = EffectiveStressScore;
                     if (s <= 0) return "No Data";
-                    if (s <= 25) return "Calm";
-                    if (s <= 50) return "Low";
+                    if (s <= 25) return "Restful";
+                    if (s <= 50) return "Calm";
                     if (s <= 75) return "Moderate";
                     return "High";
                 }
@@ -1735,8 +1882,8 @@ namespace Daily_WinUI.Views
 
                 int score = EffectiveStressScore;
                 if (score <= 0) return "No Data";
-                if (score <= 25) return "Calm";
-                if (score <= 50) return "Low";
+                if (score <= 25) return "Restful";
+                if (score <= 50) return "Calm";
                 if (score <= 75) return "Moderate";
                 return "High";
             }
@@ -1753,14 +1900,12 @@ namespace Daily_WinUI.Views
                     {
                         return mood.ToLowerInvariant() switch
                         {
-                            "zen" => "🧘",
+                            "zen" or "zen monkey" => "🧘",
                             "happy" => "🐵",
-                            "curious" => "🐒",
+                            "curious" or "curious monkey" => "🐒",
                             "alert" => "👀",
-                            "wired" => "⚡",
-                            "busy" => "⚡",
-                            "overheated" => "💤",
-                            "exhausted" => "💤",
+                            "wired" or "busy" or "busy monkey" => "⚡",
+                            "overheated" or "overheated monkey" or "exhausted" => "💤",
                             _ => "🐵"
                         };
                     }
@@ -1874,13 +2019,10 @@ namespace Daily_WinUI.Views
 
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    double? hrv = _filteredHrvMs
-                               ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value
-                               ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value;
-                    if (hrv.HasValue && hrv.Value > 0)
+                    if (_filteredHrvMs.HasValue && _filteredHrvMs.Value > 0)
                     {
-                        double ratio = hrv.Value / baseline;
-                        return Math.Min(100.0, Math.Max(0.0, (1.0 - ratio) * 100.0));
+                        double devBase = _filteredHrvIsRmssd ? 62.0 : 45.0;
+                        return Math.Round(ScoreFromHrvV2(_filteredHrvMs.Value, devBase), 0);
                     }
                     return 20.0;
                 }

@@ -153,4 +153,69 @@ struct StressEngineTests {
         #expect(decoded.monkeyMood == .curious)
         #expect(decoded.parasympatheticPercent == 58)
     }
+    
+    @Test("RMSSD vs SDNN calibration and active-hour walking stability prevent score collapse")
+    func testRmssdAndActiveHourStability() async throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let pastDay = cal.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 12))!
+        
+        // Simulate Pixel Watch 5 worn all day: RMSSD = 70ms, RHR = 61 bpm, Sleep = 92,
+        // sedentary desk hours at 14:00 (82 bpm) & 15:00 (81 bpm), then brisk walk at 16:00 (550 steps, 105 bpm).
+        let h14 = cal.date(bySettingHour: 14, minute: 15, second: 0, of: pastDay)!
+        let h15 = cal.date(bySettingHour: 15, minute: 15, second: 0, of: pastDay)!
+        let h16 = cal.date(bySettingHour: 16, minute: 15, second: 0, of: pastDay)!
+        
+        let hrPoints = [
+            IntradayHeartRatePoint(timestamp: h14, bpm: 82.0),
+            IntradayHeartRatePoint(timestamp: h15, bpm: 81.0),
+            IntradayHeartRatePoint(timestamp: h16, bpm: 105.0)
+        ]
+        let steps = [
+            HourlyStepBucket(hour: 14, steps: 90),
+            HourlyStepBucket(hour: 15, steps: 110),
+            HourlyStepBucket(hour: 16, steps: 550)
+        ]
+        
+        let (pwResult, _) = try #require(StressAnalysisEngine.calculateStress(
+            targetDate: pastDay,
+            hrvMs: 70.0,
+            isRmssd: true,
+            hrTelemetry: hrPoints,
+            hourlySteps: steps,
+            restingBpm: 61.0,
+            priorSleepScore: 92,
+            calendar: cal
+        ))
+        
+        // Must stay in healthy Calm range (~28-40), never collapsing to 8 or 12 during the walking hour
+        #expect(pwResult.currentScore >= 25 && pwResult.currentScore <= 42)
+        
+        // Simulate Oura Ring on the same hand (no standalone HRV or RHR in HealthKit, nocturnal HR ~55 bpm)
+        let h04 = cal.date(bySettingHour: 4, minute: 0, second: 0, of: pastDay)!
+        let h05 = cal.date(bySettingHour: 5, minute: 0, second: 0, of: pastDay)!
+        let h06 = cal.date(bySettingHour: 6, minute: 0, second: 0, of: pastDay)!
+        let ouraHr = [
+            IntradayHeartRatePoint(timestamp: h04, bpm: 55.0),
+            IntradayHeartRatePoint(timestamp: h05, bpm: 56.0),
+            IntradayHeartRatePoint(timestamp: h06, bpm: 55.0),
+            IntradayHeartRatePoint(timestamp: h14, bpm: 82.0),
+            IntradayHeartRatePoint(timestamp: h15, bpm: 81.0)
+        ]
+        let (ouraResult, _) = try #require(StressAnalysisEngine.calculateStress(
+            targetDate: pastDay,
+            hrvMs: nil,
+            isRmssd: false,
+            hrTelemetry: ouraHr,
+            hourlySteps: steps,
+            restingBpm: nil,
+            priorSleepScore: 75,
+            calendar: cal
+        ))
+        
+        // Derived RHR should be ~61 bpm (55.5 + 5.5), and Oura stress should converge near Pixel Watch (~30-42), never 60!
+        #expect(abs((ouraResult.restingHeartRateBpm ?? 0.0) - 61.0) <= 1.0)
+        #expect(ouraResult.currentScore >= 25 && ouraResult.currentScore <= 44)
+        #expect(abs(ouraResult.currentScore - pwResult.currentScore) <= 8)
+    }
 }

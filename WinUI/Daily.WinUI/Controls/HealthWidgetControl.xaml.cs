@@ -322,6 +322,16 @@ namespace Daily_WinUI.Controls
             }
         }
 
+        private int EffectiveWidgetStressScore
+        {
+            get
+            {
+                int cur = _currentSummary?.Summary?.Stress?.CurrentScore ?? 0;
+                if (cur > 0) return cur;
+                return _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+            }
+        }
+
         public string MonkeyMoodEmoji
         {
             get
@@ -331,17 +341,17 @@ namespace Daily_WinUI.Controls
                 {
                     return mood.ToLowerInvariant() switch
                     {
-                        "zen" => "🧘",
+                        "zen" or "zen monkey" => "🧘",
                         "happy" => "🐵",
-                        "curious" => "🐒",
+                        "curious" or "curious monkey" => "🐒",
                         "alert" => "👀",
-                        "wired" => "⚡",
-                        "exhausted" => "💤",
+                        "wired" or "busy" or "busy monkey" => "⚡",
+                        "overheated" or "overheated monkey" or "exhausted" => "💤",
                         _ => "🐵"
                     };
                 }
 
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveWidgetStressScore;
                 if (score <= 0) return "🐵";
                 if (score <= 25) return "🧘";
                 if (score <= 50) return "🐵";
@@ -354,7 +364,7 @@ namespace Daily_WinUI.Controls
         {
             get
             {
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveWidgetStressScore;
                 return score > 0 ? score.ToString() : "--";
             }
         }
@@ -363,11 +373,11 @@ namespace Daily_WinUI.Controls
         {
             get
             {
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveWidgetStressScore;
                 if (score <= 0) return new SolidColorBrush(Color.FromArgb(180, 255, 255, 255));
-                if (score <= 25) return new SolidColorBrush(Color.FromArgb(255, 52, 199, 89));   // Calm green
-                if (score <= 50) return new SolidColorBrush(Color.FromArgb(255, 56, 151, 240));  // Low blue
-                if (score <= 75) return new SolidColorBrush(Color.FromArgb(255, 255, 149, 0));  // Medium orange
+                if (score <= 25) return new SolidColorBrush(Color.FromArgb(255, 52, 199, 89));   // Restful green
+                if (score <= 50) return new SolidColorBrush(Color.FromArgb(255, 56, 151, 240));  // Calm blue
+                if (score <= 75) return new SolidColorBrush(Color.FromArgb(255, 255, 149, 0));  // Moderate orange
                 return new SolidColorBrush(Color.FromArgb(255, 255, 45, 85));                   // High pink/red
             }
         }
@@ -379,10 +389,10 @@ namespace Daily_WinUI.Controls
                 var lvl = _currentSummary?.Summary?.Stress?.CurrentLevel;
                 if (!string.IsNullOrEmpty(lvl)) return lvl;
 
-                int score = _currentSummary?.StressAvg ?? (int)(GetMetric(VitalType.Stress)?.Value ?? 0);
+                int score = EffectiveWidgetStressScore;
                 if (score <= 0) return "No Data";
-                if (score <= 25) return "Calm";
-                if (score <= 50) return "Low";
+                if (score <= 25) return "Restful";
+                if (score <= 50) return "Calm";
                 if (score <= 75) return "Moderate";
                 return "High";
             }

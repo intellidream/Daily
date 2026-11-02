@@ -141,4 +141,71 @@ class StressAnalysisEngineTest {
         assertTrue(DeviceSource.from("bubbles").isVirtualEngine)
         assertTrue(DeviceSource.from("Unknown").isVirtualEngine)
     }
+
+    @Test
+    fun testRmssdAndActiveHourStabilityAndOuraParity() {
+        val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            set(2026, Calendar.OCTOBER, 15, 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val pastDay = cal.time
+
+        fun tsAt(hour: Int, minute: Int = 15): Long {
+            val c = (cal.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, hour)
+                set(Calendar.MINUTE, minute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            return c.timeInMillis
+        }
+
+        val pwHr = listOf(
+            IntradayHeartRatePoint(timestamp = tsAt(14), bpm = 82.0),
+            IntradayHeartRatePoint(timestamp = tsAt(15), bpm = 81.0),
+            IntradayHeartRatePoint(timestamp = tsAt(16), bpm = 105.0)
+        )
+        val steps = listOf(
+            HourlyStepBucket(id = 14, hour = 14, steps = 90),
+            HourlyStepBucket(id = 15, hour = 15, steps = 110),
+            HourlyStepBucket(id = 16, hour = 16, steps = 550)
+        )
+
+        val pwCalc = StressAnalysisEngine.calculateStress(
+            targetDate = pastDay,
+            hrvMs = 70.0,
+            isRmssd = true,
+            hrTelemetry = pwHr,
+            hourlySteps = steps,
+            restingBpm = 61.0,
+            priorSleepScore = 92,
+            calendar = cal
+        )
+        assertNotNull(pwCalc)
+        val pwResult = pwCalc!!.first
+        assertTrue("Pixel Watch RMSSD 70ms must stay Calm (25..42), got ${pwResult.currentScore}", pwResult.currentScore in 25..42)
+
+        val ouraHr = listOf(
+            IntradayHeartRatePoint(timestamp = tsAt(4, 0), bpm = 55.0),
+            IntradayHeartRatePoint(timestamp = tsAt(5, 0), bpm = 56.0),
+            IntradayHeartRatePoint(timestamp = tsAt(6, 0), bpm = 55.0),
+            IntradayHeartRatePoint(timestamp = tsAt(14), bpm = 82.0),
+            IntradayHeartRatePoint(timestamp = tsAt(15), bpm = 81.0)
+        )
+        val ouraCalc = StressAnalysisEngine.calculateStress(
+            targetDate = pastDay,
+            hrvMs = null,
+            isRmssd = false,
+            hrTelemetry = ouraHr,
+            hourlySteps = steps,
+            restingBpm = null,
+            priorSleepScore = 75,
+            calendar = cal
+        )
+        assertNotNull(ouraCalc)
+        val ouraResult = ouraCalc!!.first
+        assertTrue(abs((ouraResult.restingHeartRateBpm ?: 0.0) - 61.0) <= 1.0)
+        assertTrue("Oura Ring stress must stay Calm (25..44), got ${ouraResult.currentScore}", ouraResult.currentScore in 25..44)
+        assertTrue("Oura and Pixel Watch must converge within 8 pts", abs(ouraResult.currentScore - pwResult.currentScore) <= 8)
+    }
 }

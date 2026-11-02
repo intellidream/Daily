@@ -139,6 +139,10 @@ namespace Daily.Models.Health
         [JsonPropertyName("all_devices_view")]
         [JsonProperty("all_devices_view")]
         public Dictionary<string, CanonicalAllDevicesMetricItem>? AllDevicesView { get; set; }
+
+        [JsonPropertyName("sources_breakdown")]
+        [JsonProperty("sources_breakdown")]
+        public Dictionary<string, Dictionary<string, double>>? SourcesBreakdown { get; set; }
     }
 
     public class CanonicalAllDevicesMetricItem
@@ -436,7 +440,19 @@ namespace Daily.Models.Health
 
         [JsonPropertyName("active_calories_kcal")]
         [JsonProperty("active_calories_kcal")]
-        public double ActiveCaloriesKcal { get; set; }
+        public double ActiveCaloriesKcalRaw { get; set; }
+
+        [JsonPropertyName("active_calories")]
+        [JsonProperty("active_calories")]
+        public double ActiveCaloriesV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public double ActiveCaloriesKcal
+        {
+            get => ActiveCaloriesV2 > 0 ? ActiveCaloriesV2 : ActiveCaloriesKcalRaw;
+            set { ActiveCaloriesV2 = value; ActiveCaloriesKcalRaw = value; }
+        }
 
         [JsonPropertyName("hourly_steps")]
         [JsonProperty("hourly_steps")]
@@ -470,27 +486,99 @@ namespace Daily.Models.Health
     {
         [JsonPropertyName("intraday_heart_rate")]
         [JsonProperty("intraday_heart_rate")]
-        public List<IntradayHeartRatePoint> IntradayHeartRate { get; set; } = new();
+        public List<IntradayHeartRatePoint>? IntradayHeartRateRaw { get; set; }
+
+        [JsonPropertyName("intraday_points")]
+        [JsonProperty("intraday_points")]
+        public List<IntradayHeartRatePoint>? IntradayPointsV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public List<IntradayHeartRatePoint> IntradayHeartRate
+        {
+            get => (IntradayPointsV2 != null && IntradayPointsV2.Count > 0) ? IntradayPointsV2 : (IntradayHeartRateRaw ?? new());
+            set { IntradayPointsV2 = value; IntradayHeartRateRaw = value; }
+        }
 
         [JsonPropertyName("resting_heart_rate_bpm")]
         [JsonProperty("resting_heart_rate_bpm")]
-        public double? RestingHeartRateBpm { get; set; }
+        public double? RestingHeartRateBpmRaw { get; set; }
+
+        [JsonPropertyName("resting_bpm")]
+        [JsonProperty("resting_bpm")]
+        public double? RestingBpmV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public double? RestingHeartRateBpm
+        {
+            get => RestingBpmV2 ?? RestingHeartRateBpmRaw;
+            set { RestingBpmV2 = value; RestingHeartRateBpmRaw = value; }
+        }
 
         [JsonPropertyName("average_heart_rate_bpm")]
         [JsonProperty("average_heart_rate_bpm")]
-        public double? AverageHeartRateBpm { get; set; }
+        public double? AverageHeartRateBpmRaw { get; set; }
+
+        [JsonPropertyName("average_bpm")]
+        [JsonProperty("average_bpm")]
+        public double? AverageBpmV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public double? AverageHeartRateBpm
+        {
+            get => AverageBpmV2 ?? AverageHeartRateBpmRaw;
+            set { AverageBpmV2 = value; AverageHeartRateBpmRaw = value; }
+        }
 
         [JsonPropertyName("max_heart_rate_bpm")]
         [JsonProperty("max_heart_rate_bpm")]
-        public double? MaxHeartRateBpm { get; set; }
+        public double? MaxHeartRateBpmRaw { get; set; }
+
+        [JsonPropertyName("max_bpm")]
+        [JsonProperty("max_bpm")]
+        public double? MaxBpmV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public double? MaxHeartRateBpm
+        {
+            get => MaxBpmV2 ?? MaxHeartRateBpmRaw;
+            set { MaxBpmV2 = value; MaxHeartRateBpmRaw = value; }
+        }
 
         [JsonPropertyName("min_heart_rate_bpm")]
         [JsonProperty("min_heart_rate_bpm")]
-        public double? MinHeartRateBpm { get; set; }
+        public double? MinHeartRateBpmRaw { get; set; }
+
+        [JsonPropertyName("min_bpm")]
+        [JsonProperty("min_bpm")]
+        public double? MinBpmV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public double? MinHeartRateBpm
+        {
+            get => MinBpmV2 ?? MinHeartRateBpmRaw;
+            set { MinBpmV2 = value; MinHeartRateBpmRaw = value; }
+        }
 
         [JsonPropertyName("heart_rate_zones")]
         [JsonProperty("heart_rate_zones")]
-        public CanonicalHeartRateZones? HeartRateZones { get; set; }
+        public CanonicalHeartRateZones? HeartRateZonesRaw { get; set; }
+
+        [JsonPropertyName("zones")]
+        [JsonProperty("zones")]
+        public CanonicalHeartRateZones? ZonesV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CanonicalHeartRateZones? HeartRateZones
+        {
+            get => ZonesV2 ?? HeartRateZonesRaw;
+            set { ZonesV2 = value; HeartRateZonesRaw = value; }
+        }
     }
 
     public class IntradayHeartRatePoint
@@ -547,7 +635,19 @@ namespace Daily.Models.Health
     {
         [JsonPropertyName("daily_average_score")]
         [JsonProperty("daily_average_score")]
-        public int DailyAverageScore { get; set; }
+        public int DailyAverageScoreRaw { get; set; }
+
+        [JsonPropertyName("daily_average")]
+        [JsonProperty("daily_average")]
+        public int DailyAverageV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int DailyAverageScore
+        {
+            get => DailyAverageV2 > 0 ? DailyAverageV2 : DailyAverageScoreRaw;
+            set { DailyAverageV2 = value; DailyAverageScoreRaw = value; }
+        }
 
         [JsonPropertyName("current_score")]
         [JsonProperty("current_score")]
@@ -555,23 +655,87 @@ namespace Daily.Models.Health
 
         [JsonPropertyName("current_level")]
         [JsonProperty("current_level")]
-        public string CurrentLevel { get; set; } = "calm"; // "restful", "calm", "moderate", "high"
+        public string CurrentLevel { get; set; } = "Calm";
+
+        [JsonPropertyName("parasympathetic_percent")]
+        [JsonProperty("parasympathetic_percent")]
+        public int? ParasympatheticPercentV2 { get; set; }
+
+        [JsonPropertyName("sympathetic_percent")]
+        [JsonProperty("sympathetic_percent")]
+        public int? SympatheticPercentV2 { get; set; }
+
+        [JsonPropertyName("baseline_hrv_ms")]
+        [JsonProperty("baseline_hrv_ms")]
+        public double? BaselineHrvMsV2 { get; set; }
+
+        [JsonPropertyName("current_hrv_ms")]
+        [JsonProperty("current_hrv_ms")]
+        public double? CurrentHrvMsV2 { get; set; }
+
+        [JsonPropertyName("resting_heart_rate_bpm")]
+        [JsonProperty("resting_heart_rate_bpm")]
+        public double? RestingHeartRateBpmV2 { get; set; }
+
+        [JsonPropertyName("current_sedentary_bpm")]
+        [JsonProperty("current_sedentary_bpm")]
+        public double? CurrentSedentaryBpmV2 { get; set; }
+
+        [JsonPropertyName("advice_quote")]
+        [JsonProperty("advice_quote")]
+        public string? AdviceQuote { get; set; }
+
+        [JsonPropertyName("recommended_breathing")]
+        [JsonProperty("recommended_breathing")]
+        public string? RecommendedBreathing { get; set; }
 
         [JsonPropertyName("autonomic_balance")]
         [JsonProperty("autonomic_balance")]
-        public CanonicalAutonomicBalance? AutonomicBalance { get; set; }
+        public CanonicalAutonomicBalance? AutonomicBalanceRaw { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CanonicalAutonomicBalance AutonomicBalance =>
+            AutonomicBalanceRaw ?? new CanonicalAutonomicBalance
+            {
+                ParasympatheticPercent = ParasympatheticPercentV2 ?? Math.Clamp(100 - (CurrentScore > 0 ? CurrentScore : 50), 10, 90),
+                SympatheticPercent = SympatheticPercentV2 ?? (100 - Math.Clamp(100 - (CurrentScore > 0 ? CurrentScore : 50), 10, 90))
+            };
 
         [JsonPropertyName("biometric_drivers")]
         [JsonProperty("biometric_drivers")]
-        public CanonicalStressDrivers? BiometricDrivers { get; set; }
+        public CanonicalStressDrivers? BiometricDriversRaw { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CanonicalStressDrivers BiometricDrivers =>
+            BiometricDriversRaw ?? new CanonicalStressDrivers
+            {
+                BaselineHrvMs = BaselineHrvMsV2 ?? 45.0,
+                CurrentHrvMs = CurrentHrvMsV2,
+                RestingHeartRateBpm = RestingHeartRateBpmV2,
+                CurrentSedentaryBpm = CurrentSedentaryBpmV2
+            };
 
         [JsonPropertyName("monkey_mood")]
         [JsonProperty("monkey_mood")]
-        public string? MonkeyMood { get; set; } // "zen", "curious", "busy", "overheated"
+        public string? MonkeyMood { get; set; }
 
         [JsonPropertyName("intraday_stress")]
         [JsonProperty("intraday_stress")]
-        public List<IntradayStressPoint> IntradayStress { get; set; } = new();
+        public List<IntradayStressPoint>? IntradayStressRaw { get; set; }
+
+        [JsonPropertyName("intraday_points")]
+        [JsonProperty("intraday_points")]
+        public List<IntradayStressPoint>? IntradayPointsV2 { get; set; }
+
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public List<IntradayStressPoint> IntradayStress
+        {
+            get => (IntradayPointsV2 != null && IntradayPointsV2.Count > 0) ? IntradayPointsV2 : (IntradayStressRaw ?? new());
+            set { IntradayPointsV2 = value; IntradayStressRaw = value; }
+        }
     }
 
     public class CanonicalAutonomicBalance
@@ -932,6 +1096,23 @@ namespace Daily.Models.Health
         [JsonPropertyName("sample_count")]
         [JsonProperty("sample_count")]
         public int SampleCount { get; set; } = 1;
+
+        public HealthTelemetry ToTelemetryPoint()
+        {
+            var localMidnight = DateTime.TryParse(LocalDate, out var parsed)
+                ? DateTime.SpecifyKind(parsed.Date, DateTimeKind.Local)
+                : DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Local);
+            var startUtc = localMidnight.AddMinutes(BucketMinute).ToUniversalTime();
+            return new HealthTelemetry
+            {
+                TypeString = "heart_rate",
+                Value = BpmAvg,
+                Unit = "bpm",
+                StartTime = startUtc,
+                EndTime = startUtc.AddMinutes(5),
+                SourceDevice = DeviceSource.From(SourceDeviceKey).DisplayName
+            };
+        }
     }
 
     public class CanonicalVitalSummaryItem

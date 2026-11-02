@@ -41,16 +41,24 @@ All platforms, SQL normalization triggers, and `health-engine` v2.0 strictly nor
 
 ## 3. Database & `health-engine` v2.0 Architecture
 
-### PostgreSQL Migration (`20261102000005_canonical_unification_and_clean_lean.sql`)
+### PostgreSQL Migrations (`20261102000005_canonical_unification_and_clean_lean.sql` & `20261102000006_drop_legacy_health_tables.sql`)
 - **`public.canonical_device_name(raw_source, raw_host)`**: Deterministic SQL function normalizing any raw or legacy `"Host - Sensor"` string (including obfuscated Android pedometer IDs like `J97428...`, Fitbit/Wear companion packages, Oura, HeyTap/OnePlus, Samsung Health) to the 7 canonical names, or `NULL` for virtual/desktop engines.
 - **Database Guard Triggers**:
   - `trg_guard_health_sources`: Blocks virtual engines and merges canonical `display_name`.
   - `trg_guard_health_sleep_sessions`, `trg_guard_health_daily_vitals`, `trg_guard_health_intraday_hr`: Enforces canonical `source_device_key` on every `INSERT`/`UPDATE`.
-  - `trg_sink_legacy_health_telemetry`: `BEFORE INSERT` trigger on `public.health_telemetry` that routes any legacy vitals/HR rows into `health_daily_vitals` / `health_intraday_heart_rate` and returns `NULL`, guaranteeing **`public.health_telemetry` remains permanently at 0 rows**.
+- **Permanent Retirement of Legacy Tables (`20261102000006_drop_legacy_health_tables.sql`)**:
+  - Permanently dropped **`public.health_telemetry`** and **`public.health_day_dirty`** along with obsolete helper functions (`trg_fn_sink_legacy_health_telemetry`, `normalize_and_dedup_telemetry`, `prune_stale_health_telemetry`, `purge_expired_health_telemetry`, `mark_health_day_dirty`).
+  - Updated `public.apply_health_data_retention()` (`pg_cron` 03:00 UTC) so retention runs strictly against `public.health_intraday_heart_rate`.
+  - Strictly the **5 canonical tables** remain in PostgreSQL: `health_daily_summary`, `health_daily_vitals`, `health_intraday_heart_rate`, `health_sleep_sessions`, and `health_sources`.
 
-### `supabase/functions/health-engine` v2.0
-- Reads exclusively from `health_sleep_sessions`, `health_daily_vitals`, `health_intraday_heart_rate`, and `health_sources`.
-- Deduplicates canonical device buckets, computes per-device Stress & HRV/RHR autonomic strain, and emits `all_devices_view` inside `health_daily_summary.summary` alongside consolidated `All Devices` metrics (`engine_version = "2.0"`).
+### `supabase/functions/health-engine` v2.0 & Unified Physiological Stress Engine v2.0
+- Reads exclusively from `health_sleep_sessions`, `health_daily_vitals`, `health_intraday_heart_rate`, and `health_sources` (plus 28-day rolling personal baselines from `health_daily_vitals`).
+- **Unified Stress Engine v2.0 (1:1 parity across `engine.ts`, Swift `StressAnalysisEngine.swift`, Kotlin `StressAnalysisEngine.kt`, and WinUI `HealthDetailPage.xaml.cs`)**:
+  1. **Metric-Separated HRV Baselines (`SDNN` vs `RMSSD`)**: Separates Apple Watch short-term `SDNN` (`default = 45.0 ms`) from Wear OS / Fitbit / Oura nocturnal `RMSSD` (`default = 62.0 ms`) with dynamic sigmoid scale `max(14.0, baseline * 0.35)` and 28-day rolling personal medians (`>= 35 ms` sanitation for nocturnal RMSSD), preventing normal `70 ms` RMSSD from collapsing Stress to `8`.
+  2. **Active-Hour (`steps >= 300`) Stability & Sedentary Recency**: Replaces active-hour `hrScore = hrvScore * 0.8` score collapse with physiological inertia carry-forward (`0.85 * lastSedentaryHrScore + 0.15 * 32.0`) and computes `current_score` from recency-weighted sedentary hours (`0.70 * lastSed + 0.30 * prevSed`), eliminating active-hour drops to `12`.
+  3. **Calibrated Waking Sedentary HR Curve**: Smooth sigmoid `scoreFromSedentaryHr(avgHr, baselineRhr) = clamp(46.0 + 44.0 * tanh((avgHr - baselineRhr - 22.0) / 16.0), 6.0, 95.0)` accounting for normal upright orthostatic/metabolic delta (`+10..20 bpm`) without saturating at `100`.
+  4. **Clinical RHR Derivation & Honest No-HRV Weighting**: When a wearable (such as `Oura Ring` via Apple HealthKit) lacks standalone `resting_heart_rate` or `HRV`, derives clinical RHR from nocturnal `00:00–08:00` 5-min HR median (`nocturnalMedian + 5.5 bpm`) and re-normalizes hourly weights honestly (`0.70 * hrScore + 0.30 * sleepPenalty`) instead of injecting synthetic `hrvScore = 50`.
+  5. **5-Minute Bucket Deduplication & Precomputed Per-Device `sources_breakdown`**: Deduplicates simultaneous multi-wearable 5-minute HR buckets in `All Devices` mode and emits `stress_score`, `stress_daily_avg`, and `derived_rhr` per canonical device inside `summary.sources_breakdown`.
 
 ---
 

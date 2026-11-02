@@ -71,42 +71,15 @@ Deno.serve(async (req: Request) => {
       processDirty = url.searchParams.get('process_dirty') === 'true';
     }
 
-    // Mode A: Process dirty batch
+    // Mode A: Legacy process_dirty compatibility no-op (health_day_dirty retired in Lean v2.0)
     if (processDirty && (!userId || !targetDate) && !targetDates) {
-      let query = supabase.from('health_day_dirty').select('user_id, local_date');
-      if (userId) {
-        query = query.eq('user_id', userId);
-      }
-      const { data: dirtyRows, error: dirtyErr } = await query
-        .order('dirty_since', { ascending: true })
-        .limit(15);
-
-      if (dirtyErr) {
-        return new Response(JSON.stringify({ error: dirtyErr.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      const results = [];
-      for (const d of dirtyRows || []) {
-        const rowRes = await processDayForUser(
-          supabase,
-          d.user_id,
-          d.local_date,
-          tzOffsetMin,
-          preferredDevice
-        );
-        results.push(rowRes);
-      }
-
       try {
         await supabase.rpc('apply_health_data_retention');
       } catch (e: any) {
         console.warn('Retention RPC execution notice:', e);
       }
 
-      return new Response(JSON.stringify({ processed_count: results.length, results }), {
+      return new Response(JSON.stringify({ processed_count: 0, results: [] }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -159,8 +132,14 @@ async function processDayForUser(
   tzOffsetMin: number,
   preferredDevice?: string
 ) {
-  // Fetch all 3 lean tables for this user & date in parallel
-  const [vitalsRes, sleepRes, hrRes] = await Promise.all([
+  // Compute 28-day rolling baseline window [targetDate - 28d, targetDate - 1d]
+  const parsedTarget = new Date(`${targetDate}T00:00:00Z`);
+  const histStart = new Date(parsedTarget.getTime() - 28 * 86400 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  // Fetch all 3 lean tables + 28-day rolling vitals baseline in parallel
+  const [vitalsRes, sleepRes, hrRes, historyVitalsRes] = await Promise.all([
     supabase
       .from('health_daily_vitals')
       .select('*')
@@ -178,7 +157,14 @@ async function processDayForUser(
       .eq('user_id', userId)
       .eq('local_date', targetDate)
       .order('bucket_minute', { ascending: true })
-      .limit(2000)
+      .limit(2000),
+    supabase
+      .from('health_daily_vitals')
+      .select('local_date, source_device_key, host_device_name, resting_heart_rate, hrv_sdnn_nightly, hrv_rmssd_nightly')
+      .eq('user_id', userId)
+      .gte('local_date', histStart)
+      .lt('local_date', targetDate)
+      .limit(250)
   ]);
 
   if (vitalsRes.error) {
@@ -194,6 +180,7 @@ async function processDayForUser(
   const vitalsRows = (vitalsRes.data || []) as LeanDailyVitalsRow[];
   const sleepRows = (sleepRes.data || []) as LeanSleepSessionRow[];
   const hrRows = (hrRes.data || []) as LeanIntradayHrRow[];
+  const historyVitalsRows = (historyVitalsRes.data || []) as LeanDailyVitalsRow[];
 
   if (vitalsRows.length === 0 && sleepRows.length === 0 && hrRows.length === 0) {
     // Preserve any pre-existing historical summary when lean tables have 0 rows for an older date
@@ -203,12 +190,6 @@ async function processDayForUser(
       .eq('user_id', userId)
       .eq('local_date', targetDate)
       .maybeSingle();
-
-    await supabase
-      .from('health_day_dirty')
-      .delete()
-      .eq('user_id', userId)
-      .eq('local_date', targetDate);
 
     if (existingSummary && (existingSummary.steps !== null || existingSummary.sleep_asleep_s !== null)) {
       return { success: true, date: targetDate, preserved: true };
@@ -222,6 +203,7 @@ async function processDayForUser(
     vitalsRows,
     sleepRows,
     hrRows,
+    historyVitalsRows,
     tzOffsetMin,
     preferredDevice
   });
@@ -255,12 +237,6 @@ async function processDayForUser(
     if (upsertErr) {
       throw new Error(`Failed to upsert health_daily_summary: ${upsertErr.message}`);
     }
-
-    await supabase
-      .from('health_day_dirty')
-      .delete()
-      .eq('user_id', userId)
-      .eq('local_date', targetDate);
   }
 
   return {
