@@ -60,7 +60,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     {
                         var water = await habitsService.GetDailyProgressAsync("water", DateTime.Today);
                         var goal = await habitsService.GetGoalAsync("water");
-                        var target = goal?.Target > 0 ? goal.Target : 2500;
+                        var target = goal?.TargetValue > 0 ? goal.TargetValue : 2500;
                         HydrationMetricText.Text = $"{(int)water:N0} / {(int)target:N0} ml";
 
                         var smokes = await habitsService.GetLogsAsync("smokes", DateTime.Today);
@@ -98,7 +98,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     {
                         var summary = await healthHub.GetDailySummaryAsync(DateTime.Today);
                         int score = summary?.SleepScore ?? 85;
-                        int durationMins = summary?.SleepDurationMinutes ?? 460;
+                        int durationMins = ((summary?.SleepAsleepS ?? 0) / 60);
+                        if (durationMins <= 0) durationMins = 465;
                         SleepMetricText.Text = $"{score}/100 · {durationMins / 60}h {durationMins % 60}m";
                     }
                 }

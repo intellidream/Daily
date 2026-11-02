@@ -74,7 +74,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     var primarySession = sleepSessions?.OrderByDescending(s => s.DurationMinutes).FirstOrDefault();
 
                     int score = summary?.SleepScore ?? 85;
-                    int durationMins = primarySession?.DurationMinutes ?? summary?.SleepDurationMinutes ?? 460;
+                    int durationMins = primarySession?.DurationMinutes ?? ((summary?.SleepAsleepS ?? 0) / 60);
+                    if (durationMins <= 0) durationMins = 460;
                     int hours = durationMins / 60;
                     int mins = durationMins % 60;
                     string durStr = $"{hours}h {mins:D2}m";
@@ -105,8 +106,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     RemStageText.Text = $"REM {remMins / 60}h {remMins % 60}m";
                     LightStageText.Text = $"Light {lightMins / 60}h {lightMins % 60}m";
 
-                    int restingHr = summary?.RestingHeartRateBpm ?? 58;
-                    double hrv = summary?.HrvRmssdMs ?? 62;
+                    int restingHr = (int)Math.Round(summary?.Rhr ?? 58);
+                    double hrv = summary?.HrvRmssd ?? 62;
 
                     RestingHrText.Text = $"Resting HR: {restingHr} bpm";
                     HrvBalanceText.Text = $"HRV: {hrv:F0} ms";

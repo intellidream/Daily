@@ -67,9 +67,9 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     var summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
                     if (summary != null)
                     {
-                        stressScore = summary.StressScore > 0 ? summary.StressScore : 22;
-                        hrv = summary.HrvRmssdMs > 0 ? summary.HrvRmssdMs : 64;
-                        pulse = summary.RestingHeartRateBpm > 0 ? summary.RestingHeartRateBpm : 62;
+                        stressScore = summary.StressAvg ?? 22;
+                        hrv = summary.HrvRmssd ?? 64;
+                        pulse = (int)Math.Round(summary.Rhr ?? 62);
                     }
                 }
 

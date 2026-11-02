@@ -130,14 +130,16 @@ namespace Daily_WinUI.DesktopWidgets
             if (uMsg == WM_WINDOWPOSCHANGING && !_isDragging)
             {
                 // Enforce HWND_BOTTOM so active apps don't hide behind this widget
-                unsafe
+                try
                 {
-                    var pPos = (WINDOWPOS*)lParam;
-                    if (pPos != null)
+                    if (lParam != IntPtr.Zero)
                     {
-                        pPos->hwndInsertAfter = HWND_BOTTOM;
+                        var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
+                        pos.hwndInsertAfter = HWND_BOTTOM;
+                        Marshal.StructureToPtr(pos, lParam, false);
                     }
                 }
+                catch { }
             }
 
             if (uMsg == WM_DESTROY)
@@ -378,13 +380,14 @@ namespace Daily_WinUI.DesktopWidgets
             };
             menu.Items.Add(removeItem);
 
-            if (args != null && args.TryGetPosition(sender, out var pos))
+            var target = sender as FrameworkElement ?? CardBorder;
+            if (args != null && args.TryGetPosition(target, out var pos))
             {
-                menu.ShowAt(sender, pos);
+                menu.ShowAt(target, pos);
             }
             else
             {
-                menu.ShowAt(sender);
+                menu.ShowAt(target);
             }
         }
 

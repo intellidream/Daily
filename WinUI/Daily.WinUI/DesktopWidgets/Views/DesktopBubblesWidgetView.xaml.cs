@@ -77,7 +77,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 var today = DateTime.Today;
                 var currentMl = await _habitsService.GetDailyProgressAsync("water", today);
                 var goal = await _habitsService.GetGoalAsync("water");
-                var targetMl = goal?.Target > 0 ? goal.Target : 2500;
+                var targetMl = goal?.TargetValue > 0 ? goal.TargetValue : 2500;
                 var breakdown = await _habitsService.GetDailyBreakdownAsync("water", today);
 
                 double percent = Math.Clamp((currentMl / targetMl) * 100.0, 0, 100);
