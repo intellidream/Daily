@@ -359,7 +359,8 @@ namespace Daily_WinUI.Services
         public async Task<List<HealthSleepSessionRecord>> GetLeanSleepSessionsAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-            if (!forceRefresh && _sleepCache.TryGetValue(dateStr, out var cached))
+            var hasCached = _sleepCache.TryGetValue(dateStr, out var cached);
+            if (!forceRefresh && hasCached && cached != null)
             {
                 return cached;
             }
@@ -404,7 +405,8 @@ namespace Daily_WinUI.Services
         public async Task<List<HealthDailyVitalsRecord>> GetLeanDailyVitalsAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-            if (!forceRefresh && _vitalsCache.TryGetValue(dateStr, out var cached))
+            var hasCached = _vitalsCache.TryGetValue(dateStr, out var cached);
+            if (!forceRefresh && hasCached && cached != null)
             {
                 return cached;
             }
@@ -449,7 +451,8 @@ namespace Daily_WinUI.Services
         public async Task<List<HealthIntradayHeartRateRecord>> GetLeanIntradayHeartRateAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-            if (!forceRefresh && _hrCache.TryGetValue(dateStr, out var cached))
+            var hasCached = _hrCache.TryGetValue(dateStr, out var cached);
+            if (!forceRefresh && hasCached && cached != null)
             {
                 return cached;
             }
