@@ -392,4 +392,57 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertTrue(tcArticle.content?.contains("European AI startup secures landmark round") == true)
         XCTAssertFalse(tcArticle.content?.contains("wp-block-techcrunch-mega-menu") == true)
     }
+    
+    func testZfArticleWithNestedDivsAndTextContent() {
+        let zfNestedHtml = """
+        <html>
+        <head><title>Cristian Bichi: Problematica CBDC</title></head>
+        <body>
+            <div class="header">Header</div>
+            <div class="text-content">
+                <p>Banca centrală a Suediei a solicitat recent parlamentului național să ia în considerare pregătirea cadrului legislativ pentru coroana digitală.</p>
+                <div style="background-color: #BD0000; color: white;"><span>Te-ar putea interesa și:</span></div>
+                <p>Moneda CBDC: a fi sau a nu fi?</p>
+                <p>În ultimii ani, datorită avansurilor tehnologice, au început să apară noi forme de bani pe lângă cele tradiționale.</p>
+                <p>Experiența suedeză anterioară privind e-krona este una dintre cele mai avansate din lume.</p>
+            </div>
+            <div class="recommendations">
+                <p>Alte articole recomandate care nu trebuie incluse în corpul știrii principale.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        let article = ArticleExtractor.shared.parseHtml(zfNestedHtml, url: "https://www.zf.ro/zf-24/cristian-bichi-test-23273429")
+        XCTAssertNotNil(article.content)
+        let content = article.content ?? ""
+        XCTAssertTrue(content.contains("Banca centrală a Suediei"), "Should contain first paragraph")
+        XCTAssertTrue(content.contains("Moneda CBDC: a fi sau a nu fi?"), "Should contain paragraph after nested div")
+        XCTAssertTrue(content.contains("Experiența suedeză anterioară"), "Should contain subsequent paragraphs through end of text-content")
+        XCTAssertFalse(content.contains("Alte articole recomandate"), "Should not leak recommendations outside container")
+    }
+    
+    func testZfGenZArticleWithTextContent() {
+        let zfGenZHtml = """
+        <html>
+        <head><title>Ai scos fierul din priză?</title></head>
+        <body>
+            <div class="aboutArticle">About</div>
+            <div class="articleIntro mainP text-content">
+                <p>Ai uitat vreodată unde ai lăsat cheile, dacă ai închis ușa sau dacă ai scos fierul din priză?</p>
+                <p>Deși apar la vârste înaintate, debutul lor este mult mai devreme în tăcere.</p>
+                <p>Somnul este aliatul cel mai puternic pentru sănătatea creierului.</p>
+            </div>
+            <div class="crossFooterBody">Footer junk</div>
+        </body>
+        </html>
+        """
+        
+        let article = ArticleExtractor.shared.parseHtml(zfGenZHtml, url: "https://www.zf.ro/zf-gen-z/ai-scos-fierul-test-23272668")
+        XCTAssertNotNil(article.content)
+        let content = article.content ?? ""
+        XCTAssertTrue(content.contains("Ai uitat vreodată unde ai lăsat cheile"))
+        XCTAssertTrue(content.contains("Somnul este aliatul cel mai puternic"))
+        XCTAssertFalse(content.contains("crossFooterBody"))
+    }
 }

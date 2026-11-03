@@ -16,11 +16,11 @@ public final class ArticleExtractor: @unchecked Sendable {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9,ro;q=0.8"
+            "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7"
         ]
-        self.urlSession = URLSession(configuration: config)
+        self.urlSession = URLSession(configuration: config, delegate: SecureRedirectDelegate(), delegateQueue: nil)
     }
     
     /// Fetches the raw HTML from the article URL and extracts the clean article content.
@@ -46,7 +46,7 @@ public final class ArticleExtractor: @unchecked Sendable {
             urlString: urlString,
             baseArticle: baseArticle,
             extractor: self
-        ) {
+        ), let content = readabilityArticle.content, content.count > 80 {
             return readabilityArticle
         }
         #endif
@@ -59,11 +59,33 @@ public final class ArticleExtractor: @unchecked Sendable {
         let ogTitle = extractMetaContent(property: "og:title", from: html) ?? extractTitleTag(from: html)
         let ogImage = extractMetaContent(property: "og:image", from: html) ?? baseArticle?.imageUrl
         let ogDescription = extractMetaContent(property: "og:description", from: html) ?? baseArticle?.description
-        var author = extractMetaContent(name: "author", from: html) ?? baseArticle?.author
+        var rawAuthor = extractMetaContent(name: "author", from: html)
+        if rawAuthor == nil || rawAuthor?.contains("://") == true {
+            rawAuthor = extractMetaContent(property: "article:author", from: html)
+        }
+        if rawAuthor?.contains("://") == true {
+            rawAuthor = nil
+        }
+        if rawAuthor == nil {
+            rawAuthor = extractMetaContent(property: "og:article:author", from: html)
+        }
+        if rawAuthor?.contains("://") == true {
+            rawAuthor = nil
+        }
+        if rawAuthor == nil {
+            rawAuthor = extractMetaContent(name: "twitter:creator", from: html) ??
+                        extractMetaContent(property: "author", from: html) ??
+                        extractBylineFromDom(from: html) ??
+                        baseArticle?.author
+        }
+        if rawAuthor?.contains("://") == true {
+            rawAuthor = nil
+        }
         
+        var author: String? = nil
         // Sanitize author (WinUI parity)
-        if let rawAuthor = author {
-            author = sanitizeAuthor(rawAuthor)
+        if let ra = rawAuthor {
+            author = sanitizeAuthor(ra)
         }
         
         // Extract body content with multi-candidate scoring
@@ -97,7 +119,29 @@ public final class ArticleExtractor: @unchecked Sendable {
         )
     }
     
+    private func extractBylineFromDom(from html: String) -> String? {
+        let patterns = [
+            "<[^>]+(?:class|itemprop)=[\"'][^\"']*(?:author|byline|article-author)[^\"']*[\"'][^>]*>([^<]+)</",
+            "<a[^>]+rel=[\"']author[\"'][^>]*>([^<]+)</a>"
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: html, range: NSRange(location: 0, length: (html as NSString).length)) {
+                let author = (html as NSString).substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if author.count > 2 && author.count < 80 && !author.lowercased().contains("http") {
+                    return author
+                }
+            }
+        }
+        return nil
+    }
+    
     // MARK: - Multi-Candidate Scoring Readability Heuristics
+    
+    private struct ContainerCandidate {
+        let openingTag: String
+        let content: String
+    }
     
     private func extractMainContent(from html: String) -> String {
         // Step 1: Remove heavy noise tags
@@ -108,65 +152,31 @@ public final class ArticleExtractor: @unchecked Sendable {
             cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: [.regularExpression, .caseInsensitive])
         }
         
-        // Step 2: Evaluate candidate semantic containers
-        let articlePatterns = [
-            "<article[^>]*>([\\s\\S]*?)</article>",
-            "<div[^>]+itemprop=[\"']articleBody[\"'][^>]*>([\\s\\S]*?)</div>",
-            "<div[^>]+class=[\"'][^\"']*(?:article[-_]body|entry[-_]content|post[-_]content|story[-_]body|article__content|article-text|articlecontent|single__content|wp-block-post-content|pagebuilder-article|articlebody)[^\"']*[\"'][^>]*>([\\s\\S]*?)</div>",
-            "<main[^>]*>([\\s\\S]*?)</main>"
-        ]
-        
+        // Step 2: Evaluate candidate semantic containers with balanced tag depth
+        let candidates = findContainerCandidates(in: cleaned)
         var bestCandidate = ""
         var bestScore = 0
         
-        let junkClassPatterns = [
-            "marketing", "upnext", "up-next", "card-marketing", "teaser", "related",
-            "recommendation", "recomand", "social", "ad-", "advertisement", "newsletter",
-            "promo", "comment", "box-article-newsletter", "card-articles"
-        ]
-        
-        for pattern in articlePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-                let ns = cleaned as NSString
-                let matches = regex.matches(in: cleaned, range: NSRange(location: 0, length: ns.length))
-                
-                for match in matches {
-                    let fullTag = ns.substring(with: match.range)
-                    let openingTag = fullTag.components(separatedBy: ">").first?.lowercased() ?? ""
-                    
-                    // Skip marketing, upnext, ad containers
-                    var isJunk = false
-                    for junk in junkClassPatterns {
-                        if openingTag.contains(junk) {
-                            isJunk = true
-                            break
-                        }
-                    }
-                    if isJunk { continue }
-                    
-                    let containerHtml = ns.substring(with: match.range(at: 1))
-                    let cleanContainer = sanitizeBodyHtml(containerHtml)
-                    
-                    // Score candidate with semantic weighting
-                    let charCount = cleanContainer.count
-                    let pCount = countOccurrences(of: "<p>", in: cleanContainer)
-                    let commaCount = countOccurrences(of: ",", in: cleanContainer)
-                    
-                    var semanticBonus = 0
-                    if openingTag.contains("articlebody") {
-                        semanticBonus = 1500
-                    } else if openingTag.hasPrefix("<article") {
-                        semanticBonus = 500
-                    }
-                    
-                    let score = charCount + (pCount * 60) + (commaCount * 5) + semanticBonus
-                    
-                    // Parity with Android: allow short articles if they have paragraphs or > 80 chars
-                    if score > bestScore && (charCount > 80 || pCount >= 1) {
-                        bestScore = score
-                        bestCandidate = cleanContainer
-                    }
-                }
+        for candidate in candidates {
+            let cleanContainer = sanitizeBodyHtml(candidate.content)
+            let charCount = cleanContainer.count
+            let pCount = countOccurrences(of: "<p>", in: cleanContainer)
+            let commaCount = countOccurrences(of: ",", in: cleanContainer)
+            
+            var semanticBonus = 0
+            let lowerTag = candidate.openingTag.lowercased()
+            if lowerTag.contains("articlebody") {
+                semanticBonus = 1500
+            } else if lowerTag.hasPrefix("<article") {
+                semanticBonus = 500
+            } else if lowerTag.contains("text-content") || lowerTag.contains("articlecontent") {
+                semanticBonus = 400
+            }
+            
+            let score = charCount + (pCount * 60) + (commaCount * 5) + semanticBonus
+            if score > bestScore && (charCount > 80 || pCount >= 1) {
+                bestScore = score
+                bestCandidate = cleanContainer
             }
         }
         
@@ -176,6 +186,136 @@ public final class ArticleExtractor: @unchecked Sendable {
         
         // Step 3: Extract paragraphs fallback
         return extractParagraphBlocks(from: cleaned)
+    }
+    
+    private func findMatchingClosingTag(in html: String, openTagStart: Int, tagName: String) -> Int? {
+        let openPrefix = "<\(tagName)"
+        let closePrefix = "</\(tagName)>"
+        var depth = 1
+        
+        let startIdx = html.index(html.startIndex, offsetBy: openTagStart)
+        guard let openCloseRange = html.range(of: ">", range: startIdx..<html.endIndex) else {
+            return nil
+        }
+        var searchIndex = openCloseRange.upperBound
+        
+        while searchIndex < html.endIndex && depth > 0 {
+            let nextOpen = html.range(of: openPrefix, options: .caseInsensitive, range: searchIndex..<html.endIndex)
+            let nextClose = html.range(of: closePrefix, options: .caseInsensitive, range: searchIndex..<html.endIndex)
+            
+            guard let close = nextClose else { return nil }
+            
+            if let open = nextOpen, open.lowerBound < close.lowerBound {
+                let charAfter = open.upperBound < html.endIndex ? html[open.upperBound] : Character(" ")
+                if charAfter.isWhitespace || charAfter == ">" || charAfter == "/" {
+                    if let closeBracket = html.range(of: ">", range: open.upperBound..<html.endIndex) {
+                        let prevChar = html[html.index(before: closeBracket.lowerBound)]
+                        if prevChar != "/" {
+                            depth += 1
+                        }
+                        searchIndex = closeBracket.upperBound
+                        continue
+                    }
+                }
+                searchIndex = open.upperBound
+                continue
+            } else {
+                depth -= 1
+                if depth == 0 {
+                    return html.distance(from: html.startIndex, to: close.lowerBound)
+                }
+                searchIndex = close.upperBound
+            }
+        }
+        return nil
+    }
+    
+    private func findContainerCandidates(in html: String) -> [ContainerCandidate] {
+        var candidates: [ContainerCandidate] = []
+        let junkClasses = [
+            "marketing", "upnext", "up-next", "card-marketing", "teaser", "related",
+            "recommendation", "social", "ad-", "advertisement", "newsletter", "promo", "comment"
+        ]
+        
+        // 1. Check <article> tags
+        var idx = 0
+        while idx < html.count {
+            guard let range = html.range(of: "<article", options: .caseInsensitive, range: html.index(html.startIndex, offsetBy: idx)..<html.endIndex) else { break }
+            let openIdx = html.distance(from: html.startIndex, to: range.lowerBound)
+            let charAfter = range.upperBound < html.endIndex ? html[range.upperBound] : Character(" ")
+            if !charAfter.isWhitespace && charAfter != ">" {
+                idx = openIdx + 8
+                continue
+            }
+            guard let openCloseRange = html.range(of: ">", range: range.upperBound..<html.endIndex) else { break }
+            let openCloseIdx = html.distance(from: html.startIndex, to: openCloseRange.lowerBound)
+            if let closeIdx = findMatchingClosingTag(in: html, openTagStart: openIdx, tagName: "article") {
+                let contentStart = html.index(html.startIndex, offsetBy: openCloseIdx + 1)
+                let contentEnd = html.index(html.startIndex, offsetBy: closeIdx)
+                let tagHeader = String(html[range.lowerBound...openCloseRange.lowerBound])
+                candidates.append(ContainerCandidate(openingTag: tagHeader, content: String(html[contentStart..<contentEnd])))
+                idx = closeIdx + 10
+            } else {
+                idx = openCloseIdx + 1
+            }
+        }
+        
+        // 2. Check <main> tags
+        idx = 0
+        while idx < html.count {
+            guard let range = html.range(of: "<main", options: .caseInsensitive, range: html.index(html.startIndex, offsetBy: idx)..<html.endIndex) else { break }
+            let openIdx = html.distance(from: html.startIndex, to: range.lowerBound)
+            let charAfter = range.upperBound < html.endIndex ? html[range.upperBound] : Character(" ")
+            if !charAfter.isWhitespace && charAfter != ">" {
+                idx = openIdx + 5
+                continue
+            }
+            guard let openCloseRange = html.range(of: ">", range: range.upperBound..<html.endIndex) else { break }
+            let openCloseIdx = html.distance(from: html.startIndex, to: openCloseRange.lowerBound)
+            if let closeIdx = findMatchingClosingTag(in: html, openTagStart: openIdx, tagName: "main") {
+                let contentStart = html.index(html.startIndex, offsetBy: openCloseIdx + 1)
+                let contentEnd = html.index(html.startIndex, offsetBy: closeIdx)
+                let tagHeader = String(html[range.lowerBound...openCloseRange.lowerBound])
+                candidates.append(ContainerCandidate(openingTag: tagHeader, content: String(html[contentStart..<contentEnd])))
+                idx = closeIdx + 7
+            } else {
+                idx = openCloseIdx + 1
+            }
+        }
+        
+        // 3. Check <div> tags with candidate classes or itemprop="articleBody"
+        idx = 0
+        let candidateKeywords = [
+            "articlebody", "article-body", "article_body", "entry-content",
+            "post-content", "story-body", "article__content", "article-text",
+            "articlecontent", "single__content", "wp-block-post-content",
+            "pagebuilder-article", "text-content", "articleintro",
+            "article-intro", "content-article", "story-content", "articledetail"
+        ]
+        
+        while idx < html.count {
+            guard let range = html.range(of: "<div", options: .caseInsensitive, range: html.index(html.startIndex, offsetBy: idx)..<html.endIndex) else { break }
+            let openIdx = html.distance(from: html.startIndex, to: range.lowerBound)
+            guard let openCloseRange = html.range(of: ">", range: range.upperBound..<html.endIndex) else { break }
+            let openCloseIdx = html.distance(from: html.startIndex, to: openCloseRange.lowerBound)
+            let tagHeader = String(html[range.lowerBound...openCloseRange.lowerBound]).lowercased()
+            
+            let isCandidate = candidateKeywords.contains { tagHeader.contains($0) }
+            let isJunk = junkClasses.contains { tagHeader.contains($0) }
+            
+            if isCandidate && !isJunk {
+                if let closeIdx = findMatchingClosingTag(in: html, openTagStart: openIdx, tagName: "div") {
+                    let contentStart = html.index(html.startIndex, offsetBy: openCloseIdx + 1)
+                    let contentEnd = html.index(html.startIndex, offsetBy: closeIdx)
+                    candidates.append(ContainerCandidate(openingTag: tagHeader, content: String(html[contentStart..<contentEnd])))
+                    idx = closeIdx + 6
+                    continue
+                }
+            }
+            idx = openCloseIdx + 1
+        }
+        
+        return candidates
     }
     
     private func countOccurrences(of substring: String, in string: String) -> Int {
@@ -397,6 +537,9 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         let wv = getOrCreateWebView()
         wv.loadHTMLString(sanitizedHtml, baseURL: url)
         
+        // Give WebKit a short tick to begin parsing the HTML string
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        
         let startTime = Date()
         while wv.isLoading && Date().timeIntervalSince(startTime) < 2.5 {
             try? await Task.sleep(nanoseconds: 30_000_000)
@@ -443,13 +586,13 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     }
                 } catch(e) {}
                 
-                var article = new Readability(doc, { charThreshold: 40 }).parse();
+                var article = new Readability(doc, { charThreshold: 40, keepClasses: true }).parse();
                 if (article && article.content) {
                     var finalContent = article.content;
                     try {
                         var tempDiv = doc.createElement("div");
                         tempDiv.innerHTML = article.content;
-                        var explicitBody = tempDiv.querySelector("[itemprop='articleBody'], .articleContent, .single__content, .entry-content, .article-body, .wp-block-post-content, .articlecontent");
+                        var explicitBody = tempDiv.querySelector("[itemprop='articleBody'], .articleContent, .single__content, .entry-content, .article-body, .wp-block-post-content, .articlecontent, .text-content, .articleIntro");
                         if (explicitBody && explicitBody.textContent.trim().length > 40) {
                             finalContent = explicitBody.innerHTML;
                         }
@@ -471,6 +614,13 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         
         do {
             let evalResult = try await wv.evaluateJavaScript(js)
+            if let str = evalResult as? String {
+                if str.contains("\"error\"") {
+                    print("[HeadlessReadabilityParser] JS Error: \(str)")
+                }
+            } else {
+                print("[HeadlessReadabilityParser] evalResult not a string: \(String(describing: evalResult))")
+            }
             guard let jsonStr = evalResult as? String,
                   let data = jsonStr.data(using: .utf8),
                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -523,9 +673,30 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                 category: baseArticle?.category
             )
         } catch {
-            print("[ArticleExtractor] Readability evaluation error: \\(error)")
+            print("[ArticleExtractor] Readability evaluation error: \(error)")
             return nil
         }
     }
 }
 #endif
+
+// MARK: - Insecure HTTP to HTTPS Auto-Upgrade Delegate (ATS Compliance)
+private final class SecureRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        var upgradedRequest = request
+        if let url = request.url, url.scheme?.lowercased() == "http" {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+            components?.scheme = "https"
+            if let upgradedUrl = components?.url {
+                upgradedRequest.url = upgradedUrl
+            }
+        }
+        completionHandler(upgradedRequest)
+    }
+}

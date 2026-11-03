@@ -248,19 +248,28 @@ When retrieving recommendation feed items concurrently in the briefing engine or
 - **WinUI as Gold Standard**: In-depth benchmark analysis of all 18 default news sources revealed WinUI provided the most legible, distraction-free reading experience due to its centered reading measure (`max-width: 800px; margin: 0 auto;`), calm link styling, and structured HTML parsing.
 - **Container Selector Expansion**:
   - Top Romanian and international sources previously fell back prematurely to aggressive paragraph scrapers because their semantic DOM wrappers were missing from container heuristics.
-  - Added support for `div.articleContent` / `div.articlecontent` (*Ziarul Financiar*), `div.single__content` / `div.article__content` (*Economica.net*), `div.wp-block-post-content` / `div.entry-content` (*TechCrunch*), and `div.pagebuilder-article` / `div.articlebody` (*CNBC*).
+  - Added support for `div.text-content`, `div.articleContent` / `div.articlecontent` (*Ziarul Financiar*), `div.single__content` / `div.article__content` (*Economica.net*), `div.wp-block-post-content` / `div.entry-content` (*TechCrunch*), `div.pagebuilder-article` / `div.articlebody` (*CNBC*), `div.articleintro`, `div.article-intro`, `div.content-article`, `div.story-content`, and `div.articledetail`.
   - Synchronized across Apple platforms (`DailyCore/Sources/DailyCore/Services/ArticleExtractor.swift`) and Android (`com.intellidream.daily.model.ArticleExtractor.kt`).
+- **Elimination of "Paywall" False Positives on Legacy Mobile Redirects (Ziarul Financiar & Similar)**:
+  - **Root Cause**: When downloading full article HTML using mobile User-Agents (`iPhone`, `Android`), servers like `zf.ro` issue a `302 Found` redirecting to cleartext `http://m.zf.ro/...`. Modern Apple App Transport Security (ATS) and Android Network Security Config (`usesCleartextTraffic="false"`) strictly abort cleartext HTTP redirects. This caused network exceptions, resulting in empty content falling through to the generic paywall warning card. In contrast, WinUI always succeeded because it used a desktop browser User-Agent which `zf.ro` served directly over HTTPS.
+  - **Desktop User-Agent & HTTPS Redirect Upgrade**:
+    - Aligned client User-Agent strings to Desktop Chrome / Safari across `DailyCore` (`URLSessionConfiguration`) and Android (`NewsRepository.kt`).
+    - Implemented `SecureRedirectDelegate` (`URLSessionTaskDelegate`) in Swift and manual redirect loop handling in Kotlin to automatically rewrite any `http://` redirect location to `https://`, preventing security policy drops.
+  - **Refactored Fallback Card**: Replaced the alarmist "behind a paywall" text with an actionable, calm briefing card: *"This article can be read directly on the publisher's website"* with a direct button *"Read on Publisher"*.
+- **Depth-Balanced Tag Container Extraction for Nested Divs**:
+  - **Root Cause**: Standard regular expression matchers (e.g. `([\\s\\S]*?)</div>`) stopped at the very first closing `</div>`. When publishers embedded inline recommendation widgets or styling wrappers (such as ZF's `<div style="...">Te-ar putea interesa și:</span></div>` after paragraph 1), the regex cut off the remaining 25+ paragraphs (~20,000 characters).
+  - **Fix**: Implemented depth-balanced tag closure matching (`findMatchingClosingTag`) in `ArticleExtractor.swift` and enhanced Android candidate resolution, counting tag nesting levels to capture the complete container block.
 - **Typography, Measure & Media Styling Alignment**:
   - Aligned HTML/CSS rendering templates across iOS (`iOS/Daily/Views/News/ArticleWebView.swift`), macOS (`MacOS/Daily/Views/News/ArticleWebView.swift`), and Android (`Android/app/src/main/java/com/intellidream/daily/presentation/news/NewsReaderSheet.kt`):
     - **Link Colors**: Calm accent blue (`#66B2FF` in Dark Mode, `#0066CC` in Light Mode) replacing harsh default blue underlines.
     - **Reading Measure**: Centered `max-width: 800px; margin: 0 auto;` container with fluid padding.
     - **Header Hierarchy**: Explicit weights, line heights, and margins for `h2`, `h3`, and `h4` headings.
     - **Responsive Tables & Media**: Horizontally scrollable `table` wrappers with subtle borders, plus fluid `iframe, video, object` embeds to prevent horizontal clipping.
-    - **Protected Publications & Paywall Fallbacks**: Styled paywall briefing card (`.paywall-card`) for anti-bot / Cloudflare-protected publications (e.g. *The Economist*) or JS-redirect aggregators (e.g. *Google News*), matching WinUI's graceful fallback card.
 - **Android Full Article Lazy Trigger Fix**:
   - In `NewsReaderSheet.kt`, fixed an issue where RSS feeds carrying item summaries/descriptions caused the reader to skip triggering full background article extraction. Explicitly checks and triggers `viewModel.loadFullArticle(article)` whenever an article is opened.
 - **Substack Integration Architecture**:
   - Designed comprehensive integration specification for Substack feeds, user library bookmarks, and authenticated reading, documented in [Substack_News_Integration_Investigation.md](file:///Users/mihai/Source/Daily/Docs/Features/Substack_News_Integration_Investigation.md).
+
 
 
 

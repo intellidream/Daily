@@ -403,5 +403,60 @@ class NewsParsersTest {
         assertTrue(tcArticle.content!!.contains("European AI startup secures landmark round"))
         assertTrue(!tcArticle.content!!.contains("wp-block-techcrunch-mega-menu"))
     }
+
+    @Test
+    fun testZfArticleWithNestedDivsAndTextContent() {
+        val zfNestedHtml = """
+            <html>
+            <head><title>Cristian Bichi: Problematica CBDC</title></head>
+            <body>
+                <div class="header">Header</div>
+                <div class="text-content">
+                    <p>Banca centrala a Suediei a solicitat recent parlamentului national sa ia in considerare pregatirea cadrului legislativ pentru coroana digitala.</p>
+                    <div style="background-color: #BD0000; color: white;"><span>Te-ar putea interesa si:</span></div>
+                    <p>Moneda CBDC: a fi sau a nu fi?</p>
+                    <p>In ultimii ani, datorita avansurilor tehnologice, au inceput sa apara noi forme de bani pe langa cele traditionale.</p>
+                    <p>Experienta suedeza anterioara privind e-krona este una dintre cele mai avansate din lume.</p>
+                </div>
+                <div class="recommendations">
+                    <p>Alte articole recomandate care nu trebuie incluse in corpul stirii principale.</p>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val article = ArticleExtractor.shared.parseHtml(zfNestedHtml, "https://www.zf.ro/zf-24/cristian-bichi-test-23273429")
+        assertNotNull(article.content)
+        val content = article.content!!
+        assertTrue(content.contains("Banca centrala a Suediei"))
+        assertTrue(content.contains("Moneda CBDC: a fi sau a nu fi?"))
+        assertTrue(content.contains("Experienta suedeza anterioara"))
+        assertTrue(!content.contains("Alte articole recomandate"))
+    }
+
+    @Test
+    fun testZfGenZArticleWithTextContent() {
+        val zfGenZHtml = """
+            <html>
+            <head><title>Ai scos fierul din priza?</title></head>
+            <body>
+                <div class="aboutArticle">About</div>
+                <div class="articleIntro mainP text-content">
+                    <p>Ai uitat vreodata unde ai lasat cheile, daca ai inchis usa sau daca ai scos fierul din priza?</p>
+                    <p>Desi apar la varste inaintate, debutul lor este mult mai devreme in tacere.</p>
+                    <p>Somnul este aliatul cel mai puternic pentru sanatatea creierului.</p>
+                </div>
+                <div class="crossFooterBody">Footer junk</div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val article = ArticleExtractor.shared.parseHtml(zfGenZHtml, "https://www.zf.ro/zf-gen-z/ai-scos-fierul-test-23272668")
+        assertNotNull(article.content)
+        val content = article.content!!
+        assertTrue(content.contains("Ai uitat vreodata unde ai lasat cheile"))
+        assertTrue(content.contains("Somnul este aliatul cel mai puternic"))
+        assertTrue(!content.contains("crossFooterBody"))
+    }
 }
 

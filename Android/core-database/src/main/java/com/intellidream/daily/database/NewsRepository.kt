@@ -345,22 +345,30 @@ class NewsRepository(
         while (redirects < 5) {
             var conn: HttpURLConnection? = null
             try {
+                if (currentUrl.startsWith("http://", ignoreCase = true)) {
+                    currentUrl = "https://" + currentUrl.substring(7)
+                }
                 val url = URL(currentUrl)
                 conn = url.openConnection() as HttpURLConnection
-                conn.instanceFollowRedirects = true
+                conn.instanceFollowRedirects = false
                 conn.connectTimeout = 8000
                 conn.readTimeout = 10000
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
                 conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml,application/atom+xml,application/json")
                 conn.setRequestProperty("Accept-Language", "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7")
                 val responseCode = conn.responseCode
                 if (responseCode in 300..399) {
                     val location = conn.getHeaderField("Location")
                     if (!location.isNullOrBlank()) {
-                        currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                        val rawRedirect = if (location.startsWith("http://") || location.startsWith("https://")) {
                             location
                         } else {
                             URL(url, location).toString()
+                        }
+                        currentUrl = if (rawRedirect.startsWith("http://", ignoreCase = true)) {
+                            "https://" + rawRedirect.substring(7)
+                        } else {
+                            rawRedirect
                         }
                         redirects++
                         continue

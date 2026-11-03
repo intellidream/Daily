@@ -770,10 +770,10 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
         """.trimIndent()
         else -> """
             <div class='paywall-card'>
-                <div class='paywall-icon'>🔒</div>
-                <h3>Full Article on ${article.publicationName ?: "Publisher"}</h3>
-                <p>The content may be behind a paywall or require an active subscription.</p>
-                <a href='${article.link}' class='open-browser-btn'>Open on ${article.publicationName ?: "Publisher"}</a>
+                <div class='paywall-icon'>📰</div>
+                <h3>Full Story on ${article.publicationName ?: "Publisher"}</h3>
+                <p>This article can be read directly on the publisher's website.</p>
+                <a href='${article.link}' class='open-browser-btn'>Read on ${article.publicationName ?: "Publisher"}</a>
             </div>
         """.trimIndent()
     }
