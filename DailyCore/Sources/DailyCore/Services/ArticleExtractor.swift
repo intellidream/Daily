@@ -24,6 +24,24 @@ public struct ScrapedMediumItem: Decodable, Sendable {
     }
 }
 
+/// In-memory cache for extracted full article content to guarantee instant opening on revisits.
+public actor ArticleContentCache {
+    public static let shared = ArticleContentCache()
+    private var cache: [String: NewsArticle] = [:]
+    
+    public func get(_ key: String) -> NewsArticle? {
+        cache[key]
+    }
+    
+    public func set(_ key: String, article: NewsArticle) {
+        cache[key] = article
+    }
+    
+    public func clear() {
+        cache.removeAll()
+    }
+}
+
 public final class ArticleExtractor: @unchecked Sendable {
     
     public static let shared = ArticleExtractor()
@@ -55,6 +73,15 @@ public final class ArticleExtractor: @unchecked Sendable {
         return false
     }
     
+    public static func clearCache() async {
+        await ArticleContentCache.shared.clear()
+    }
+    
+    private func cacheAndReturn(_ article: NewsArticle, for urlString: String) async -> NewsArticle {
+        await ArticleContentCache.shared.set(urlString, article: article)
+        return article
+    }
+    
     /// Fetches the raw HTML from the article URL and extracts the clean article content.
     public func extract(from urlString: String, baseArticle: NewsArticle? = nil) async throws -> NewsArticle {
         var safeUrlString = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,6 +92,12 @@ public final class ArticleExtractor: @unchecked Sendable {
             throw URLError(.badURL)
         }
         
+        // Fast path: Check in-memory extraction cache for instant sub-millisecond retrieval
+        if let cached = await ArticleContentCache.shared.get(safeUrlString),
+           let content = cached.content, content.count > 250, !Self.isMediumTeaser(content) {
+            return cached
+        }
+        
         let isMedium = safeUrlString.contains("medium.com") || (baseArticle?.publicationName?.contains("Medium") == true)
         
         let hasSubstantialBaseContent = (baseArticle?.content != nil) &&
@@ -72,7 +105,7 @@ public final class ArticleExtractor: @unchecked Sendable {
             !Self.isMediumTeaser(baseArticle!.content!)
         
         if isMedium && hasSubstantialBaseContent {
-            return baseArticle!
+            return await cacheAndReturn(baseArticle!, for: safeUrlString)
         }
         
         #if canImport(WebKit)
@@ -82,7 +115,7 @@ public final class ArticleExtractor: @unchecked Sendable {
                 baseArticle: baseArticle,
                 extractor: self
             ), let content = mediumArticle.content, content.count > 100 {
-                return mediumArticle
+                return await cacheAndReturn(mediumArticle, for: safeUrlString)
             }
         }
         #endif
@@ -111,12 +144,13 @@ public final class ArticleExtractor: @unchecked Sendable {
                                  content.contains("id=\"header\"") ||
                                  content.contains("class=\"menu")
             if !isMenuArtifact {
-                return readabilityArticle
+                return await cacheAndReturn(readabilityArticle, for: safeUrlString)
             }
         }
         #endif
         
-        return parseHtml(html, url: urlString, baseArticle: baseArticle)
+        let parsed = parseHtml(html, url: urlString, baseArticle: baseArticle)
+        return await cacheAndReturn(parsed, for: safeUrlString)
     }
     
     /// Synchronously parses an HTML string to extract readable article content using heuristic scoring.
