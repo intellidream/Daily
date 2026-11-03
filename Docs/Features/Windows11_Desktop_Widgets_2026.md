@@ -103,14 +103,19 @@ Setarea `CloseToTray` a fost configurată implicit pe `true`. Când utilizatorul
 
 În etapa de finisare și paritate funcțională completă cu MacOS și Glance, au fost implementate următoarele îmbunătățiri majore:
 
-### A. Transparență Configurăbilă (Glass Transparency)
-* Fiecărui widget i s-a adăugat submeniul **Transparency** în meniul contextual (clic dreapta pe header):
-  - `100% (Solid Glass)` ($\alpha = 1.0$)
-  - `85% (Subtle Glass)` ($\alpha = 0.85$)
-  - `70% (Balanced Glass)` ($\alpha = 0.70$)
-  - `50% (Translucent)` ($\alpha = 0.50$)
-  - `30% (Clear Glass)` ($\alpha = 0.30$)
-* Nivelul de transparență este modulat prin canalul Alpha al fundalului cardului (`CardBorder.Background`), asigurând că textul, valorile numerice și butoanele rămân 100% vizibile, contrastante și lizibile pe fundalul de Desktop Acrylic blurat.
+### A. Transparență Reală la Nivel de Fereastră & Wallpaper (DesktopAcrylicController)
+* **Analiza Cauzei Rădăcină**: La ferestrele WinUI 3 cu stilul `WS_EX_NOACTIVATE`, sistemul de backdrops XAML (`DesktopAcrylicBackdrop`) marchează implicit `SystemBackdropConfiguration.IsInputActive = false`, deoarece fereastra nu deține niciodată focusul de prim-plan. La deactivare, controller-ul implicit de Acrylic trece automat la culoarea solidă de fallback (un gri opac închis `#1C1C1C`), mascând complet tapetul desktop-ului. Modificarea opacității XAML doar pe elementele din interior (`CardBorder.Opacity`) nu făcea decât să estompeze conținutul peste un dreptunghi gri opac.
+* **Incompatibilitatea `WS_EX_LAYERED` cu DirectComposition**: Încercarea de a forța transparența la nivel de HWND prin `WS_EX_LAYERED` și `SetLayeredWindowAttributes` provoacă un conflict intern în swapchain-ul DirectX/DirectComposition al WinUI 3 (`Microsoft.UI.Xaml.dll`), generând excepția `0xc000027b` (`0x80070057 E_INVALIDARG`).
+* **Soluția Nativă Implementată**:
+  1. Instanțierea directă a `DesktopAcrylicController` și `MicaController` din namespace-ul `Microsoft.UI.Composition.SystemBackdrops`.
+  2. Forțarea `SystemBackdropConfiguration.IsInputActive = true` permanent pe widgeturi, împiedicând trecerea la fallback-ul solid și menținând sampler-ul de wallpaper și blur-ul DWM permanent active.
+  3. Modularea directă a proprietăților `_acrylicController.TintOpacity` și `LuminosityOpacity` în funcție de nivelul de transparență ales:
+     - `100% (Solid Glass)`: $\text{TintOpacity} = 0.70$
+     - `85% (Subtle Glass)`: $\text{TintOpacity} = 0.60$
+     - `70% (Balanced Glass)`: $\text{TintOpacity} = 0.49$
+     - `50% (Translucent)`: $\text{TintOpacity} = 0.35$
+     - `30% (Clear Glass)`: $\text{TintOpacity} = 0.21$
+  4. Redefinirea fundalului `CardBorder` cu o tentă translucidă discretă (`Margin="0"`, `BorderBrush` subtil), permițând tapetului de pe desktop să fie vizibil prin întreaga fereastră a widget-ului, în timp ce textele, icoanele și butoanele își păstrează opacitatea completă (100%) și contrastul impecabil.
 
 ### B. Widget-ul Hero / Combined Brief
 * A fost eliminat rândul de footer ("All systems nominal · Offline cache synced"), eliberând spațiu vertical prețios pentru matricea celor 4 carduri metrice (Vreme, Hidratare, Fumat, SmartLedger).
