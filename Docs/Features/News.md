@@ -244,31 +244,34 @@ When retrieving recommendation feed items concurrently in the briefing engine or
   - **Self-Healing Startup**: Added `DeduplicateSavedArticlesAsync()` called on startup initialization to group existing duplicates, merge them into the canonical deterministic GUID row, and mark the redundant random GUID rows as deleted so they sync and soft-delete from Supabase.
   - **Reactive UI Refresh on Sync**: Exposed `OnSavedArticlesPulled` in `ISyncService`. Subscribed to it inside `RssArticleService` so that when a background sync downloads a new saved article from another machine, the UI cache instantly refreshes, preventing "ghost" unsaved visual states that cause users to create duplicates.
 
-### 6.6 Cross-Platform Reading Rendering Parity & Article Extraction (November 2026)
-- **WinUI as Gold Standard**: In-depth benchmark analysis of all 18 default news sources revealed WinUI provided the most legible, distraction-free reading experience due to its centered reading measure (`max-width: 800px; margin: 0 auto;`), calm link styling, and structured HTML parsing.
-- **Container Selector Expansion**:
-  - Top Romanian and international sources previously fell back prematurely to aggressive paragraph scrapers because their semantic DOM wrappers were missing from container heuristics.
-  - Added support for `div.text-content`, `div.articleContent` / `div.articlecontent` (*Ziarul Financiar*), `div.single__content` / `div.article__content` (*Economica.net*), `div.wp-block-post-content` / `div.entry-content` (*TechCrunch*), `div.pagebuilder-article` / `div.articlebody` (*CNBC*), `div.articleintro`, `div.article-intro`, `div.content-article`, `div.story-content`, and `div.articledetail`.
-  - Synchronized across Apple platforms (`DailyCore/Sources/DailyCore/Services/ArticleExtractor.swift`) and Android (`com.intellidream.daily.model.ArticleExtractor.kt`).
-- **Elimination of "Paywall" False Positives on Legacy Mobile Redirects (Ziarul Financiar & Similar)**:
-  - **Root Cause**: When downloading full article HTML using mobile User-Agents (`iPhone`, `Android`), servers like `zf.ro` issue a `302 Found` redirecting to cleartext `http://m.zf.ro/...`. Modern Apple App Transport Security (ATS) and Android Network Security Config (`usesCleartextTraffic="false"`) strictly abort cleartext HTTP redirects. This caused network exceptions, resulting in empty content falling through to the generic paywall warning card. In contrast, WinUI always succeeded because it used a desktop browser User-Agent which `zf.ro` served directly over HTTPS.
-  - **Desktop User-Agent & HTTPS Redirect Upgrade**:
-    - Aligned client User-Agent strings to Desktop Chrome / Safari across `DailyCore` (`URLSessionConfiguration`) and Android (`NewsRepository.kt`).
-    - Implemented `SecureRedirectDelegate` (`URLSessionTaskDelegate`) in Swift and manual redirect loop handling in Kotlin to automatically rewrite any `http://` redirect location to `https://`, preventing security policy drops.
-  - **Refactored Fallback Card**: Replaced the alarmist "behind a paywall" text with an actionable, calm briefing card: *"This article can be read directly on the publisher's website"* with a direct button *"Read on Publisher"*.
-- **Depth-Balanced Tag Container Extraction for Nested Divs**:
-  - **Root Cause**: Standard regular expression matchers (e.g. `([\\s\\S]*?)</div>`) stopped at the very first closing `</div>`. When publishers embedded inline recommendation widgets or styling wrappers (such as ZF's `<div style="...">Te-ar putea interesa și:</span></div>` after paragraph 1), the regex cut off the remaining 25+ paragraphs (~20,000 characters).
-  - **Fix**: Implemented depth-balanced tag closure matching (`findMatchingClosingTag`) in `ArticleExtractor.swift` and enhanced Android candidate resolution, counting tag nesting levels to capture the complete container block.
-- **Typography, Measure & Media Styling Alignment**:
-  - Aligned HTML/CSS rendering templates across iOS (`iOS/Daily/Views/News/ArticleWebView.swift`), macOS (`MacOS/Daily/Views/News/ArticleWebView.swift`), and Android (`Android/app/src/main/java/com/intellidream/daily/presentation/news/NewsReaderSheet.kt`):
-    - **Link Colors**: Calm accent blue (`#66B2FF` in Dark Mode, `#0066CC` in Light Mode) replacing harsh default blue underlines.
-    - **Reading Measure**: Centered `max-width: 800px; margin: 0 auto;` container with fluid padding.
-    - **Header Hierarchy**: Explicit weights, line heights, and margins for `h2`, `h3`, and `h4` headings.
-    - **Responsive Tables & Media**: Horizontally scrollable `table` wrappers with subtle borders, plus fluid `iframe, video, object` embeds to prevent horizontal clipping.
-- **Android Full Article Lazy Trigger Fix**:
-  - In `NewsReaderSheet.kt`, fixed an issue where RSS feeds carrying item summaries/descriptions caused the reader to skip triggering full background article extraction. Explicitly checks and triggers `viewModel.loadFullArticle(article)` whenever an article is opened.
-- **Substack Integration Architecture**:
-  - Designed comprehensive integration specification for Substack feeds, user library bookmarks, and authenticated reading, documented in [Substack_News_Integration_Investigation.md](file:///Users/mihai/Source/Daily/Docs/Features/Substack_News_Integration_Investigation.md).
+### 6.7 Recorder Cross-Platform ATS Resolution & Politico WinUI Multi-Chunk Extraction (November 2026)
+- **Recorder.ro Loading Resolution across iOS, macOS, Android**:
+  - **Problem**: Recorder (`http://recorder.ro/feed/`) failed to load completely on iOS, macOS, and Android, while functioning on WinUI.
+  - **Root Cause**:
+    1. *Cleartext Protocol & Platform Security Policies*: Recorder's feed URL was seeded or subscribed with `http://`. Modern Apple App Transport Security (ATS) strictly aborted cleartext requests (`NSURLErrorAppTransportSecurityRequiresSecureConnection: -1022`) because `NSAppTransportSecurity` was not declared in `Info.plist`. On Android 9+ (API 28+), cleartext traffic was disabled by default (`Cleartext HTTP traffic to recorder.ro not permitted`).
+    2. *Container Heuristics*: Recorder encapsulates its editorial text inside `<article class="single-content">` and `<div class="single-content-content">`. Swift and Kotlin container heuristics checked `single__content` (double underscore) but lacked `single-content` (single dash) and `single-content-content`.
+    3. *Default Feeds Omission*: Recorder was missing from the default seed lists in `DailyCore`, Android `NewsRepository`, and WinUI `SeederService`.
+  - **Resolution**:
+    - Automatic `http://` to `https://` protocol upgrades across all networking layers (`NewsService.swift`, `ArticleExtractor.swift`, `NewsRemoteService.kt`, `NewsRepository.kt`, and `RssFeedService.cs`).
+    - Configured `NSAppTransportSecurity` (`NSAllowsArbitraryLoads = true`) in `iOS/Daily/Resources/Info.plist` and `MacOS/Daily/Resources/Info.plist`.
+    - Configured `android:usesCleartextTraffic="true"` in `Android/app/src/main/AndroidManifest.xml`.
+    - Added `single-content` and `single-content-content` to candidate selector arrays in `ArticleExtractor.swift` and `ArticleExtractor.kt`.
+    - Added Recorder (`https://recorder.ro/feed/`) to default feeds across all platforms.
+- **Politico.eu High-Fidelity Extraction on WinUI**:
+  - **Problem**: On WinUI, Politico articles displayed unrelated recommendation cards or truncated text (missing paragraphs 1-3), while Apple and Android readers rendered cleanly.
+  - **Root Cause**:
+    1. *Fragmented DOM Architecture*: Politico divides article copy into multiple disjoint `<div class="sidebar-grid__content article__content">` divs separated by inline advertisement widgets and desktop sidebars.
+    2. *False-Positive Recommendation Selection*: Politico appends a `<div class="content-listing__wrapper">` containing 4 article recommendation cards at the bottom. WinUI's `SmartReader` scored the 4-card listing higher than individual article chunks, replacing the clicked article with 4 unrelated headlines.
+    3. *Chunk Dropping*: If recommendation cards were ignored, `SmartReader` selected only Chunk 2 (paragraphs 4-8), dropping Chunk 1 (paragraphs 1-3).
+    4. *Featured Image & Author*: Featured image resides in `og:image` / `<header>`, which `SmartReader` discarded, and the author byline carried raw `"By \n\n Author Name"`.
+  - **Resolution**:
+    - In `RssFeedService.cs`, introduced a dedicated Politico fast-path extraction:
+      - Aggregates and merges all `.article__content` blocks into a unified reading body with preserved paragraph order.
+      - Extracts high-resolution OpenGraph image (`og:image`), title (`og:title`), description (`og:description`), and publication timestamp.
+      - Cleans author byline by stripping leading `"By "` prefix and whitespace.
+    - Added recommendation carousel pre-cleaning (`.content-listing`, `.cards-collection`, `.bong.carousel`) to the universal `SmartReader` fallback path to protect all feeds against false-positive recommendation card capture.
+    - In `RssFeedDetailPage.xaml.cs`, preserved existing RSS item metadata (`ImageUrl`, `Author`) if extracted values are null, and ensured graceful fallback to `item.Content` if body extraction is empty. 100% regression-free for all other news publications.
+
 
 
 

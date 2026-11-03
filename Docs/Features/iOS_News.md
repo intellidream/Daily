@@ -299,10 +299,40 @@ Shared between iOS and upcoming macOS apps without any UIKit dependencies:
 - **Physical Device Delivery**:
   - Built natively for macOS (`Daily.app`) and verified clean build.
   - Deployed and installed on physical iPhone 16 Pro ("Schmitz", `00008140-000E2C863EFB001C`) via `xcrun devicectl`.
-
   - `testHeuristicFallbackShortArticleExtraction`: Validates that the heuristic fallback correctly scores and extracts short articles (< 200 chars) while ignoring cookie banners and recommendation boxes.
   - Full suite of 52 tests across `DailyCoreTests` passing with 0 failures.
 - **Simulator Live Inspection**:
   - Verified live in `SimulaPhone` via `-startTabNews -testOpenRepublicaReader`. Visual screenshot confirmed clean author byline, featured image, and crisp prose formatting with zero cookie or recommendation artifacts.
 - **Device Compilation**:
   - Verified compilation and code signing against `generic/platform=iOS` (`DerivedData-device/Build/Products/Debug-iphoneos/Daily.app`).
+
+---
+
+## 9. Recorder Cleartext ATS Resolution & Container Heuristic Parity (November 2026)
+
+### 9.1 Problem & Root Cause
+- **Issue**: Recorder.ro articles and feed (`http://recorder.ro/feed/`) failed to load completely on iOS and macOS, while working on WinUI.
+- **Root Cause**:
+  1. *Cleartext HTTP Block*: The default feed was configured with an `http://` URL scheme. On iOS and macOS, App Transport Security (ATS) aborts any non-TLS network connection with `NSURLErrorAppTransportSecurityRequiresSecureConnection: -1022`. `NSAppTransportSecurity` dictionary was absent from both `iOS/Daily/Resources/Info.plist` and `MacOS/Daily/Resources/Info.plist`.
+  2. *CSS Selectors*: Recorder's web templates wrap articles in `<article class="single-content">` and `<div class="single-content-content">`. `ArticleExtractor.swift` checked `single__content` (double underscore) but lacked `single-content` and `single-content-content`.
+  3. *Default Feeds*: Recorder was missing from `NewsService.defaultFeeds`.
+
+### 9.2 Architecture & Fix
+1. **ATS Entitlement in Info.plist**:
+   - Added `NSAppTransportSecurity` with `NSAllowsArbitraryLoads = true` in both iOS and macOS `Info.plist` files, enabling legacy HTTP fallback where required.
+2. **Transparent HTTPS Upgrade**:
+   - In `NewsService.swift`, automatically rewrites any incoming `http://` feed URLs to `https://` during fetching (`fetchFeedItems`), adding (`addFeed`), and Supabase synchronization (`syncSubscriptionsWithSupabase`).
+   - In `ArticleExtractor.swift`, transparently rewrites article page fetch URLs from `http://` to `https://`.
+3. **Container Heuristics Expansion**:
+   - Added `"single-content"` and `"single-content-content"` to `candidateKeywords` in `ArticleExtractor.swift`.
+4. **Default Feeds Inclusion**:
+   - Seeded Recorder (`https://recorder.ro/feed/`) under `.local` category (displayOrder 6).
+
+### 9.3 Verification
+- **Unit Tests**:
+  - `NewsServiceTests.testRecorderArticleExtraction`: Verified extraction of sample Recorder HTML with `<article class="single-content">` and `<div class="single-content-content">`, ensuring full content extraction (> 50 chars) and exclusion of `.single-content-meta` author/tag noise.
+  - `NewsServiceTests.testDefaultFeedsIncludeRecorder`: Confirms Recorder is present in `defaultFeeds` with valid HTTPS feed URL and `.local` category.
+  - Executed 18 tests in `NewsServiceTests`, all passed (`0 failures`).
+- **Physical Device Delivery**:
+  - Built and deployed cleanly to iPhone 16 Pro ("Schmitz", `00008140-000E2C863EFB001C`).
+

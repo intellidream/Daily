@@ -185,32 +185,6 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
 
 ---
 
-## 7. High-Precision Explicit Body Extraction & Anti-Navigation Menu Guard (Ziarul Financiar Live/CEC Bank Fix)
-
-### A. Issue & Context
-- ZF.ro articles displayed broadcast live / video ticker text (`"LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI..."`) or truncated content on mobile/desktop readers when navigation menus leaked into the reader body.
-- WinUI served as the reference standard by utilizing `SmartReader` link density thresholding.
-
-### B. Architectural Resolution
-1. **Multi-Candidate Semantic Scoring Parity**:
-   - In `ArticleExtractor.kt`, introduced container bonuses matching Apple DailyCore: `articlebody` (+1500), `<article>` (+500), and `text-content`/`articlecontent` (+400).
-   - This prioritizes direct editorial blocks over large composite wrapper divs containing recommended reading sidebars or carousels.
-2. **Strict Navigation Menu & Header Rejection**:
-   - Added `"header"`, `"menu"`, `"band"`, `"bong"`, and `"carousel"` to candidate junk classes.
-   - Any container candidate containing `role="menu"`, `role="menuitem"`, `id="header"`, or `class="menu"` is immediately disqualified.
-3. **Author Sanitization Parity**:
-   - `sanitizeAuthor()` isolates the first non-empty line, stripping secondary job titles (`"Autor fondator"`, etc.) from multi-line byline spans.
-
-### C. Verification Summary
-- **Unit Tests**:
-  - `NewsParsersTest.testRealZfArticleExtraction`: Verified on 10 live ZF article pages and an inline test fixture with live broadcast tickers, asserting clean length, zero menu/menuitem artifacts, zero header divs, and zero live broadcast tickers.
-- **Physical Device Delivery**:
-  - Built (`./gradlew assembleDebug`) and installed successfully on physical Google Pixel 9 Pro ("TRAPPER") and physical Samsung Galaxy Z Fold 8 ("RADAR").
-
-  - Zero crashes or exceptions in logcat.
-
----
-
 ## 7. High-Performance Two-Tier Image Caching & Stutter-Free Scrolling (Update)
 
 ### A. Root Cause: List Scroll Jitter & Image Flickering
@@ -256,7 +230,7 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
 
 ---
 
-## 7. High-Precision Explicit Body Extraction & Anti-Navigation Menu Guard (Ziarul Financiar Live/CEC Bank Fix)
+## 8. High-Precision Explicit Body Extraction & Anti-Navigation Menu Guard (Ziarul Financiar Live/CEC Bank Fix)
 
 ### A. Issue & Context
 - ZF.ro articles displayed broadcast live / video ticker text (`"LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI..."`) or truncated content on mobile/desktop readers when navigation menus leaked into the reader body.
@@ -277,6 +251,35 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
   - `NewsParsersTest.testRealZfArticleExtraction`: Verified on 10 live ZF article pages and an inline test fixture with live broadcast tickers, asserting clean length, zero menu/menuitem artifacts, zero header divs, and zero live broadcast tickers.
 - **Physical Device Delivery**:
   - Built (`./gradlew assembleDebug`) and installed successfully on physical Google Pixel 9 Pro ("TRAPPER") and physical Samsung Galaxy Z Fold 8 ("RADAR").
+
+---
+
+## 9. Recorder Cleartext Traffic Resolution & Container Heuristic Parity (November 2026)
+
+### A. Issue & Context
+- Recorder.ro articles and feed (`http://recorder.ro/feed/`) failed to load on Android.
+- Android 9+ (API level 28+) strictly disables cleartext HTTP by default, raising `java.io.IOException: Cleartext HTTP traffic to recorder.ro not permitted`.
+- Recorder encapsulates its article body inside `<article class="single-content">` and `<div class="single-content-content">`, which were not present in Android's `findContainerCandidates` selector set.
+- Recorder was omitted from `NewsRepository.defaultFeeds`.
+
+### B. Architectural Resolution
+1. **Cleartext Traffic Policy**:
+   - Configured `android:usesCleartextTraffic="true"` in `Android/app/src/main/AndroidManifest.xml` to allow backward-compatible HTTP fallback when explicit legacy URLs are encountered.
+2. **Transparent HTTPS Protocol Upgrade**:
+   - In `NewsRemoteService.kt`, automatically upgrades `http://` to `https://` in `fetchUrl(url)`.
+   - In `NewsRepository.kt`, automatically upgrades `http://` to `https://` in `normalizeFeedUrl(url)` and when mapping Room subscriptions.
+3. **Container Heuristics Expansion**:
+   - In `ArticleExtractor.kt`, added `single-content` and `single-content-content` to `findContainerCandidates` class matching keywords.
+4. **Default Feeds Inclusion**:
+   - Added Recorder (`https://recorder.ro/feed/`) under `FeedCategory.Local` with displayOrder 6 in `NewsRepository.kt`.
+
+### C. Verification Summary
+- **Unit Tests**:
+  - `NewsParsersTest.testRecorderArticleExtraction`: Tests Recorder article HTML with `<article class="single-content">` and `<div class="single-content-content">`, ensuring full content extraction (> 50 chars) and exclusion of meta junk.
+  - Executed `./gradlew :core-database:testDebugUnitTest` and `:core-network:testDebugUnitTest` successfully (`BUILD SUCCESSFUL`).
+- **Physical Device Delivery**:
+  - Successfully built and installed on physical Google Pixel 9 Pro ("TRAPPER") via ADB (`adb install -r app-debug.apk`).
+
 
 
 
