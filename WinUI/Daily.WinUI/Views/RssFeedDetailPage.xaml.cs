@@ -384,12 +384,26 @@ public sealed partial class RssFeedDetailPage : Page
                 // Detect that and trigger the WebView2 fallback instead of showing the error.
                 if (fullArticle.Title == "Error fetching article" || string.IsNullOrWhiteSpace(fullArticle.Content))
                 {
-                    needsWebViewFallback = true;
+                    if (!string.IsNullOrWhiteSpace(item.Content) && item.Content.Length > 80)
+                    {
+                        fullArticle = item;
+                    }
+                    else
+                    {
+                        needsWebViewFallback = true;
+                    }
                 }
             }
             catch
             {
-                needsWebViewFallback = true;
+                if (!string.IsNullOrWhiteSpace(item.Content) && item.Content.Length > 80)
+                {
+                    fullArticle = item;
+                }
+                else
+                {
+                    needsWebViewFallback = true;
+                }
             }
         }
 
@@ -401,6 +415,15 @@ public sealed partial class RssFeedDetailPage : Page
                 // Preserve correct publication name/icon from the clicked item
                 fullArticle.PublicationName = item.PublicationName;
                 fullArticle.PublicationIconUrl = item.PublicationIconUrl;
+
+                if (string.IsNullOrEmpty(fullArticle.ImageUrl) && !string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    fullArticle.ImageUrl = item.ImageUrl;
+                }
+                if (string.IsNullOrEmpty(fullArticle.Author) && !string.IsNullOrEmpty(item.Author))
+                {
+                    fullArticle.Author = item.Author;
+                }
 
                 _currentRenderedArticle = fullArticle;
                 string html = GenerateReaderHtml(fullArticle);

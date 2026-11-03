@@ -279,6 +279,8 @@ class ArticleExtractor {
                     tagHeader.contains("article-text") ||
                     tagHeader.contains("articlecontent") ||
                     tagHeader.contains("single__content") ||
+                    tagHeader.contains("single-content") ||
+                    tagHeader.contains("single-content-content") ||
                     tagHeader.contains("wp-block-post-content") ||
                     tagHeader.contains("pagebuilder-article") ||
                     tagHeader.contains("text-content") ||

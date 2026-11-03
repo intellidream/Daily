@@ -61,6 +61,11 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>DayOne uses your location to provide accurate local weather forecasts and atmospheric conditions.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSHealthShareUsageDescription</key>
 	<string>DayOne visualizes your steps, heart rate, sleep architecture, and biometric vitals directly from HealthKit.</string>
 	<key>NSHealthUpdateUsageDescription</key>

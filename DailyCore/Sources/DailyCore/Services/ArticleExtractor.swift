@@ -25,7 +25,11 @@ public final class ArticleExtractor: @unchecked Sendable {
     
     /// Fetches the raw HTML from the article URL and extracts the clean article content.
     public func extract(from urlString: String, baseArticle: NewsArticle? = nil) async throws -> NewsArticle {
-        guard let url = URL(string: urlString) else {
+        var safeUrlString = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if safeUrlString.hasPrefix("http://") {
+            safeUrlString = "https://" + safeUrlString.dropFirst(7)
+        }
+        guard let url = URL(string: safeUrlString) else {
             throw URLError(.badURL)
         }
         
@@ -295,7 +299,7 @@ public final class ArticleExtractor: @unchecked Sendable {
         let candidateKeywords = [
             "articlebody", "article-body", "article_body", "entry-content",
             "post-content", "story-body", "article__content", "article-text",
-            "articlecontent", "single__content", "wp-block-post-content",
+            "articlecontent", "single__content", "single-content", "single-content-content", "wp-block-post-content",
             "pagebuilder-article", "text-content", "articleintro",
             "article-intro", "content-article", "story-content", "articledetail"
         ]

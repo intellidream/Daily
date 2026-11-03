@@ -58,24 +58,25 @@ public final class NewsService: ObservableObject {
             FeedSource(name: "HotNews", url: "https://www.hotnews.ro/rss", category: .local, displayOrder: 3),
             FeedSource(name: "Biziday", url: "https://www.biziday.ro/feed/", category: .local, displayOrder: 4),
             FeedSource(name: "Economica.net", url: "https://www.economica.net/rss", category: .local, displayOrder: 5),
+            FeedSource(name: "Recorder", url: "https://recorder.ro/feed/", category: .local, displayOrder: 6),
             
             // 📈 Markets
-            FeedSource(name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: .markets, displayOrder: 6),
-            FeedSource(name: "The Economist", url: "https://www.economist.com/finance-and-economics/rss.xml", category: .markets, displayOrder: 7),
+            FeedSource(name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: .markets, displayOrder: 7),
+            FeedSource(name: "The Economist", url: "https://www.economist.com/finance-and-economics/rss.xml", category: .markets, displayOrder: 8),
             
             // 🌍 World
-            FeedSource(name: "BBC News", url: "https://feeds.bbci.co.uk/news/rss.xml", category: .world, displayOrder: 8),
-            FeedSource(name: "NPR", url: "https://feeds.npr.org/1001/rss.xml", category: .world, displayOrder: 9),
-            FeedSource(name: "Politico Europe", url: "https://www.politico.eu/feed/", category: .world, displayOrder: 10),
-            FeedSource(name: "Deutsche Welle", url: "https://rss.dw.com/rdf/rss-en-all", category: .world, displayOrder: 11),
-            FeedSource(name: "Google News", url: "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", category: .world, displayOrder: 12),
+            FeedSource(name: "BBC News", url: "https://feeds.bbci.co.uk/news/rss.xml", category: .world, displayOrder: 9),
+            FeedSource(name: "NPR", url: "https://feeds.npr.org/1001/rss.xml", category: .world, displayOrder: 10),
+            FeedSource(name: "Politico Europe", url: "https://www.politico.eu/feed/", category: .world, displayOrder: 11),
+            FeedSource(name: "Deutsche Welle", url: "https://rss.dw.com/rdf/rss-en-all", category: .world, displayOrder: 12),
+            FeedSource(name: "Google News", url: "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", category: .world, displayOrder: 13),
             
             // 💡 Tech
-            FeedSource(name: "TechCrunch", url: "https://techcrunch.com/feed/", category: .tech, displayOrder: 13),
-            FeedSource(name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: .tech, displayOrder: 14),
-            FeedSource(name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: .tech, displayOrder: 15),
-            FeedSource(name: "Zona IT", url: "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", type: .wpJson, category: .tech, displayOrder: 16),
-            FeedSource(name: "Windows Central", url: "https://www.windowscentral.com/feeds.xml", category: .tech, displayOrder: 17)
+            FeedSource(name: "TechCrunch", url: "https://techcrunch.com/feed/", category: .tech, displayOrder: 14),
+            FeedSource(name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: .tech, displayOrder: 15),
+            FeedSource(name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: .tech, displayOrder: 16),
+            FeedSource(name: "Zona IT", url: "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", type: .wpJson, category: .tech, displayOrder: 17),
+            FeedSource(name: "Windows Central", url: "https://www.windowscentral.com/feeds.xml", category: .tech, displayOrder: 18)
         ]
     }
     
@@ -271,7 +272,11 @@ public final class NewsService: ObservableObject {
             }
         }
         
-        guard let url = URL(string: feed.url) else {
+        var targetFeedUrl = feed.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if targetFeedUrl.hasPrefix("http://") {
+            targetFeedUrl = "https://" + targetFeedUrl.dropFirst(7)
+        }
+        guard let url = URL(string: targetFeedUrl) else {
             throw URLError(.badURL)
         }
         
@@ -320,10 +325,14 @@ public final class NewsService: ObservableObject {
     }
     
     public func addFeed(name: String, url: String, category: FeedCategory) {
-        let type: FeedType = url.contains("wp-json") ? .wpJson : .rss
+        var safeUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if safeUrl.hasPrefix("http://") {
+            safeUrl = "https://" + safeUrl.dropFirst(7)
+        }
+        let type: FeedType = safeUrl.contains("wp-json") ? .wpJson : .rss
         let newFeed = FeedSource(
             name: name,
-            url: url,
+            url: safeUrl,
             type: type,
             category: category,
             displayOrder: feeds.count
@@ -456,7 +465,21 @@ public final class NewsService: ObservableObject {
             let response = try JSONDecoder().decode([RssSubscription].self, from: res.data)
             
             if !response.isEmpty {
-                var remoteFeeds = response.filter { !$0.isDeleted }.map { $0.toFeedSource() }
+                var remoteFeeds = response.filter { !$0.isDeleted }.map { sub -> FeedSource in
+                    var fs = sub.toFeedSource()
+                    if fs.url.hasPrefix("http://") {
+                        fs = FeedSource(
+                            id: fs.id,
+                            name: fs.name,
+                            url: "https://" + fs.url.dropFirst(7),
+                            iconUrl: fs.iconUrl,
+                            type: fs.type,
+                            category: fs.category,
+                            displayOrder: fs.displayOrder
+                        )
+                    }
+                    return fs
+                }
                 // Deduplicate by URL
                 var seen = Set<String>()
                 remoteFeeds = remoteFeeds.filter { seen.insert($0.url).inserted }

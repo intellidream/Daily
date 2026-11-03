@@ -700,7 +700,85 @@ namespace Daily.Services
 
                 // OPTIMIZATION: Use shared HttpClient for fetching to ensure Handler/DNS reuse and speed
                 var html = await GetStringWithFallbackAsync(url);
-                var reader = new SmartReader.Reader(url, html);
+
+                // --- POLITICO SPECIALIZED EXTRACTION ---
+                // Politico splits articles across multiple .article__content containers separated by ads/sidebars,
+                // and places a prominent 4-card recommendation listing (.content-listing) that standard SmartReader
+                // scores higher than the actual article chunks.
+                bool isPolitico = url.Contains("politico.eu", StringComparison.OrdinalIgnoreCase) || 
+                                  url.Contains("politico.com", StringComparison.OrdinalIgnoreCase);
+
+                if (isPolitico && !string.IsNullOrEmpty(html))
+                {
+                    var contentMatches = Regex.Matches(html, @"<div[^>]*class=""[^""]*article__content[^""]*""[^>]*>(.*?)</div>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                    var contentChunks = new List<string>();
+                    foreach (Match m in contentMatches)
+                    {
+                        var chunk = m.Groups[1].Value.Trim();
+                        if (!string.IsNullOrEmpty(chunk) && chunk.Contains("<p"))
+                        {
+                            contentChunks.Add(chunk);
+                        }
+                    }
+
+                    if (contentChunks.Count > 0)
+                    {
+                        string combinedContent = string.Join("\n", contentChunks);
+
+                        // Extract Title
+                        var titleMatch = Regex.Match(html, @"<meta\s+property=""og:title""\s+content=""([^""]+)""", RegexOptions.IgnoreCase);
+                        string title = titleMatch.Success ? System.Net.WebUtility.HtmlDecode(titleMatch.Groups[1].Value) : (CurrentFeed?.Name ?? "Politico");
+
+                        // Extract Image
+                        var imgMatch = Regex.Match(html, @"<meta\s+property=""og:image""\s+content=""([^""]+)""", RegexOptions.IgnoreCase);
+                        string imageUrl = imgMatch.Success ? imgMatch.Groups[1].Value : (CurrentFeed?.IconUrl ?? "");
+
+                        // Extract Description
+                        var descMatch = Regex.Match(html, @"<meta\s+property=""og:description""\s+content=""([^""]+)""", RegexOptions.IgnoreCase);
+                        string description = descMatch.Success ? System.Net.WebUtility.HtmlDecode(descMatch.Groups[1].Value) : "";
+
+                        // Extract Author
+                        var authorMatch = Regex.Match(html, @"<meta\s+name=""author""\s+content=""([^""]+)""", RegexOptions.IgnoreCase);
+                        if (!authorMatch.Success)
+                        {
+                            authorMatch = Regex.Match(html, @"class=""authors[^""]*""[^>]*>\s*(?:By\s*)?<a[^>]*>([^<]+)</a>", RegexOptions.IgnoreCase);
+                        }
+                        string author = authorMatch.Success ? System.Net.WebUtility.HtmlDecode(authorMatch.Groups[1].Value.Trim()) : "";
+                        if (author.StartsWith("By ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            author = author.Substring(3).Trim();
+                        }
+
+                        DateTime pubDate = DateTime.Now;
+                        var pubDateMatch = Regex.Match(html, @"<meta\s+property=""article:published_time""\s+content=""([^""]+)""", RegexOptions.IgnoreCase);
+                        if (pubDateMatch.Success && DateTime.TryParse(pubDateMatch.Groups[1].Value, out var parsedDate))
+                        {
+                            pubDate = parsedDate;
+                        }
+
+                        return new RssItem
+                        {
+                            Title = title,
+                            Link = url,
+                            Content = combinedContent,
+                            Description = description,
+                            ImageUrl = imageUrl,
+                            PublishDate = pubDate,
+                            Author = author,
+                            PublicationName = CurrentFeed?.Name ?? "Politico Europe",
+                            PublicationIconUrl = CurrentFeed?.IconUrl
+                        };
+                    }
+                }
+
+                // Strip recommendation carousels and listing blocks before passing to SmartReader to prevent false positives
+                var cleanHtml = html;
+                if (!string.IsNullOrEmpty(cleanHtml))
+                {
+                    cleanHtml = Regex.Replace(cleanHtml, @"<div[^>]*class=""[^""]*(?:content-listing|cards-collection|bong\.carousel)[^""]*""[^>]*>.*?</div>\s*</div>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                }
+
+                var reader = new SmartReader.Reader(url, cleanHtml);
                 var article = reader.GetArticle(); // Synchronous parse of provided content
 
                 if (article.IsReadable)
@@ -779,6 +857,11 @@ namespace Daily.Services
                                        .Replace("NavigationContributor", "", StringComparison.OrdinalIgnoreCase) // Specific combo
                                        .Replace("Navigation", "", StringComparison.OrdinalIgnoreCase)
                                        .Replace("See all articles", "", StringComparison.OrdinalIgnoreCase);
+
+                        if (author.StartsWith("By ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            author = author.Substring(3).Trim();
+                        }
 
                         // 2. Fix Concatenated or Unseparated Titles (e.g. "NameSenior" or "Name Senior")
                         // Ensure comma separator. Order of titles matters (Longer first to capture full title).
@@ -868,14 +951,19 @@ namespace Daily.Services
 
         private async Task<string> GetStringWithFallbackAsync(string url)
         {
+            var targetUrl = url;
+            if (targetUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                targetUrl = "https://" + targetUrl.Substring(7);
+            }
             try
             {
-                return await _httpClient.GetStringAsync(url);
+                return await _httpClient.GetStringAsync(targetUrl);
             }
             catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden || ex.StatusCode == System.Net.HttpStatusCode.NotAcceptable)
             {
-                Console.WriteLine($"[RssFeedService] {ex.StatusCode} when fetching {url}. Retrying with browser headers...");
-                return await _browserHttpClient.GetStringAsync(url);
+                Console.WriteLine($"[RssFeedService] {ex.StatusCode} when fetching {targetUrl}. Retrying with browser headers...");
+                return await _browserHttpClient.GetStringAsync(targetUrl);
             }
         }
     }

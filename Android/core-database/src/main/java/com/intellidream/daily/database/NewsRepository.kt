@@ -154,7 +154,10 @@ class NewsRepository(
                     }
 
                     _feeds.value = distinctEntities.map { entity ->
-                        val feed = entity.toFeedSource()
+                        var feed = entity.toFeedSource()
+                        if (feed.url.startsWith("http://", ignoreCase = true)) {
+                            feed = feed.copy(url = "https://" + feed.url.substring(7))
+                        }
                         if (feed.url.contains("economica.net/rss")) {
                             feed.copy(url = "https://www.economica.net/feed")
                         } else {
@@ -709,6 +712,9 @@ class NewsRepository(
     companion object {
         fun normalizeFeedUrl(url: String): String {
             var u = url.trim().lowercase()
+            if (u.startsWith("http://")) {
+                u = "https://" + u.substring(7)
+            }
             if (u.endsWith("/")) {
                 u = u.dropLast(1)
             }
@@ -726,24 +732,25 @@ class NewsRepository(
             FeedSource(id = "seed_hotnews", name = "HotNews", url = "https://www.hotnews.ro/rss", category = FeedCategory.Local, displayOrder = 3),
             FeedSource(id = "seed_biziday", name = "Biziday", url = "https://www.biziday.ro/feed/", category = FeedCategory.Local, displayOrder = 4),
             FeedSource(id = "seed_economica", name = "Economica.net", url = "https://www.economica.net/feed", category = FeedCategory.Local, displayOrder = 5),
+            FeedSource(id = "seed_recorder", name = "Recorder", url = "https://recorder.ro/feed/", category = FeedCategory.Local, displayOrder = 6),
 
             // 📈 Markets
-            FeedSource(id = "seed_cnbc", name = "CNBC", url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", category = FeedCategory.Markets, displayOrder = 6),
-            FeedSource(id = "seed_economist", name = "The Economist", url = "https://www.economist.com/finance-and-economics/rss.xml", category = FeedCategory.Markets, displayOrder = 7),
+            FeedSource(id = "seed_cnbc", name = "CNBC", url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", category = FeedCategory.Markets, displayOrder = 7),
+            FeedSource(id = "seed_economist", name = "The Economist", url = "https://www.economist.com/finance-and-economics/rss.xml", category = FeedCategory.Markets, displayOrder = 8),
 
             // 🌍 World
-            FeedSource(id = "seed_bbc", name = "BBC News", url = "https://feeds.bbci.co.uk/news/rss.xml", category = FeedCategory.World, displayOrder = 8),
-            FeedSource(id = "seed_npr", name = "NPR", url = "https://feeds.npr.org/1001/rss.xml", category = FeedCategory.World, displayOrder = 9),
-            FeedSource(id = "seed_politico", name = "Politico Europe", url = "https://www.politico.eu/feed/", category = FeedCategory.World, displayOrder = 10),
-            FeedSource(id = "seed_dw", name = "Deutsche Welle", url = "https://rss.dw.com/rdf/rss-en-all", category = FeedCategory.World, displayOrder = 11),
-            FeedSource(id = "seed_google_news", name = "Google News", url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", category = FeedCategory.World, displayOrder = 12),
+            FeedSource(id = "seed_bbc", name = "BBC News", url = "https://feeds.bbci.co.uk/news/rss.xml", category = FeedCategory.World, displayOrder = 9),
+            FeedSource(id = "seed_npr", name = "NPR", url = "https://feeds.npr.org/1001/rss.xml", category = FeedCategory.World, displayOrder = 10),
+            FeedSource(id = "seed_politico", name = "Politico Europe", url = "https://www.politico.eu/feed/", category = FeedCategory.World, displayOrder = 11),
+            FeedSource(id = "seed_dw", name = "Deutsche Welle", url = "https://rss.dw.com/rdf/rss-en-all", category = FeedCategory.World, displayOrder = 12),
+            FeedSource(id = "seed_google_news", name = "Google News", url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", category = FeedCategory.World, displayOrder = 13),
 
             // 💡 Tech
-            FeedSource(id = "seed_techcrunch", name = "TechCrunch", url = "https://techcrunch.com/feed/", category = FeedCategory.Tech, displayOrder = 13),
-            FeedSource(id = "seed_theverge", name = "The Verge", url = "https://www.theverge.com/rss/index.xml", category = FeedCategory.Tech, displayOrder = 14),
-            FeedSource(id = "seed_arstechnica", name = "Ars Technica", url = "https://feeds.arstechnica.com/arstechnica/index", category = FeedCategory.Tech, displayOrder = 15),
-            FeedSource(id = "seed_zonait", name = "Zona IT", url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", type = FeedType.WpJson, category = FeedCategory.Tech, displayOrder = 16),
-            FeedSource(id = "seed_windowscentral", name = "Windows Central", url = "https://www.windowscentral.com/feeds.xml", category = FeedCategory.Tech, displayOrder = 17)
+            FeedSource(id = "seed_techcrunch", name = "TechCrunch", url = "https://techcrunch.com/feed/", category = FeedCategory.Tech, displayOrder = 14),
+            FeedSource(id = "seed_theverge", name = "The Verge", url = "https://www.theverge.com/rss/index.xml", category = FeedCategory.Tech, displayOrder = 15),
+            FeedSource(id = "seed_arstechnica", name = "Ars Technica", url = "https://feeds.arstechnica.com/arstechnica/index", category = FeedCategory.Tech, displayOrder = 16),
+            FeedSource(id = "seed_zonait", name = "Zona IT", url = "https://zonait.ro/wp-json/wp/v2/posts?per_page=20&_embed", type = FeedType.WpJson, category = FeedCategory.Tech, displayOrder = 17),
+            FeedSource(id = "seed_windowscentral", name = "Windows Central", url = "https://www.windowscentral.com/feeds.xml", category = FeedCategory.Tech, displayOrder = 18)
         )
     }
 }

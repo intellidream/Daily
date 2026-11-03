@@ -516,6 +516,47 @@ class NewsParsersTest {
             assertTrue("Item $i must not contain CEC", !content.contains("CEC Bank pentru afaceri româneşti"))
         }
     }
+
+    @Test
+    fun testRecorderArticleExtraction() {
+        val recorderHtml = """
+            <!DOCTYPE html>
+            <html lang="ro-RO">
+            <head>
+                <title>EXPLICATIV. Alegeri în SUA: Donald Trump, în fața testului de la jumătatea mandatului - Recorder</title>
+                <meta property="og:title" content="EXPLICATIV. Alegeri în SUA: Donald Trump, în fața testului de la jumătatea mandatului" />
+                <meta property="og:image" content="https://recorder.ro/wp-content/uploads/2026/10/Thumb_Explicativ_Alegeri_SUA_CLEAN.jpg" />
+                <meta property="og:description" content="Explicăm ce sunt aceste alegeri și de ce rezultatul lor ar putea determina cursul ultimilor doi ani." />
+                <meta name="author" content="Teodora Preda" />
+            </head>
+            <body>
+                <header id="header">
+                    <nav class="nav">Navigation</nav>
+                </header>
+                <main class="single-post-wrapper">
+                    <article class="single-content post-54895">
+                        <div class="single-content-content">
+                            <p class="wp-block-paragraph">Pe 3 noiembrie, în Statele Unite ale Americii au loc alegerile de la jumătatea mandatului prezidențial, cunoscute sub numele de „midterms.”</p>
+                            <p class="wp-block-paragraph">Cetățenii americani din toate cele 50 de state vor decide o parte importantă a membrilor Congresului, care reprezintă puterea legislativă la nivel federal.</p>
+                            <p class="wp-block-paragraph">Ultimele sondaje arată că Partidul Democrat ar putea recâștiga majoritatea în Camera Reprezentanților, în timp ce cursa pentru Senat rămâne strânsă.</p>
+                        </div>
+                    </article>
+                </main>
+                <div class="related-posts">Recomandari</div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val article = ArticleExtractor.shared.parseHtml(recorderHtml, "https://recorder.ro/explicativ-alegeri-in-sua-donald-trump-in-fata-testului-de-la-jumatatea-mandatului/")
+        assertNotNull(article.content)
+        val content = article.content!!
+        assertTrue(content.contains("Pe 3 noiembrie, în Statele Unite"))
+        assertTrue(content.contains("puterea legislativă la nivel federal"))
+        assertTrue(!content.contains("Recomandari"))
+        assertTrue(!content.contains("Navigation"))
+        assertEquals("Teodora Preda", article.author)
+        assertEquals("https://recorder.ro/wp-content/uploads/2026/10/Thumb_Explicativ_Alegeri_SUA_CLEAN.jpg", article.imageUrl)
+    }
 }
 
 

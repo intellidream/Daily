@@ -513,4 +513,53 @@ final class NewsServiceTests: XCTestCase {
         }
     }
     #endif
+    
+    func testRecorderArticleExtraction() {
+        let recorderHtml = """
+        <!DOCTYPE html>
+        <html lang="ro-RO">
+        <head>
+            <title>EXPLICATIV. Alegeri în SUA: Donald Trump, în fața testului de la jumătatea mandatului - Recorder</title>
+            <meta property="og:title" content="EXPLICATIV. Alegeri în SUA: Donald Trump, în fața testului de la jumătatea mandatului" />
+            <meta property="og:image" content="https://recorder.ro/wp-content/uploads/2026/10/Thumb_Explicativ_Alegeri_SUA_CLEAN.jpg" />
+            <meta property="og:description" content="Explicăm ce sunt aceste alegeri și de ce rezultatul lor ar putea determina cursul ultimilor doi ani." />
+            <meta name="author" content="Teodora Preda" />
+        </head>
+        <body>
+            <header id="header">
+                <nav class="nav">Navigation</nav>
+            </header>
+            <main class="single-post-wrapper">
+                <article class="single-content post-54895">
+                    <div class="single-content-content">
+                        <p class="wp-block-paragraph">Pe 3 noiembrie, în Statele Unite ale Americii au loc alegerile de la jumătatea mandatului prezidențial, cunoscute sub numele de „midterms.”</p>
+                        <p class="wp-block-paragraph">Cetățenii americani din toate cele 50 de state vor decide o parte importantă a membrilor Congresului, care reprezintă puterea legislativă la nivel federal.</p>
+                        <p class="wp-block-paragraph">Ultimele sondaje arată că Partidul Democrat ar putea recâștiga majoritatea în Camera Reprezentanților, în timp ce cursa pentru Senat rămâne strânsă.</p>
+                    </div>
+                </article>
+            </main>
+            <div class="related-posts">Recomandari</div>
+        </body>
+        </html>
+        """
+        
+        let article = ArticleExtractor.shared.parseHtml(recorderHtml, url: "https://recorder.ro/explicativ-alegeri-in-sua-donald-trump-in-fata-testului-de-la-jumatatea-mandatului/")
+        XCTAssertNotNil(article.content)
+        let content = article.content ?? ""
+        XCTAssertTrue(content.contains("Pe 3 noiembrie, în Statele Unite"), "Should extract article body from single-content-content")
+        XCTAssertTrue(content.contains("puterea legislativă la nivel federal"), "Should extract all paragraphs")
+        XCTAssertFalse(content.contains("Recomandari"), "Should exclude related posts")
+        XCTAssertFalse(content.contains("Navigation"), "Should exclude header navigation")
+        XCTAssertEqual(article.author, "Teodora Preda")
+        XCTAssertEqual(article.imageUrl, "https://recorder.ro/wp-content/uploads/2026/10/Thumb_Explicativ_Alegeri_SUA_CLEAN.jpg")
+    }
+    
+    @MainActor
+    func testDefaultFeedsIncludeRecorder() {
+        let feeds = NewsService.defaultFeeds
+        let recorder = feeds.first { $0.name == "Recorder" }
+        XCTAssertNotNil(recorder, "Recorder must be included in default feeds")
+        XCTAssertEqual(recorder?.category, .local)
+        XCTAssertEqual(recorder?.url, "https://recorder.ro/feed/")
+    }
 }

@@ -261,6 +261,7 @@ namespace Daily.Services
                 ("HotNews", "https://www.hotnews.ro/rss", "Local"),
                 ("Biziday", "https://www.biziday.ro/feed/", "Local"),
                 ("Economica.net", "https://www.economica.net/rss", "Local"),
+                ("Recorder", "https://recorder.ro/feed/", "Local"),
 
                 // 📈 Markets
                 ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html", "Markets"),
