@@ -657,5 +657,58 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertEqual(pubName, "Entrepreneurship")
         XCTAssertEqual(HeadlessReadabilityParser.optimizeMediumImageUrl(item.imageUrl), "https://miro.medium.com/v2/resize:fit:800/1*test.jpg")
     }
+    
+    func testMediumFullArticleContentPreservationWhenSubstantial() async throws {
+        let substantialBody = """
+        <p>This is paragraph 1 of a comprehensive engineering deep-dive on modern architectures.</p>
+        <p>Paragraph 2 details the exact synchronization invariants across client and server nodes.</p>
+        <p>Paragraph 3 explains the memory layout, garbage collection characteristics, and throughput.</p>
+        <p>Paragraph 4 wraps up the benchmarks and production operational recommendations.</p>
+        """
+        let article = NewsArticle(
+            id: "medium-1",
+            title: "Scaling Distributed Systems",
+            link: "https://medium.com/@architect/scaling-distributed-systems-12345",
+            publishDate: Date(),
+            imageUrl: "https://miro.medium.com/v2/resize:fit:800/1*sample.jpg",
+            description: "Deep dive into distributed systems.",
+            content: substantialBody,
+            author: "System Architect",
+            publicationName: "Medium",
+            publicationIconUrl: "https://www.google.com/s2/favicons?domain=medium.com&sz=64",
+            category: .tech
+        )
+        
+        let extracted = try await ArticleExtractor.shared.extract(from: article.link, baseArticle: article)
+        XCTAssertEqual(extracted.content, substantialBody, "Substantial Medium article content must be preserved without truncation or web scraping bypass")
+        XCTAssertEqual(extracted.title, "Scaling Distributed Systems")
+    }
+    
+    func testMediumDomExtractionPreservesMemberStoryParagraphs() {
+        let htmlWithMemberSections = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>Member Only Story - Medium</title></head>
+        <body>
+            <article>
+                <h1>Autonomous Systems in 2026</h1>
+                <div class="pw-author-card"><span>Written by Mihai</span></div>
+                <section>
+                    <div class="postPaywall meteredContent">
+                        <p>First paragraph introducing the next generation of mobile operating systems.</p>
+                        <p>Second paragraph analyzing the cross-platform rendering primitives and performance budgets.</p>
+                        <p>Third paragraph providing concrete performance measurements and memory profiles.</p>
+                    </div>
+                </section>
+            </article>
+        </body>
+        </html>
+        """
+        
+        let parsed = ArticleExtractor.shared.parseHtml(htmlWithMemberSections, url: "https://medium.com/@mihai/autonomous-systems-2026")
+        XCTAssertFalse(parsed.content?.isEmpty ?? true)
+        XCTAssertTrue(parsed.content?.contains("First paragraph introducing") ?? false)
+        XCTAssertTrue(parsed.content?.contains("Third paragraph providing") ?? false)
+    }
     #endif
 }

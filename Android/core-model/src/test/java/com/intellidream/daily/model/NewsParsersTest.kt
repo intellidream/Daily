@@ -642,6 +642,35 @@ class NewsParsersTest {
         assertEquals("Entrepreneurship", pubName)
         assertEquals("https://miro.medium.com/v2/resize:fit:800/1*test.jpg", optimizeMediumImageUrl(scraped.imageUrl))
     }
+
+    @Test
+    fun testMediumDomExtractionPreservesMemberStoryParagraphs() {
+        val htmlWithMemberSections = """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Member Only Story - Medium</title></head>
+            <body>
+                <article>
+                    <h1>Autonomous Systems in 2026</h1>
+                    <div class="pw-author-card"><span>Written by Mihai</span></div>
+                    <section>
+                        <div class="postPaywall meteredContent">
+                            <p>First paragraph introducing the next generation of mobile operating systems.</p>
+                            <p>Second paragraph analyzing the cross-platform rendering primitives and performance budgets.</p>
+                            <p>Third paragraph providing concrete performance measurements and memory profiles.</p>
+                        </div>
+                    </section>
+                </article>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val parsed = ArticleExtractor.shared.parseHtml(htmlWithMemberSections, "https://medium.com/@mihai/autonomous-systems-2026")
+        assertNotNull(parsed.content)
+        val content = parsed.content!!
+        assertTrue(content.contains("First paragraph introducing"))
+        assertTrue(content.contains("Third paragraph providing"))
+    }
 }
 
 

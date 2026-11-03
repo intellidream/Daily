@@ -369,7 +369,17 @@ public sealed partial class RssFeedDetailPage : Page
                          (item.Link.Contains("medium.com") || 
                           (item.PublicationName != null && item.PublicationName.Contains("Medium")));
 
-        if (isMedium)
+        bool hasSubstantialContent = !string.IsNullOrWhiteSpace(item.Content) && 
+                                     item.Content.Length > 250 && 
+                                     !item.Content.Contains("Continue reading on Medium", StringComparison.OrdinalIgnoreCase) &&
+                                     !item.Content.Contains("member-only story", StringComparison.OrdinalIgnoreCase);
+
+        if (isMedium && hasSubstantialContent)
+        {
+            fullArticle = item;
+            needsWebViewFallback = false;
+        }
+        else if (isMedium)
         {
             System.Diagnostics.Debug.WriteLine($"[Reader] Forcing WebView2 fallback for Medium link to preserve cookie authentication: {item.Link}");
             needsWebViewFallback = true;
@@ -487,12 +497,24 @@ public sealed partial class RssFeedDetailPage : Page
                     // Give the page a moment to settle after navigation
                     await Task.Delay(2000);
 
-                    // Remove cookie/GDPR overlays that block content
+                    // Remove cookie/GDPR overlays that block content, with safety guards so real story content is never stripped
                     var cleanupScript = "(function(){" +
                         "var selectors=['#cmp-app-container','.cookie-banner','#cookie-consent','.gdpr-modal'," +
                         "'[class*=\"cookie\"]','[id*=\"cookie\"]','[class*=\"consent\"]','[class*=\"paywall\"]'," +
                         "'[id*=\"consent\"]','[class*=\"overlay\"]','[id*=\"piano\"]'];" +
-                        "selectors.forEach(function(s){document.querySelectorAll(s).forEach(function(e){e.remove();});});" +
+                        "selectors.forEach(function(s){" +
+                        "    document.querySelectorAll(s).forEach(function(e){" +
+                        "        if(e.tagName==='ARTICLE'||e.tagName==='MAIN'||e.tagName==='SECTION') return;" +
+                        "        if(e.querySelectorAll('p').length>=2||(e.innerText||'').length>300) return;" +
+                        "        e.remove();" +
+                        "    });" +
+                        "});" +
+                        "var upsells=['.meteredContentUpsell','[data-testid=\"paywall-dialog\"]','[data-testid=\"upgrade-banner\"]','[data-testid=\"postPaywallBanner\"]'];" +
+                        "upsells.forEach(function(s){" +
+                        "    document.querySelectorAll(s).forEach(function(e){" +
+                        "        if(e.querySelectorAll('p').length<2&&(e.innerText||'').length<300) e.remove();" +
+                        "    });" +
+                        "});" +
                         "document.body.style.overflow='auto';document.documentElement.style.overflow='auto';" +
                         "document.body.style.position='static';" +
                         "var main=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role=\"main\"]');" +
@@ -502,51 +524,92 @@ public sealed partial class RssFeedDetailPage : Page
 
                     // Poll until the page has substantial text content (JS-rendered)
                     string extractedHtml = "";
+                    int lastLen = 0;
+                    int stableCount = 0;
                     for (int i = 0; i < 20; i++)
                     {
-                        await Task.Delay(1000);
+                        await Task.Delay(800);
                         
+                        // Hydration scroll triggers on initial iterations to force lazy-loaded sections / React hydration
+                        if (i == 1 || i == 3)
+                        {
+                            await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, document.body.scrollHeight / 2);");
+                        }
+                        else if (i == 2 || i == 4)
+                        {
+                            await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, document.body.scrollHeight);");
+                        }
+                        else if (i == 5)
+                        {
+                            await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, 0);");
+                        }
+
                         // Re-run cleanup each iteration in case overlays re-appear
                         if (i % 3 == 0 && i > 0)
                             await ReaderWebView.ExecuteScriptAsync(cleanupScript);
 
                         // Check text length
                         var lenJson = await ReaderWebView.ExecuteScriptAsync(
-                            "document.body && document.body.innerText ? document.body.innerText.length : 0;");
-                        if (lenJson != null && int.TryParse(lenJson.Trim('\"'), out int len) && len > 500)
+                            "(function(){ var el = document.querySelector('article') || document.querySelector('main') || document.body; return el && el.innerText ? el.innerText.length : 0; })()");
+                        
+                        int curLen = 0;
+                        if (lenJson != null && int.TryParse(lenJson.Trim('\"'), out int parsedLen))
                         {
-                            // Also try article-specific selectors for a more targeted extraction
-                            var articleJson = await ReaderWebView.ExecuteScriptAsync(
-                                "(function(){" +
-                                "var selectors='article, main, [itemprop=\"articleBody\"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';" +
-                                "var el=document.querySelector(selectors);" +
-                                "if(el && el.innerText && el.innerText.length > 200) return '<html><head><meta charset=\"utf-8\"/></head><body>'+el.outerHTML+'</body></html>';" +
-                                "return null;" +
-                                "})()");
-                            
-                            string? articleHtml = null;
-                            if (articleJson != null && articleJson != "null")
+                            curLen = parsedLen;
+                        }
+
+                        if (curLen > 300)
+                        {
+                            if (curLen == lastLen)
                             {
-                                try { articleHtml = System.Text.Json.JsonSerializer.Deserialize<string>(articleJson); }
-                                catch { }
+                                stableCount++;
+                            }
+                            else
+                            {
+                                stableCount = 0;
+                                lastLen = curLen;
                             }
 
-                            if (!string.IsNullOrWhiteSpace(articleHtml) && articleHtml.Length > 500)
+                            // Extract once hydrated and stabilized (or if content is already very long, e.g. > 3500 chars)
+                            if (stableCount >= 2 || curLen > 3500 || (i >= 8 && curLen > 600))
                             {
-                                extractedHtml = articleHtml;
-                                break;
-                            }
+                                var articleJson = await ReaderWebView.ExecuteScriptAsync(
+                                    "(function(){" +
+                                    "var selectors='article, main, [itemprop=\"articleBody\"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';" +
+                                    "var el=document.querySelector(selectors);" +
+                                    "if(el && el.innerText && el.innerText.length > 200) {" +
+                                    "    var clone = el.cloneNode(true);" +
+                                    "    var junk = clone.querySelectorAll('button, [data-testid*=\"clap\"], [data-testid*=\"response\"], .responsesStream, [data-testid=\"postSidebar\"]');" +
+                                    "    junk.forEach(function(j){ j.remove(); });" +
+                                    "    return '<html><head><meta charset=\"utf-8\"/></head><body>'+clone.outerHTML+'</body></html>';" +
+                                    "}" +
+                                    "return null;" +
+                                    "})()");
+                                
+                                string? articleHtml = null;
+                                if (articleJson != null && articleJson != "null")
+                                {
+                                    try { articleHtml = System.Text.Json.JsonSerializer.Deserialize<string>(articleJson); }
+                                    catch { }
+                                }
 
-                            // Fall back to full page HTML
-                            var fullJson = await ReaderWebView.ExecuteScriptAsync("document.documentElement.outerHTML;");
-                            if (fullJson != null && fullJson != "null")
-                            {
-                                try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(fullJson) ?? ""; }
-                                catch { extractedHtml = fullJson; }
+                                if (!string.IsNullOrWhiteSpace(articleHtml) && articleHtml.Length > 500)
+                                {
+                                    extractedHtml = articleHtml;
+                                    break;
+                                }
+
+                                // Fall back to full page HTML
+                                var fullJson = await ReaderWebView.ExecuteScriptAsync("document.documentElement.outerHTML;");
+                                if (fullJson != null && fullJson != "null")
+                                {
+                                    try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(fullJson) ?? ""; }
+                                    catch { extractedHtml = fullJson; }
+                                }
+                                
+                                if (extractedHtml.Length > 1500)
+                                    break;
                             }
-                            
-                            if (extractedHtml.Length > 2000)
-                                break;
                         }
                     }
                     
@@ -569,20 +632,46 @@ public sealed partial class RssFeedDetailPage : Page
                 loadedHtml = await tcs.Task;
             }
             
-            if (!string.IsNullOrWhiteSpace(loadedHtml) && loadedHtml.Length > 500)
+            if (!string.IsNullOrWhiteSpace(loadedHtml) && loadedHtml.Length > 200)
             {
                 var reader = new SmartReader.Reader(item.Link, loadedHtml);
                 var article = reader.GetArticle();
                 
-                if (article.IsReadable)
+                string? chosenContent = null;
+                if (article.IsReadable && !string.IsNullOrWhiteSpace(article.Content) && article.Content.Length > 250)
+                {
+                    chosenContent = article.Content;
+                }
+                
+                // If SmartReader stripped too much, discarded sections, or wasn't readable,
+                // fall back safely to the cleaned article HTML
+                if (string.IsNullOrWhiteSpace(chosenContent) || chosenContent.Length < 300)
+                {
+                    int bodyStart = loadedHtml.IndexOf("<body", StringComparison.OrdinalIgnoreCase);
+                    if (bodyStart >= 0)
+                    {
+                        int tagClose = loadedHtml.IndexOf('>', bodyStart);
+                        int bodyEnd = loadedHtml.IndexOf("</body>", StringComparison.OrdinalIgnoreCase);
+                        if (tagClose >= 0 && bodyEnd > tagClose)
+                        {
+                            chosenContent = loadedHtml.Substring(tagClose + 1, bodyEnd - tagClose - 1);
+                        }
+                    }
+                    if (string.IsNullOrWhiteSpace(chosenContent))
+                    {
+                        chosenContent = loadedHtml;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(chosenContent) && chosenContent.Length > 80)
                 {
                     var fallbackArticle = new RssItem 
                     {
-                        Title = !string.IsNullOrEmpty(article.Title) ? article.Title : item.Title,
+                        Title = !string.IsNullOrEmpty(article?.Title) ? article.Title : item.Title,
                         Link = item.Link,
-                        Content = article.Content,
-                        Description = article.Excerpt ?? article.TextContent,
-                        Author = article.Byline ?? item.Author,
+                        Content = chosenContent,
+                        Description = article?.Excerpt ?? article?.TextContent ?? item.Description,
+                        Author = article?.Byline ?? item.Author,
                         PublishDate = item.PublishDate,
                         PublicationName = item.PublicationName,
                         PublicationIconUrl = item.PublicationIconUrl,

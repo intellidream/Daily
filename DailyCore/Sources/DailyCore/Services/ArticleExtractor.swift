@@ -52,6 +52,16 @@ public final class ArticleExtractor: @unchecked Sendable {
         }
         
         let isMedium = safeUrlString.contains("medium.com") || (baseArticle?.publicationName?.contains("Medium") == true)
+        
+        let hasSubstantialBaseContent = (baseArticle?.content != nil) &&
+            (baseArticle!.content!.count > 250) &&
+            !baseArticle!.content!.localizedCaseInsensitiveContains("Continue reading on Medium") &&
+            !baseArticle!.content!.localizedCaseInsensitiveContains("member-only story")
+        
+        if isMedium && hasSubstantialBaseContent {
+            return baseArticle!
+        }
+        
         #if canImport(WebKit)
         if isMedium {
             if let mediumArticle = await HeadlessReadabilityParser.shared.extractMediumArticle(
@@ -859,15 +869,34 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             }
         }
         
-        // Give 2s for React/Next.js hydration and member payload rendering
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        // Give 1.5s for initial React/Next.js shell rendering
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        
+        // Trigger scroll hydration to force lazy-rendered member sections into the DOM
+        _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight / 2);")
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight);")
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        _ = try? await wv.evaluateJavaScript("window.scrollTo(0, 0);")
         
         let cleanupScript = """
         (function(){
             var selectors=['#cmp-app-container','.cookie-banner','#cookie-consent','.gdpr-modal',
             '[class*="cookie"]','[id*="cookie"]','[class*="consent"]','[class*="paywall"]',
             '[id*="consent"]','[class*="overlay"]','[id*="piano"]'];
-            selectors.forEach(function(s){document.querySelectorAll(s).forEach(function(e){e.remove();});});
+            selectors.forEach(function(s){
+                document.querySelectorAll(s).forEach(function(e){
+                    if(e.tagName==='ARTICLE'||e.tagName==='MAIN'||e.tagName==='SECTION') return;
+                    if(e.querySelectorAll('p').length>=2||(e.innerText||'').length>300) return;
+                    e.remove();
+                });
+            });
+            var upsells=['.meteredContentUpsell','[data-testid="paywall-dialog"]','[data-testid="upgrade-banner"]','[data-testid="postPaywallBanner"]'];
+            upsells.forEach(function(s){
+                document.querySelectorAll(s).forEach(function(e){
+                    if(e.querySelectorAll('p').length<2&&(e.innerText||'').length<300) e.remove();
+                });
+            });
             document.body.style.overflow='auto';document.documentElement.style.overflow='auto';
             var main=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role="main"]');
             if(main){main.style.display='block';main.style.visibility='visible';main.style.opacity='1';}
@@ -879,7 +908,12 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         (function(){
             var selectors='article, main, [itemprop="articleBody"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';
             var el=document.querySelector(selectors);
-            if(el && el.innerText && el.innerText.length > 200) return '<html><head><meta charset="utf-8"/></head><body>'+el.outerHTML+'</body></html>';
+            if(el && el.innerText && el.innerText.length > 200) {
+                var clone = el.cloneNode(true);
+                var junk = clone.querySelectorAll('button, [data-testid*="clap"], [data-testid*="response"], .responsesStream, [data-testid="postSidebar"]');
+                junk.forEach(function(j){ j.remove(); });
+                return '<html><head><meta charset="utf-8"/></head><body>'+clone.outerHTML+'</body></html>';
+            }
             if(document.body && document.body.innerText && document.body.innerText.length > 500) {
                 return document.documentElement.outerHTML;
             }
@@ -888,22 +922,54 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         """
         
         var extractedHtml: String? = nil
-        for _ in 0..<8 {
+        var lastLen = 0
+        var stableCount = 0
+        
+        for iteration in 0..<12 {
             try? await Task.sleep(nanoseconds: 600_000_000)
-            if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
-                extractedHtml = result
-                break
+            
+            if iteration % 4 == 0 && iteration > 0 {
+                _ = try? await wv.evaluateJavaScript(cleanupScript)
+            }
+            
+            let lenCheckJs = "(function(){ var el = document.querySelector('article') || document.querySelector('main') || document.body; return el && el.innerText ? el.innerText.length : 0; })()"
+            let curLen = (try? await wv.evaluateJavaScript(lenCheckJs) as? Int) ?? 0
+            
+            if curLen > 300 {
+                if curLen == lastLen {
+                    stableCount += 1
+                } else {
+                    stableCount = 0
+                    lastLen = curLen
+                }
+                
+                if stableCount >= 2 || curLen > 3500 || (iteration >= 7 && curLen > 600) {
+                    if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
+                        extractedHtml = result
+                        break
+                    }
+                }
             }
         }
         
         if extractedHtml == nil {
-            if let fullHtml = try? await wv.evaluateJavaScript("document.documentElement.outerHTML") as? String, fullHtml.count > 500 {
+            if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
+                extractedHtml = result
+            } else if let fullHtml = try? await wv.evaluateJavaScript("document.documentElement.outerHTML") as? String, fullHtml.count > 500 {
                 extractedHtml = fullHtml
             }
         }
         
         guard let html = extractedHtml else { return nil }
-        return await self.parse(html: html, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor)
+        
+        // Attempt parsing with Mozilla Readability engine
+        if let readabilityArticle = await self.parse(html: html, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor),
+           let content = readabilityArticle.content, content.count > 250 {
+            return readabilityArticle
+        }
+        
+        // Fallback: Use multi-candidate heuristic container extractor on the sanitized DOM
+        return extractor.parseHtml(html, url: url.absoluteString, baseArticle: baseArticle)
     }
     
     public func scrapeMediumReadingList(urlString: String) async -> [NewsArticle] {

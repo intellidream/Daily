@@ -84,12 +84,52 @@ Following the completion of Medium OAuth login parity across iOS, macOS, and And
 
 ---
 
-## 4. Verification & Testing
+## 5. Complete Article Rendering & Member Hydration Resolution (Update)
+
+### A. Root Causes of Incomplete Medium Articles
+Even when logged in, users observed that Medium articles across all platforms were truncated after a few paragraphs:
+1. **Destructive Selector Deletion (`cleanupScript`)**:
+   - The overlay cleanup script previously executed:
+     `selectors = [..., '[class*="paywall"]', '[class*="overlay"]', ...]; selectors.forEach(s => document.querySelectorAll(s).forEach(e => e.remove()));`
+   - In Medium's React application, member-only article bodies or post containers have classes containing `paywall` (e.g. `postPaywall`, `meteredContent`, `paywall-content`).
+   - Removing all elements matching `[class*="paywall"]` stripped out the actual story body, leaving only the preview teaser!
+2. **Premature Extraction Loop Termination**:
+   - In WinUI, iOS/macOS (`ArticleExtractor.swift`), and Android (`MediumWebViewBridge.kt`), the extraction loops broke on the very first second (when character count exceeded 200–500 chars), capturing only the server-rendered preview before React hydrated the full member story payload.
+3. **RSS `<content:encoded>` Bypassed**:
+   - Medium author and tag RSS feeds already contain the entire article in `<content:encoded>`.
+   - Forcing WebView scraping for every Medium article unconditionally discarded the complete article already present in `item.Content`.
+
+### B. Architectural Solution Across All Platforms
+1. **High-Value Content Fast-Path Preservation**:
+   - In WinUI (`RssFeedDetailPage.xaml.cs`), iOS/macOS (`ArticleExtractor.swift`), and Android (`NewsRepository.kt`):
+     If `item.Content` already contains > 250 characters and does not contain paywall truncation markers (`"Continue reading on Medium"`, `"member-only story"`), the content is preserved and rendered directly without web scraping overhead or risks.
+2. **Content-Guarded Cleanup Script**:
+   - `cleanupScript` enforces strict content safety guards:
+     ```javascript
+     selectors.forEach(function(s){
+         document.querySelectorAll(s).forEach(function(e){
+             if(e.tagName==='ARTICLE'||e.tagName==='MAIN'||e.tagName==='SECTION') return;
+             if(e.querySelectorAll('p').length>=2||(e.innerText||'').length>300) return;
+             e.remove();
+         });
+     });
+     ```
+   - Target only explicit upsell modals (`.meteredContentUpsell`, `[data-testid="paywall-dialog"]`, `[data-testid="upgrade-banner"]`, `[data-testid="postPaywallBanner"]`) when they do not contain real story paragraphs.
+3. **Scroll Hydration & Dynamic Stabilization Loop**:
+   - The WebView extraction triggers smooth scroll events (`window.scrollTo(0, document.body.scrollHeight / 2)`, `window.scrollTo(0, document.body.scrollHeight)`, `window.scrollTo(0, 0)`) to activate Medium's `IntersectionObserver` / lazy rendering.
+   - The extraction loop tracks character length and paragraph count across iterations, waiting for text stabilization before extracting.
+   - Cleaned `<article>` clone strips out interactive claps, responses stream, and follow buttons before passing to readability.
+4. **Resilient Fallback**:
+   - If SmartReader or Readability returns truncated text or fails to parse, the system safely falls back to the cleaned `<article>` DOM so no paragraphs are lost.
+
+---
+
+## 6. Verification & Testing
 
 | Platform / Module | Test Suite / Command | Result | Verification Notes |
 | :--- | :--- | :--- | :--- |
-| **DailyCore (Swift)** | `swift test --package-path DailyCore --filter NewsServiceTests` | **Passed (20/20)** | Added `testMediumImageOptimizationAndReadingListParsing` validating Miro CDN URL regex and scraped article deserialization |
-| **Android (Kotlin)** | `./gradlew :core-model:testDebugUnitTest :core-database:testDebugUnitTest` | **Passed** | Added `testMediumImageOptimizationAndScrapedItemParsing` in `NewsParsersTest.kt` |
+| **DailyCore (Swift)** | `swift test --package-path DailyCore --filter NewsServiceTests` | **Passed (22/22)** | Added `testMediumFullArticleContentPreservationWhenSubstantial` and `testMediumDomExtractionPreservesMemberStoryParagraphs` |
+| **Android (Kotlin)** | `./gradlew :core-model:testDebugUnitTest :core-database:testDebugUnitTest` | **Passed** | Added `testMediumDomExtractionPreservesMemberStoryParagraphs` in `NewsParsersTest.kt` |
 | **macOS Native** | `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` | **BUILD SUCCEEDED** | Signed atomically with Apple Development credentials |
 | **iOS Native** | `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' build` | **BUILD SUCCEEDED** | Clean build with embedded `DailyWidgetsExtension` |
 | **Android App** | `./gradlew assembleDebug` | **BUILD SUCCEEDED** | Verified R8 / DEX compilation without regressions |
@@ -98,7 +138,7 @@ Following the completion of Medium OAuth login parity across iOS, macOS, and And
 
 ---
 
-## 5. Paywall & Security Compliance
+## 7. Paywall & Security Compliance
 - Zero unauthorized paywall circumvention or proxy bypasses are used.
 - The headless WebViews directly leverage the user's authentic session cookies acquired during legitimate sign-in in Settings -> Features.
 - If the user is a paid member, stories render in full. If the user is not a member, Medium displays standard previews, mirroring WinUI and desktop browser behavior identically.

@@ -342,6 +342,17 @@ class NewsRepository(
         try {
             val isMedium = article.link.contains("medium.com") || 
                            article.publicationName?.contains("Medium", ignoreCase = true) == true
+
+            val articleContent = article.content
+            val hasSubstantialContent = !articleContent.isNullOrBlank() && 
+                                         articleContent.length > 250 && 
+                                         !articleContent.contains("Continue reading on Medium", ignoreCase = true) &&
+                                         !articleContent.contains("member-only story", ignoreCase = true)
+
+            if (isMedium && hasSubstantialContent) {
+                return@withContext article
+            }
+
             if (isMedium) {
                 val extractedMedium = syncHandler?.extractMediumArticle(article.link, article)
                 val medContent = extractedMedium?.content

@@ -183,59 +183,120 @@ class MediumWebViewBridge(private val context: Context) {
                         super.onPageFinished(view, loadedUrl)
                         if (hasExtracted) return
 
-                        handler.postDelayed({
-                            if (hasExtracted || !continuation.isActive) return@postDelayed
+                        val cleanupJs = """
+                            (function(){
+                                var selectors=['#cmp-app-container','.cookie-banner','#cookie-consent','.gdpr-modal',
+                                '[class*="cookie"]','[id*="cookie"]','[class*="consent"]','[class*="paywall"]',
+                                '[id*="consent"]','[class*="overlay"]','[id*="piano"]'];
+                                selectors.forEach(function(s){
+                                    document.querySelectorAll(s).forEach(function(e){
+                                        if(e.tagName==='ARTICLE'||e.tagName==='MAIN'||e.tagName==='SECTION') return;
+                                        if(e.querySelectorAll('p').length>=2||(e.innerText||'').length>300) return;
+                                        e.remove();
+                                    });
+                                });
+                                var upsells=['.meteredContentUpsell','[data-testid="paywall-dialog"]','[data-testid="upgrade-banner"]','[data-testid="postPaywallBanner"]'];
+                                upsells.forEach(function(s){
+                                    document.querySelectorAll(s).forEach(function(e){
+                                        if(e.querySelectorAll('p').length<2&&(e.innerText||'').length<300) e.remove();
+                                    });
+                                });
+                                document.body.style.overflow='auto';document.documentElement.style.overflow='auto';
+                                var main=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role="main"]');
+                                if(main){main.style.display='block';main.style.visibility='visible';main.style.opacity='1';}
+                            })()
+                        """.trimIndent()
 
-                            val cleanupJs = """
-                                (function(){
-                                    var selectors=['#cmp-app-container','.cookie-banner','#cookie-consent','.gdpr-modal',
-                                    '[class*="cookie"]','[id*="cookie"]','[class*="consent"]','[class*="paywall"]',
-                                    '[id*="consent"]','[class*="overlay"]','[id*="piano"]'];
-                                    selectors.forEach(function(s){document.querySelectorAll(s).forEach(function(e){e.remove();});});
-                                    document.body.style.overflow='auto';document.documentElement.style.overflow='auto';
-                                    var main=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role="main"]');
-                                    if(main){main.style.display='block';main.style.visibility='visible';main.style.opacity='1';}
-                                })()
-                            """.trimIndent()
-                            webView.evaluateJavascript(cleanupJs, null)
+                        val extractJs = """
+                            (function(){
+                                var selectors='article, main, [itemprop="articleBody"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';
+                                var el=document.querySelector(selectors);
+                                if(el && el.innerText && el.innerText.length > 200) {
+                                    var clone = el.cloneNode(true);
+                                    var junk = clone.querySelectorAll('button, [data-testid*="clap"], [data-testid*="response"], .responsesStream, [data-testid="postSidebar"]');
+                                    junk.forEach(function(j){ j.remove(); });
+                                    return '<html><head><meta charset="utf-8"/></head><body>'+clone.outerHTML+'</body></html>';
+                                }
+                                if(document.body && document.body.innerText && document.body.innerText.length > 500) {
+                                    return document.documentElement.outerHTML;
+                                }
+                                return null;
+                            })()
+                        """.trimIndent()
 
-                            val extractJs = """
-                                (function(){
-                                    var selectors='article, main, [itemprop="articleBody"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';
-                                    var el=document.querySelector(selectors);
-                                    if(el && el.innerText && el.innerText.length > 200) return '<html><head><meta charset="utf-8"/></head><body>'+el.outerHTML+'</body></html>';
-                                    if(document.body && document.body.innerText && document.body.innerText.length > 500) {
-                                        return document.documentElement.outerHTML;
-                                    }
-                                    return null;
-                                })()
-                            """.trimIndent()
+                        var attempts = 0
+                        val maxAttempts = 12
+                        var lastLen = 0
+                        var stableCount = 0
 
-                            webView.evaluateJavascript(extractJs) { htmlResult ->
-                                cleanup()
-                                if (htmlResult.isNullOrBlank() || htmlResult == "null") {
-                                    if (continuation.isActive) continuation.resume(null)
-                                    return@evaluateJavascript
+                        val pollRunnable = object : Runnable {
+                            override fun run() {
+                                if (hasExtracted || !continuation.isActive) return
+                                attempts++
+
+                                // Hydration scroll triggers on early iterations
+                                if (attempts == 2) {
+                                    webView.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight / 2);", null)
+                                } else if (attempts == 4) {
+                                    webView.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight);", null)
+                                } else if (attempts == 6) {
+                                    webView.evaluateJavascript("window.scrollTo(0, 0);", null)
                                 }
 
-                                try {
-                                    val rawHtml = if (htmlResult.startsWith("\"") && htmlResult.endsWith("\"")) {
-                                        org.json.JSONTokener(htmlResult).nextValue().toString()
-                                    } else {
-                                        htmlResult
+                                if (attempts % 4 == 0) {
+                                    webView.evaluateJavascript(cleanupJs, null)
+                                }
+
+                                val lenCheckJs = "(function(){ var el = document.querySelector('article') || document.querySelector('main') || document.body; return el && el.innerText ? el.innerText.length : 0; })()"
+                                webView.evaluateJavascript(lenCheckJs) { lenStr ->
+                                    val curLen = lenStr?.toIntOrNull() ?: 0
+
+                                    if (curLen > 300) {
+                                        if (curLen == lastLen) {
+                                            stableCount++
+                                        } else {
+                                            stableCount = 0
+                                            lastLen = curLen
+                                        }
                                     }
 
-                                    if (rawHtml.length > 100) {
-                                        val parsed = ArticleExtractor.shared.parseHtml(rawHtml, url, baseArticle)
-                                        if (continuation.isActive) continuation.resume(parsed)
+                                    val isReady = stableCount >= 2 || curLen > 3500 || (attempts >= 8 && curLen > 500) || attempts >= maxAttempts
+
+                                    if (isReady) {
+                                        hasExtracted = true
+                                        webView.evaluateJavascript(extractJs) { htmlResult ->
+                                            cleanup()
+                                            if (htmlResult.isNullOrBlank() || htmlResult == "null") {
+                                                if (continuation.isActive) continuation.resume(null)
+                                                return@evaluateJavascript
+                                            }
+
+                                            try {
+                                                val rawHtml = if (htmlResult.startsWith("\"") && htmlResult.endsWith("\"")) {
+                                                    org.json.JSONTokener(htmlResult).nextValue().toString()
+                                                } else {
+                                                    htmlResult
+                                                }
+
+                                                if (rawHtml.length > 100) {
+                                                    val parsed = ArticleExtractor.shared.parseHtml(rawHtml, url, baseArticle)
+                                                    if (continuation.isActive) continuation.resume(parsed)
+                                                } else {
+                                                    if (continuation.isActive) continuation.resume(null)
+                                                }
+                                            } catch (_: Throwable) {
+                                                if (continuation.isActive) continuation.resume(null)
+                                            }
+                                        }
                                     } else {
-                                        if (continuation.isActive) continuation.resume(null)
+                                        handler.postDelayed(this, 600)
                                     }
-                                } catch (_: Throwable) {
-                                    if (continuation.isActive) continuation.resume(null)
                                 }
                             }
-                        }, 2000)
+                        }
+
+                        // Start polling after 1.5s initial settle time
+                        handler.postDelayed(pollRunnable, 1500)
                     }
                 }
 
