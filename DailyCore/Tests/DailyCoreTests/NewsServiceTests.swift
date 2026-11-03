@@ -331,4 +331,65 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertFalse(content.contains("cookie-banner"))
         XCTAssertFalse(content.contains("Recommended story"))
     }
+    
+    // MARK: - 10. Publication Specific Container Extraction Parity
+    
+    func testZfAndEconomicaContainerExtraction() {
+        let zfHtml = """
+        <html>
+        <head><title>ZF Financial Report</title></head>
+        <body>
+            <div class="overlay-content">Banner</div>
+            <div class="articleContent">
+                <p>Banca Transilvania și OMV Petrom au raportat creșteri record pe bursa de la București în trimestrul al treilea.</p>
+                <p>Investițiile masive în energie regenerabilă continuă conform calendarului anunțat acționarilor.</p>
+            </div>
+            <div class="footer-wrap">Footer links</div>
+        </body>
+        </html>
+        """
+        
+        let zfArticle = ArticleExtractor.shared.parseHtml(zfHtml, url: "https://zf.ro/banci/test")
+        XCTAssertNotNil(zfArticle.content)
+        XCTAssertTrue(zfArticle.content?.contains("Banca Transilvania și OMV Petrom") == true)
+        XCTAssertFalse(zfArticle.content?.contains("overlay-content") == true)
+        
+        let economicaHtml = """
+        <html>
+        <head><title>Economica Analysis</title></head>
+        <body>
+            <div class="header-nav">Nav</div>
+            <div class="single__content">
+                <p>Piața de retail din România atinge un nou maxim istoric pe fondul consumului intern susținut.</p>
+                <p>Comercianții mizează pe promoții agresive pentru sezonul sărbătorilor de iarnă.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        let ecoArticle = ArticleExtractor.shared.parseHtml(economicaHtml, url: "https://economica.net/retail/test")
+        XCTAssertNotNil(ecoArticle.content)
+        XCTAssertTrue(ecoArticle.content?.contains("Piața de retail din România") == true)
+        XCTAssertFalse(ecoArticle.content?.contains("header-nav") == true)
+    }
+    
+    func testTechCrunchAndCnbcContainerExtraction() {
+        let tcHtml = """
+        <html>
+        <head><title>AI Breakthrough</title></head>
+        <body>
+            <div class="wp-block-techcrunch-mega-menu__content">Menu</div>
+            <div class="entry-content wp-block-post-content">
+                <p>European AI startup secures landmark round for open source foundation models.</p>
+                <p>The consortium includes sovereign funds and tier-one venture partners.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        let tcArticle = ArticleExtractor.shared.parseHtml(tcHtml, url: "https://techcrunch.com/2026/test")
+        XCTAssertNotNil(tcArticle.content)
+        XCTAssertTrue(tcArticle.content?.contains("European AI startup secures landmark round") == true)
+        XCTAssertFalse(tcArticle.content?.contains("wp-block-techcrunch-mega-menu") == true)
+    }
 }

@@ -742,7 +742,7 @@ private fun FloatingRecommendationsBar(
 
 private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMultiplier: Double): String {
     val textColor = if (isDark) "#E0E0E0" else "#1A1A1A"
-    val linkColor = if (isDark) "#00D2FF" else "#0066CC"
+    val linkColor = if (isDark) "#66B2FF" else "#0066CC"
     val metaColor = if (isDark) "#A0A0A0" else "#666666"
     val bodyBackground = if (isDark) "#1A1423" else "#EDE5D9"
     val baseFontSize = (18.0 * fontSizeMultiplier).toInt()
@@ -757,9 +757,26 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
     val authorHtml = if (!article.author.isNullOrBlank()) " &bull; <span>By ${article.author}</span>" else ""
     val metaHtml = "<div class='meta'><span>Published: $dateStr</span>$authorHtml</div>"
 
-    val contentBody = article.content?.takeIf { it.isNotBlank() }
-        ?: article.description?.takeIf { it.isNotBlank() }
-        ?: "<p>No content preview available. Tap <strong>Open in Browser</strong> from the top menu to read the full story on the publisher's website.</p>"
+    val rawBody = article.content?.trim() ?: ""
+    val contentBody = when {
+        rawBody.isNotBlank() -> rawBody
+        !article.description.isNullOrBlank() -> """
+            <div class='paywall-card'>
+                <div class='paywall-icon'>📰</div>
+                <h3>Preview from ${article.publicationName ?: "Publisher"}</h3>
+                <p>${article.description}</p>
+                <a href='${article.link}' class='open-browser-btn'>Open on ${article.publicationName ?: "Publisher"}</a>
+            </div>
+        """.trimIndent()
+        else -> """
+            <div class='paywall-card'>
+                <div class='paywall-icon'>🔒</div>
+                <h3>Full Article on ${article.publicationName ?: "Publisher"}</h3>
+                <p>The content may be behind a paywall or require an active subscription.</p>
+                <a href='${article.link}' class='open-browser-btn'>Open on ${article.publicationName ?: "Publisher"}</a>
+            </div>
+        """.trimIndent()
+    }
 
     return """
     <!DOCTYPE html>
@@ -781,9 +798,9 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
                 -webkit-text-size-adjust: 100%;
             }
             .article-wrap {
-                max-width: 720px;
+                max-width: 800px;
                 margin: 0 auto;
-                padding: 20px 18px 80px 18px;
+                padding: 24px 20px 80px 20px;
             }
             h1.title {
                 font-size: ${(baseFontSize * 1.6).toInt()}px;
@@ -791,6 +808,12 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
                 line-height: 1.25;
                 margin: 0 0 12px 0;
                 letter-spacing: -0.5px;
+            }
+            h2, h3, h4 {
+                margin-top: 32px;
+                margin-bottom: 16px;
+                font-weight: 700;
+                line-height: 1.3;
             }
             .meta {
                 font-size: 13px;
@@ -801,16 +824,16 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
             }
             .featured-image {
                 width: 100%;
-                max-height: 380px;
+                max-height: 420px;
                 object-fit: cover;
-                border-radius: 16px;
-                margin: 12px 0 24px 0;
+                border-radius: 14px;
+                margin: 12px 0 28px 0;
                 box-shadow: 0 8px 24px rgba(0,0,0,0.25);
             }
             p { margin-bottom: 20px; }
             a { color: $linkColor; text-decoration: none; font-weight: 500; }
             a:hover { text-decoration: underline; }
-            img { max-width: 100%; height: auto; border-radius: 12px; margin: 20px 0; display: block; }
+            img { max-width: 100%; height: auto; border-radius: 10px; margin: 24px 0; display: block; }
             figure { margin: 20px 0; }
             figcaption { font-size: 12px; color: $metaColor; text-align: center; margin-top: 6px; }
             blockquote {
@@ -835,6 +858,58 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
                 padding: 14px;
                 border-radius: 10px;
                 overflow-x: auto;
+            }
+            table {
+                width: 100%;
+                max-width: 100%;
+                border-collapse: collapse;
+                margin: 24px 0;
+                font-size: 0.9em;
+            }
+            th, td {
+                padding: 10px 14px;
+                border: 1px solid ${if (isDark) "rgba(255,255,255,0.12)" else "rgba(0,0,0,0.12)"};
+                text-align: left;
+            }
+            th {
+                background: ${if (isDark) "rgba(255,255,255,0.06)" else "rgba(0,0,0,0.04)"};
+                font-weight: 600;
+            }
+            iframe, video {
+                max-width: 100%;
+                width: 100%;
+                border-radius: 12px;
+                margin: 24px 0;
+                display: block;
+                border: none;
+            }
+            hr {
+                border: none;
+                border-top: 1px solid ${if (isDark) "rgba(255,255,255,0.12)" else "rgba(0,0,0,0.12)"};
+                margin: 32px 0;
+            }
+            .paywall-card {
+                background: ${if (isDark) "rgba(255,255,255,0.04)" else "rgba(0,0,0,0.03)"};
+                border: 1px solid ${if (isDark) "rgba(255,255,255,0.12)" else "rgba(0,0,0,0.12)"};
+                border-radius: 16px;
+                padding: 24px;
+                text-align: center;
+                margin: 32px 0;
+            }
+            .paywall-icon {
+                font-size: 32px;
+                margin-bottom: 12px;
+            }
+            .open-browser-btn {
+                display: inline-block;
+                margin-top: 16px;
+                padding: 10px 20px;
+                background: ${if (isDark) "rgba(102, 178, 255, 0.15)" else "rgba(0, 102, 204, 0.1)"};
+                color: $linkColor !important;
+                border: 1px solid ${if (isDark) "rgba(102, 178, 255, 0.3)" else "rgba(0, 102, 204, 0.3)"};
+                border-radius: 20px;
+                font-weight: 600;
+                font-size: 14px;
             }
         </style>
     </head>

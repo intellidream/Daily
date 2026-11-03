@@ -112,7 +112,7 @@ public final class ArticleExtractor: @unchecked Sendable {
         let articlePatterns = [
             "<article[^>]*>([\\s\\S]*?)</article>",
             "<div[^>]+itemprop=[\"']articleBody[\"'][^>]*>([\\s\\S]*?)</div>",
-            "<div[^>]+class=[\"'][^\"']*(?:article[-_]body|entry[-_]content|post[-_]content|story[-_]body|article__content|article-text)[^\"']*[\"'][^>]*>([\\s\\S]*?)</div>",
+            "<div[^>]+class=[\"'][^\"']*(?:article[-_]body|entry[-_]content|post[-_]content|story[-_]body|article__content|article-text|articlecontent|single__content|wp-block-post-content|pagebuilder-article|articlebody)[^\"']*[\"'][^>]*>([\\s\\S]*?)</div>",
             "<main[^>]*>([\\s\\S]*?)</main>"
         ]
         
@@ -449,7 +449,7 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     try {
                         var tempDiv = doc.createElement("div");
                         tempDiv.innerHTML = article.content;
-                        var explicitBody = tempDiv.querySelector("[itemprop='articleBody']");
+                        var explicitBody = tempDiv.querySelector("[itemprop='articleBody'], .articleContent, .single__content, .entry-content, .article-body, .wp-block-post-content, .articlecontent");
                         if (explicitBody && explicitBody.textContent.trim().length > 40) {
                             finalContent = explicitBody.innerHTML;
                         }

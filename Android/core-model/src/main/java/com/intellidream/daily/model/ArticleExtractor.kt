@@ -256,7 +256,11 @@ class ArticleExtractor {
                     tagHeader.contains("post-content") ||
                     tagHeader.contains("story-body") ||
                     tagHeader.contains("article__content") ||
-                    tagHeader.contains("article-text")
+                    tagHeader.contains("article-text") ||
+                    tagHeader.contains("articlecontent") ||
+                    tagHeader.contains("single__content") ||
+                    tagHeader.contains("wp-block-post-content") ||
+                    tagHeader.contains("pagebuilder-article")
 
             val isJunk = junkClasses.any { tagHeader.contains(it) }
 

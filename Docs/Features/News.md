@@ -244,5 +244,24 @@ When retrieving recommendation feed items concurrently in the briefing engine or
   - **Self-Healing Startup**: Added `DeduplicateSavedArticlesAsync()` called on startup initialization to group existing duplicates, merge them into the canonical deterministic GUID row, and mark the redundant random GUID rows as deleted so they sync and soft-delete from Supabase.
   - **Reactive UI Refresh on Sync**: Exposed `OnSavedArticlesPulled` in `ISyncService`. Subscribed to it inside `RssArticleService` so that when a background sync downloads a new saved article from another machine, the UI cache instantly refreshes, preventing "ghost" unsaved visual states that cause users to create duplicates.
 
+### 6.6 Cross-Platform Reading Rendering Parity & Article Extraction (November 2026)
+- **WinUI as Gold Standard**: In-depth benchmark analysis of all 18 default news sources revealed WinUI provided the most legible, distraction-free reading experience due to its centered reading measure (`max-width: 800px; margin: 0 auto;`), calm link styling, and structured HTML parsing.
+- **Container Selector Expansion**:
+  - Top Romanian and international sources previously fell back prematurely to aggressive paragraph scrapers because their semantic DOM wrappers were missing from container heuristics.
+  - Added support for `div.articleContent` / `div.articlecontent` (*Ziarul Financiar*), `div.single__content` / `div.article__content` (*Economica.net*), `div.wp-block-post-content` / `div.entry-content` (*TechCrunch*), and `div.pagebuilder-article` / `div.articlebody` (*CNBC*).
+  - Synchronized across Apple platforms (`DailyCore/Sources/DailyCore/Services/ArticleExtractor.swift`) and Android (`com.intellidream.daily.model.ArticleExtractor.kt`).
+- **Typography, Measure & Media Styling Alignment**:
+  - Aligned HTML/CSS rendering templates across iOS (`iOS/Daily/Views/News/ArticleWebView.swift`), macOS (`MacOS/Daily/Views/News/ArticleWebView.swift`), and Android (`Android/app/src/main/java/com/intellidream/daily/presentation/news/NewsReaderSheet.kt`):
+    - **Link Colors**: Calm accent blue (`#66B2FF` in Dark Mode, `#0066CC` in Light Mode) replacing harsh default blue underlines.
+    - **Reading Measure**: Centered `max-width: 800px; margin: 0 auto;` container with fluid padding.
+    - **Header Hierarchy**: Explicit weights, line heights, and margins for `h2`, `h3`, and `h4` headings.
+    - **Responsive Tables & Media**: Horizontally scrollable `table` wrappers with subtle borders, plus fluid `iframe, video, object` embeds to prevent horizontal clipping.
+    - **Protected Publications & Paywall Fallbacks**: Styled paywall briefing card (`.paywall-card`) for anti-bot / Cloudflare-protected publications (e.g. *The Economist*) or JS-redirect aggregators (e.g. *Google News*), matching WinUI's graceful fallback card.
+- **Android Full Article Lazy Trigger Fix**:
+  - In `NewsReaderSheet.kt`, fixed an issue where RSS feeds carrying item summaries/descriptions caused the reader to skip triggering full background article extraction. Explicitly checks and triggers `viewModel.loadFullArticle(article)` whenever an article is opened.
+- **Substack Integration Architecture**:
+  - Designed comprehensive integration specification for Substack feeds, user library bookmarks, and authenticated reading, documented in [Substack_News_Integration_Investigation.md](file:///Users/mihai/Source/Daily/Docs/Features/Substack_News_Integration_Investigation.md).
+
+
 
 

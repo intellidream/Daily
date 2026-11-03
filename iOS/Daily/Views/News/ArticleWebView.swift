@@ -33,7 +33,7 @@ public struct ArticleWebView: UIViewRepresentable {
     
     private func generateReaderHtml(article: NewsArticle, isDark: Bool, fontSizeMultiplier: Double) -> String {
         let textColor = isDark ? "#E0E0E0" : "#1A1A1A"
-        let linkColor = isDark ? "#00D2FF" : "#0066CC"
+        let linkColor = isDark ? "#66B2FF" : "#0066CC"
         let metaColor = isDark ? "#A0A0A0" : "#666666"
         let bodyBackground = isDark ? "#1A1423" : "#EDE5D9"
         let baseFontSize = Int(18.0 * fontSizeMultiplier)
@@ -55,7 +55,29 @@ public struct ArticleWebView: UIViewRepresentable {
         }
         metaHtml += "</div>"
         
-        let contentBody = article.content ?? article.description ?? "<p>No content preview available.</p>"
+        let rawBody = article.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let contentBody: String
+        if !rawBody.isEmpty {
+            contentBody = rawBody
+        } else if let desc = article.description, !desc.isEmpty {
+            contentBody = """
+            <div class='paywall-card'>
+                <div class='paywall-icon'>📰</div>
+                <h3>Preview from \(article.publicationName ?? "Publisher")</h3>
+                <p>\(desc)</p>
+                <a href='\(article.link)' class='open-browser-btn'>Open on \(article.publicationName ?? "Publisher")</a>
+            </div>
+            """
+        } else {
+            contentBody = """
+            <div class='paywall-card'>
+                <div class='paywall-icon'>🔒</div>
+                <h3>Full Article on \(article.publicationName ?? "Publisher")</h3>
+                <p>The content may be behind a paywall or require an active subscription.</p>
+                <a href='\(article.link)' class='open-browser-btn'>Open on \(article.publicationName ?? "Publisher")</a>
+            </div>
+            """
+        }
         
         return """
         <!DOCTYPE html>
@@ -82,9 +104,9 @@ public struct ArticleWebView: UIViewRepresentable {
                     -webkit-text-size-adjust: 100%;
                 }
                 .article-wrap {
-                    max-width: 720px;
+                    max-width: 800px;
                     margin: 0 auto;
-                    padding: 20px 18px 40px 18px;
+                    padding: 24px 20px 60px 20px;
                 }
                 h1.title {
                     font-size: \(Int(Double(baseFontSize) * 1.6))px;
@@ -92,6 +114,12 @@ public struct ArticleWebView: UIViewRepresentable {
                     line-height: 1.25;
                     margin: 0 0 12px 0;
                     letter-spacing: -0.5px;
+                }
+                h2, h3, h4 {
+                    margin-top: 32px;
+                    margin-bottom: 16px;
+                    font-weight: 700;
+                    line-height: 1.3;
                 }
                 .meta {
                     font-size: 13px;
@@ -102,10 +130,10 @@ public struct ArticleWebView: UIViewRepresentable {
                 }
                 .featured-image {
                     width: 100%;
-                    max-height: 380px;
+                    max-height: 420px;
                     object-fit: cover;
-                    border-radius: 16px;
-                    margin: 12px 0 24px 0;
+                    border-radius: 14px;
+                    margin: 12px 0 28px 0;
                     box-shadow: 0 8px 24px rgba(0,0,0,0.25);
                 }
                 p {
@@ -122,8 +150,8 @@ public struct ArticleWebView: UIViewRepresentable {
                 img {
                     max-width: 100%;
                     height: auto;
-                    border-radius: 12px;
-                    margin: 20px 0;
+                    border-radius: 10px;
+                    margin: 24px 0;
                     display: block;
                 }
                 figure {
@@ -162,6 +190,58 @@ public struct ArticleWebView: UIViewRepresentable {
                     padding: 14px;
                     border-radius: 10px;
                     overflow-x: auto;
+                }
+                table {
+                    width: 100%;
+                    max-width: 100%;
+                    border-collapse: collapse;
+                    margin: 24px 0;
+                    font-size: 0.9em;
+                }
+                th, td {
+                    padding: 10px 14px;
+                    border: 1px solid \(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)");
+                    text-align: left;
+                }
+                th {
+                    background: \(isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)");
+                    font-weight: 600;
+                }
+                iframe, video {
+                    max-width: 100%;
+                    width: 100%;
+                    border-radius: 12px;
+                    margin: 24px 0;
+                    display: block;
+                    border: none;
+                }
+                hr {
+                    border: none;
+                    border-top: 1px solid \(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)");
+                    margin: 32px 0;
+                }
+                .paywall-card {
+                    background: \(isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)");
+                    border: 1px solid \(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)");
+                    border-radius: 16px;
+                    padding: 24px;
+                    text-align: center;
+                    margin: 32px 0;
+                }
+                .paywall-icon {
+                    font-size: 32px;
+                    margin-bottom: 12px;
+                }
+                .open-browser-btn {
+                    display: inline-block;
+                    margin-top: 16px;
+                    padding: 10px 20px;
+                    background: \(isDark ? "rgba(102, 178, 255, 0.15)" : "rgba(0, 102, 204, 0.1)");
+                    color: \(linkColor) !important;
+                    border: 1px solid \(isDark ? "rgba(102, 178, 255, 0.3)" : "rgba(0, 102, 204, 0.3)");
+                    border-radius: 20px;
+                    font-weight: 600;
+                    font-size: 14px;
                 }
             </style>
         </head>

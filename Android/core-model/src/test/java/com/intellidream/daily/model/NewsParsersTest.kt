@@ -343,5 +343,65 @@ class NewsParsersTest {
         assertNotNull(extracted.content)
         assertTrue(extracted.content!!.contains("Detailed briefing from RSS feed"))
     }
+
+    @Test
+    fun testZfAndEconomicaContainerExtraction() {
+        val zfHtml = """
+            <html>
+            <head><title>ZF Financial Report</title></head>
+            <body>
+                <div class="overlay-content">Banner</div>
+                <div class="articleContent">
+                    <p>Banca Transilvania si OMV Petrom au raportat cresteri record pe bursa de la Bucuresti in trimestrul al treilea.</p>
+                    <p>Investitiile masive in energie regenerabila continua conform calendarului anuntat actionarilor.</p>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val zfArticle = ArticleExtractor.shared.parseHtml(zfHtml, "https://zf.ro/banci/test")
+        assertNotNull(zfArticle.content)
+        assertTrue(zfArticle.content!!.contains("Banca Transilvania si OMV Petrom"))
+        assertTrue(!zfArticle.content!!.contains("overlay-content"))
+
+        val ecoHtml = """
+            <html>
+            <head><title>Economica Analysis</title></head>
+            <body>
+                <div class="header-nav">Nav</div>
+                <div class="single__content">
+                    <p>Piata de retail din Romania atinge un nou maxim istoric pe fondul consumului intern sustinut.</p>
+                    <p>Comerciantii mizeaza pe promotii agresive pentru sezonul sarbatorilor de iarna.</p>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val ecoArticle = ArticleExtractor.shared.parseHtml(ecoHtml, "https://economica.net/retail/test")
+        assertNotNull(ecoArticle.content)
+        assertTrue(ecoArticle.content!!.contains("Piata de retail din Romania"))
+        assertTrue(!ecoArticle.content!!.contains("header-nav"))
+    }
+
+    @Test
+    fun testTechCrunchAndCnbcContainerExtraction() {
+        val tcHtml = """
+            <html>
+            <head><title>AI Breakthrough</title></head>
+            <body>
+                <div class="wp-block-techcrunch-mega-menu__content">Menu</div>
+                <div class="entry-content wp-block-post-content">
+                    <p>European AI startup secures landmark round for open source foundation models.</p>
+                    <p>The consortium includes sovereign funds and tier-one venture partners.</p>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val tcArticle = ArticleExtractor.shared.parseHtml(tcHtml, "https://techcrunch.com/2026/test")
+        assertNotNull(tcArticle.content)
+        assertTrue(tcArticle.content!!.contains("European AI startup secures landmark round"))
+        assertTrue(!tcArticle.content!!.contains("wp-block-techcrunch-mega-menu"))
+    }
 }
 
