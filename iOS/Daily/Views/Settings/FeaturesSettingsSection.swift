@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 import DailyCore
 
 public struct FeaturesSettingsSection: View {
@@ -384,12 +385,19 @@ public struct FeaturesSettingsSection: View {
         }
         .sheet(isPresented: $showMediumLoginSheet) {
             MediumLoginSheet()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .alert("Disconnect Medium", isPresented: $showDisconnectMediumAlert) {
             Button("Disconnect", role: .destructive) {
                 settingsService.update {
                     $0.newsMediumUsername = nil
                     $0.newsMediumReadingListUrl = nil
+                }
+                WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+                    for cookie in cookies where cookie.domain.contains("medium.com") {
+                        WKWebsiteDataStore.default().httpCookieStore.delete(cookie)
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}

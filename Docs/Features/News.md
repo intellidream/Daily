@@ -272,6 +272,36 @@ When retrieving recommendation feed items concurrently in the briefing engine or
     - Added recommendation carousel pre-cleaning (`.content-listing`, `.cards-collection`, `.bong.carousel`) to the universal `SmartReader` fallback path to protect all feeds against false-positive recommendation card capture.
     - In `RssFeedDetailPage.xaml.cs`, preserved existing RSS item metadata (`ImageUrl`, `Author`) if extracted values are null, and ensured graceful fallback to `item.Content` if body extraction is empty. 100% regression-free for all other news publications.
 
+### 6.8 Medium Web OAuth Authentication Parity & Dialog Expansion (November 2026)
+- **Context & User Need**:
+  - On WinUI, Medium login has always been the gold standard: opens an expansive secondary window with a full `WebView2` allowing login via Facebook, Google, Apple, or email, automatically detecting the authenticated handle upon redirect.
+  - On non-WinUI platforms, users experienced two major obstacles:
+    1. The login dialog did not expand to show the web interface, or was limited strictly to typing a manual username handle.
+    2. Social login (specifically via Facebook OAuth) failed completely because embedded webviews lacked popup window delegation and third-party cookie handling.
+- **Architectural Resolution Across Platforms**:
+  - **Android (Native Compose & WebView Interop)**:
+    - *Problem*: `SettingsScreen.kt` formerly presented an `AlertDialog` containing only an `OutlinedTextField` for manual username input, with zero web or OAuth capabilities.
+    - *Fix*: Created a dedicated, expandable [MediumLoginSheet.kt](file:///Users/mihai/Source/Daily/Android/app/src/main/java/com/intellidream/daily/presentation/MediumLoginSheet.kt) matching Daily's Liquid Glass aesthetics:
+      - Uses `Dialog(properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false))` taking 94% height on mobile and a 720dp centered modal on foldables (`configuration.screenWidthDp >= 600`).
+      - Integrates an Android `WebView` with `WebChromeClient.onCreateWindow` routing popup windows back to the primary WebView so that Facebook and Google OAuth flows stay within the active view.
+      - Enables `CookieManager.setAcceptThirdPartyCookies(webView, true)` and sets a modern Chrome Mobile User-Agent to satisfy Facebook/Google OAuth requirements.
+      - Monitors `WebViewClient.shouldOverrideUrlLoading`, `onPageStarted`, and `onPageFinished` for Medium redirect URLs (`/@<username>`, `<user>.medium.com`, or `/me`), extracting the username and auto-completing setup.
+      - Retains the top quick handle bar for users preferring direct username connection.
+      - Clears `medium.com` cookies upon Disconnect via `CookieManager.removeAllCookies(null)`.
+  - **macOS (SwiftUI & AppKit/WebKit)**:
+    - *Problem*: In SwiftUI on macOS, `.sheet` without explicit dimensions collapses into the minimum intrinsic size of its children. Because `NSViewRepresentable` (`WKWebView`) has no intrinsic size, the sheet collapsed into a tiny 60px horizontal strip containing only the username text field, completely obscuring the web login view.
+    - *Fix*: Configured `.frame(minWidth: 720, idealWidth: 800, maxWidth: 960, minHeight: 680, idealHeight: 780, maxHeight: 920)` on the root `NavigationStack` in [MediumLoginSheet.swift](file:///Users/mihai/Source/Daily/MacOS/Daily/Views/Settings/MediumLoginSheet.swift), ensuring the dialog always opens fully expanded.
+    - Implemented `WKUIDelegate.webView(_:createWebViewWith:for:windowFeatures:)` and handled `navigationAction.targetFrame == nil` in `decidePolicyFor navigationAction` so Facebook OAuth popups load seamlessly inside the web view.
+    - Configured a desktop Safari User-Agent and added automatic cookie deletion upon account disconnection.
+  - **iOS (SwiftUI & UIKit/WebKit)**:
+    - Configured `.presentationDetents([.large])` and `.presentationDragIndicator(.visible)` on [MediumLoginSheet.swift](file:///Users/mihai/Source/Daily/iOS/Daily/Views/Settings/MediumLoginSheet.swift) to ensure full expansion.
+    - Implemented `WKUIDelegate` and `navigationAction.targetFrame == nil` interception in `Coordinator`, routing Facebook OAuth popups into the main WKWebView.
+    - Set iOS Safari User-Agent and shared `WKWebsiteDataStore.default()` persistence.
+- **Verification & Parity**:
+  - Unit tests verified redirect URL parsing across root domains, subdomains, `/me` navigation, and callback URLs on both Swift (`NewsServiceTests.testMediumOAuthRedirectUrlParsing`) and Kotlin (`NewsParsersTest.testMediumOAuthRedirectUrlParsing`).
+  - macOS, iOS, and Android applications compiled with zero errors and deployed to physical iPhone 16 Pro ("Schmitz") and Google Pixel 9 Pro ("Trapper").
+
+
 
 
 

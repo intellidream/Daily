@@ -1,6 +1,7 @@
 package com.intellidream.daily.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -152,6 +153,62 @@ class NewsParsersTest {
             author = "BBC Correspondent"
         )
         assertNull(extractMediumUsername(nonMediumArticle))
+    }
+
+    @Test
+    fun testMediumOAuthRedirectUrlParsing() {
+        fun parseHandle(urlString: String): Pair<String?, Boolean> {
+            val uri = try { java.net.URI(urlString) } catch (_: Exception) { return Pair(null, false) }
+            val host = uri.host?.lowercase() ?: return Pair(null, false)
+            if (host.contains("medium.com")) {
+                val path = uri.path ?: ""
+                if (path.startsWith("/@")) {
+                    val parts = path.removePrefix("/@").split("/")
+                    val detected = parts.firstOrNull()?.trim()
+                    if (!detected.isNullOrEmpty()) {
+                        return Pair(detected, false)
+                    }
+                } else if (host != "medium.com" && host != "www.medium.com" && host != "api.medium.com" && host.endsWith(".medium.com")) {
+                    val sub = host.substringBefore(".medium.com").trim()
+                    if (sub.isNotEmpty()) {
+                        return Pair(sub, false)
+                    }
+                } else if (path == "/" || path == "" || path == "/?source=logo") {
+                    return Pair(null, true)
+                }
+            }
+            return Pair(null, false)
+        }
+
+        // Direct profile URL after Facebook OAuth redirect
+        val direct = parseHandle("https://medium.com/@mihai_daily")
+        assertEquals("mihai_daily", direct.first)
+        assertFalse(direct.second)
+
+        // Reading list profile URL
+        val readingList = parseHandle("https://medium.com/@alexandru/list/reading-list")
+        assertEquals("alexandru", readingList.first)
+        assertFalse(readingList.second)
+
+        // Subdomain URL
+        val subdomain = parseHandle("https://marclou.medium.com/post-title-1234")
+        assertEquals("marclou", subdomain.first)
+        assertFalse(subdomain.second)
+
+        // Root homepage redirect needing /me
+        val root = parseHandle("https://medium.com/")
+        assertNull(root.first)
+        assertTrue(root.second)
+
+        // Root with logo param
+        val rootLogo = parseHandle("https://medium.com/?source=logo")
+        assertNull(rootLogo.first)
+        assertTrue(rootLogo.second)
+
+        // Intermediate OAuth callback before final redirect
+        val oauthCallback = parseHandle("https://medium.com/m/callback/facebook?code=AQD123")
+        assertNull(oauthCallback.first)
+        assertFalse(oauthCallback.second)
     }
 
     @Test

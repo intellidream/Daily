@@ -274,6 +274,63 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertEqual(minute, 11)
     }
     
+    // MARK: - 8b. Medium OAuth URL Redirection & Handle Extraction
+    
+    func testMediumOAuthRedirectUrlParsing() {
+        func parseHandle(from urlString: String) -> (handle: String?, shouldNavigateMe: Bool) {
+            guard let url = URL(string: urlString), let host = url.host?.lowercased() else {
+                return (nil, false)
+            }
+            if host.contains("medium.com") {
+                let path = url.path
+                if path.hasPrefix("/@") {
+                    let parts = path.dropFirst(2).split(separator: "/")
+                    if let first = parts.first, !first.isEmpty {
+                        return (String(first), false)
+                    }
+                } else if host != "medium.com" && host != "www.medium.com" && host != "api.medium.com" && host.hasSuffix(".medium.com") {
+                    let sub = host.replacingOccurrences(of: ".medium.com", with: "")
+                    if !sub.isEmpty {
+                        return (sub, false)
+                    }
+                } else if path == "/" || path == "" || path == "/?source=logo" {
+                    return (nil, true)
+                }
+            }
+            return (nil, false)
+        }
+        
+        // Direct profile URL after Facebook OAuth redirect
+        let direct = parseHandle(from: "https://medium.com/@mihai_daily")
+        XCTAssertEqual(direct.handle, "mihai_daily")
+        XCTAssertFalse(direct.shouldNavigateMe)
+        
+        // Reading list profile URL
+        let readingList = parseHandle(from: "https://medium.com/@alexandru/list/reading-list")
+        XCTAssertEqual(readingList.handle, "alexandru")
+        XCTAssertFalse(readingList.shouldNavigateMe)
+        
+        // Subdomain URL
+        let subdomain = parseHandle(from: "https://marclou.medium.com/post-title-1234")
+        XCTAssertEqual(subdomain.handle, "marclou")
+        XCTAssertFalse(subdomain.shouldNavigateMe)
+        
+        // Root homepage redirect needing /me
+        let root = parseHandle(from: "https://medium.com/")
+        XCTAssertNil(root.handle)
+        XCTAssertTrue(root.shouldNavigateMe)
+        
+        // Root with logo param
+        let rootLogo = parseHandle(from: "https://medium.com/?source=logo")
+        XCTAssertNil(rootLogo.handle)
+        XCTAssertTrue(rootLogo.shouldNavigateMe)
+        
+        // Intermediate OAuth callback before final redirect
+        let oauthCallback = parseHandle(from: "https://medium.com/m/callback/facebook?code=AQD123")
+        XCTAssertNil(oauthCallback.handle)
+        XCTAssertFalse(oauthCallback.shouldNavigateMe)
+    }
+    
     // MARK: - 9. Short Article Extraction & Cookie Script Pruning (Republica Parity)
     
     func testRepublicaShortArticleExtraction() async throws {

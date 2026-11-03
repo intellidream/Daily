@@ -75,6 +75,7 @@ public struct MediumLoginSheet: View {
                                 handleDetectedUsername(username)
                             }
                         )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
                         if isLoadingWeb {
                             VStack(spacing: 12) {
@@ -88,6 +89,7 @@ public struct MediumLoginSheet: View {
                             .background(Color(hex: "#120D1A").opacity(0.85))
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .navigationTitle("Login to Medium")
@@ -101,6 +103,8 @@ public struct MediumLoginSheet: View {
                 }
             }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
     
     private func connectManualUsername() {
@@ -136,23 +140,42 @@ private struct MediumWebViewRepresentable: UIViewRepresentable {
     
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.websiteDataStore = WKWebsiteDataStore.default()
+        
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1"
         webView.load(URLRequest(url: initialUrl))
         return webView
     }
     
     func updateUIView(_ uiView: WKWebView, context: Context) {}
     
-    class Coordinator: NSObject, WKNavigationDelegate {
+    class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let parent: MediumWebViewRepresentable
+        private var detectedCompleted = false
         
         init(_ parent: MediumWebViewRepresentable) {
             self.parent = parent
         }
         
+        // MARK: - WKUIDelegate (Window & Popup Management for OAuth like Facebook / Google)
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+        
+        // MARK: - WKNavigationDelegate
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             parent.isLoading = true
+        }
+        
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            checkUrl(webView.url, webView: webView)
         }
         
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -161,6 +184,11 @@ private struct MediumWebViewRepresentable: UIViewRepresentable {
         }
         
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+                decisionHandler(.cancel)
+                return
+            }
             if let url = navigationAction.request.url {
                 if checkUrl(url, webView: webView) {
                     decisionHandler(.cancel)
@@ -172,16 +200,26 @@ private struct MediumWebViewRepresentable: UIViewRepresentable {
         
         @discardableResult
         private func checkUrl(_ url: URL?, webView: WKWebView) -> Bool {
-            guard let url = url, let host = url.host?.lowercased() else { return false }
+            guard !detectedCompleted, let url = url, let host = url.host?.lowercased() else { return false }
             
             if host.contains("medium.com") {
                 let path = url.path
                 if path.hasPrefix("/@") {
                     let parts = path.dropFirst(2).split(separator: "/")
                     if let first = parts.first, !first.isEmpty {
+                        detectedCompleted = true
                         let detected = String(first)
                         DispatchQueue.main.async {
                             self.parent.onUsernameDetected(detected)
+                        }
+                        return true
+                    }
+                } else if host != "medium.com" && host != "www.medium.com" && host != "api.medium.com" && host.hasSuffix(".medium.com") {
+                    let sub = host.replacingOccurrences(of: ".medium.com", with: "")
+                    if !sub.isEmpty {
+                        detectedCompleted = true
+                        DispatchQueue.main.async {
+                            self.parent.onUsernameDetected(sub)
                         }
                         return true
                     }

@@ -1063,6 +1063,9 @@ private fun NewsSettingsCard(
                                     onUpdateSettings { s ->
                                         s.copy(newsMediumUsername = null, newsMediumReadingListUrl = null)
                                     }
+                                    try {
+                                        android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                                    } catch (_: Exception) {}
                                 }
                                 .padding(vertical = 9.dp),
                             contentAlignment = Alignment.Center
@@ -1118,57 +1121,21 @@ private fun NewsSettingsCard(
     }
 
     if (showMediumDialog) {
-        AlertDialog(
-            onDismissRequest = { showMediumDialog = false },
-            title = {
-                Text(text = "Connect Medium", color = Color.White, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Enter your Medium username (e.g. @username or username) to sync your public reading list.",
-                        color = ThemeColors.textSecondary,
-                        fontSize = 13.sp
-                    )
-                    OutlinedTextField(
-                        value = mediumUsernameInput,
-                        onValueChange = { mediumUsernameInput = it },
-                        placeholder = { Text("@username", color = ThemeColors.textMuted) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = ThemeColors.accentCyan,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val clean = mediumUsernameInput.trim().removePrefix("@")
-                        if (clean.isNotEmpty()) {
-                            onUpdateSettings { s ->
-                                s.copy(
-                                    newsMediumUsername = clean,
-                                    newsMediumReadingListUrl = "https://medium.com/@$clean/list/reading-list"
-                                )
-                            }
-                        }
-                        showMediumDialog = false
+        MediumLoginSheet(
+            initialUsername = mediumUsernameInput,
+            onDismiss = { showMediumDialog = false },
+            onConnect = { detectedUsername ->
+                val clean = detectedUsername.trim().removePrefix("@")
+                if (clean.isNotEmpty()) {
+                    onUpdateSettings { s ->
+                        s.copy(
+                            newsMediumUsername = clean,
+                            newsMediumReadingListUrl = "https://medium.com/@$clean/list/reading-list"
+                        )
                     }
-                ) {
-                    Text("Connect", color = ThemeColors.accentCyan, fontWeight = FontWeight.Bold)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMediumDialog = false }) {
-                    Text("Cancel", color = ThemeColors.textMuted)
-                }
-            },
-            containerColor = Color(0xFF0F1A2E)
+                showMediumDialog = false
+            }
         )
     }
 }
