@@ -7,6 +7,8 @@ public struct FeaturesSettingsSection: View {
     @ObservedObject private var habitsService = HabitsService.shared
     
     @State private var showMediumLoginSheet = false
+    @State private var clearMediumSessionBeforeLogin = false
+    @State private var hasActiveMediumSession = false
     @State private var showDisconnectMediumAlert = false
     
     public init() {}
@@ -282,15 +284,17 @@ public struct FeaturesSettingsSection: View {
                         Spacer()
                         
                         if let username = settingsService.settings.newsMediumUsername, !username.isEmpty {
-                            HStack(spacing: 4) {
-                                Circle().fill(Color.green).frame(width: 6, height: 6)
-                                Text("@\(username)")
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(hasActiveMediumSession ? Color.green : Color.orange)
+                                    .frame(width: 6, height: 6)
+                                Text(hasActiveMediumSession ? "@\(username)" : "@\(username) · Session Inactive")
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(.white)
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Capsule().fill(Color.green.opacity(0.15)))
+                            .background(Capsule().fill((hasActiveMediumSession ? Color.green : Color.orange).opacity(0.16)))
                         } else {
                             Text("Not Configured")
                                 .font(.system(size: 11, weight: .medium))
@@ -299,9 +303,33 @@ public struct FeaturesSettingsSection: View {
                     }
                     
                     if let username = settingsService.settings.newsMediumUsername, !username.isEmpty {
-                        Text("Your reading list has been configured. You can customize the URL below if needed.")
-                            .font(.system(size: 12))
-                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text(
+                            hasActiveMediumSession
+                                ? "Member session active. Full Member-Only stories and your Reading List are unlocked."
+                                : "Reading List is configured, but your Medium browser session is inactive. Sign in once to unlock full Member-Only stories."
+                        )
+                        .font(.system(size: 12))
+                        .foregroundColor(hasActiveMediumSession ? ThemeColors.fgMutedDark : Color.orange.opacity(0.95))
+                        
+                        if !hasActiveMediumSession {
+                            Button {
+                                clearMediumSessionBeforeLogin = false
+                                showMediumLoginSheet = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "person.badge.key.fill")
+                                    Text("Reconnect Medium Session")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(
+                                    Capsule().fill(ThemeColors.accentCyan)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                         
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Reading List URL")
@@ -328,6 +356,7 @@ public struct FeaturesSettingsSection: View {
                         
                         HStack(spacing: 10) {
                             Button {
+                                clearMediumSessionBeforeLogin = hasActiveMediumSession
                                 showMediumLoginSheet = true
                             } label: {
                                 Text("Change Account")
@@ -363,6 +392,7 @@ public struct FeaturesSettingsSection: View {
                             .foregroundColor(ThemeColors.fgMutedDark)
                         
                         Button {
+                            clearMediumSessionBeforeLogin = false
                             showMediumLoginSheet = true
                         } label: {
                             HStack(spacing: 6) {
@@ -383,8 +413,18 @@ public struct FeaturesSettingsSection: View {
                 .id("medium_setup")
             }
         }
+        .task {
+            hasActiveMediumSession = await HeadlessReadabilityParser.shared.hasAuthenticatedMediumSession()
+        }
+        .onChange(of: showMediumLoginSheet) { _, isPresented in
+            if !isPresented {
+                Task {
+                    hasActiveMediumSession = await HeadlessReadabilityParser.shared.hasAuthenticatedMediumSession()
+                }
+            }
+        }
         .sheet(isPresented: $showMediumLoginSheet) {
-            MediumLoginSheet()
+            MediumLoginSheet(clearExistingSession: clearMediumSessionBeforeLogin)
         }
         .alert("Disconnect Medium", isPresented: $showDisconnectMediumAlert) {
             Button("Disconnect", role: .destructive) {
@@ -392,10 +432,14 @@ public struct FeaturesSettingsSection: View {
                     $0.newsMediumUsername = nil
                     $0.newsMediumReadingListUrl = nil
                 }
-                WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
-                    for cookie in cookies where cookie.domain.contains("medium.com") {
-                        WKWebsiteDataStore.default().httpCookieStore.delete(cookie)
+                hasActiveMediumSession = false
+                Task {
+                    let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+                    let cookies = await cookieStore.allCookies()
+                    for cookie in cookies where cookie.domain.lowercased().contains("medium.com") {
+                        await cookieStore.deleteCookie(cookie)
                     }
+                    await ArticleExtractor.clearCache()
                 }
             }
             Button("Cancel", role: .cancel) {}

@@ -729,5 +729,97 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertTrue(parsed.content?.contains("First paragraph introducing") ?? false)
         XCTAssertTrue(parsed.content?.contains("Third paragraph providing") ?? false)
     }
+    
+    func testMediumSessionCookieAuthenticationAndSubdomainSanitization() throws {
+        // 1. Guest `lo_*` uid cookies must NOT count as authenticated
+        XCTAssertFalse(ArticleExtractor.isAuthenticatedMediumUid(""))
+        XCTAssertFalse(ArticleExtractor.isAuthenticatedMediumUid("lo_7888e3b9f123"))
+        XCTAssertFalse(ArticleExtractor.isAuthenticatedMediumUid("LO_ABCDEF"))
+        XCTAssertTrue(ArticleExtractor.isAuthenticatedMediumUid("a8f92e41c770"))
+        
+        let guestUid = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: ".medium.com",
+            .path: "/",
+            .name: "uid",
+            .value: "lo_7888e3b9f123"
+        ]))
+        let validSid = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: ".medium.com",
+            .path: "/",
+            .name: "sid",
+            .value: "1:gpTVx8CIabcdef"
+        ]))
+        XCTAssertFalse(
+            ArticleExtractor.hasAuthenticatedMediumCookies([guestUid, validSid]),
+            "Logged-out `lo_*` uid must never report as an active Medium member session"
+        )
+        
+        let memberUid = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: ".medium.com",
+            .path: "/",
+            .name: "uid",
+            .value: "91f2a70bc311"
+        ]))
+        XCTAssertTrue(
+            ArticleExtractor.hasAuthenticatedMediumCookies([memberUid, validSid]),
+            "Real member uid + sid on .medium.com must report as an active Medium session"
+        )
+        
+        // 2. Host-only subdomain cookies (e.g. `malshikay.medium.com`) must be flagged for deletion so `.medium.com` applies
+        let poisonedSubdomainUid = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "malshikay.medium.com",
+            .path: "/",
+            .name: "uid",
+            .value: "lo_7888e3b9f123"
+        ]))
+        let poisonedSubdomainSid = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "malshikay.medium.com",
+            .path: "/",
+            .name: "sid",
+            .value: "1:staleSession"
+        ]))
+        XCTAssertTrue(ArticleExtractor.shouldDeleteMediumCookie(poisonedSubdomainUid, hasValidRootUid: false))
+        XCTAssertTrue(ArticleExtractor.shouldDeleteMediumCookie(poisonedSubdomainSid, hasValidRootUid: true))
+        XCTAssertFalse(ArticleExtractor.shouldDeleteMediumCookie(memberUid, hasValidRootUid: true))
+        XCTAssertFalse(ArticleExtractor.shouldDeleteMediumCookie(validSid, hasValidRootUid: true))
+        XCTAssertTrue(
+            ArticleExtractor.shouldDeleteMediumCookie(guestUid, hasValidRootUid: true),
+            "Guest `lo_*` uid must be purged when a valid authenticated uid exists"
+        )
+    }
+    
+    func testMediumTrackingPixelAndInlineNewsletterCleanup() async throws {
+        await ArticleExtractor.clearCache()
+        let rssFullArticleWithStatPixel = """
+        <p>LINQ makes C# expressive, readable, and fast to write. Section 1 covers multiple enumeration pitfalls.</p>
+        <h3>6. Using OrderBy + First Instead of MinBy / MaxBy</h3>
+        <p>Sorting an entire sequence in O(n log n) only to take the first element wastes CPU and memory allocations.</p>
+        <div>Get Yohan Malshika’s stories in your inbox — Join Medium for free to get updates from this writer.</div>
+        <h3>7. Mixing Client-Side Logic Into EF Core Queries</h3>
+        <p>Keep projections translatable to SQL and materialize with AsNoTracking for read-only production paths.</p>
+        <h3>Conclusion</h3>
+        <p>Treat LINQ pipelines as execution plans and benchmark hot paths in production.</p>
+        <img src="https://medium.com/_/stat?event=post.clientViewed&referrerSource=full_rss&postId=8f62cc289a73" width="1" height="1" alt="">
+        """
+        
+        let article = NewsArticle(
+            id: "linq-perf-1",
+            title: "LINQ Performance: 7 Mistakes .NET Developers Make in Production",
+            link: "https://malshikay.medium.com/linq-performance-7-mistakes-net-developers-make-in-production-8f62cc289a73",
+            publishDate: Date(),
+            content: rssFullArticleWithStatPixel,
+            author: "Yohan Malshika",
+            publicationName: "Medium: @malshikay",
+            category: .coding
+        )
+        
+        let extracted = try await ArticleExtractor.shared.extract(from: article.link, baseArticle: article)
+        let content = try XCTUnwrap(extracted.content)
+        XCTAssertTrue(content.contains("6. Using OrderBy + First"))
+        XCTAssertTrue(content.contains("7. Mixing Client-Side Logic"))
+        XCTAssertTrue(content.contains("Conclusion"))
+        XCTAssertFalse(content.contains("medium.com/_/stat"), "1x1 Medium RSS stat tracking pixel must be stripped")
+        XCTAssertFalse(content.contains("stories in your inbox"), "Inline newsletter spam box must be stripped")
+    }
     #endif
 }

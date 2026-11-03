@@ -73,6 +73,71 @@ public final class ArticleExtractor: @unchecked Sendable {
         return false
     }
     
+    /// Returns true when a Medium `uid` cookie represents a real signed-in user rather than a logged-out guest (`lo_*`).
+    public static func isAuthenticatedMediumUid(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return !trimmed.lowercased().hasPrefix("lo_")
+    }
+    
+    /// Verifies whether a cookie jar contains a live authenticated Medium member session (`uid` != `lo_*` and `sid` present).
+    public static func hasAuthenticatedMediumCookies(_ cookies: [HTTPCookie], now: Date = Date()) -> Bool {
+        var hasValidUid = false
+        var hasValidSid = false
+        
+        for cookie in cookies {
+            let domain = cookie.domain.lowercased()
+            guard domain == "medium.com" || domain == ".medium.com" else { continue }
+            if let expires = cookie.expiresDate, expires <= now { continue }
+            
+            if cookie.name == "uid" && isAuthenticatedMediumUid(cookie.value) {
+                hasValidUid = true
+            } else if cookie.name == "sid" && !cookie.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                hasValidSid = true
+            }
+        }
+        return hasValidUid && hasValidSid
+    }
+    
+    /// Identifies poisoned host-only subdomain cookies (e.g. `malshikay.medium.com` shadowing `.medium.com`)
+    /// or stale logged-out (`lo_*`) `uid` cookies that must be purged.
+    public static func shouldDeleteMediumCookie(_ cookie: HTTPCookie, hasValidRootUid: Bool) -> Bool {
+        let domain = cookie.domain.lowercased()
+        let authCookieNames: Set<String> = ["uid", "sid", "xsrf", "cf_clearance"]
+        
+        // Host-only cookies on custom Medium subdomains (`*.medium.com`) shadow `.medium.com` per RFC 6265 §5.4.
+        if domain != "medium.com" && domain != ".medium.com" && domain.hasSuffix(".medium.com") {
+            if authCookieNames.contains(cookie.name) {
+                return true
+            }
+        }
+        
+        // Remove guest `lo_*` uid cookies whenever a real authenticated uid exists, or on subdomains.
+        if cookie.name == "uid" && !isAuthenticatedMediumUid(cookie.value) {
+            if hasValidRootUid || (domain != "medium.com" && domain != ".medium.com") {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    /// Strips Medium RSS 1x1 tracking pixels (`medium.com/_/stat`) and empty tracking wrappers so reader views
+    /// never fire unauthenticated tracking requests or render invisible pixel artifacts.
+    public static func stripMediumTrackingAndNoise(_ html: String) -> String {
+        var cleaned = html.replacingOccurrences(
+            of: "<img[^>]*medium\\.com/_/stat[^>]*>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        cleaned = cleaned.replacingOccurrences(
+            of: "<div[^>]*>\\s*Get [^<]{1,80}stories in[^<]{0,40}inbox[\\s\\S]{0,400}?</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return cleaned
+    }
+    
     public static func clearCache() async {
         await ArticleContentCache.shared.clear()
     }
@@ -98,24 +163,34 @@ public final class ArticleExtractor: @unchecked Sendable {
             return cached
         }
         
-        let isMedium = safeUrlString.contains("medium.com") || (baseArticle?.publicationName?.contains("Medium") == true)
+        let isMedium = safeUrlString.contains("medium.com") ||
+                       (baseArticle?.publicationName?.localizedCaseInsensitiveContains("medium") == true) ||
+                       Self.isMediumTeaser(baseArticle?.content ?? "") ||
+                       Self.isMediumTeaser(baseArticle?.description ?? "")
         
         let hasSubstantialBaseContent = (baseArticle?.content != nil) &&
             (baseArticle!.content!.count > 250) &&
             !Self.isMediumTeaser(baseArticle!.content!)
         
-        if isMedium && hasSubstantialBaseContent {
-            return await cacheAndReturn(baseArticle!, for: safeUrlString)
+        if isMedium && hasSubstantialBaseContent, var cleanBase = baseArticle {
+            if let rawContent = cleanBase.content {
+                cleanBase.content = Self.stripMediumTrackingAndNoise(rawContent)
+            }
+            return await cacheAndReturn(cleanBase, for: safeUrlString)
         }
         
         #if canImport(WebKit)
         if isMedium {
-            if let mediumArticle = await HeadlessReadabilityParser.shared.extractMediumArticle(
+            if let result = await HeadlessReadabilityParser.shared.extractMediumArticleDetailed(
                 url: url,
                 baseArticle: baseArticle,
                 extractor: self
-            ), let content = mediumArticle.content, content.count > 100 {
-                return await cacheAndReturn(mediumArticle, for: safeUrlString)
+            ), let content = result.article.content, content.count > 100 {
+                // Never cache paywall-truncated guest previews so signing in immediately unlocks full stories
+                if result.isPaywallTruncated || Self.isMediumTeaser(content) {
+                    return result.article
+                }
+                return await cacheAndReturn(result.article, for: safeUrlString)
             }
         }
         #endif
@@ -590,10 +665,26 @@ public final class ArticleExtractor: @unchecked Sendable {
 }
 
 #if canImport(WebKit)
+public struct MediumExtractionResult: Sendable {
+    public let article: NewsArticle
+    public let isPaywallTruncated: Bool
+    
+    public init(article: NewsArticle, isPaywallTruncated: Bool) {
+        self.article = article
+        self.isPaywallTruncated = isPaywallTruncated
+    }
+}
+
 /// Headless WebKit engine hosting Mozilla Readability for distraction-free DOM parsing.
 @MainActor
 public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
     public static let shared = HeadlessReadabilityParser()
+    
+    #if os(macOS)
+    public static let mediumSafariUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15"
+    #else
+    public static let mediumSafariUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1"
+    #endif
     
     private var webView: WKWebView?
     
@@ -606,6 +697,7 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             return existing
         }
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
@@ -877,38 +969,65 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
-        let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
-        #if os(macOS)
-        wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-        #else
-        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-        #endif
+        let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 900), configuration: config)
+        wv.customUserAgent = Self.mediumSafariUserAgent
         return wv
     }
     
-    public func extractMediumArticle(
-        url: URL,
-        baseArticle: NewsArticle?,
-        extractor: ArticleExtractor
-    ) async -> NewsArticle? {
-        let wv = createAuthenticatedWebView()
-        let observer = NavigationObserver()
-        wv.navigationDelegate = observer
+    /// Purges poisoned host-only subdomain cookies (e.g. `malshikay.medium.com` shadowing `.medium.com`)
+    /// and ensures authenticated parent cookies (`uid`, `sid`) apply across `medium.com` and `*.medium.com`.
+    public func sanitizeMediumCookies() async {
+        let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+        let allCookies = await cookieStore.allCookies()
         
-        // Ensure parent domain medium.com cookies are synced to custom subdomains (e.g. malshikay.medium.com)
-        if let host = url.host?.lowercased(), host.hasSuffix(".medium.com") && host != "medium.com" {
-            let cookieStore = WKWebsiteDataStore.default().httpCookieStore
-            let allCookies = await cookieStore.allCookies()
-            for cookie in allCookies where cookie.domain.contains("medium.com") {
-                var props = cookie.properties ?? [:]
-                props[.domain] = host
-                if let newCookie = HTTPCookie(properties: props) {
-                    await cookieStore.setCookie(newCookie)
-                }
+        let hasValidRootUid = allCookies.contains { cookie in
+            let d = cookie.domain.lowercased()
+            return (d == "medium.com" || d == ".medium.com") &&
+                   cookie.name == "uid" &&
+                   ArticleExtractor.isAuthenticatedMediumUid(cookie.value)
+        }
+        
+        var hasDotMediumUid = false
+        var hasDotMediumSid = false
+        for cookie in allCookies where cookie.domain.lowercased() == ".medium.com" {
+            if cookie.name == "uid" && ArticleExtractor.isAuthenticatedMediumUid(cookie.value) {
+                hasDotMediumUid = true
+            } else if cookie.name == "sid" && !cookie.value.isEmpty {
+                hasDotMediumSid = true
             }
         }
         
-        _ = await withCheckedContinuation { continuation in
+        for cookie in allCookies {
+            if ArticleExtractor.shouldDeleteMediumCookie(cookie, hasValidRootUid: hasValidRootUid) {
+                await cookieStore.deleteCookie(cookie)
+                continue
+            }
+            
+            // If an authenticated cookie was stored on host-only `medium.com`, mirror it to `.medium.com`
+            // so custom author subdomains (`*.medium.com`) receive it automatically.
+            if cookie.domain.lowercased() == "medium.com" {
+                let shouldPromoteUid = (cookie.name == "uid" && ArticleExtractor.isAuthenticatedMediumUid(cookie.value) && !hasDotMediumUid)
+                let shouldPromoteSid = (cookie.name == "sid" && !cookie.value.isEmpty && !hasDotMediumSid)
+                if shouldPromoteUid || shouldPromoteSid {
+                    var props = cookie.properties ?? [:]
+                    props[.domain] = ".medium.com"
+                    if let wildcardCookie = HTTPCookie(properties: props) {
+                        await cookieStore.setCookie(wildcardCookie)
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Checks whether `WKWebsiteDataStore.default()` currently holds a valid signed-in Medium session.
+    public func hasAuthenticatedMediumSession() async -> Bool {
+        await sanitizeMediumCookies()
+        let cookies = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+        return ArticleExtractor.hasAuthenticatedMediumCookies(cookies)
+    }
+    
+    private func loadURL(_ targetUrl: URL, in wv: WKWebView, observer: NavigationObserver, timeoutNanoseconds: UInt64 = 12_000_000_000) async -> Bool {
+        await withCheckedContinuation { continuation in
             var finished = false
             observer.onFinished = { success in
                 if !finished {
@@ -916,28 +1035,41 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     continuation.resume(returning: success)
                 }
             }
-            wv.load(URLRequest(url: url))
+            wv.load(URLRequest(url: targetUrl))
             
-            Task {
-                try? await Task.sleep(nanoseconds: 12_000_000_000)
-                await MainActor.run {
-                    if !finished {
-                        finished = true
-                        continuation.resume(returning: false)
-                    }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                if !finished {
+                    finished = true
+                    continuation.resume(returning: false)
                 }
             }
         }
+    }
+    
+    public func extractMediumArticle(
+        url: URL,
+        baseArticle: NewsArticle?,
+        extractor: ArticleExtractor
+    ) async -> NewsArticle? {
+        await extractMediumArticleDetailed(url: url, baseArticle: baseArticle, extractor: extractor)?.article
+    }
+    
+    public func extractMediumArticleDetailed(
+        url: URL,
+        baseArticle: NewsArticle?,
+        extractor: ArticleExtractor
+    ) async -> MediumExtractionResult? {
+        await sanitizeMediumCookies()
+        let hasActiveCookies = ArticleExtractor.hasAuthenticatedMediumCookies(
+            await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+        )
         
-        // Give 1.5s for initial React/Next.js shell rendering
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        let wv = createAuthenticatedWebView()
+        let observer = NavigationObserver()
+        wv.navigationDelegate = observer
         
-        // Trigger scroll hydration to force lazy-rendered member sections into the DOM
-        _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight / 2);")
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight);")
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        _ = try? await wv.evaluateJavaScript("window.scrollTo(0, 0);")
+        _ = await loadURL(url, in: wv, observer: observer)
         
         let cleanupScript = """
         (function(){
@@ -962,7 +1094,34 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             if(main){main.style.display='block';main.style.visibility='visible';main.style.opacity='1';}
         })()
         """
-        _ = try? await wv.evaluateJavaScript(cleanupScript)
+        
+        let stateCheckJs = """
+        (function() {
+            var s = window.__APOLLO_STATE__ || {};
+            var rq = s.ROOT_QUERY || {};
+            var hasViewer = Boolean(rq.viewer);
+            var postKey = Object.keys(s).find(function(k) { return k.indexOf('Post:') === 0; });
+            var post = postKey ? s[postKey] : null;
+            var postId = (post && post.id) ? String(post.id) : (postKey ? postKey.slice(5) : '');
+            var isLocked = post ? Boolean(post.isLocked) : false;
+            var expectedWords = (post && typeof post.wordCount === 'number') ? post.wordCount : 0;
+            var apolloParagraphs = Object.keys(s).filter(function(k) { return k.indexOf('Paragraph:') === 0; }).length;
+            var el = document.querySelector('article') || document.querySelector('main') || document.body;
+            var text = (el && el.innerText) ? el.innerText.trim() : '';
+            var words = text ? text.split(/\\s+/).length : 0;
+            var domBlocks = el ? el.querySelectorAll('p, h1, h2, h3, h4, pre, li, blockquote').length : 0;
+            return JSON.stringify({
+                hasViewer: hasViewer,
+                postId: postId,
+                isLocked: isLocked,
+                expectedWords: expectedWords,
+                apolloParagraphs: apolloParagraphs,
+                domWords: words,
+                domChars: text.length,
+                domBlocks: domBlocks
+            });
+        })()
+        """
         
         let extractScript = """
         (function(){
@@ -970,9 +1129,26 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             var el=document.querySelector(selectors);
             if(el && el.innerText && el.innerText.length > 200) {
                 var clone = el.cloneNode(true);
-                var junk = clone.querySelectorAll('button, [data-testid*="clap"], [data-testid*="response"], .responsesStream, [data-testid="postSidebar"]');
+                var junk = clone.querySelectorAll(
+                    'button, [data-testid*="clap"], [data-testid*="response"], .responsesStream, [data-testid="postSidebar"], ' +
+                    '[data-testid="authorPhoto"], img[src*="resize:fill:48:48"], img[src*="resize:fill:64:64"], img[src*="resize:fill:88:88"]'
+                );
                 junk.forEach(function(j){ j.remove(); });
-                return '<html><head><meta charset="utf-8"/></head><body>'+clone.outerHTML+'</body></html>';
+                clone.querySelectorAll('div, aside, section').forEach(function(box) {
+                    if (box.tagName === 'ARTICLE') return;
+                    var txt = (box.innerText || '').trim();
+                    if (txt.length > 0 && txt.length < 360 && box.querySelectorAll('p').length <= 3) {
+                        var lower = txt.toLowerCase();
+                        if (lower.indexOf('stories in your inbox') !== -1 ||
+                            (lower.indexOf('stories in ') !== -1 && lower.indexOf('inbox') !== -1) ||
+                            lower.indexOf('get updates from this writer') !== -1) {
+                            box.remove();
+                        }
+                    }
+                });
+                var headMeta = Array.from(document.querySelectorAll('title, meta[property^="og:"], meta[name="author"], meta[property*="author"]'))
+                    .map(function(m){ return m.outerHTML; }).join('');
+                return '<html><head><meta charset="utf-8"/>' + headMeta + '</head><body>' + clone.outerHTML + '</body></html>';
             }
             if(document.body && document.body.innerText && document.body.innerText.length > 500) {
                 return document.documentElement.outerHTML;
@@ -982,45 +1158,103 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         """
         
         var extractedHtml: String? = nil
-        var lastLen = 0
+        var isPaywallTruncated = false
+        var didAttemptIdentityHandshake = false
+        var lastChars = 0
         var stableCount = 0
         
-        for iteration in 0..<14 {
-            try? await Task.sleep(nanoseconds: 600_000_000)
+        for iteration in 0..<12 {
+            try? await Task.sleep(nanoseconds: iteration == 0 ? 500_000_000 : 400_000_000)
             
-            // Progressive scroll triggers to ensure deep hydration
-            if iteration == 1 || iteration == 4 {
+            var hasViewer = false
+            var postId = ""
+            var isLocked = false
+            var expectedWords = 0
+            var apolloParagraphs = 0
+            var domWords = 0
+            var domChars = 0
+            var domBlocks = 0
+            
+            if let stateJson = try? await wv.evaluateJavaScript(stateCheckJs) as? String,
+               let stateData = stateJson.data(using: .utf8),
+               let dict = try? JSONSerialization.jsonObject(with: stateData) as? [String: Any] {
+                hasViewer = (dict["hasViewer"] as? Bool) ?? false
+                postId = (dict["postId"] as? String) ?? ""
+                isLocked = (dict["isLocked"] as? Bool) ?? false
+                expectedWords = (dict["expectedWords"] as? Int) ?? 0
+                apolloParagraphs = (dict["apolloParagraphs"] as? Int) ?? 0
+                domWords = (dict["domWords"] as? Int) ?? 0
+                domChars = (dict["domChars"] as? Int) ?? 0
+                domBlocks = (dict["domBlocks"] as? Int) ?? 0
+            }
+            
+            // If user has valid `.medium.com` cookies, is visiting a custom publication domain where viewer
+            // has not hydrated yet, route once through `medium.com/p/<postId>` / `global-identity-2` to attach session.
+            if iteration == 0 && isLocked && !hasViewer && hasActiveCookies && !didAttemptIdentityHandshake {
+                let currentHost = wv.url?.host?.lowercased() ?? url.host?.lowercased() ?? ""
+                let isDirectMediumHost = currentHost == "medium.com" || currentHost == "www.medium.com"
+                if !isDirectMediumHost && !postId.isEmpty, let canonicalPostUrl = URL(string: "https://medium.com/p/\(postId)") {
+                    didAttemptIdentityHandshake = true
+                    _ = await loadURL(canonicalPostUrl, in: wv, observer: observer, timeoutNanoseconds: 10_000_000_000)
+                    continue
+                }
+            }
+            
+            // Fast exit when all expected words/paragraphs are already rendered in the DOM
+            let hasFullExpectedWords = expectedWords > 0 && domWords >= Int(Double(expectedWords) * 0.68)
+            let hasAllUnlockedBlocks = !isLocked && apolloParagraphs > 0 && domBlocks >= Int(Double(apolloParagraphs) * 0.85) && domChars > 350
+            
+            if hasFullExpectedWords || hasAllUnlockedBlocks {
+                // Quick scroll sweep to ensure lazy `<figure>` images hydrate their full-res `src`
                 _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight / 2);")
-            } else if iteration == 2 || iteration == 5 {
+                try? await Task.sleep(nanoseconds: 120_000_000)
                 _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight);")
-            } else if iteration == 3 || iteration == 6 {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                _ = try? await wv.evaluateJavaScript("window.scrollTo(0, 0);")
+                _ = try? await wv.evaluateJavaScript(cleanupScript)
+                
+                if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
+                    extractedHtml = result
+                    isPaywallTruncated = false
+                    break
+                }
+            }
+            
+            // Fast exit when article is member-locked and Medium has no signed-in viewer:
+            // Medium's server never transmitted the locked paragraphs, so don't stall for 10 seconds.
+            if iteration >= 1 && isLocked && !hasViewer && (expectedWords == 0 || domWords < Int(Double(expectedWords) * 0.55)) {
+                _ = try? await wv.evaluateJavaScript(cleanupScript)
+                if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
+                    extractedHtml = result
+                }
+                isPaywallTruncated = true
+                break
+            }
+            
+            // Progressive scroll hydration when signed in and waiting for GraphQL/React member body
+            if iteration % 3 == 0 {
+                _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight / 2);")
+            } else if iteration % 3 == 1 {
+                _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight);")
+            } else {
                 _ = try? await wv.evaluateJavaScript("window.scrollTo(0, 0);")
             }
             
-            if iteration % 4 == 0 && iteration > 0 {
-                _ = try? await wv.evaluateJavaScript(cleanupScript)
-            }
-            
-            let lenCheckJs = "(function(){ var el = document.querySelector('article') || document.querySelector('main') || document.body; return el && el.innerText ? el.innerText.length : 0; })()"
-            let curLen = (try? await wv.evaluateJavaScript(lenCheckJs) as? Int) ?? 0
-            
-            if curLen > 300 {
-                if curLen == lastLen {
+            if domChars > 300 {
+                if domChars == lastChars {
                     stableCount += 1
                 } else {
                     stableCount = 0
-                    lastLen = curLen
+                    lastChars = domChars
                 }
                 
-                // Do not prematurely extract on early teaser SSR shells; wait for full content (>3000 chars)
-                // or ensure at least 7-8 iterations of hydration scrolls have taken place
-                let isHydrated = (curLen > 3000 && stableCount >= 2) || 
-                                 (iteration >= 7 && curLen > 1000 && stableCount >= 2) ||
-                                 (iteration >= 11 && curLen > 500)
-                
-                if isHydrated {
+                if (domChars > 3000 && stableCount >= 2) || (iteration >= 6 && stableCount >= 2) {
+                    _ = try? await wv.evaluateJavaScript(cleanupScript)
                     if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
                         extractedHtml = result
+                        if isLocked && expectedWords > 250 && domWords < Int(Double(expectedWords) * 0.55) {
+                            isPaywallTruncated = true
+                        }
                         break
                     }
                 }
@@ -1028,6 +1262,7 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         }
         
         if extractedHtml == nil {
+            _ = try? await wv.evaluateJavaScript(cleanupScript)
             if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
                 extractedHtml = result
             } else if let fullHtml = try? await wv.evaluateJavaScript("document.documentElement.outerHTML") as? String, fullHtml.count > 500 {
@@ -1035,20 +1270,27 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             }
         }
         
-        guard let html = extractedHtml else { return nil }
+        guard let rawHtml = extractedHtml else { return nil }
+        let html = ArticleExtractor.stripMediumTrackingAndNoise(rawHtml)
         
         // Attempt parsing with Mozilla Readability engine
-        if let readabilityArticle = await self.parse(html: html, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor),
+        if var readabilityArticle = await self.parse(html: html, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor),
            let content = readabilityArticle.content, content.count > 300 {
-            return readabilityArticle
+            readabilityArticle.content = ArticleExtractor.stripMediumTrackingAndNoise(content)
+            return MediumExtractionResult(article: readabilityArticle, isPaywallTruncated: isPaywallTruncated)
         }
         
         // Fallback: Use multi-candidate heuristic container extractor on the sanitized DOM
-        return extractor.parseHtml(html, url: url.absoluteString, baseArticle: baseArticle)
+        var fallbackArticle = extractor.parseHtml(html, url: url.absoluteString, baseArticle: baseArticle)
+        if let content = fallbackArticle.content {
+            fallbackArticle.content = ArticleExtractor.stripMediumTrackingAndNoise(content)
+        }
+        return MediumExtractionResult(article: fallbackArticle, isPaywallTruncated: isPaywallTruncated)
     }
     
     public func scrapeMediumReadingList(urlString: String) async -> [NewsArticle] {
         guard let url = URL(string: urlString) else { return [] }
+        await sanitizeMediumCookies()
         let wv = createAuthenticatedWebView()
         let observer = NavigationObserver()
         wv.navigationDelegate = observer

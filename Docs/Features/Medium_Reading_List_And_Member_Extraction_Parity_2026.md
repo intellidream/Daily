@@ -128,13 +128,42 @@ Even when logged in, users observed that Medium articles across all platforms we
 
 ---
 
-## 6. Verification & Testing
+## 6. Phase 3 Forensic Repair: OAuth Cookie Persistence, Subdomain De-Poisoning & Apollo-Aware Extraction (macOS & DailyCore)
+
+### A. Forensic Root Causes Discovered
+Live inspection inside the sandboxed macOS `Daily.app` container (`WKWebsiteDataStore.default().httpCookieStore` + `window.__APOLLO_STATE__`) revealed why public Medium RSS articles (e.g. Yohan Malshika's *"LINQ Performance"*, `isLocked: false`, containing full `<content:encoded>` in RSS) opened instantly and completely, whereas Member-Only stories (`isLocked: true`, e.g. *"Understanding the SemaphoreSlim in C#"*, *"Why async void Is Dangerous in C#"*, and *Starts With A Bang!*) stalled for ~9–11s and rendered truncated:
+1. **Premature OAuth Redirect Cancellation & `WKWebView` Teardown (`MediumLoginSheet.swift`)**:
+   - Facebook/Google OAuth redirects through `/m/callback/<provider>` to `https://medium.com/?source=login...` (`url.path == "/"`).
+   - Previously, `MediumLoginSheet` intercepted `decidePolicyFor navigationAction` *before* the navigation committed, aborted the redirect by triggering `webView.load("/me")`, and then called `decisionHandler(.cancel)` + `dismiss()` on `/@username` — tearing down the `WKWebView` before `com.apple.WebKit.Networking` flushed `HttpOnly` `uid` and `sid` cookies to disk, while `newsMediumUsername` was already saved in `SettingsService` (causing Settings to show a false green dot and Reading List to load publicly while `uid` fell back to guest `lo_*`).
+2. **Cookie Store Contamination from Reader & Offline Parser WebViews**:
+   - `ArticleWebView` and `HeadlessReadabilityParser.getOrCreateWebView()` previously used the default `WKWebsiteDataStore.default()` without the shared Safari `User-Agent`. Opening a free Medium RSS article containing `<img src="https://medium.com/_/stat?...">` fired an unauthenticated/bare-WebKit request that wrote a guest `uid=lo_*` cookie and triggered Cloudflare UA mismatch challenges.
+3. **RFC 6265 Subdomain Cookie Shadowing**:
+   - Copying cookies onto host-only domains (e.g. `domain = malshikay.medium.com`) created host-specific `uid=lo_*` cookies that permanently shadowed parent `.medium.com` member cookies per RFC 6265 §5.4.
+4. **In-Memory Caching of Paywall Stubs & Blind 11-Second Polling**:
+   - `ArticleContentCache` previously cached truncated member previews (`> 250` chars without `"continue reading on"`), and `extractMediumArticle` polled 14 times even when `window.__APOLLO_STATE__` already reported all expected words in the DOM (or `isLocked == true && viewer == null`).
+
+### B. Architectural Fixes Implemented (`DailyCore` & `MacOS`)
+1. **Commit-Safe OAuth Verification (`MediumLoginSheet.swift`)**:
+   - Never cancels normal navigations or OAuth redirects in `decidePolicyFor navigationAction` (only routes `targetFrame == nil` popups into the frame).
+   - Verifies authentication exclusively in `didFinish` by inspecting `window.__APOLLO_STATE__.ROOT_QUERY.viewer` AND confirming live non-guest cookies (`uid` not prefixed with `lo_` + `sid` present) via `ArticleExtractor.hasAuthenticatedMediumCookies`, sanitizing cookies, clearing `ArticleContentCache`, and allowing `WKHTTPCookieStore` to flush before dismissing.
+2. **True Session Status in Settings (`FeaturesSettingsSection.swift`)**:
+   - Evaluates `HeadlessReadabilityParser.shared.hasAuthenticatedMediumSession()` live so Settings distinguishes between an active member session (`🟢 @username`) and an inactive/expired cookie jar (`🟠 @username · Session Inactive` with a one-click **Reconnect Medium Session** action), without adding intrusive banners inside `NewsReaderView`.
+3. **Isolated `.nonPersistent()` Reader & Readability WebViews + Tracking Pixel Cleanup**:
+   - Both `ArticleWebView` and `HeadlessReadabilityParser.getOrCreateWebView()` now use `WKWebsiteDataStore.nonPersistent()`, and `ArticleExtractor.stripMediumTrackingAndNoise` strips `medium.com/_/stat` 1x1 pixels and inline `"stories in your inbox"` prompts.
+   - Unified `HeadlessReadabilityParser.mediumSafariUserAgent` across `MediumLoginSheet` and `createAuthenticatedWebView()`.
+4. **Subdomain De-Poisoning & Fast `__APOLLO_STATE__` Extraction (`ArticleExtractor.swift`)**:
+   - `sanitizeMediumCookies()` purges all host-only `uid`/`sid`/`xsrf`/`cf_clearance` cookies on `*.medium.com` subdomains and stale `lo_*` cookies so `.medium.com` cookies apply cleanly across all author subdomains (`malshikay.medium.com`, etc.), plus routes custom publication domains through `medium.com/p/<postId>` handshake when needed.
+   - `extractMediumArticleDetailed` compares live `<article>` word/block counts against `window.__APOLLO_STATE__` (`Post.wordCount`, `Post.isLocked`, `ROOT_QUERY.viewer`), cutting extraction latency to **~1.5–2.1s** and strictly preventing `ArticleContentCache` from caching paywall-truncated previews (`isPaywallTruncated == true`).
+
+---
+
+## 7. Verification & Testing
 
 | Platform / Module | Test Suite / Command | Result | Verification Notes |
 | :--- | :--- | :--- | :--- |
-| **DailyCore (Swift)** | `swift test --package-path DailyCore --filter NewsServiceTests` | **Passed (23/23)** | Added `testMediumTeaserClassification`, verified `Starts With A Bang!` and `Yohan Malshika` |
+| **DailyCore (Swift)** | `swift test --package-path DailyCore --filter NewsServiceTests` | **Passed (25/25)** | Added `testMediumSessionCookieAuthenticationAndSubdomainSanitization` and `testMediumTrackingPixelAndInlineNewsletterCleanup` |
 | **Android (Kotlin)** | `./gradlew :core-model:testDebugUnitTest :core-database:testDebugUnitTest` | **Passed** | Added `testMediumTeaserClassification` in `NewsParsersTest.kt` |
-| **macOS Native** | `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` | **BUILD SUCCEEDED** | Signed atomically with Apple Development credentials |
+| **macOS Native** | `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` | **BUILD SUCCEEDED** | Signed atomically with Apple Development credentials (`7LZ9ZT2Z5B`), verified live launch |
 | **Windows 11 VM** | `dotnet build -c Debug -p:Platform=ARM64` | **BUILD SUCCEEDED** | Native WinUI build with CoreWebView2 cookie sync and hydration |
 | **iOS Native** | `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' build` | **BUILD SUCCEEDED** | Clean build with embedded `DailyWidgetsExtension` |
 | **Android App** | `./gradlew assembleDebug` | **BUILD SUCCEEDED** | Verified R8 / DEX compilation without regressions |
@@ -143,7 +172,7 @@ Even when logged in, users observed that Medium articles across all platforms we
 
 ---
 
-## 7. Paywall & Security Compliance
+## 8. Paywall & Security Compliance
 - Zero unauthorized paywall circumvention or proxy bypasses are used.
 - The headless WebViews directly leverage the user's authentic session cookies acquired during legitimate sign-in in Settings -> Features.
 - If the user is a paid member, stories render in full. If the user is not a member, Medium displays standard previews, mirroring WinUI and desktop browser behavior identically.

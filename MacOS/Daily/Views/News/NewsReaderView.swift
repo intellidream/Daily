@@ -15,7 +15,6 @@ public struct NewsReaderView: View {
     @State private var recommendations: [NewsArticle] = []
     @State private var isRecommendationsExpanded: Bool = false
     @State private var isHoveringBubble: Bool = false
-    @State private var showMediumLoginSheet: Bool = false
     
     @ObservedObject private var savedService = SavedArticlesService.shared
     @ObservedObject private var settingsService = SettingsService.shared
@@ -62,36 +61,6 @@ public struct NewsReaderView: View {
                 // Top Glass Toolbar
                 readerToolbar
                 
-                // Medium Member Authentication Hint Banner
-                if currentArticle.link.contains("medium.com") && settingsService.settings.newsMediumUsername == nil && !isLoadingFullArticle {
-                    HStack(spacing: 8) {
-                        Image(systemName: "sparkles")
-                            .foregroundColor(ThemeColors.accentCyan)
-                            .font(.system(size: 13))
-                        Text("Connect Medium account to unlock full Member-Only stories.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white.opacity(0.9))
-                        Spacer()
-                        Button {
-                            showMediumLoginSheet = true
-                        } label: {
-                            Text("Sign In")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Capsule().fill(ThemeColors.accentCyan))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.35))
-                    .overlay(alignment: .bottom) {
-                        Divider().background(Color.white.opacity(0.1))
-                    }
-                }
-                
                 // Article Content Canvas
                 ZStack(alignment: .bottom) {
                     if isLoadingFullArticle {
@@ -134,17 +103,6 @@ public struct NewsReaderView: View {
         }
         .task {
             loadArticle(initialArticle)
-        }
-        .sheet(isPresented: $showMediumLoginSheet) {
-            MediumLoginSheet()
-        }
-        .onChange(of: showMediumLoginSheet) { _, isPresented in
-            if !isPresented && settingsService.settings.newsMediumUsername != nil {
-                Task {
-                    await ArticleExtractor.clearCache()
-                    loadArticle(currentArticle)
-                }
-            }
         }
     }
     
@@ -364,19 +322,6 @@ public struct NewsReaderView: View {
                     )
                 }
                 .disabled(isSubscribed)
-            }
-            
-            // Medium Member Account Setup
-            if currentArticle.link.contains("medium.com") {
-                Divider()
-                Button {
-                    showMediumLoginSheet = true
-                } label: {
-                    Label(
-                        settingsService.settings.newsMediumUsername != nil ? "Medium: @\(settingsService.settings.newsMediumUsername!)" : "Sign in to Medium",
-                        systemImage: settingsService.settings.newsMediumUsername != nil ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.plus"
-                    )
-                }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
