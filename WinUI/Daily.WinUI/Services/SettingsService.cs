@@ -64,6 +64,7 @@ public sealed class AppSettings
     public bool ShowNewsImages { get; set; } = true;
     public string? MediumUsername { get; set; }
     public string? MediumReadingListUrl { get; set; }
+    public string? SubstackUsername { get; set; }
 
     // ── DayOne Orbit Configurations ──
     public int WatchSyncFrequency { get; set; } = 15;

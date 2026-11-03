@@ -29,6 +29,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var newsShowImages: Bool = true
     public var newsMediumUsername: String? = nil
     public var newsMediumReadingListUrl: String? = nil
+    public var newsSubstackUsername: String? = nil
     
     // MARK: - Cloud & Sync
     public var cloudSyncEnabled: Bool = true
@@ -59,7 +60,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case weatherAlwaysAutoLocation, weatherUnitSystem, weatherWindUnit, weatherPressureUnit, weatherShowSunrise, weatherShowHumidity
         case healthMockDataEnabled, healthSleepTargetHours
         case habitsWaterTargetLiters, habitsRemindersEnabled
-        case newsAutoRefreshOnStartup, newsShowImages, newsMediumUsername, newsMediumReadingListUrl
+        case newsAutoRefreshOnStartup, newsShowImages, newsMediumUsername, newsMediumReadingListUrl, newsSubstackUsername
         case cloudSyncEnabled, lastSyncTimestamp, watchSyncFrequency
         case smartBriefingEnabled, smartBriefingAutoMorning, geminiApiKey
         case nasaApiKey, cosmosWeatherEndpoint, cosmosWeatherApiKey
@@ -86,6 +87,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.newsShowImages = try c.decodeIfPresent(Bool.self, forKey: .newsShowImages) ?? true
         self.newsMediumUsername = try c.decodeIfPresent(String.self, forKey: .newsMediumUsername)
         self.newsMediumReadingListUrl = try c.decodeIfPresent(String.self, forKey: .newsMediumReadingListUrl)
+        self.newsSubstackUsername = try c.decodeIfPresent(String.self, forKey: .newsSubstackUsername)
         self.cloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudSyncEnabled) ?? true
         self.lastSyncTimestamp = try c.decodeIfPresent(Date.self, forKey: .lastSyncTimestamp)
         self.watchSyncFrequency = try c.decodeIfPresent(Int.self, forKey: .watchSyncFrequency) ?? 15
@@ -133,6 +135,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encode(newsShowImages, forKey: .newsShowImages)
         try c.encodeIfPresent(newsMediumUsername, forKey: .newsMediumUsername)
         try c.encodeIfPresent(newsMediumReadingListUrl, forKey: .newsMediumReadingListUrl)
+        try c.encodeIfPresent(newsSubstackUsername, forKey: .newsSubstackUsername)
         try c.encode(cloudSyncEnabled, forKey: .cloudSyncEnabled)
         try c.encodeIfPresent(lastSyncTimestamp, forKey: .lastSyncTimestamp)
         try c.encode(watchSyncFrequency, forKey: .watchSyncFrequency)

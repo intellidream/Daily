@@ -208,7 +208,7 @@
                                       Foreground="{Binding ReadLaterBrush}"/>
                         </Button>
 
-                        <!-- Subscribe to Author Button -->
+                        <!-- Subscribe to Author / Publication Button -->
                         <Button Click="SubscribeAuthorButton_Click"
                                 Width="38" Height="38" 
                                 CornerRadius="19"
@@ -216,8 +216,8 @@
                                 BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
                                 BorderThickness="1"
                                 Padding="0"
-                                ToolTipService.ToolTip="Subscribe to Author"
-                                Visibility="{Binding IsMediumItem, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                ToolTipService.ToolTip="Subscribe to Author / Publication"
+                                Visibility="{Binding CanSubscribe, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <FontIcon Glyph="&#xE710;" 
                                       FontFamily="Segoe Fluent Icons" 
                                       FontSize="16" 

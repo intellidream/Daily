@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Check
@@ -283,6 +284,11 @@ fun NewsReaderSheet(
                                 coroutineScope.launch {
                                     repository.subscribeToMediumAuthor(user, currentArticle.author)
                                 }
+                            },
+                            onSubscribeSubstack = { slug ->
+                                coroutineScope.launch {
+                                    repository.subscribeToSubstackPublication(slug, currentArticle.publicationName)
+                                }
                             }
                         )
                     }
@@ -430,7 +436,8 @@ private fun ReaderTopToolbar(
     onSelectFontSize: (Double) -> Unit,
     onShare: () -> Unit,
     onOpenInBrowser: () -> Unit,
-    onFollowMedium: (String) -> Unit
+    onFollowMedium: (String) -> Unit,
+    onSubscribeSubstack: (String) -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showSizeSubmenu by remember { mutableStateOf(false) }
@@ -629,6 +636,28 @@ private fun ReaderTopToolbar(
                             onClick = {
                                 showMenu = false
                                 onFollowMedium(mediumUser)
+                            }
+                        )
+                    }
+                }
+
+                if (article.isSubstackItem) {
+                    val pubSlug = article.substackPublicationSlug ?: com.intellidream.daily.model.extractSubstackPublicationSlug(article.link)
+                    if (pubSlug != null) {
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 4.dp))
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    tint = ThemeColors.accentCyan,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            text = { Text("Subscribe to $pubSlug", color = ThemeColors.accentCyan, fontSize = 13.sp) },
+                            onClick = {
+                                showMenu = false
+                                onSubscribeSubstack(pubSlug)
                             }
                         )
                     }

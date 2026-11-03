@@ -94,6 +94,7 @@ class DailyApp : Application() {
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
         val mediumBridge = com.intellidream.daily.news.MediumWebViewBridge(this)
+        val substackBridge = com.intellidream.daily.news.SubstackWebViewBridge(this)
         val newsHandler = object : com.intellidream.daily.database.NewsSyncHandler {
             override suspend fun fetchUrl(url: String): String? = newsRemoteService.fetchUrl(url)
             override suspend fun searchFeedly(query: String): List<com.intellidream.daily.model.FeedSearchResult> = newsRemoteService.searchFeedly(query)
@@ -103,6 +104,8 @@ class DailyApp : Application() {
             override suspend fun pushSavedArticle(article: com.intellidream.daily.model.SavedArticle): Boolean = newsRemoteService.pushSavedArticle(article)
             override suspend fun scrapeMediumReadingList(readingListUrl: String): List<com.intellidream.daily.model.NewsArticle>? = mediumBridge.scrapeReadingList(readingListUrl)
             override suspend fun extractMediumArticle(url: String, baseArticle: com.intellidream.daily.model.NewsArticle?): com.intellidream.daily.model.NewsArticle? = mediumBridge.extractArticle(url, baseArticle)
+            override suspend fun scrapeSubstackInbox(): List<com.intellidream.daily.model.NewsArticle>? = substackBridge.scrapeInbox()
+            override suspend fun extractSubstackArticle(url: String, baseArticle: com.intellidream.daily.model.NewsArticle?): com.intellidream.daily.model.NewsArticle? = substackBridge.extractArticle(url, baseArticle)
         }
         newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao(), syncHandler = newsHandler)
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)

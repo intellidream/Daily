@@ -73,6 +73,21 @@ public final class ArticleExtractor: @unchecked Sendable {
         return false
     }
     
+    /// Determines whether the article content is a Substack teaser/preview rather than a full story.
+    public static func isSubstackTeaser(_ content: String) -> Bool {
+        let lower = content.lowercased()
+        if lower.contains("read more") && (lower.contains("substack.com/p/") || lower.contains("paywall")) {
+            return true
+        }
+        if lower.contains("this post is for paid subscribers") ||
+           lower.contains("this post is for subscribers") ||
+           lower.contains("subscribe to unlock") ||
+           lower.contains("subscription-widget-wrap") {
+            return true
+        }
+        return false
+    }
+    
     /// Returns true when a Medium `uid` cookie represents a real signed-in user rather than a logged-out guest (`lo_*`).
     public static func isAuthenticatedMediumUid(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -138,6 +153,40 @@ public final class ArticleExtractor: @unchecked Sendable {
         return cleaned
     }
     
+    /// Strips Substack newsletter subscription widgets, like buttons, comment prompts, and footer CTA elements.
+    public static func stripSubstackTrackingAndNoise(_ html: String) -> String {
+        var clean = html
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*(?:subscription-widget-wrap|subscribe-widget|post-footer)[^\"]*\"[\\s\\S]*?</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*(?:like-button-container|share-dialog|comment-widget)[^\"]*\"[\\s\\S]*?</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return clean
+    }
+    
+    nonisolated public static func optimizeSubstackImageUrl(_ url: String) -> String {
+        guard url.contains("substackcdn.com") || url.contains("substack-post-media") else { return url }
+        if url.contains("w_") {
+            let pattern = "w_\\d+"
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return url }
+            let range = NSRange(location: 0, length: (url as NSString).length)
+            return regex.stringByReplacingMatches(in: url, range: range, withTemplate: "w_1200")
+        }
+        return url
+    }
+    
+    nonisolated public static func hasAuthenticatedSubstackCookies(_ cookies: [HTTPCookie]) -> Bool {
+        return cookies.contains { cookie in
+            cookie.name == "substack.sid" &&
+            !cookie.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+    
     public static func clearCache() async {
         await ArticleContentCache.shared.clear()
     }
@@ -179,6 +228,22 @@ public final class ArticleExtractor: @unchecked Sendable {
             return await cacheAndReturn(cleanBase, for: safeUrlString)
         }
         
+        let isSubstack = safeUrlString.contains("substack.com") ||
+                         (baseArticle?.publicationName?.localizedCaseInsensitiveContains("substack") == true) ||
+                         Self.isSubstackTeaser(baseArticle?.content ?? "") ||
+                         Self.isSubstackTeaser(baseArticle?.description ?? "")
+        
+        let hasSubstantialSubstackBaseContent = (baseArticle?.content != nil) &&
+            (baseArticle!.content!.count > 250) &&
+            !Self.isSubstackTeaser(baseArticle!.content!)
+        
+        if isSubstack && hasSubstantialSubstackBaseContent, var cleanBase = baseArticle {
+            if let rawContent = cleanBase.content {
+                cleanBase.content = Self.stripSubstackTrackingAndNoise(rawContent)
+            }
+            return await cacheAndReturn(cleanBase, for: safeUrlString)
+        }
+        
         #if canImport(WebKit)
         if isMedium {
             if let result = await HeadlessReadabilityParser.shared.extractMediumArticleDetailed(
@@ -191,6 +256,19 @@ public final class ArticleExtractor: @unchecked Sendable {
                     return result.article
                 }
                 return await cacheAndReturn(result.article, for: safeUrlString)
+            }
+        }
+        
+        if isSubstack {
+            if let result = await HeadlessReadabilityParser.shared.extractSubstackArticle(
+                url: url,
+                baseArticle: baseArticle,
+                extractor: self
+            ), let content = result.content, content.count > 100 {
+                if Self.isSubstackTeaser(content) {
+                    return result
+                }
+                return await cacheAndReturn(result, for: safeUrlString)
             }
         }
         #endif
@@ -1460,6 +1538,217 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         let range = NSRange(location: 0, length: (url as NSString).length)
         return regex.stringByReplacingMatches(in: url, range: range, withTemplate: "v2/resize:fit:800")
     }
+    
+    // MARK: - Substack Helper & Inbox Methods
+    
+    public func hasAuthenticatedSubstackSession() async -> Bool {
+        let cookies = await getAuthenticatedSubstackCookies()
+        return ArticleExtractor.hasAuthenticatedSubstackCookies(cookies)
+    }
+    
+    public func getAuthenticatedSubstackCookies() async -> [HTTPCookie] {
+        let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+        let allCookies = await cookieStore.allCookies()
+        return allCookies.filter { c in
+            let d = c.domain.lowercased()
+            return d == "substack.com" || d.hasSuffix(".substack.com")
+        }
+    }
+    
+    public func scrapeSubstackInbox() async -> [NewsArticle] {
+        let wv = createAuthenticatedWebView()
+        let observer = NavigationObserver()
+        wv.navigationDelegate = observer
+        
+        guard let inboxUrl = URL(string: "https://substack.com/inbox") else { return [] }
+        
+        _ = await withCheckedContinuation { continuation in
+            var finished = false
+            observer.onFinished = { success in
+                if !finished {
+                    finished = true
+                    continuation.resume(returning: success)
+                }
+            }
+            wv.load(URLRequest(url: inboxUrl))
+            
+            Task {
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                await MainActor.run {
+                    if !finished {
+                        finished = true
+                        continuation.resume(returning: false)
+                    }
+                }
+            }
+        }
+        
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        
+        for _ in 0..<6 {
+            if let count = try? await wv.evaluateJavaScript("document.querySelectorAll('article, [data-testid*=\"post\"], a[href*=\"/p/\"]').length") as? Int, count > 0 {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+        }
+        
+        let script = """
+        (function() {
+            var items = [];
+            var seen = {};
+            var cards = document.querySelectorAll('article, [data-testid*=\"post\"], div[class*=\"reader-post\"]');
+            if (cards.length === 0) {
+                cards = document.querySelectorAll('a[href*=\"/p/\"]');
+            }
+            
+            cards.forEach(function(card) {
+                var a = card.tagName === 'A' ? card : (card.querySelector('a[href*=\"/p/\"]') || card.querySelector('a'));
+                if (!a || !a.href) return;
+                var href = a.href;
+                if (seen[href]) return;
+                seen[href] = true;
+                
+                var titleEl = card.querySelector('h1, h2, h3, [class*=\"title\"]') || a;
+                var title = titleEl ? (titleEl.innerText || '').trim() : '';
+                if (!title) return;
+                
+                var pubEl = card.querySelector('[class*=\"publication\"], [class*=\"pub-name\"], a[href*=\"substack.com\"]:not([href*=\"/p/\"])');
+                var pubName = pubEl ? (pubEl.innerText || '').trim() : '';
+                
+                var authorEl = card.querySelector('[class*=\"byline\"], [class*=\"author\"]');
+                var author = authorEl ? (authorEl.innerText || '').trim() : '';
+                
+                var descEl = card.querySelector('p, [class*=\"subtitle\"], [class*=\"description\"]');
+                var desc = descEl ? (descEl.innerText || '').trim() : '';
+                
+                var imgEl = card.querySelector('img');
+                var imgUrl = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+                
+                items.push({
+                    title: title,
+                    url: href,
+                    publication: pubName,
+                    author: author,
+                    imageUrl: imgUrl,
+                    description: desc,
+                    date: null
+                });
+            });
+            return JSON.stringify(items);
+        })()
+        """
+        
+        guard let jsonStr = try? await wv.evaluateJavaScript(script) as? String,
+              let data = jsonStr.data(using: .utf8),
+              let scraped = try? JSONDecoder().decode([ScrapedSubstackItem].self, from: data),
+              !scraped.isEmpty else {
+            return []
+        }
+        
+        return scraped.map { item in
+            let optImg = Self.optimizeSubstackImageUrl(item.imageUrl)
+            return NewsArticle(
+                id: item.url,
+                title: item.title,
+                link: item.url,
+                publishDate: Date(),
+                imageUrl: optImg.isEmpty ? nil : optImg,
+                description: item.description.isEmpty ? "Substack Post from \(item.publication.isEmpty ? "Substack" : item.publication)" : item.description,
+                content: nil,
+                author: item.author.isEmpty ? nil : item.author,
+                publicationName: item.publication.isEmpty ? "Substack" : item.publication,
+                publicationIconUrl: "https://substack.com/favicon.ico",
+                category: .tech
+            )
+        }
+    }
+    
+    public func extractSubstackArticle(
+        url: URL,
+        baseArticle: NewsArticle?,
+        extractor: ArticleExtractor
+    ) async -> NewsArticle? {
+        let wv = createAuthenticatedWebView()
+        let observer = NavigationObserver()
+        wv.navigationDelegate = observer
+        
+        _ = await withCheckedContinuation { continuation in
+            var finished = false
+            observer.onFinished = { success in
+                if !finished {
+                    finished = true
+                    continuation.resume(returning: success)
+                }
+            }
+            wv.load(URLRequest(url: url))
+            
+            Task {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                await MainActor.run {
+                    if !finished {
+                        finished = true
+                        continuation.resume(returning: false)
+                    }
+                }
+            }
+        }
+        
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        
+        let cleanupScript = """
+        (function() {
+            var junk = document.querySelectorAll('.subscription-widget-wrap, .subscribe-widget, .post-footer, .like-button-container, .share-dialog, .comment-widget');
+            junk.forEach(function(el) { el.remove(); });
+            
+            var article = document.querySelector('article, [itemprop="articleBody"], .post, .entry-content, main');
+            if (article && (article.innerText || '').length > 200) {
+                return article.outerHTML;
+            }
+            return document.body ? document.body.innerHTML : null;
+        })()
+        """
+        
+        guard let extractedHtml = try? await wv.evaluateJavaScript(cleanupScript) as? String,
+              extractedHtml.count > 200 else {
+            return nil
+        }
+        
+        let cleanedHtml = ArticleExtractor.stripSubstackTrackingAndNoise(extractedHtml)
+        if let parsed = await parse(html: cleanedHtml, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor) {
+            var art = parsed
+            if let content = art.content {
+                art.content = ArticleExtractor.stripSubstackTrackingAndNoise(content)
+            }
+            return art
+        }
+        
+        if var fallback = baseArticle {
+            fallback.content = cleanedHtml
+            return fallback
+        }
+        return nil
+    }
+    
+    nonisolated public static func optimizeSubstackImageUrl(_ url: String) -> String {
+        guard url.contains("substackcdn.com") || url.contains("substack-post-media") else { return url }
+        if url.contains("w_") {
+            let pattern = "w_\\d+"
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return url }
+            let range = NSRange(location: 0, length: (url as NSString).length)
+            return regex.stringByReplacingMatches(in: url, range: range, withTemplate: "w_1200")
+        }
+        return url
+    }
+}
+
+public struct ScrapedSubstackItem: Codable, Sendable {
+    public let title: String
+    public let url: String
+    public let publication: String
+    public let author: String
+    public let imageUrl: String
+    public let description: String
+    public let date: String?
 }
 #endif
 

@@ -52,6 +52,12 @@ namespace Daily_WinUI.ViewModels
             PublicationName == "Medium Reading List" || 
             (Link != null && Link.Contains("medium.com"));
 
+        public bool IsSubstackItem => 
+            PublicationName == "Substack Inbox" || 
+            (Link != null && (Link.Contains("substack.com") || Link.Contains(".substack.com")));
+
+        public bool CanSubscribe => IsMediumItem || IsSubstackItem;
+
         private bool _isFavorite;
         public bool IsFavorite
         {

@@ -90,6 +90,7 @@ data class AppSettings(
     val newsShowImages: Boolean = true,
     val newsMediumUsername: String? = null,
     val newsMediumReadingListUrl: String? = null,
+    val newsSubstackUsername: String? = null,
 
     // Cloud & Sync
     val cloudSyncEnabled: Boolean = true,

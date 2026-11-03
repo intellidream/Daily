@@ -554,5 +554,35 @@ class ArticleExtractor {
             }
             return hasValidUid && hasValidSid
         }
+
+        fun isSubstackTeaser(content: String?): Boolean {
+            if (content.isNullOrBlank()) return true
+            val lower = content.lowercase(Locale.ROOT)
+            return lower.contains("this post is for paid subscribers") ||
+                   lower.contains("upgrade to paid") ||
+                   lower.contains("subscription-widget-wrap") ||
+                   lower.contains("subscribe to get access") ||
+                   lower.contains("only available to paid subscribers")
+        }
+
+        fun stripSubstackTrackingAndNoise(html: String): String {
+            var cleaned = html.replace(Regex("<div[^>]*class=\"[^\"]*subscription-widget-wrap[^\"]*\"[\\s\\S]*?</div>\\s*</div>", RegexOption.IGNORE_CASE), "")
+            cleaned = cleaned.replace(Regex("<div[^>]*class=\"[^\"]*post-footer[^\"]*\"[\\s\\S]*?</div>", RegexOption.IGNORE_CASE), "")
+            cleaned = cleaned.replace(Regex("<div[^>]*class=\"[^\"]*like-button-container[^\"]*\"[\\s\\S]*?</div>", RegexOption.IGNORE_CASE), "")
+            return cleaned
+        }
+
+        fun hasAuthenticatedSubstackCookies(cookieHeader: String?): Boolean {
+            if (cookieHeader.isNullOrBlank()) return false
+            val cookies = cookieHeader.split(";")
+            return cookies.any { pair ->
+                val parts = pair.trim().split("=", limit = 2)
+                if (parts.size == 2) {
+                    val name = parts[0].trim()
+                    val value = parts[1].trim()
+                    (name == "substack.sid" || name == "connect.sid") && value.isNotEmpty()
+                } else false
+            }
+        }
     }
 }

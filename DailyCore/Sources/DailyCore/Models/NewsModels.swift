@@ -113,6 +113,34 @@ public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
         publicationName?.contains("Medium") == true || link.contains("medium.com")
     }
     
+    public var isSubstackItem: Bool {
+        publicationName?.contains("Substack") == true ||
+        link.contains("substack.com") ||
+        (publicationIconUrl?.contains("substack") == true)
+    }
+    
+    public var substackPublicationSlug: String? {
+        guard let url = URL(string: link), let host = url.host?.lowercased() else { return nil }
+        if host.hasSuffix(".substack.com") {
+            let parts = host.split(separator: ".")
+            if let first = parts.first, first != "www" && first != "api" {
+                return String(first)
+            }
+        }
+        return nil
+    }
+    
+    public var substackFeedUrl: String? {
+        if let slug = substackPublicationSlug {
+            return "https://\(slug).substack.com/feed"
+        }
+        if link.contains("substack.com") {
+            guard let url = URL(string: link), let host = url.host else { return nil }
+            return "\(url.scheme ?? "https")://\(host)/feed"
+        }
+        return nil
+    }
+    
     public var relativeTimeFormatted: String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -393,4 +421,17 @@ public struct FeedSearchResult: Identifiable, Hashable, Codable, Sendable {
         self.iconUrl = iconUrl
         self.website = website
     }
+}
+
+public func extractSubstackInfo(from article: NewsArticle) -> (name: String, feedUrl: String)? {
+    if let feedUrl = article.substackFeedUrl {
+        let name = article.publicationName ?? article.substackPublicationSlug ?? "Substack"
+        return (name, feedUrl)
+    }
+    if article.isSubstackItem, let url = URL(string: article.link), let host = url.host {
+        let feedUrl = "\(url.scheme ?? "https")://\(host)/feed"
+        let name = article.publicationName ?? host
+        return (name, feedUrl)
+    }
+    return nil
 }

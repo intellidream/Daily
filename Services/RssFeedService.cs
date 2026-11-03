@@ -589,7 +589,7 @@ namespace Daily.Services
                         Title = title,
                         Link = link,
                         PublishDate = DateTime.TryParse(pubDateStr, out var date) ? date : DateTime.Now,
-                        ImageUrl = OptimizeMediumImageUrl(imageUrl ?? channelImage ?? feed.IconUrl),
+                        ImageUrl = OptimizeSubstackImageUrl(OptimizeMediumImageUrl(imageUrl ?? channelImage ?? feed.IconUrl)),
                         Description = cleanDescription,
                         Content = contentEncoded,
                         Author = authorName,
@@ -945,6 +945,19 @@ namespace Daily.Services
                 var pattern = @"v2/resize:[^/]+(/format:[^/]+)?";
                 var result = Regex.Replace(url, pattern, "v2/resize:fit:800");
                 return result;
+            }
+            return url;
+        }
+
+        public static string OptimizeSubstackImageUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url;
+            if (url.Contains("substackcdn.com") || url.Contains("substack-post-media"))
+            {
+                if (url.Contains("w_"))
+                {
+                    return Regex.Replace(url, @"w_\d+", "w_1200");
+                }
             }
             return url;
         }

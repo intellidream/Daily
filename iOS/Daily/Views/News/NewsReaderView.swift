@@ -251,6 +251,26 @@ public struct NewsReaderView: View {
                 }
                 .disabled(isSubscribed)
             }
+            
+            // Substack Publication Subscribe if applicable
+            if let substackInfo = extractSubstackInfo(from: currentArticle) {
+                let isSubscribed = NewsService.shared.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
+                Divider()
+                Button {
+                    if !isSubscribed {
+                        withAnimation {
+                            NewsService.shared.subscribeToSubstackPublication(name: substackInfo.name, feedUrl: substackInfo.feedUrl)
+                        }
+                        triggerHaptic()
+                    }
+                } label: {
+                    Label(
+                        isSubscribed ? "Subscribed to \(substackInfo.name)" : "Subscribe to \(substackInfo.name)",
+                        systemImage: isSubscribed ? "checkmark.circle.fill" : "plus.circle"
+                    )
+                }
+                .disabled(isSubscribed)
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 16, weight: .semibold))

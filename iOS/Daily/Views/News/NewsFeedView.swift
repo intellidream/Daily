@@ -334,6 +334,17 @@ public struct NewsFeedView: View {
                     }
                 }
                 
+                if let substackFeed = newsService.substackInboxFeedSource {
+                    Divider()
+                    Button {
+                        Task {
+                            await newsService.selectFeed(substackFeed)
+                        }
+                    } label: {
+                        Label("Substack Inbox", systemImage: "tray.full.fill")
+                    }
+                }
+                
                 Divider()
                 
                 ForEach(newsService.feeds) { feed in

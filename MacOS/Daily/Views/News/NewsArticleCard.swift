@@ -152,6 +152,30 @@ public struct NewsArticleCard: View {
                                         )
                                     }
                                     .buttonStyle(.plain)
+                                } else if let substackInfo = extractSubstackInfo(from: article) {
+                                    let isSubscribed = NewsService.shared.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
+                                    Button {
+                                        if !isSubscribed {
+                                            withAnimation {
+                                                NewsService.shared.subscribeToSubstackPublication(name: substackInfo.name, feedUrl: substackInfo.feedUrl)
+                                            }
+                                            triggerHaptic()
+                                        }
+                                    } label: {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                                .font(.system(size: 10))
+                                            Text(isSubscribed ? "Subscribed" : "Subscribe")
+                                                .font(.system(size: 10, weight: .bold))
+                                        }
+                                        .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            Capsule().fill(isSubscribed ? Color.white.opacity(0.06) : ThemeColors.accentCyan.opacity(0.12))
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }

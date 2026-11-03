@@ -256,7 +256,7 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
                 currentImageUrl = extractFirstImage(from: currentContentEncoded) ?? extractFirstImage(from: currentDescription)
             }
             
-            let finalImageUrl = optimizeMediumImageUrl(currentImageUrl ?? channelImageUrl ?? feed.iconUrl)
+            let finalImageUrl = optimizeSubstackImageUrl(optimizeMediumImageUrl(currentImageUrl ?? channelImageUrl ?? feed.iconUrl))
             
             // Clean description snippet
             var cleanDesc = stripHtmlTags(currentDescription)
@@ -359,7 +359,7 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
                 title: decodeHtmlEntities(title),
                 link: link,
                 publishDate: date,
-                imageUrl: optimizeMediumImageUrl(imageUrl.isEmpty ? feed.iconUrl : imageUrl),
+                imageUrl: optimizeSubstackImageUrl(optimizeMediumImageUrl(imageUrl.isEmpty ? feed.iconUrl : imageUrl)),
                 description: cleanDesc,
                 content: content.isEmpty ? desc : content,
                 author: author.isEmpty ? nil : author,
@@ -530,5 +530,14 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
         guard url.contains("miro.medium.com") else { return url }
         let pattern = "v2/resize:[^/]+(/format:[^/]+)?"
         return url.replacingOccurrences(of: pattern, with: "v2/resize:fit:800", options: .regularExpression)
+    }
+    
+    private func optimizeSubstackImageUrl(_ url: String) -> String {
+        guard url.contains("substackcdn.com") || url.contains("substack-post-media") else { return url }
+        if url.contains("w_") {
+            let pattern = "w_\\d+"
+            return url.replacingOccurrences(of: pattern, with: "w_1200", options: .regularExpression)
+        }
+        return url
     }
 }

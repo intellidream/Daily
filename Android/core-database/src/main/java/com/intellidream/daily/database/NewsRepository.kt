@@ -45,6 +45,8 @@ interface NewsSyncHandler {
     suspend fun pushSavedArticle(article: SavedArticle): Boolean
     suspend fun scrapeMediumReadingList(readingListUrl: String): List<NewsArticle>? = null
     suspend fun extractMediumArticle(url: String, baseArticle: NewsArticle? = null): NewsArticle? = null
+    suspend fun scrapeSubstackInbox(): List<NewsArticle>? = null
+    suspend fun extractSubstackArticle(url: String, baseArticle: NewsArticle? = null): NewsArticle? = null
 }
 
 class NewsRepository(
@@ -317,6 +319,11 @@ class NewsRepository(
             if (!scraped.isNullOrEmpty()) {
                 return@withContext scraped
             }
+        } else if (feed.id == "substack_inbox") {
+            val scraped = syncHandler?.scrapeSubstackInbox()
+            if (!scraped.isNullOrEmpty()) {
+                return@withContext scraped
+            }
         }
 
         val targetUrl = when {
@@ -343,6 +350,10 @@ class NewsRepository(
             val isMedium = article.link.contains("medium.com") || 
                            article.publicationName?.contains("Medium", ignoreCase = true) == true
 
+            val isSubstack = article.isSubstackItem || 
+                             article.link.contains("substack.com") || 
+                             article.publicationName?.contains("Substack", ignoreCase = true) == true
+
             val articleContent = article.content
             val hasSubstantialContent = !articleContent.isNullOrBlank() && 
                                          articleContent.length > 250 && 
@@ -352,11 +363,27 @@ class NewsRepository(
                 return@withContext article
             }
 
+            val hasSubstantialSubstackContent = !articleContent.isNullOrBlank() && 
+                                                articleContent.length > 300 && 
+                                                !ArticleExtractor.isSubstackTeaser(articleContent)
+
+            if (isSubstack && hasSubstantialSubstackContent) {
+                return@withContext article
+            }
+
             if (isMedium) {
                 val extractedMedium = syncHandler?.extractMediumArticle(article.link, article)
                 val medContent = extractedMedium?.content
                 if (extractedMedium != null && !medContent.isNullOrBlank() && medContent.length > 100) {
                     return@withContext extractedMedium
+                }
+            }
+
+            if (isSubstack) {
+                val extractedSubstack = syncHandler?.extractSubstackArticle(article.link, article)
+                val subContent = extractedSubstack?.content
+                if (extractedSubstack != null && !subContent.isNullOrBlank() && subContent.length > 100) {
+                    return@withContext extractedSubstack
                 }
             }
 
@@ -483,6 +510,45 @@ class NewsRepository(
     suspend fun unsubscribeFromMediumAuthor(username: String, userId: String = currentUserId) {
         val clean = username.trim().removePrefix("@").lowercase()
         val feedUrl = "https://medium.com/feed/@$clean"
+        val feed = _feeds.value.firstOrNull { it.url.equals(feedUrl, ignoreCase = true) } ?: return
+        deleteFeed(feed.id, userId)
+    }
+
+    // MARK: - Substack Subscriptions & Inbox
+
+    fun substackInboxFeedSource(username: String?): FeedSource? {
+        if (username.isNullOrBlank()) return null
+        val clean = username.trim().removePrefix("@")
+        if (clean.isBlank()) return null
+        return FeedSource(
+            id = "substack_inbox",
+            name = "Substack Inbox",
+            url = "https://substack.com/inbox",
+            iconUrl = "https://substack.com/favicon.ico",
+            type = FeedType.Rss,
+            category = FeedCategory.Other,
+            displayOrder = 998
+        )
+    }
+
+    fun isSubscribedToSubstack(publicationSlug: String): Boolean {
+        val clean = publicationSlug.trim().lowercase()
+        val feedUrl = "https://$clean.substack.com/feed"
+        return _feeds.value.any { it.url.equals(feedUrl, ignoreCase = true) }
+    }
+
+    suspend fun subscribeToSubstackPublication(publicationSlug: String, publicationName: String? = null, userId: String = currentUserId) {
+        val clean = publicationSlug.trim().lowercase()
+        if (clean.isBlank()) return
+        val feedUrl = "https://$clean.substack.com/feed"
+        if (_feeds.value.any { it.url.equals(feedUrl, ignoreCase = true) }) return
+        val displayName = publicationName ?: clean.replaceFirstChar { it.uppercase() }
+        addFeed(name = displayName, url = feedUrl, category = FeedCategory.Other, userId = userId)
+    }
+
+    suspend fun unsubscribeFromSubstackPublication(publicationSlug: String, userId: String = currentUserId) {
+        val clean = publicationSlug.trim().lowercase()
+        val feedUrl = "https://$clean.substack.com/feed"
         val feed = _feeds.value.firstOrNull { it.url.equals(feedUrl, ignoreCase = true) } ?: return
         deleteFeed(feed.id, userId)
     }

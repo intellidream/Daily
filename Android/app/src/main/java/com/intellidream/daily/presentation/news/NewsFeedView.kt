@@ -244,6 +244,7 @@ fun NewsFeedView(
                     storiesCount = filteredArticles.size,
                     mediumUsername = settings.newsMediumUsername,
                     mediumReadingListUrl = settings.newsMediumReadingListUrl,
+                    substackUsername = settings.newsSubstackUsername,
                     repository = repository,
                     onSelectFeed = { feed ->
                         scope.launch {
@@ -306,6 +307,10 @@ fun NewsFeedView(
                                     val u = article.mediumUsername ?: article.author?.removePrefix("@") ?: ""
                                     repository.isSubscribedToMediumAuthor(u)
                                 } else false,
+                                isSubstackSubscribed = if (article.isSubstackItem) {
+                                    val slug = article.substackPublicationSlug ?: com.intellidream.daily.model.extractSubstackPublicationSlug(article.link) ?: ""
+                                    repository.isSubscribedToSubstack(slug)
+                                } else false,
                                 onTap = { selectedArticleForReader = article },
                                 onToggleReadLater = {
                                     scope.launch { repository.toggleReadLater(article) }
@@ -319,6 +324,15 @@ fun NewsFeedView(
                                             repository.unsubscribeFromMediumAuthor(user)
                                         } else {
                                             repository.subscribeToMediumAuthor(user, article.author)
+                                        }
+                                    }
+                                },
+                                onSubscribeSubstackPublication = { slug ->
+                                    scope.launch {
+                                        if (repository.isSubscribedToSubstack(slug)) {
+                                            repository.unsubscribeFromSubstackPublication(slug)
+                                        } else {
+                                            repository.subscribeToSubstackPublication(slug, article.publicationName)
                                         }
                                     }
                                 }
@@ -678,6 +692,7 @@ private fun FeedPickerRow(
     storiesCount: Int,
     mediumUsername: String?,
     mediumReadingListUrl: String?,
+    substackUsername: String? = null,
     repository: NewsRepository,
     onSelectFeed: (FeedSource) -> Unit
 ) {
@@ -758,6 +773,25 @@ private fun FeedPickerRow(
                         onClick = {
                             showPickerMenu = false
                             onSelectFeed(mediumSource)
+                        }
+                    )
+                }
+
+                val substackSource = repository.substackInboxFeedSource(substackUsername)
+                if (substackSource != null) {
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 4.dp))
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Substack Inbox",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedFeed.id == substackSource.id) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            showPickerMenu = false
+                            onSelectFeed(substackSource)
                         }
                     )
                 }

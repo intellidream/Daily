@@ -246,6 +246,31 @@ public final class NewsService: ObservableObject {
         return feeds.contains(where: { $0.url == feedUrl })
     }
     
+    // MARK: - Substack Integration
+    
+    public var substackInboxFeedSource: FeedSource? {
+        let settings = SettingsService.shared.settings
+        guard let username = settings.newsSubstackUsername, !username.isEmpty else { return nil }
+        return FeedSource(
+            id: "substack_inbox",
+            name: "Substack Inbox",
+            url: "https://substack.com/inbox",
+            iconUrl: "https://substack.com/favicon.ico",
+            type: .rss,
+            category: .tech,
+            displayOrder: 998
+        )
+    }
+    
+    public func subscribeToSubstackPublication(name: String, feedUrl: String) {
+        if feeds.contains(where: { $0.url == feedUrl }) { return }
+        addFeed(name: name, url: feedUrl, category: .tech)
+    }
+    
+    public func isSubscribedToSubstack(feedUrl: String) -> Bool {
+        feeds.contains(where: { $0.url == feedUrl })
+    }
+    
     nonisolated private static func fetchFeedItems(
         _ feed: FeedSource,
         mediumUsername: String?,
@@ -284,6 +309,15 @@ public final class NewsService: ObservableObject {
                     print("[NewsService] Medium RSS fetch fallback error: \(error)")
                 }
             }
+        }
+        
+        if feed.id == "substack_inbox" {
+            #if canImport(WebKit)
+            let scraped = await HeadlessReadabilityParser.shared.scrapeSubstackInbox()
+            if !scraped.isEmpty {
+                return scraped
+            }
+            #endif
         }
         
         var targetFeedUrl = feed.url.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -235,6 +235,7 @@ public sealed partial class FeaturesPage : Page
             // Load Subscribed Feeds list
             _ = LoadFeedsListAsync();
             UpdateMediumUi();
+            UpdateSubstackUi();
             
             // Load Paired Watches
             _ = LoadPairedWatchesAsync();
@@ -1878,6 +1879,148 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
+    private void UpdateSubstackUi()
+    {
+        if (!string.IsNullOrEmpty(_settings.SubstackUsername))
+        {
+            SubstackStatusText.Text = $"Status: Linked as @{_settings.SubstackUsername}";
+            SubstackHelpText.Text = "Your Substack account is connected. Inbox articles and subscriber stories are available.";
+            SubstackLoginBtn.Content = "Reconnect / Change Account";
+            SubstackDisconnectBtn.Visibility = Visibility.Visible;
+            SubstackUsernameTextBox.Visibility = Visibility.Visible;
+            SubstackUsernameTextBox.Text = _settings.SubstackUsername;
+
+            _ = CheckSubstackSessionAsync();
+        }
+        else
+        {
+            SubstackStatusText.Text = "Status: Not Configured";
+            SubstackHelpText.Text = "Account username and session cookies sync upon login.";
+            SubstackLoginBtn.Content = "Login to Substack";
+            SubstackDisconnectBtn.Visibility = Visibility.Collapsed;
+            SubstackUsernameTextBox.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async Task CheckSubstackSessionAsync()
+    {
+        if (string.IsNullOrEmpty(_settings.SubstackUsername)) return;
+        try
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+            if (!System.IO.Directory.Exists(userDataFolder)) return;
+
+            var tempWebView = new WebView2();
+            var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+            await tempWebView.EnsureCoreWebView2Async(env);
+
+            var cookies = await tempWebView.CoreWebView2.CookieManager.GetCookiesAsync("https://substack.com");
+            bool hasSubstackSid = false;
+            foreach (var c in cookies)
+            {
+                if ((c.Name == "substack.sid" || c.Name == "connect.sid") && !string.IsNullOrWhiteSpace(c.Value))
+                {
+                    hasSubstackSid = true;
+                    break;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!string.IsNullOrEmpty(_settings.SubstackUsername))
+                {
+                    if (hasSubstackSid)
+                    {
+                        SubstackStatusText.Text = $"Status: Linked as @{_settings.SubstackUsername} (Session Active)";
+                    }
+                    else
+                    {
+                        SubstackStatusText.Text = $"Status: @{_settings.SubstackUsername} (Session Inactive - Reconnect)";
+                    }
+                }
+            });
+        }
+        catch
+        {
+            // Fallback gracefully without overriding
+        }
+    }
+
+    private void SubstackLoginBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var loginWindow = new SubstackLoginWindow(_settings, UpdateSubstackUi, this.ActualTheme);
+            loginWindow.Activate();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Error opening Substack login window: {ex.Message}");
+        }
+    }
+
+    private async void SubstackDisconnectBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Disconnect Substack",
+            Content = "Are you sure you want to disconnect your Substack account and log out?",
+            PrimaryButtonText = "Disconnect",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.XamlRoot
+        };
+
+        var res = await dialog.ShowAsync();
+        if (res == ContentDialogResult.Primary)
+        {
+            _settings.SubstackUsername = null;
+            SettingsService.Save(_settings);
+            UpdateSubstackUi();
+
+            try
+            {
+                var tempWebView = new WebView2();
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+                var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+                await tempWebView.EnsureCoreWebView2Async(env);
+                
+                var cookieManager = tempWebView.CoreWebView2.CookieManager;
+                var cookies = await cookieManager.GetCookiesAsync("https://substack.com");
+                foreach (var cookie in cookies)
+                {
+                    cookieManager.DeleteCookie(cookie);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Substack Disconnect] Cookie clearing failed: {ex.Message}");
+            }
+        }
+    }
+
+    private void SubstackUsernameTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+        {
+            var text = tb.Text?.Trim().TrimStart('@');
+            if (!string.IsNullOrEmpty(text))
+            {
+                _settings.SubstackUsername = text;
+                SettingsService.Save(_settings);
+                UpdateSubstackUi();
+            }
+            else
+            {
+                tb.Text = _settings.SubstackUsername ?? "";
+            }
+        }
+    }
+
     // View Model for subscribed feed list items
     public class SubscriptionItemViewModel : System.ComponentModel.INotifyPropertyChanged
     {
@@ -2360,6 +2503,296 @@ public sealed partial class FeaturesPage : Page
         private void MediumLoginWindow_Closed(object sender, WindowEventArgs args)
         {
             this.Closed -= MediumLoginWindow_Closed;
+            if (_webView != null && _webView.CoreWebView2 != null)
+            {
+                if (_sourceChangedHandler != null)
+                {
+                    _webView.CoreWebView2.SourceChanged -= _sourceChangedHandler;
+                }
+                if (_navigationCompletedHandler != null)
+                {
+                    _webView.CoreWebView2.NavigationCompleted -= _navigationCompletedHandler;
+                }
+            }
+        }
+    }
+
+    public sealed class SubstackLoginWindow : Window
+    {
+        private readonly WebView2 _webView;
+        private readonly ProgressRing _progressRing;
+        private readonly AppSettings _settings;
+        private readonly Action _onUiUpdate;
+        private Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2SourceChangedEventArgs>? _sourceChangedHandler;
+        private Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? _navigationCompletedHandler;
+        private bool _authResolved = false;
+        private ElementTheme _theme;
+        private IntPtr _hWnd = IntPtr.Zero;
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        private void SetTitleBarTheme(IntPtr hwnd, ElementTheme theme)
+        {
+            try
+            {
+                int darkMode = theme == ElementTheme.Dark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+                DwmSetWindowAttribute(hwnd, 19, ref darkMode, sizeof(int));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SubstackLoginWindow] SetTitleBarTheme error: {ex.Message}");
+            }
+        }
+
+        public SubstackLoginWindow(AppSettings settings, Action onUiUpdate, ElementTheme theme)
+        {
+            _settings = settings;
+            _onUiUpdate = onUiUpdate;
+            _theme = theme;
+            
+            this.Title = "Login to Substack";
+            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            
+            App.Current.RegisterSecondaryWindow(this);
+            
+            _webView = new WebView2
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            if (theme == ElementTheme.Dark)
+            {
+                _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0x1A, 0x14, 0x23);
+            }
+            else
+            {
+                _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0xED, 0xE5, 0xD9);
+            }
+
+            _progressRing = new ProgressRing
+            {
+                IsActive = true,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = 50,
+                Height = 50
+            };
+
+            var grid = new Grid
+            {
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                RequestedTheme = theme
+            };
+            grid.Children.Add(_webView);
+            grid.Children.Add(_progressRing);
+
+            this.Content = grid;
+
+            this.Activated += SubstackLoginWindow_Activated;
+            this.Closed += SubstackLoginWindow_Closed;
+        }
+
+        public void ApplyTheme(ElementTheme theme)
+        {
+            _theme = theme;
+            if (Content is FrameworkElement root)
+            {
+                root.RequestedTheme = theme;
+            }
+            if (_webView != null)
+            {
+                if (theme == ElementTheme.Dark)
+                {
+                    _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0x1A, 0x14, 0x23);
+                }
+                else
+                {
+                    _webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 0xED, 0xE5, 0xD9);
+                }
+            }
+            if (_hWnd != IntPtr.Zero)
+            {
+                SetTitleBarTheme(_hWnd, theme);
+            }
+        }
+
+        private async void SubstackLoginWindow_Activated(object sender, WindowActivatedEventArgs args)
+        {
+            this.Activated -= SubstackLoginWindow_Activated;
+
+            try
+            {
+                _hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_hWnd);
+                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                
+                appWindow.SetIcon("Assets/AppIcon.ico");
+                appWindow.Resize(new Windows.Graphics.SizeInt32(850, 850));
+                
+                SetTitleBarTheme(_hWnd, _theme);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SubstackLoginWindow] Sizing error: {ex.Message}");
+            }
+
+            try
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+                System.IO.Directory.CreateDirectory(userDataFolder);
+
+                var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+                await _webView.EnsureCoreWebView2Async(env);
+                
+                _sourceChangedHandler = async (senderCore, sourceArgs) =>
+                {
+                    await CheckAuthenticationAsync(senderCore);
+                };
+
+                _navigationCompletedHandler = async (senderCore, navArgs) =>
+                {
+                    _progressRing.IsActive = false;
+                    _progressRing.Visibility = Visibility.Collapsed;
+                    await CheckAuthenticationAsync(senderCore);
+                };
+
+                _webView.CoreWebView2.SourceChanged += _sourceChangedHandler;
+                _webView.CoreWebView2.NavigationCompleted += _navigationCompletedHandler;
+                _webView.Source = new Uri("https://substack.com/sign-in");
+            }
+            catch (Exception ex)
+            {
+                _progressRing.IsActive = false;
+                _progressRing.Visibility = Visibility.Collapsed;
+                System.Diagnostics.Debug.WriteLine($"[SubstackLoginWindow] WebView2 initialization failed: {ex.Message}");
+            }
+        }
+
+        private async Task CheckAuthenticationAsync(Microsoft.Web.WebView2.Core.CoreWebView2 core)
+        {
+            if (_authResolved) return;
+
+            var url = core.Source;
+            if (string.IsNullOrEmpty(url)) return;
+
+            try
+            {
+                var uri = new Uri(url);
+                if (!uri.Host.EndsWith("substack.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                // Check cookies for active logged-in session (substack.sid or connect.sid)
+                var cookieManager = core.CookieManager;
+                var cookies = await cookieManager.GetCookiesAsync("https://substack.com");
+                bool hasSubstackSid = false;
+
+                foreach (var c in cookies)
+                {
+                    if ((c.Name == "substack.sid" || c.Name == "connect.sid") && !string.IsNullOrWhiteSpace(c.Value))
+                    {
+                        hasSubstackSid = true;
+                        break;
+                    }
+                }
+
+                string? username = null;
+                var path = uri.AbsolutePath;
+
+                if (path.StartsWith("/@"))
+                {
+                    var parts = path.Substring(2).Split('/');
+                    if (!string.IsNullOrEmpty(parts[0]))
+                    {
+                        username = parts[0];
+                    }
+                }
+
+                // Query window._preloads.user if available
+                try
+                {
+                    var jsViewer = @"(() => {
+                        try {
+                            if (window._preloads && window._preloads.user) {
+                                const u = window._preloads.user;
+                                return JSON.stringify({
+                                    handle: u.handle || u.username || null,
+                                    name: u.name || null
+                                });
+                            }
+                        } catch(e) {
+                            return null;
+                        }
+                        return null;
+                    })()";
+                    var viewerRaw = await core.ExecuteScriptAsync(jsViewer);
+                    if (!string.IsNullOrWhiteSpace(viewerRaw) && viewerRaw != "null")
+                    {
+                        string unescaped = System.Text.Json.JsonSerializer.Deserialize<string>(viewerRaw) ?? viewerRaw;
+                        using var doc = System.Text.Json.JsonDocument.Parse(unescaped);
+                        if (doc.RootElement.TryGetProperty("handle", out var hProp) && hProp.GetString() is { Length: > 0 } hVal)
+                        {
+                            username ??= hVal;
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                if (hasSubstackSid)
+                {
+                    // Promote authentication cookies to .substack.com
+                    foreach (var c in cookies)
+                    {
+                        if (c.Name == "substack.sid" || c.Name == "connect.sid" || c.Name == "substack.lli")
+                        {
+                            var promoted = cookieManager.CreateCookie(c.Name, c.Value, ".substack.com", "/");
+                            promoted.IsSecure = true;
+                            promoted.IsHttpOnly = c.IsHttpOnly;
+                            cookieManager.AddOrUpdateCookie(promoted);
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(username))
+                    {
+                        // Check if not on sign-in page anymore (e.g. redirected to /inbox or /home or /)
+                        if (path.Contains("sign-in") || path.Contains("login"))
+                        {
+                            return;
+                        }
+                        username = "user";
+                    }
+
+                    _authResolved = true;
+                    if (_sourceChangedHandler != null) core.SourceChanged -= _sourceChangedHandler;
+                    if (_navigationCompletedHandler != null) core.NavigationCompleted -= _navigationCompletedHandler;
+
+                    _settings.SubstackUsername = username;
+                    SettingsService.Save(_settings);
+
+                    _onUiUpdate();
+
+                    this.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Substack Login] Error parsing URL {url}: {ex.Message}");
+            }
+        }
+
+        private void SubstackLoginWindow_Closed(object sender, WindowEventArgs args)
+        {
+            this.Closed -= SubstackLoginWindow_Closed;
             if (_webView != null && _webView.CoreWebView2 != null)
             {
                 if (_sourceChangedHandler != null)

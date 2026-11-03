@@ -889,6 +889,8 @@ private fun NewsSettingsCard(
 ) {
     var showMediumDialog by remember { mutableStateOf(false) }
     var mediumUsernameInput by remember { mutableStateOf(settings.newsMediumUsername ?: "") }
+    var showSubstackDialog by remember { mutableStateOf(false) }
+    var substackUsernameInput by remember { mutableStateOf(settings.newsSubstackUsername ?: "") }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -1161,6 +1163,196 @@ private fun NewsSettingsCard(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Substack Setup (Parity with iOS & MacOS)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "SUBSTACK SETUP",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ThemeColors.accentCyan
+                    )
+
+                    val username = settings.newsSubstackUsername
+                    val substackCookies = try { android.webkit.CookieManager.getInstance().getCookie("https://substack.com") } catch (_: Exception) { null }
+                    val hasActiveSession = com.intellidream.daily.model.ArticleExtractor.hasAuthenticatedSubstackCookies(substackCookies)
+
+                    if (!username.isNullOrBlank()) {
+                        val statusColor = if (hasActiveSession) Color(0xFF34C759) else Color(0xFFFF9500)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(statusColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(statusColor)
+                            )
+                            Text(
+                                text = if (hasActiveSession) "@$username" else "@$username · Session Inactive",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Not Configured",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = ThemeColors.fgMutedDark
+                        )
+                    }
+                }
+
+                val configuredUsername = settings.newsSubstackUsername
+                if (!configuredUsername.isNullOrBlank()) {
+                    val substackCookies = try { android.webkit.CookieManager.getInstance().getCookie("https://substack.com") } catch (_: Exception) { null }
+                    val hasActiveSession = com.intellidream.daily.model.ArticleExtractor.hasAuthenticatedSubstackCookies(substackCookies)
+
+                    Text(
+                        text = if (hasActiveSession) {
+                            "Substack session active. Your Inbox and subscribed member posts are unlocked."
+                        } else {
+                            "Substack is linked, but your browser session is inactive. Sign in once to unlock your full Inbox and paid subscriber posts."
+                        },
+                        fontSize = 12.sp,
+                        color = if (hasActiveSession) ThemeColors.fgMutedDark else Color(0xFFFF9500)
+                    )
+
+                    if (!hasActiveSession) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(CircleShape)
+                                .background(ThemeColors.accentCyan)
+                                .clickable {
+                                    substackUsernameInput = configuredUsername
+                                    showSubstackDialog = true
+                                }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Link,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Reconnect Substack Session",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.12f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .clickable {
+                                    substackUsernameInput = configuredUsername
+                                    showSubstackDialog = true
+                                }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Change Account",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF6B6B).copy(alpha = 0.12f))
+                                .border(1.dp, Color(0xFFFF6B6B).copy(alpha = 0.25f), CircleShape)
+                                .clickable {
+                                    onUpdateSettings { s ->
+                                        s.copy(newsSubstackUsername = null)
+                                    }
+                                }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Disconnect",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFFF6B6B)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Connect your Substack account to read subscriber-only newsletters and access your Substack Inbox.",
+                        fontSize = 12.sp,
+                        color = ThemeColors.fgMutedDark
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(CircleShape)
+                            .background(ThemeColors.accentCyan)
+                            .clickable {
+                                substackUsernameInput = ""
+                                showSubstackDialog = true
+                            }
+                            .padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Newspaper,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Connect Substack Account",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1179,6 +1371,22 @@ private fun NewsSettingsCard(
                     }
                 }
                 showMediumDialog = false
+            }
+        )
+    }
+
+    if (showSubstackDialog) {
+        SubstackLoginSheet(
+            initialUsername = substackUsernameInput,
+            onDismiss = { showSubstackDialog = false },
+            onConnect = { detectedUsername ->
+                val clean = detectedUsername.trim().removePrefix("@")
+                if (clean.isNotEmpty()) {
+                    onUpdateSettings { s ->
+                        s.copy(newsSubstackUsername = clean)
+                    }
+                }
+                showSubstackDialog = false
             }
         )
     }
