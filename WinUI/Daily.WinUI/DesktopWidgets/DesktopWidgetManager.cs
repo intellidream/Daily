@@ -64,9 +64,21 @@ namespace Daily_WinUI.DesktopWidgets
                 models = CreateDefaultWidgets();
             }
 
+            bool migrated = false;
             foreach (var model in models)
             {
+                // Auto-migrate legacy Acrylic widgets to MicaAlt for crisp, artifact-free Liquid Glass
+                if (model.Backdrop == DesktopBackdropType.Acrylic)
+                {
+                    model.Backdrop = DesktopBackdropType.MicaAlt;
+                    migrated = true;
+                }
                 SpawnWidgetWindow(model);
+            }
+
+            if (migrated)
+            {
+                SaveConfiguration();
             }
         }
 

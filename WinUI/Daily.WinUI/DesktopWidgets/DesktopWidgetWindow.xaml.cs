@@ -23,10 +23,6 @@ namespace Daily_WinUI.DesktopWidgets
         private readonly IntPtr _hwnd;
         private FrameworkElement? _currentView;
 
-        private DesktopAcrylicController? _acrylicController;
-        private MicaController? _micaController;
-        private SystemBackdropConfiguration? _backdropConfig;
-
         // ── Win32 P/Invoke ──────────────────────────────────────────────────────────
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
         [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -84,6 +80,7 @@ namespace Daily_WinUI.DesktopWidgets
         private const int MA_NOACTIVATE = 3;
 
         private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWA_BORDER_COLOR = 34;
         private const int DWMWCP_ROUND = 2;
 
         public bool IsExplicitlyHidden { get; set; } = false;
@@ -192,57 +189,14 @@ namespace Daily_WinUI.DesktopWidgets
 
         private void DesktopWidgetWindow_Closed(object sender, WindowEventArgs args)
         {
-            if (_acrylicController != null)
-            {
-                _acrylicController.Dispose();
-                _acrylicController = null;
-            }
-            if (_micaController != null)
-            {
-                _micaController.Dispose();
-                _micaController = null;
-            }
-            _backdropConfig = null;
         }
 
         public void ApplyBackdrop()
         {
-            if (_acrylicController != null)
+            if (Model.Backdrop == DesktopBackdropType.MicaAlt)
             {
-                _acrylicController.Dispose();
-                _acrylicController = null;
-            }
-            if (_micaController != null)
-            {
-                _micaController.Dispose();
-                _micaController = null;
-            }
-
-            bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
-
-            _backdropConfig = new SystemBackdropConfiguration
-            {
-                IsInputActive = true, // Keeps acrylic / mica active even when unfocused!
-                Theme = isDark ? SystemBackdropTheme.Dark : SystemBackdropTheme.Light
-            };
-
-            if (Model.Backdrop == DesktopBackdropType.MicaAlt && MicaController.IsSupported())
-            {
-                _micaController = new MicaController { Kind = MicaKind.BaseAlt };
-                _micaController.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
-                _micaController.SetSystemBackdropConfiguration(_backdropConfig);
-            }
-            else if (DesktopAcrylicController.IsSupported())
-            {
-                _acrylicController = new DesktopAcrylicController
-                {
-                    TintOpacity = (float)Math.Clamp(Model.Opacity * 0.70, 0.15, 0.90),
-                    LuminosityOpacity = (float)Math.Clamp(Model.Opacity * 0.60, 0.10, 0.85),
-                    TintColor = isDark ? Windows.UI.Color.FromArgb(255, 14, 18, 25) : Windows.UI.Color.FromArgb(255, 245, 245, 245),
-                    FallbackColor = isDark ? Windows.UI.Color.FromArgb(220, 16, 20, 28) : Windows.UI.Color.FromArgb(220, 240, 240, 240)
-                };
-                _acrylicController.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
-                _acrylicController.SetSystemBackdropConfiguration(_backdropConfig);
+                // Native Mica Alt: seamlessly incorporates desktop wallpaper with zero smudges or ghosting
+                this.SystemBackdrop = new MicaBackdrop { Kind = MicaKind.BaseAlt };
             }
             else
             {
@@ -256,29 +210,28 @@ namespace Daily_WinUI.DesktopWidgets
         {
             bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
 
-            if (_backdropConfig != null)
-            {
-                _backdropConfig.IsInputActive = true;
-                _backdropConfig.Theme = isDark ? SystemBackdropTheme.Dark : SystemBackdropTheme.Light;
-            }
+            // Apply native DWM 1px border around the rounded window (0x00BBGGRR format)
+            int borderColor = isDark ? 0x004A3C30 : 0x00D0D0D0;
+            DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
 
-            if (_acrylicController != null)
+            if (RootLayout != null)
             {
-                // Directly update the DesktopAcrylic tint and luminosity according to user's Opacity setting!
-                _acrylicController.TintOpacity = (float)Math.Clamp(Model.Opacity * 0.70, 0.15, 0.90);
-                _acrylicController.LuminosityOpacity = (float)Math.Clamp(Model.Opacity * 0.60, 0.10, 0.85);
-                _acrylicController.TintColor = isDark ? Windows.UI.Color.FromArgb(255, 14, 18, 25) : Windows.UI.Color.FromArgb(255, 245, 245, 245);
-            }
+                // Modulate glass tint depth based on user's Opacity selection:
+                // 30% = pure wallpaper-infused Mica Alt
+                // 100% = deep, high-contrast solid glass
+                double op = Math.Clamp(Model.Opacity, 0.20, 1.0);
+                byte tintAlpha = (byte)Math.Clamp((int)((op - 0.30) / 0.70 * 110), 0, 120);
 
-            if (CardBorder != null)
-            {
-                // Subtle translucent glass container overlay that lets the desktop wallpaper blur shine through,
-                // while preserving high contrast for typography and interactive controls
-                byte alpha = (byte)Math.Clamp((int)(Model.Opacity * 40), 10, 75);
-                CardBorder.Background = isDark
-                    ? new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 255, 255, 255))
-                    : new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 255, 255, 255));
-                CardBorder.Opacity = 1.0;
+                if (tintAlpha > 0)
+                {
+                    RootLayout.Background = isDark
+                        ? new SolidColorBrush(Windows.UI.Color.FromArgb(tintAlpha, 10, 14, 20))
+                        : new SolidColorBrush(Windows.UI.Color.FromArgb(tintAlpha, 255, 255, 255));
+                }
+                else
+                {
+                    RootLayout.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+                }
             }
         }
 
@@ -451,6 +404,15 @@ namespace Daily_WinUI.DesktopWidgets
 
             // Backdrop Style Submenu
             var backdropSubItem = new MenuFlyoutSubItem { Text = "Glass Effect" };
+            var micaItem = new ToggleMenuFlyoutItem { Text = "Mica Alt Glass (Recommended)", IsChecked = Model.Backdrop == DesktopBackdropType.MicaAlt };
+            micaItem.Click += (s, e) =>
+            {
+                Model.Backdrop = DesktopBackdropType.MicaAlt;
+                ApplyBackdrop();
+                DesktopWidgetManager.Instance.SaveConfiguration();
+            };
+            backdropSubItem.Items.Add(micaItem);
+
             var acrylicItem = new ToggleMenuFlyoutItem { Text = "Acrylic Glass", IsChecked = Model.Backdrop == DesktopBackdropType.Acrylic };
             acrylicItem.Click += (s, e) =>
             {
@@ -459,15 +421,6 @@ namespace Daily_WinUI.DesktopWidgets
                 DesktopWidgetManager.Instance.SaveConfiguration();
             };
             backdropSubItem.Items.Add(acrylicItem);
-
-            var micaItem = new ToggleMenuFlyoutItem { Text = "Mica Alt Glass", IsChecked = Model.Backdrop == DesktopBackdropType.MicaAlt };
-            micaItem.Click += (s, e) =>
-            {
-                Model.Backdrop = DesktopBackdropType.MicaAlt;
-                ApplyBackdrop();
-                DesktopWidgetManager.Instance.SaveConfiguration();
-            };
-            backdropSubItem.Items.Add(micaItem);
             menu.Items.Add(backdropSubItem);
 
             // Transparency Submenu
@@ -528,7 +481,7 @@ namespace Daily_WinUI.DesktopWidgets
             };
             menu.Items.Add(removeItem);
 
-            var target = sender as FrameworkElement ?? CardBorder;
+            var target = sender as FrameworkElement ?? RootLayout;
             if (args != null && args.TryGetPosition(target, out var pos))
             {
                 menu.ShowAt(target, pos);
@@ -549,11 +502,11 @@ namespace Daily_WinUI.DesktopWidgets
             DesktopWidgetManager.Instance.SaveConfiguration();
         }
 
-        private void CardBorder_Tapped(object sender, TappedRoutedEventArgs e)
+        private void RootLayout_Tapped(object sender, TappedRoutedEventArgs e)
         {
             // If the user tapped on or inside a Button, do not navigate away
             var src = e.OriginalSource as DependencyObject;
-            while (src != null && src != CardBorder)
+            while (src != null && src != RootLayout)
             {
                 if (src is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase || src is Button)
                 {

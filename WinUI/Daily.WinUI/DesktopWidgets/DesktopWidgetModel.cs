@@ -40,7 +40,7 @@ namespace Daily_WinUI.DesktopWidgets
         public DesktopWidgetSize Size { get; set; } = DesktopWidgetSize.Medium;
 
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public DesktopBackdropType Backdrop { get; set; } = DesktopBackdropType.Acrylic;
+        public DesktopBackdropType Backdrop { get; set; } = DesktopBackdropType.MicaAlt;
 
         public int X { get; set; } = 100;
         public int Y { get; set; } = 100;
