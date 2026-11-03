@@ -523,5 +523,36 @@ class ArticleExtractor {
                    lower.contains("member-only") ||
                    lower.contains("made this story available to medium members")
         }
+
+        fun stripMediumTrackingAndNoise(html: String): String {
+            var cleaned = html.replace(Regex("<img[^>]*medium\\.com/_/stat[^>]*>", RegexOption.IGNORE_CASE), "")
+            cleaned = cleaned.replace(Regex("<div[^>]*>\\s*Get [^<]{1,80}stories in[^<]{0,40}inbox[\\s\\S]{0,400}?</div>", RegexOption.IGNORE_CASE), "")
+            return cleaned
+        }
+
+        fun isAuthenticatedMediumUid(value: String?): Boolean {
+            val trimmed = value?.trim() ?: return false
+            return trimmed.isNotEmpty() && !trimmed.lowercase(Locale.ROOT).startsWith("lo_")
+        }
+
+        fun hasAuthenticatedMediumCookies(cookieHeader: String?): Boolean {
+            if (cookieHeader.isNullOrBlank()) return false
+            var hasValidUid = false
+            var hasValidSid = false
+            val cookies = cookieHeader.split(";")
+            for (c in cookies) {
+                val pair = c.trim().split("=", limit = 2)
+                if (pair.size == 2) {
+                    val name = pair[0].trim()
+                    val value = pair[1].trim()
+                    if (name.equals("uid", ignoreCase = true) && isAuthenticatedMediumUid(value)) {
+                        hasValidUid = true
+                    } else if (name.equals("sid", ignoreCase = true) && value.isNotEmpty()) {
+                        hasValidSid = true
+                    }
+                }
+            }
+            return hasValidUid && hasValidSid
+        }
     }
 }

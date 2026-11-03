@@ -961,23 +961,27 @@ private fun NewsSettingsCard(
                     )
 
                     val username = settings.newsMediumUsername
+                    val mediumCookies = try { android.webkit.CookieManager.getInstance().getCookie("https://medium.com") } catch (_: Exception) { null }
+                    val hasActiveSession = com.intellidream.daily.model.ArticleExtractor.hasAuthenticatedMediumCookies(mediumCookies)
+
                     if (!username.isNullOrBlank()) {
+                        val statusColor = if (hasActiveSession) Color(0xFF34C759) else Color(0xFFFF9500)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(Color(0xFF34C759).copy(alpha = 0.15f))
+                                .background(statusColor.copy(alpha = 0.15f))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF34C759))
+                                    .background(statusColor)
                             )
                             Text(
-                                text = "@$username",
+                                text = if (hasActiveSession) "@$username" else "@$username · Session Inactive",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White
@@ -995,11 +999,51 @@ private fun NewsSettingsCard(
 
                 val configuredUsername = settings.newsMediumUsername
                 if (!configuredUsername.isNullOrBlank()) {
+                    val mediumCookies = try { android.webkit.CookieManager.getInstance().getCookie("https://medium.com") } catch (_: Exception) { null }
+                    val hasActiveSession = com.intellidream.daily.model.ArticleExtractor.hasAuthenticatedMediumCookies(mediumCookies)
+
                     Text(
-                        text = "Your reading list has been configured. You can customize the URL below if needed.",
+                        text = if (hasActiveSession) {
+                            "Member session active. Full Member-Only stories and your Reading List are unlocked."
+                        } else {
+                            "Reading List is configured, but your Medium browser session is inactive. Sign in once to unlock full Member-Only stories."
+                        },
                         fontSize = 12.sp,
-                        color = ThemeColors.fgMutedDark
+                        color = if (hasActiveSession) ThemeColors.fgMutedDark else Color(0xFFFF9500)
                     )
+
+                    if (!hasActiveSession) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(CircleShape)
+                                .background(ThemeColors.accentCyan)
+                                .clickable {
+                                    mediumUsernameInput = configuredUsername
+                                    showMediumDialog = true
+                                }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Link,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Reconnect Medium Session",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(

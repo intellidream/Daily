@@ -523,96 +523,162 @@ public sealed partial class RssFeedDetailPage : Page
 
                     // Poll until the page has substantial text content (JS-rendered)
                     string extractedHtml = "";
-                    int lastLen = 0;
+                    int lastChars = 0;
                     int stableCount = 0;
-                    for (int i = 0; i < 20; i++)
+
+                    var stateCheckScript = "(function(){" +
+                        "var s = window.__APOLLO_STATE__ || {};" +
+                        "var rq = s.ROOT_QUERY || {};" +
+                        "var hasViewer = Boolean(rq.viewer);" +
+                        "var postKey = Object.keys(s).find(function(k){ return k.indexOf('Post:') === 0; });" +
+                        "var post = postKey ? s[postKey] : null;" +
+                        "var isLocked = post ? Boolean(post.isLocked) : false;" +
+                        "var expectedWords = (post && typeof post.wordCount === 'number') ? post.wordCount : 0;" +
+                        "var apolloParagraphs = Object.keys(s).filter(function(k){ return k.indexOf('Paragraph:') === 0; }).length;" +
+                        "var el = document.querySelector('article') || document.querySelector('main') || document.body;" +
+                        "var text = (el && el.innerText) ? el.innerText.trim() : '';" +
+                        "var words = text ? text.split(/\\s+/).length : 0;" +
+                        "var domBlocks = el ? el.querySelectorAll('p, h1, h2, h3, h4, pre, li, blockquote').length : 0;" +
+                        "return JSON.stringify({" +
+                        "    hasViewer: hasViewer," +
+                        "    isLocked: isLocked," +
+                        "    expectedWords: expectedWords," +
+                        "    apolloParagraphs: apolloParagraphs," +
+                        "    domWords: words," +
+                        "    domChars: text.length," +
+                        "    domBlocks: domBlocks" +
+                        "});" +
+                        "})()";
+
+                    var extractArticleScript = "(function(){" +
+                        "var selectors='article, main, [itemprop=\"articleBody\"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';" +
+                        "var el=document.querySelector(selectors);" +
+                        "if(el && el.innerText && el.innerText.length > 200) {" +
+                        "    var clone = el.cloneNode(true);" +
+                        "    var junk = clone.querySelectorAll('button, [data-testid*=\"clap\"], [data-testid*=\"response\"], .responsesStream, [data-testid=\"postSidebar\"], [data-testid=\"authorPhoto\"], img[src*=\"resize:fill:48:48\"], img[src*=\"resize:fill:64:64\"], img[src*=\"resize:fill:88:88\"]');" +
+                        "    junk.forEach(function(j){ j.remove(); });" +
+                        "    clone.querySelectorAll('div, aside, section').forEach(function(box){" +
+                        "        if(box.tagName === 'ARTICLE') return;" +
+                        "        var txt = (box.innerText || '').trim();" +
+                        "        if(txt.length > 0 && txt.length < 360 && box.querySelectorAll('p').length <= 3) {" +
+                        "            var lower = txt.toLowerCase();" +
+                        "            if(lower.indexOf('stories in your inbox') !== -1 || (lower.indexOf('stories in ') !== -1 && lower.indexOf('inbox') !== -1) || lower.indexOf('get updates from this writer') !== -1) {" +
+                        "                box.remove();" +
+                        "            }" +
+                        "        }" +
+                        "    });" +
+                        "    var headMeta = Array.from(document.querySelectorAll('title, meta[property^=\"og:\"], meta[name=\"author\"], meta[property*=\"author\"]'))" +
+                        "        .map(function(m){ return m.outerHTML; }).join('');" +
+                        "    return '<html><head><meta charset=\"utf-8\"/>' + headMeta + '</head><body>' + clone.outerHTML + '</body></html>';" +
+                        "}" +
+                        "if(document.body && document.body.innerText && document.body.innerText.length > 500) {" +
+                        "    return document.documentElement.outerHTML;" +
+                        "}" +
+                        "return null;" +
+                        "})()";
+
+                    for (int i = 0; i < 12; i++)
                     {
-                        await Task.Delay(800);
-                        
-                        // Hydration scroll triggers on initial iterations to force lazy-loaded sections / React hydration
-                        if (i == 1 || i == 3)
+                        await Task.Delay(i == 0 ? 500 : 400);
+
+                        bool hasViewer = false;
+                        bool isLocked = false;
+                        int expectedWords = 0;
+                        int apolloParagraphs = 0;
+                        int domWords = 0;
+                        int domChars = 0;
+                        int domBlocks = 0;
+
+                        try
+                        {
+                            var stateJsonRaw = await ReaderWebView.ExecuteScriptAsync(stateCheckScript);
+                            if (!string.IsNullOrWhiteSpace(stateJsonRaw) && stateJsonRaw != "null")
+                            {
+                                string unescapedState = System.Text.Json.JsonSerializer.Deserialize<string>(stateJsonRaw) ?? stateJsonRaw;
+                                using var doc = System.Text.Json.JsonDocument.Parse(unescapedState);
+                                var root = doc.RootElement;
+                                if (root.TryGetProperty("hasViewer", out var hv)) hasViewer = hv.GetBoolean();
+                                if (root.TryGetProperty("isLocked", out var il)) isLocked = il.GetBoolean();
+                                if (root.TryGetProperty("expectedWords", out var ew)) expectedWords = ew.GetInt32();
+                                if (root.TryGetProperty("apolloParagraphs", out var ap)) apolloParagraphs = ap.GetInt32();
+                                if (root.TryGetProperty("domWords", out var dw)) domWords = dw.GetInt32();
+                                if (root.TryGetProperty("domChars", out var dc)) domChars = dc.GetInt32();
+                                if (root.TryGetProperty("domBlocks", out var db)) domBlocks = db.GetInt32();
+                            }
+                        }
+                        catch { }
+
+                        bool hasFullExpectedWords = expectedWords > 0 && domWords >= (int)(expectedWords * 0.68);
+                        bool hasAllUnlockedBlocks = !isLocked && apolloParagraphs > 0 && domBlocks >= (int)(apolloParagraphs * 0.85) && domChars > 350;
+                        bool isLockedWithoutViewer = i >= 1 && isLocked && !hasViewer;
+
+                        if (hasFullExpectedWords || hasAllUnlockedBlocks || isLockedWithoutViewer || i >= 10)
+                        {
+                            await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, document.body.scrollHeight / 2);");
+                            await Task.Delay(100);
+                            await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, document.body.scrollHeight);");
+                            await Task.Delay(100);
+                            await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, 0);");
+                            await ReaderWebView.ExecuteScriptAsync(cleanupScript);
+
+                            var articleJson = await ReaderWebView.ExecuteScriptAsync(extractArticleScript);
+                            if (articleJson != null && articleJson != "null")
+                            {
+                                try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(articleJson) ?? ""; }
+                                catch { extractedHtml = articleJson; }
+                            }
+                            if (!string.IsNullOrWhiteSpace(extractedHtml) && extractedHtml.Length > 200)
+                                break;
+                        }
+
+                        // Hydration scroll triggers on intermediate iterations
+                        if (i % 3 == 0)
                         {
                             await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, document.body.scrollHeight / 2);");
                         }
-                        else if (i == 2 || i == 4)
+                        else if (i % 3 == 1)
                         {
                             await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, document.body.scrollHeight);");
                         }
-                        else if (i == 5)
+                        else
                         {
                             await ReaderWebView.ExecuteScriptAsync("window.scrollTo(0, 0);");
                         }
 
-                        // Re-run cleanup each iteration in case overlays re-appear
-                        if (i % 3 == 0 && i > 0)
-                            await ReaderWebView.ExecuteScriptAsync(cleanupScript);
-
-                        // Check text length
-                        var lenJson = await ReaderWebView.ExecuteScriptAsync(
-                            "(function(){ var el = document.querySelector('article') || document.querySelector('main') || document.body; return el && el.innerText ? el.innerText.length : 0; })()");
-                        
-                        int curLen = 0;
-                        if (lenJson != null && int.TryParse(lenJson.Trim('\"'), out int parsedLen))
+                        if (domChars > 300)
                         {
-                            curLen = parsedLen;
-                        }
-
-                        if (curLen > 300)
-                        {
-                            if (curLen == lastLen)
+                            if (domChars == lastChars)
                             {
                                 stableCount++;
                             }
                             else
                             {
                                 stableCount = 0;
-                                lastLen = curLen;
+                                lastChars = domChars;
                             }
 
-                            // Extract once hydrated and stabilized (or if content is already very long, e.g. > 3000 chars)
-                            bool isHydrated = (curLen > 3000 && stableCount >= 2) || 
-                                              (i >= 8 && curLen > 1000 && stableCount >= 2) ||
-                                              (i >= 15 && curLen > 500);
-
-                            if (isHydrated)
+                            if ((domChars > 3000 && stableCount >= 2) || (i >= 6 && stableCount >= 2))
                             {
-                                var articleJson = await ReaderWebView.ExecuteScriptAsync(
-                                    "(function(){" +
-                                    "var selectors='article, main, [itemprop=\"articleBody\"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';" +
-                                    "var el=document.querySelector(selectors);" +
-                                    "if(el && el.innerText && el.innerText.length > 200) {" +
-                                    "    var clone = el.cloneNode(true);" +
-                                    "    var junk = clone.querySelectorAll('button, [data-testid*=\"clap\"], [data-testid*=\"response\"], .responsesStream, [data-testid=\"postSidebar\"]');" +
-                                    "    junk.forEach(function(j){ j.remove(); });" +
-                                    "    return '<html><head><meta charset=\"utf-8\"/></head><body>'+clone.outerHTML+'</body></html>';" +
-                                    "}" +
-                                    "return null;" +
-                                    "})()");
-                                
-                                string? articleHtml = null;
+                                await ReaderWebView.ExecuteScriptAsync(cleanupScript);
+                                var articleJson = await ReaderWebView.ExecuteScriptAsync(extractArticleScript);
                                 if (articleJson != null && articleJson != "null")
                                 {
-                                    try { articleHtml = System.Text.Json.JsonSerializer.Deserialize<string>(articleJson); }
-                                    catch { }
+                                    try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(articleJson) ?? ""; }
+                                    catch { extractedHtml = articleJson; }
                                 }
-
-                                if (!string.IsNullOrWhiteSpace(articleHtml) && articleHtml.Length > 500)
-                                {
-                                    extractedHtml = articleHtml;
-                                    break;
-                                }
-
-                                // Fall back to full page HTML
-                                var fullJson = await ReaderWebView.ExecuteScriptAsync("document.documentElement.outerHTML;");
-                                if (fullJson != null && fullJson != "null")
-                                {
-                                    try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(fullJson) ?? ""; }
-                                    catch { extractedHtml = fullJson; }
-                                }
-                                
-                                if (extractedHtml.Length > 1500)
+                                if (!string.IsNullOrWhiteSpace(extractedHtml) && extractedHtml.Length > 200)
                                     break;
                             }
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(extractedHtml))
+                    {
+                        var fullJson = await ReaderWebView.ExecuteScriptAsync("document.documentElement.outerHTML;");
+                        if (fullJson != null && fullJson != "null")
+                        {
+                            try { extractedHtml = System.Text.Json.JsonSerializer.Deserialize<string>(fullJson) ?? ""; }
+                            catch { extractedHtml = fullJson; }
                         }
                     }
                     
@@ -626,20 +692,48 @@ public sealed partial class RssFeedDetailPage : Page
             
             ReaderWebView.CoreWebView2.NavigationCompleted += handler;
 
-            // Synchronize parent domain medium.com cookies to custom subdomains
-            if (!string.IsNullOrEmpty(item.Link) && item.Link.Contains(".medium.com") && !item.Link.Contains("://medium.com"))
+            // Sanitize cookies and ensure parent domain .medium.com cookies apply across subdomains
+            if (!string.IsNullOrEmpty(item.Link) && item.Link.Contains("medium.com"))
             {
                 try
                 {
                     var cookieManager = ReaderWebView.CoreWebView2.CookieManager;
                     var mediumCookies = await cookieManager.GetCookiesAsync("https://medium.com");
-                    var targetUri = new Uri(item.Link);
+                    bool hasAuthUid = false;
                     foreach (var c in mediumCookies)
                     {
-                        var copy = cookieManager.CreateCookie(c.Name, c.Value, targetUri.Host, c.Path);
-                        copy.IsHttpOnly = c.IsHttpOnly;
-                        copy.IsSecure = c.IsSecure;
-                        cookieManager.AddOrUpdateCookie(copy);
+                        if (c.Name == "uid" && !string.IsNullOrEmpty(c.Value) && !c.Value.StartsWith("lo_", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasAuthUid = true;
+                            break;
+                        }
+                    }
+
+                    var targetUri = new Uri(item.Link);
+                    var targetCookies = await cookieManager.GetCookiesAsync(item.Link);
+                    foreach (var c in targetCookies)
+                    {
+                        // Delete host-only cookies on subdomains that shadow .medium.com per RFC 6265 §5.4
+                        if (c.Domain.Equals(targetUri.Host, StringComparison.OrdinalIgnoreCase) && !c.Domain.Equals("medium.com", StringComparison.OrdinalIgnoreCase))
+                        {
+                            cookieManager.DeleteCookie(c);
+                        }
+                        else if (c.Name == "uid" && c.Value.StartsWith("lo_", StringComparison.OrdinalIgnoreCase) && hasAuthUid)
+                        {
+                            cookieManager.DeleteCookie(c);
+                        }
+                    }
+
+                    // Promote any host-only medium.com auth cookies to .medium.com
+                    foreach (var c in mediumCookies)
+                    {
+                        if ((c.Name == "uid" || c.Name == "sid") && c.Domain == "medium.com")
+                        {
+                            var wildcard = cookieManager.CreateCookie(c.Name, c.Value, ".medium.com", c.Path);
+                            wildcard.IsHttpOnly = c.IsHttpOnly;
+                            wildcard.IsSecure = c.IsSecure;
+                            cookieManager.AddOrUpdateCookie(wildcard);
+                        }
                     }
                 }
                 catch { }
@@ -653,6 +747,16 @@ public sealed partial class RssFeedDetailPage : Page
             if (completedTask == tcs.Task)
             {
                 loadedHtml = await tcs.Task;
+            }
+
+            if (!string.IsNullOrWhiteSpace(loadedHtml))
+            {
+                loadedHtml = System.Text.RegularExpressions.Regex.Replace(
+                    loadedHtml,
+                    @"<img[^>]*medium\.com/_/stat[^>]*>",
+                    "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
             }
             
             if (!string.IsNullOrWhiteSpace(loadedHtml) && loadedHtml.Length > 200)

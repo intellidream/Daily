@@ -235,9 +235,26 @@ class MediumWebViewBridge(private val context: Context) {
                                 var el=document.querySelector(selectors);
                                 if(el && el.innerText && el.innerText.length > 200) {
                                     var clone = el.cloneNode(true);
-                                    var junk = clone.querySelectorAll('button, [data-testid*="clap"], [data-testid*="response"], .responsesStream, [data-testid="postSidebar"]');
+                                    var junk = clone.querySelectorAll(
+                                        'button, [data-testid*="clap"], [data-testid*="response"], .responsesStream, [data-testid="postSidebar"], ' +
+                                        '[data-testid="authorPhoto"], img[src*="resize:fill:48:48"], img[src*="resize:fill:64:64"], img[src*="resize:fill:88:88"]'
+                                    );
                                     junk.forEach(function(j){ j.remove(); });
-                                    return '<html><head><meta charset="utf-8"/></head><body>'+clone.outerHTML+'</body></html>';
+                                    clone.querySelectorAll('div, aside, section').forEach(function(box) {
+                                        if (box.tagName === 'ARTICLE') return;
+                                        var txt = (box.innerText || '').trim();
+                                        if (txt.length > 0 && txt.length < 360 && box.querySelectorAll('p').length <= 3) {
+                                            var lower = txt.toLowerCase();
+                                            if (lower.indexOf('stories in your inbox') !== -1 ||
+                                                (lower.indexOf('stories in ') !== -1 && lower.indexOf('inbox') !== -1) ||
+                                                lower.indexOf('get updates from this writer') !== -1) {
+                                                box.remove();
+                                            }
+                                        }
+                                    });
+                                    var headMeta = Array.from(document.querySelectorAll('title, meta[property^="og:"], meta[name="author"], meta[property*="author"]'))
+                                        .map(function(m){ return m.outerHTML; }).join('');
+                                    return '<html><head><meta charset="utf-8"/>' + headMeta + '</head><body>' + clone.outerHTML + '</body></html>';
                                 }
                                 if(document.body && document.body.innerText && document.body.innerText.length > 500) {
                                     return document.documentElement.outerHTML;
@@ -246,9 +263,37 @@ class MediumWebViewBridge(private val context: Context) {
                             })()
                         """.trimIndent()
 
+                        val stateCheckJs = """
+                            (function() {
+                                var s = window.__APOLLO_STATE__ || {};
+                                var rq = s.ROOT_QUERY || {};
+                                var hasViewer = Boolean(rq.viewer);
+                                var postKey = Object.keys(s).find(function(k) { return k.indexOf('Post:') === 0; });
+                                var post = postKey ? s[postKey] : null;
+                                var postId = (post && post.id) ? String(post.id) : (postKey ? postKey.slice(5) : '');
+                                var isLocked = post ? Boolean(post.isLocked) : false;
+                                var expectedWords = (post && typeof post.wordCount === 'number') ? post.wordCount : 0;
+                                var apolloParagraphs = Object.keys(s).filter(function(k) { return k.indexOf('Paragraph:') === 0; }).length;
+                                var el = document.querySelector('article') || document.querySelector('main') || document.body;
+                                var text = (el && el.innerText) ? el.innerText.trim() : '';
+                                var words = text ? text.split(/\s+/).length : 0;
+                                var domBlocks = el ? el.querySelectorAll('p, h1, h2, h3, h4, pre, li, blockquote').length : 0;
+                                return JSON.stringify({
+                                    hasViewer: hasViewer,
+                                    postId: postId,
+                                    isLocked: isLocked,
+                                    expectedWords: expectedWords,
+                                    apolloParagraphs: apolloParagraphs,
+                                    domWords: words,
+                                    domChars: text.length,
+                                    domBlocks: domBlocks
+                                });
+                            })()
+                        """.trimIndent()
+
                         var attempts = 0
-                        val maxAttempts = 12
-                        var lastLen = 0
+                        val maxAttempts = 10
+                        var lastChars = 0
                         var stableCount = 0
 
                         val pollRunnable = object : Runnable {
@@ -256,72 +301,115 @@ class MediumWebViewBridge(private val context: Context) {
                                 if (hasExtracted || !continuation.isActive) return
                                 attempts++
 
-                                // Hydration scroll triggers on early iterations
-                                if (attempts == 2) {
-                                    webView.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight / 2);", null)
-                                } else if (attempts == 4) {
-                                    webView.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight);", null)
-                                } else if (attempts == 6) {
-                                    webView.evaluateJavascript("window.scrollTo(0, 0);", null)
-                                }
+                                webView.evaluateJavascript(stateCheckJs) { stateJson ->
+                                    var hasViewer = false
+                                    var isLocked = false
+                                    var expectedWords = 0
+                                    var apolloParagraphs = 0
+                                    var domWords = 0
+                                    var domChars = 0
+                                    var domBlocks = 0
 
-                                if (attempts % 4 == 0) {
-                                    webView.evaluateJavascript(cleanupJs, null)
-                                }
+                                    if (!stateJson.isNullOrBlank() && stateJson != "null") {
+                                        try {
+                                            val rawJson = if (stateJson.startsWith("\"") && stateJson.endsWith("\"")) {
+                                                org.json.JSONTokener(stateJson).nextValue().toString()
+                                            } else {
+                                                stateJson
+                                            }
+                                            val obj = org.json.JSONObject(rawJson)
+                                            hasViewer = obj.optBoolean("hasViewer", false)
+                                            isLocked = obj.optBoolean("isLocked", false)
+                                            expectedWords = obj.optInt("expectedWords", 0)
+                                            apolloParagraphs = obj.optInt("apolloParagraphs", 0)
+                                            domWords = obj.optInt("domWords", 0)
+                                            domChars = obj.optInt("domChars", 0)
+                                            domBlocks = obj.optInt("domBlocks", 0)
+                                        } catch (_: Throwable) {}
+                                    }
 
-                                val lenCheckJs = "(function(){ var el = document.querySelector('article') || document.querySelector('main') || document.body; return el && el.innerText ? el.innerText.length : 0; })()"
-                                webView.evaluateJavascript(lenCheckJs) { lenStr ->
-                                    val curLen = lenStr?.toIntOrNull() ?: 0
+                                    val hasFullExpectedWords = expectedWords > 0 && domWords >= (expectedWords * 0.68).toInt()
+                                    val hasAllUnlockedBlocks = !isLocked && apolloParagraphs > 0 && domBlocks >= (apolloParagraphs * 0.85).toInt() && domChars > 350
+                                    val isLockedWithoutViewer = attempts >= 2 && isLocked && !hasViewer
 
-                                    if (curLen > 300) {
-                                        if (curLen == lastLen) {
+                                    if (hasFullExpectedWords || hasAllUnlockedBlocks || isLockedWithoutViewer || attempts >= maxAttempts) {
+                                        hasExtracted = true
+                                        webView.evaluateJavascript(cleanupJs) {
+                                            webView.evaluateJavascript(extractJs) { htmlResult ->
+                                                cleanup()
+                                                if (htmlResult.isNullOrBlank() || htmlResult == "null") {
+                                                    if (continuation.isActive) continuation.resume(null)
+                                                    return@evaluateJavascript
+                                                }
+
+                                                try {
+                                                    val rawHtml = if (htmlResult.startsWith("\"") && htmlResult.endsWith("\"")) {
+                                                        org.json.JSONTokener(htmlResult).nextValue().toString()
+                                                    } else {
+                                                        htmlResult
+                                                    }
+
+                                                    if (rawHtml.length > 100) {
+                                                        val cleanHtml = ArticleExtractor.stripMediumTrackingAndNoise(rawHtml)
+                                                        val parsed = ArticleExtractor.shared.parseHtml(cleanHtml, url, baseArticle)
+                                                        if (continuation.isActive) continuation.resume(parsed)
+                                                    } else {
+                                                        if (continuation.isActive) continuation.resume(null)
+                                                    }
+                                                } catch (_: Throwable) {
+                                                    if (continuation.isActive) continuation.resume(null)
+                                                }
+                                            }
+                                        }
+                                        return@evaluateJavascript
+                                    }
+
+                                    // Hydration scroll triggers on intermediate iterations
+                                    if (attempts % 3 == 1) {
+                                        webView.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight / 2);", null)
+                                    } else if (attempts % 3 == 2) {
+                                        webView.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight);", null)
+                                    } else {
+                                        webView.evaluateJavascript("window.scrollTo(0, 0);", null)
+                                    }
+
+                                    if (domChars > 300) {
+                                        if (domChars == lastChars) {
                                             stableCount++
                                         } else {
                                             stableCount = 0
-                                            lastLen = curLen
+                                            lastChars = domChars
+                                        }
+                                        if ((domChars > 3000 && stableCount >= 2) || (attempts >= 6 && stableCount >= 2)) {
+                                            hasExtracted = true
+                                            webView.evaluateJavascript(cleanupJs) {
+                                                webView.evaluateJavascript(extractJs) { htmlResult ->
+                                                    cleanup()
+                                                    try {
+                                                        val rawHtml = if (htmlResult != null && htmlResult.startsWith("\"") && htmlResult.endsWith("\"")) {
+                                                            org.json.JSONTokener(htmlResult).nextValue().toString()
+                                                        } else {
+                                                            htmlResult ?: ""
+                                                        }
+                                                        val cleanHtml = ArticleExtractor.stripMediumTrackingAndNoise(rawHtml)
+                                                        val parsed = ArticleExtractor.shared.parseHtml(cleanHtml, url, baseArticle)
+                                                        if (continuation.isActive) continuation.resume(parsed)
+                                                    } catch (_: Throwable) {
+                                                        if (continuation.isActive) continuation.resume(null)
+                                                    }
+                                                }
+                                            }
+                                            return@evaluateJavascript
                                         }
                                     }
 
-                                    val isReady = (curLen > 3000 && stableCount >= 2) ||
-                                                  (attempts >= 8 && curLen > 1000 && stableCount >= 2) ||
-                                                  (attempts >= 11 && curLen > 500) ||
-                                                  attempts >= maxAttempts
-
-                                    if (isReady) {
-                                        hasExtracted = true
-                                        webView.evaluateJavascript(extractJs) { htmlResult ->
-                                            cleanup()
-                                            if (htmlResult.isNullOrBlank() || htmlResult == "null") {
-                                                if (continuation.isActive) continuation.resume(null)
-                                                return@evaluateJavascript
-                                            }
-
-                                            try {
-                                                val rawHtml = if (htmlResult.startsWith("\"") && htmlResult.endsWith("\"")) {
-                                                    org.json.JSONTokener(htmlResult).nextValue().toString()
-                                                } else {
-                                                    htmlResult
-                                                }
-
-                                                if (rawHtml.length > 100) {
-                                                    val parsed = ArticleExtractor.shared.parseHtml(rawHtml, url, baseArticle)
-                                                    if (continuation.isActive) continuation.resume(parsed)
-                                                } else {
-                                                    if (continuation.isActive) continuation.resume(null)
-                                                }
-                                            } catch (_: Throwable) {
-                                                if (continuation.isActive) continuation.resume(null)
-                                            }
-                                        }
-                                    } else {
-                                        handler.postDelayed(this, 600)
-                                    }
+                                    handler.postDelayed(this, 400)
                                 }
                             }
                         }
 
-                        // Start polling after 1.5s initial settle time
-                        handler.postDelayed(pollRunnable, 1500)
+                        // Start polling after 500ms settle time
+                        handler.postDelayed(pollRunnable, 500)
                     }
                 }
 

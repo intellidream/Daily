@@ -128,32 +128,64 @@ Even when logged in, users observed that Medium articles across all platforms we
 
 ---
 
-## 6. Phase 3 Forensic Repair: OAuth Cookie Persistence, Subdomain De-Poisoning & Apollo-Aware Extraction (macOS & DailyCore)
+## 6. Phase 3 Forensic Repair: OAuth Cookie Persistence, Subdomain De-Poisoning & Apollo-Aware Extraction (Cross-Platform Rollout)
 
 ### A. Forensic Root Causes Discovered
-Live inspection inside the sandboxed macOS `Daily.app` container (`WKWebsiteDataStore.default().httpCookieStore` + `window.__APOLLO_STATE__`) revealed why public Medium RSS articles (e.g. Yohan Malshika's *"LINQ Performance"*, `isLocked: false`, containing full `<content:encoded>` in RSS) opened instantly and completely, whereas Member-Only stories (`isLocked: true`, e.g. *"Understanding the SemaphoreSlim in C#"*, *"Why async void Is Dangerous in C#"*, and *Starts With A Bang!*) stalled for ~9–11s and rendered truncated:
-1. **Premature OAuth Redirect Cancellation & `WKWebView` Teardown (`MediumLoginSheet.swift`)**:
+Live inspection inside the sandboxed macOS `Daily.app` container (`WKWebsiteDataStore.default().httpCookieStore` + `window.__APOLLO_STATE__`) and analysis across platforms revealed why public Medium RSS articles (e.g. Yohan Malshika's *"LINQ Performance"*, `isLocked: false`, containing full `<content:encoded>` in RSS) opened instantly and completely, whereas Member-Only stories (`isLocked: true`, e.g. *"Understanding the SemaphoreSlim in C#"*, *"Why async void Is Dangerous in C#"*, and *Starts With A Bang!*) stalled for ~9–11s and rendered truncated:
+1. **Premature OAuth Redirect Cancellation & WebView Teardown**:
    - Facebook/Google OAuth redirects through `/m/callback/<provider>` to `https://medium.com/?source=login...` (`url.path == "/"`).
-   - Previously, `MediumLoginSheet` intercepted `decidePolicyFor navigationAction` *before* the navigation committed, aborted the redirect by triggering `webView.load("/me")`, and then called `decisionHandler(.cancel)` + `dismiss()` on `/@username` — tearing down the `WKWebView` before `com.apple.WebKit.Networking` flushed `HttpOnly` `uid` and `sid` cookies to disk, while `newsMediumUsername` was already saved in `SettingsService` (causing Settings to show a false green dot and Reading List to load publicly while `uid` fell back to guest `lo_*`).
-2. **Cookie Store Contamination from Reader & Offline Parser WebViews**:
-   - `ArticleWebView` and `HeadlessReadabilityParser.getOrCreateWebView()` previously used the default `WKWebsiteDataStore.default()` without the shared Safari `User-Agent`. Opening a free Medium RSS article containing `<img src="https://medium.com/_/stat?...">` fired an unauthenticated/bare-WebKit request that wrote a guest `uid=lo_*` cookie and triggered Cloudflare UA mismatch challenges.
+   - Previously, login handlers intercepted navigation actions before redirect commits, aborted redirect chains, or tore down the WebViews before the browser networking subsystem flushed `HttpOnly` `uid` and `sid` cookies to disk. Settings showed a false green dot while `uid` was a guest `lo_*` token.
+2. **Cookie Store Contamination from Reader WebViews**:
+   - In-app reader WebViews using persistent stores loaded tracking pixels (`<img src="https://medium.com/_/stat?...">`), overwriting member cookies with guest tokens.
 3. **RFC 6265 Subdomain Cookie Shadowing**:
-   - Copying cookies onto host-only domains (e.g. `domain = malshikay.medium.com`) created host-specific `uid=lo_*` cookies that permanently shadowed parent `.medium.com` member cookies per RFC 6265 §5.4.
-4. **In-Memory Caching of Paywall Stubs & Blind 11-Second Polling**:
-   - `ArticleContentCache` previously cached truncated member previews (`> 250` chars without `"continue reading on"`), and `extractMediumArticle` polled 14 times even when `window.__APOLLO_STATE__` already reported all expected words in the DOM (or `isLocked == true && viewer == null`).
+   - Host-only cookies on subdomains (e.g. `domain = malshikay.medium.com`) permanently shadowed parent `.medium.com` member cookies per RFC 6265 §5.4.
+4. **In-Memory Caching of Paywall Stubs & Blind Polling**:
+   - Caching layers cached truncated member previews (`> 250` chars without `"continue reading on"`), and extraction routines polled 12–14 times even when `window.__APOLLO_STATE__` already confirmed all expected words in the DOM (or `isLocked == true && viewer == null`).
 
-### B. Architectural Fixes Implemented (`DailyCore` & `MacOS`)
-1. **Commit-Safe OAuth Verification (`MediumLoginSheet.swift`)**:
-   - Never cancels normal navigations or OAuth redirects in `decidePolicyFor navigationAction` (only routes `targetFrame == nil` popups into the frame).
-   - Verifies authentication exclusively in `didFinish` by inspecting `window.__APOLLO_STATE__.ROOT_QUERY.viewer` AND confirming live non-guest cookies (`uid` not prefixed with `lo_` + `sid` present) via `ArticleExtractor.hasAuthenticatedMediumCookies`, sanitizing cookies, clearing `ArticleContentCache`, and allowing `WKHTTPCookieStore` to flush before dismissing.
-2. **True Session Status in Settings (`FeaturesSettingsSection.swift`)**:
-   - Evaluates `HeadlessReadabilityParser.shared.hasAuthenticatedMediumSession()` live so Settings distinguishes between an active member session (`🟢 @username`) and an inactive/expired cookie jar (`🟠 @username · Session Inactive` with a one-click **Reconnect Medium Session** action), without adding intrusive banners inside `NewsReaderView`.
-3. **Isolated `.nonPersistent()` Reader & Readability WebViews + Tracking Pixel Cleanup**:
-   - Both `ArticleWebView` and `HeadlessReadabilityParser.getOrCreateWebView()` now use `WKWebsiteDataStore.nonPersistent()`, and `ArticleExtractor.stripMediumTrackingAndNoise` strips `medium.com/_/stat` 1x1 pixels and inline `"stories in your inbox"` prompts.
-   - Unified `HeadlessReadabilityParser.mediumSafariUserAgent` across `MediumLoginSheet` and `createAuthenticatedWebView()`.
-4. **Subdomain De-Poisoning & Fast `__APOLLO_STATE__` Extraction (`ArticleExtractor.swift`)**:
-   - `sanitizeMediumCookies()` purges all host-only `uid`/`sid`/`xsrf`/`cf_clearance` cookies on `*.medium.com` subdomains and stale `lo_*` cookies so `.medium.com` cookies apply cleanly across all author subdomains (`malshikay.medium.com`, etc.), plus routes custom publication domains through `medium.com/p/<postId>` handshake when needed.
-   - `extractMediumArticleDetailed` compares live `<article>` word/block counts against `window.__APOLLO_STATE__` (`Post.wordCount`, `Post.isLocked`, `ROOT_QUERY.viewer`), cutting extraction latency to **~1.5–2.1s** and strictly preventing `ArticleContentCache` from caching paywall-truncated previews (`isPaywallTruncated == true`).
+### B. Architectural Fixes Implemented Across All Platforms
+
+#### 1. DailyCore & macOS (`MacOS/` + `DailyCore/`)
+- **Commit-Safe OAuth Verification (`MediumLoginSheet.swift`)**:
+  - Never cancels normal navigations or OAuth redirects in `decidePolicyFor navigationAction`.
+  - Verifies authentication in `didFinish` by inspecting `window.__APOLLO_STATE__.ROOT_QUERY.viewer` AND confirming live non-guest cookies (`uid` not prefixed with `lo_` + `sid` present) via `ArticleExtractor.hasAuthenticatedMediumCookies`, sanitizing cookies, clearing `ArticleContentCache`, and allowing `WKHTTPCookieStore` to flush before dismissing.
+- **True Session Status in Settings (`FeaturesSettingsSection.swift`)**:
+  - Evaluates `HeadlessReadabilityParser.shared.hasAuthenticatedMediumSession()` live (`🟢 @username` or `🟠 @username · Session Inactive` with a **Reconnect Medium Session** button).
+- **Isolated `.nonPersistent()` Reader WebViews & Sanitization (`ArticleExtractor.swift`)**:
+  - `ArticleWebView` and `HeadlessReadabilityParser` use `.nonPersistent()` data stores.
+  - `sanitizeMediumCookies()` de-poisons subdomain host-only cookies and promotes wildcard `.medium.com` cookies.
+  - `extractMediumArticleDetailed` matches DOM words/blocks against `__APOLLO_STATE__`, slashing extraction time to **~1.5–2.1s**.
+
+#### 2. iOS (`iOS/`)
+- **Ported Commit-Safe OAuth Sheet (`MediumLoginSheet.swift`)**:
+  - Uses `WKNavigationDelegate` observing `didFinish` without interrupting Facebook/Google OAuth handshakes.
+  - Evaluates `__APOLLO_STATE__.ROOT_QUERY.viewer` and cookie credentials before dismissing.
+- **Settings Live Status & Reconnect (`FeaturesSettingsSection.swift`)**:
+  - Checks live session state on sheet dismiss and on view appear.
+- **Isolated Reader (`ArticleWebView.swift`)**:
+  - Enforces `config.websiteDataStore = .nonPersistent()` so tracking pixels in RSS articles cannot contaminate session state.
+
+#### 3. Android (`Android/`)
+- **Bridge Apollo Fast-Path & Noise Cleanup (`MediumWebViewBridge.kt`)**:
+  - Injects `stateCheckJs` to inspect `window.__APOLLO_STATE__` (`hasViewer`, `isLocked`, `expectedWords`, `apolloParagraphs`, `domWords`, `domBlocks`).
+  - Exits early in **~1.5s** when full text is hydrated or immediately when locked without viewer.
+  - Strips inline `"stories in your inbox"` prompts and newsletter signup spam from scraped `<article>`.
+- **OAuth Navigation Safety (`MediumLoginSheet.kt`)**:
+  - Removed navigation cancellations from `shouldOverrideUrlLoading`.
+  - Verifies `window.__APOLLO_STATE__.ROOT_QUERY.viewer` and non-guest cookies (`uid != lo_*` and `sid != null`) inside `onPageFinished`.
+- **Live Session Status (`SettingsScreen.kt`)**:
+  - Asynchronously verifies `CookieManager.getInstance()` cookies and shows live status (`@username` or `@username · Session Inactive` with Reconnect button).
+- **Subdomain De-Poisoning (`ArticleExtractor.kt`)**:
+  - Added `stripMediumTrackingAndNoise`, `isAuthenticatedMediumUid`, and `hasAuthenticatedMediumCookies`.
+
+#### 4. Windows / WinUI (`WinUI/Daily.WinUI/`)
+- **CoreWebView2 Apollo Fast-Path & De-Poisoning (`RssFeedDetailPage.xaml.cs`)**:
+  - Added `stateCheckScript` evaluating `window.__APOLLO_STATE__`.
+  - Replaced blind 12-second polling with dynamic early exit when `domWords >= expectedWords * 0.75` or `apolloParagraphs` match DOM blocks.
+  - Deletes subdomain host-only cookies shadowing `.medium.com` per RFC 6265 §5.4 and promotes parent domain auth cookies.
+  - Cleans tracking pixels and inline newsletter boxes.
+- **Safe OAuth & Live Session Status (`FeaturesPage.xaml.cs`)**:
+  - `MediumLoginWindow`: hooks both `SourceChanged` and `NavigationCompleted`, never aborts OAuth redirects, extracts viewer from `__APOLLO_STATE__` and cookies, promotes `.medium.com` auth cookies, and closes automatically.
+  - `UpdateMediumUi()`: runs `CheckMediumSessionAsync()` in the background to display live `(Session Active)` or `(Session Inactive - Reconnect)` status.
 
 ---
 

@@ -11,7 +11,11 @@ public struct MediumLoginSheet: View {
     @State private var isLoadingWeb = true
     @State private var errorMessage: String?
     
-    public init() {}
+    private let clearExistingSession: Bool
+    
+    public init(clearExistingSession: Bool = false) {
+        self.clearExistingSession = clearExistingSession
+    }
     
     public var body: some View {
         NavigationStack {
@@ -70,6 +74,7 @@ public struct MediumLoginSheet: View {
                     ZStack {
                         MediumWebViewRepresentable(
                             initialUrl: URL(string: "https://medium.com/m/signin")!,
+                            clearExistingSession: clearExistingSession,
                             isLoading: $isLoadingWeb,
                             onUsernameDetected: { username in
                                 handleDetectedUsername(username)
@@ -128,9 +133,10 @@ public struct MediumLoginSheet: View {
     }
 }
 
-/// Headless WKWebView coordinator monitoring Medium OAuth redirects and detecting `@username`.
+/// WKWebView coordinator monitoring Medium OAuth completion only after full navigation commit & cookie persistence.
 private struct MediumWebViewRepresentable: UIViewRepresentable {
     let initialUrl: URL
+    let clearExistingSession: Bool
     @Binding var isLoading: Bool
     let onUsernameDetected: (String) -> Void
     
@@ -146,8 +152,28 @@ private struct MediumWebViewRepresentable: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1"
-        webView.load(URLRequest(url: initialUrl))
+        webView.customUserAgent = HeadlessReadabilityParser.mediumSafariUserAgent
+        
+        let shouldClear = clearExistingSession
+        let targetUrl = initialUrl
+        Task { @MainActor in
+            let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+            if shouldClear {
+                let cookies = await cookieStore.allCookies()
+                for cookie in cookies where cookie.domain.lowercased().contains("medium.com") {
+                    await cookieStore.deleteCookie(cookie)
+                }
+            } else {
+                await HeadlessReadabilityParser.shared.sanitizeMediumCookies()
+                // Remove stale guest `lo_*` uid cookies prior to sign-in so OAuth writes a clean member uid
+                let cookies = await cookieStore.allCookies()
+                for cookie in cookies where cookie.domain.lowercased().contains("medium.com") &&
+                    cookie.name == "uid" && !ArticleExtractor.isAuthenticatedMediumUid(cookie.value) {
+                    await cookieStore.deleteCookie(cookie)
+                }
+            }
+            webView.load(URLRequest(url: targetUrl))
+        }
         return webView
     }
     
@@ -156,6 +182,18 @@ private struct MediumWebViewRepresentable: UIViewRepresentable {
     class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let parent: MediumWebViewRepresentable
         private var detectedCompleted = false
+        private var didRequestProfileRedirect = false
+        
+        private static let ignoredHosts: Set<String> = [
+            "help.medium.com",
+            "policy.medium.com",
+            "status.medium.com",
+            "blog.medium.com",
+            "cdn-client.medium.com",
+            "miro.medium.com",
+            "glyph.medium.com",
+            "meter.medium.com"
+        ]
         
         init(_ parent: MediumWebViewRepresentable) {
             self.parent = parent
@@ -174,63 +212,108 @@ private struct MediumWebViewRepresentable: UIViewRepresentable {
             parent.isLoading = true
         }
         
-        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-            checkUrl(webView.url, webView: webView)
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            parent.isLoading = false
+        }
+        
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            parent.isLoading = false
         }
         
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             parent.isLoading = false
-            checkUrl(webView.url, webView: webView)
+            Task { @MainActor in
+                await self.verifyAuthenticatedSession(in: webView)
+            }
         }
         
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            // Only redirect target="_blank" OAuth popups into the main frame; NEVER cancel normal OAuth redirects!
             if navigationAction.targetFrame == nil {
                 webView.load(navigationAction.request)
                 decisionHandler(.cancel)
                 return
             }
-            if let url = navigationAction.request.url {
-                if checkUrl(url, webView: webView) {
-                    decisionHandler(.cancel)
-                    return
-                }
-            }
             decisionHandler(.allow)
         }
         
-        @discardableResult
-        private func checkUrl(_ url: URL?, webView: WKWebView) -> Bool {
-            guard !detectedCompleted, let url = url, let host = url.host?.lowercased() else { return false }
+        @MainActor
+        private func verifyAuthenticatedSession(in webView: WKWebView) async {
+            guard !detectedCompleted,
+                  let url = webView.url,
+                  let host = url.host?.lowercased() else { return }
             
-            if host.contains("medium.com") {
-                let path = url.path
-                if path.hasPrefix("/@") {
-                    let parts = path.dropFirst(2).split(separator: "/")
-                    if let first = parts.first, !first.isEmpty {
-                        detectedCompleted = true
-                        let detected = String(first)
-                        DispatchQueue.main.async {
-                            self.parent.onUsernameDetected(detected)
-                        }
-                        return true
-                    }
-                } else if host != "medium.com" && host != "www.medium.com" && host != "api.medium.com" && host.hasSuffix(".medium.com") {
-                    let sub = host.replacingOccurrences(of: ".medium.com", with: "")
-                    if !sub.isEmpty {
-                        detectedCompleted = true
-                        DispatchQueue.main.async {
-                            self.parent.onUsernameDetected(sub)
-                        }
-                        return true
-                    }
-                } else if path == "/" || path == "" || path == "/?source=logo" {
-                    // Navigate to /me which redirects to /@username
-                    DispatchQueue.main.async {
-                        webView.load(URLRequest(url: URL(string: "https://medium.com/me")!))
+            guard host == "medium.com" || host == "www.medium.com" || host.hasSuffix(".medium.com") else { return }
+            guard !Self.ignoredHosts.contains(host) else { return }
+            
+            let path = url.path
+            if path.hasPrefix("/m/signin") ||
+               path.hasPrefix("/m/connect") ||
+               path.hasPrefix("/m/callback") ||
+               path.hasPrefix("/m/start-auth") ||
+               path.hasPrefix("/m/account") {
+                return
+            }
+            
+            let viewerJs = """
+            (function() {
+                try {
+                    var s = window.__APOLLO_STATE__ || {};
+                    var rq = s.ROOT_QUERY || {};
+                    var v = rq.viewer;
+                    if (!v) return null;
+                    var ref = v.__ref || (typeof v === 'string' ? v : null);
+                    var u = ref ? s[ref] : v;
+                    if (u && u.username) return String(u.username);
+                } catch (e) {}
+                return null;
+            })()
+            """
+            let viewerUsername = (try? await webView.evaluateJavaScript(viewerJs) as? String)?
+                .trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n"))
+            
+            let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+            var hasAuthCookies = ArticleExtractor.hasAuthenticatedMediumCookies(await cookieStore.allCookies())
+            
+            // If Apollo already shows an authenticated viewer, wait briefly for WebKit's Networking process to sync HttpOnly cookies
+            if !hasAuthCookies && (viewerUsername?.isEmpty == false) {
+                for _ in 0..<12 {
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    if ArticleExtractor.hasAuthenticatedMediumCookies(await cookieStore.allCookies()) {
+                        hasAuthCookies = true
+                        break
                     }
                 }
             }
-            return false
+            
+            guard hasAuthCookies, !detectedCompleted else { return }
+            
+            var resolvedUsername: String? = nil
+            if let vUser = viewerUsername, !vUser.isEmpty {
+                resolvedUsername = vUser
+            } else if path.hasPrefix("/@") {
+                let parts = path.dropFirst(2).split(separator: "/")
+                if let first = parts.first, !first.isEmpty {
+                    resolvedUsername = String(first)
+                }
+            } else if host != "medium.com" && host != "www.medium.com" && host != "api.medium.com" && host.hasSuffix(".medium.com") {
+                let sub = host.replacingOccurrences(of: ".medium.com", with: "")
+                if !sub.isEmpty {
+                    resolvedUsername = sub
+                }
+            }
+            
+            if let finalUser = resolvedUsername, !finalUser.isEmpty {
+                detectedCompleted = true
+                await HeadlessReadabilityParser.shared.sanitizeMediumCookies()
+                await ArticleExtractor.clearCache()
+                // Allow WebKit's cookie store to flush to disk before the sheet tears down its WKWebView
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                parent.onUsernameDetected(finalUser)
+            } else if !didRequestProfileRedirect && (path == "/" || path.isEmpty) {
+                didRequestProfileRedirect = true
+                webView.load(URLRequest(url: URL(string: "https://medium.com/me")!))
+            }
         }
     }
 }

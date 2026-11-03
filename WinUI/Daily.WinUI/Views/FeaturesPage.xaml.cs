@@ -1738,10 +1738,12 @@ public sealed partial class FeaturesPage : Page
         {
             MediumStatusText.Text = $"Status: Linked as @{_settings.MediumUsername}";
             MediumReadingListUrlHelpText.Text = "Your reading list has been successfully configured. You can customize the URL below if needed.";
-            MediumLoginBtn.Content = "Change Account";
+            MediumLoginBtn.Content = "Reconnect / Change Account";
             MediumDisconnectBtn.Visibility = Visibility.Visible;
             MediumReadingListUrlTextBox.Visibility = Visibility.Visible;
             MediumReadingListUrlTextBox.Text = _settings.MediumReadingListUrl ?? $"https://medium.com/@{_settings.MediumUsername}/list/reading-list";
+
+            _ = CheckMediumSessionAsync();
         }
         else
         {
@@ -1750,6 +1752,56 @@ public sealed partial class FeaturesPage : Page
             MediumLoginBtn.Content = "Login to Medium";
             MediumDisconnectBtn.Visibility = Visibility.Collapsed;
             MediumReadingListUrlTextBox.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async Task CheckMediumSessionAsync()
+    {
+        if (string.IsNullOrEmpty(_settings.MediumUsername)) return;
+        try
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+            if (!System.IO.Directory.Exists(userDataFolder)) return;
+
+            var tempWebView = new WebView2();
+            var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+            await tempWebView.EnsureCoreWebView2Async(env);
+
+            var cookies = await tempWebView.CoreWebView2.CookieManager.GetCookiesAsync("https://medium.com");
+            bool hasAuthUid = false;
+            bool hasSid = false;
+            foreach (var c in cookies)
+            {
+                if (c.Name == "uid" && !string.IsNullOrWhiteSpace(c.Value) && !c.Value.StartsWith("lo_", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasAuthUid = true;
+                }
+                else if (c.Name == "sid" && !string.IsNullOrWhiteSpace(c.Value))
+                {
+                    hasSid = true;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!string.IsNullOrEmpty(_settings.MediumUsername))
+                {
+                    if (hasAuthUid && hasSid)
+                    {
+                        MediumStatusText.Text = $"Status: Linked as @{_settings.MediumUsername} (Session Active)";
+                    }
+                    else
+                    {
+                        MediumStatusText.Text = $"Status: @{_settings.MediumUsername} (Session Inactive - Reconnect)";
+                    }
+                }
+            });
+        }
+        catch
+        {
+            // Fallback gracefully without overriding
         }
     }
 
@@ -2026,6 +2078,8 @@ public sealed partial class FeaturesPage : Page
         private readonly AppSettings _settings;
         private readonly Action _onUiUpdate;
         private Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2SourceChangedEventArgs>? _sourceChangedHandler;
+        private Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? _navigationCompletedHandler;
+        private bool _authResolved = false;
         private ElementTheme _theme;
         private IntPtr _hWnd = IntPtr.Zero;
 
@@ -2093,12 +2147,6 @@ public sealed partial class FeaturesPage : Page
 
             this.Content = grid;
 
-            _webView.NavigationCompleted += (s, args) =>
-            {
-                _progressRing.IsActive = false;
-                _progressRing.Visibility = Visibility.Collapsed;
-            };
-
             this.Activated += MediumLoginWindow_Activated;
             this.Closed += MediumLoginWindow_Closed;
         }
@@ -2159,45 +2207,18 @@ public sealed partial class FeaturesPage : Page
                 
                 _sourceChangedHandler = async (senderCore, sourceArgs) =>
                 {
-                    var url = senderCore.Source;
-                    if (string.IsNullOrEmpty(url)) return;
+                    await CheckAuthenticationAsync(senderCore);
+                };
 
-                    try
-                    {
-                        var uri = new Uri(url);
-                        if (uri.Host == "medium.com")
-                        {
-                            var path = uri.AbsolutePath;
-                            if (path.StartsWith("/@"))
-                            {
-                                var parts = path.Substring(2).Split('/');
-                                var username = parts[0];
-                                if (!string.IsNullOrEmpty(username))
-                                {
-                                    senderCore.SourceChanged -= _sourceChangedHandler;
-
-                                    _settings.MediumUsername = username;
-                                    _settings.MediumReadingListUrl = $"https://medium.com/@{username}/list/reading-list";
-                                    SettingsService.Save(_settings);
-
-                                    _onUiUpdate();
-
-                                    this.Close();
-                                }
-                            }
-                            else if (path == "/" || path == "" || path == "/?source=logo")
-                            {
-                                senderCore.Navigate("https://medium.com/me");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Medium Login] Error parsing URL {url}: {ex.Message}");
-                    }
+                _navigationCompletedHandler = async (senderCore, navArgs) =>
+                {
+                    _progressRing.IsActive = false;
+                    _progressRing.Visibility = Visibility.Collapsed;
+                    await CheckAuthenticationAsync(senderCore);
                 };
 
                 _webView.CoreWebView2.SourceChanged += _sourceChangedHandler;
+                _webView.CoreWebView2.NavigationCompleted += _navigationCompletedHandler;
                 _webView.Source = new Uri("https://medium.com/m/signin");
             }
             catch (Exception ex)
@@ -2208,12 +2229,147 @@ public sealed partial class FeaturesPage : Page
             }
         }
 
+        private async Task CheckAuthenticationAsync(Microsoft.Web.WebView2.Core.CoreWebView2 core)
+        {
+            if (_authResolved) return;
+
+            var url = core.Source;
+            if (string.IsNullOrEmpty(url)) return;
+
+            try
+            {
+                var uri = new Uri(url);
+                if (!uri.Host.EndsWith("medium.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                // Check cookies for active logged-in session (non-guest uid and sid)
+                var cookieManager = core.CookieManager;
+                var cookies = await cookieManager.GetCookiesAsync("https://medium.com");
+                bool hasAuthUid = false;
+                bool hasSid = false;
+
+                foreach (var c in cookies)
+                {
+                    if (c.Name == "uid" && !string.IsNullOrWhiteSpace(c.Value) && !c.Value.StartsWith("lo_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasAuthUid = true;
+                    }
+                    else if (c.Name == "sid" && !string.IsNullOrWhiteSpace(c.Value))
+                    {
+                        hasSid = true;
+                    }
+                }
+
+                string? username = null;
+                var path = uri.AbsolutePath;
+
+                if (path.StartsWith("/@"))
+                {
+                    var parts = path.Substring(2).Split('/');
+                    if (!string.IsNullOrEmpty(parts[0]))
+                    {
+                        username = parts[0];
+                    }
+                }
+
+                // Query window.__APOLLO_STATE__ viewer if available
+                try
+                {
+                    var jsViewer = @"(() => {
+                        try {
+                            const state = window.__APOLLO_STATE__;
+                            if (!state) return null;
+                            const rq = state.ROOT_QUERY || {};
+                            const viewerRef = rq.viewer;
+                            if (!viewerRef || !viewerRef.__ref) return null;
+                            const viewer = state[viewerRef.__ref];
+                            if (!viewer) return null;
+                            return JSON.stringify({ username: viewer.username || null, name: viewer.name || null });
+                        } catch(e) {
+                            return null;
+                        }
+                    })()";
+                    var viewerRaw = await core.ExecuteScriptAsync(jsViewer);
+                    if (!string.IsNullOrWhiteSpace(viewerRaw) && viewerRaw != "null")
+                    {
+                        string unescaped = System.Text.Json.JsonSerializer.Deserialize<string>(viewerRaw) ?? viewerRaw;
+                        using var doc = System.Text.Json.JsonDocument.Parse(unescaped);
+                        if (doc.RootElement.TryGetProperty("username", out var uProp) && uProp.GetString() is { Length: > 0 } uVal)
+                        {
+                            username ??= uVal;
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                if (hasAuthUid && hasSid)
+                {
+                    // Clean and promote authentication cookies to .medium.com
+                    foreach (var c in cookies)
+                    {
+                        if (c.Name == "uid" || c.Name == "sid" || c.Name == "xsrf" || c.Name == "lightstep_guid/lite-js")
+                        {
+                            var promoted = cookieManager.CreateCookie(c.Name, c.Value, ".medium.com", "/");
+                            promoted.IsSecure = true;
+                            promoted.IsHttpOnly = c.IsHttpOnly;
+                            cookieManager.AddOrUpdateCookie(promoted);
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(username))
+                    {
+                        if (path == "/" || path == "" || path == "/?source=logo" || path.StartsWith("/m/signin"))
+                        {
+                            core.Navigate("https://medium.com/me");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        _authResolved = true;
+                        if (_sourceChangedHandler != null) core.SourceChanged -= _sourceChangedHandler;
+                        if (_navigationCompletedHandler != null) core.NavigationCompleted -= _navigationCompletedHandler;
+
+                        _settings.MediumUsername = username;
+                        _settings.MediumReadingListUrl = $"https://medium.com/@{username}/list/reading-list";
+                        SettingsService.Save(_settings);
+
+                        _onUiUpdate();
+
+                        this.Close();
+                    }
+                }
+                else
+                {
+                    if ((path == "/" || path == "" || path == "/?source=logo") && !string.IsNullOrEmpty(username))
+                    {
+                        core.Navigate("https://medium.com/me");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Medium Login] Error parsing URL {url}: {ex.Message}");
+            }
+        }
+
         private void MediumLoginWindow_Closed(object sender, WindowEventArgs args)
         {
             this.Closed -= MediumLoginWindow_Closed;
-            if (_webView != null && _webView.CoreWebView2 != null && _sourceChangedHandler != null)
+            if (_webView != null && _webView.CoreWebView2 != null)
             {
-                _webView.CoreWebView2.SourceChanged -= _sourceChangedHandler;
+                if (_sourceChangedHandler != null)
+                {
+                    _webView.CoreWebView2.SourceChanged -= _sourceChangedHandler;
+                }
+                if (_navigationCompletedHandler != null)
+                {
+                    _webView.CoreWebView2.NavigationCompleted -= _navigationCompletedHandler;
+                }
             }
         }
     }

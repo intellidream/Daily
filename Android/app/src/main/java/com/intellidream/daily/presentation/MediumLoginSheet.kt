@@ -297,37 +297,80 @@ fun MediumLoginSheet(
                                 cookieManager.setAcceptCookie(true)
                                 cookieManager.setAcceptThirdPartyCookies(this, true)
 
-                                fun checkUrl(url: String?, webView: WebView?): Boolean {
-                                    if (url.isNullOrBlank() || detectedCompleted) return false
-                                    val uri = try { Uri.parse(url) } catch (_: Exception) { return false }
-                                    val host = uri.host?.lowercase() ?: return false
+                                var didRequestProfileRedirect = false
 
-                                    if (host.contains("medium.com")) {
-                                        val path = uri.path ?: ""
-                                        if (path.startsWith("/@")) {
+                                fun verifySession(loadedUrl: String?, webView: WebView?) {
+                                    if (loadedUrl.isNullOrBlank() || detectedCompleted || webView == null) return
+                                    val uri = try { Uri.parse(loadedUrl) } catch (_: Exception) { return }
+                                    val host = uri.host?.lowercase() ?: return
+                                    if (!host.contains("medium.com")) return
+
+                                    val ignoredHosts = setOf(
+                                        "help.medium.com", "policy.medium.com", "status.medium.com",
+                                        "blog.medium.com", "cdn-client.medium.com", "miro.medium.com",
+                                        "glyph.medium.com", "meter.medium.com"
+                                    )
+                                    if (ignoredHosts.contains(host)) return
+
+                                    val path = uri.path ?: ""
+                                    if (path.startsWith("/m/signin") || path.startsWith("/m/connect") ||
+                                        path.startsWith("/m/callback") || path.startsWith("/m/start-auth") ||
+                                        path.startsWith("/m/account")) {
+                                        return
+                                    }
+
+                                    val viewerJs = """
+                                        (function() {
+                                            try {
+                                                var s = window.__APOLLO_STATE__ || {};
+                                                var rq = s.ROOT_QUERY || {};
+                                                var v = rq.viewer;
+                                                if (!v) return null;
+                                                var ref = v.__ref || (typeof v === 'string' ? v : null);
+                                                var u = ref ? s[ref] : v;
+                                                if (u && u.username) return String(u.username);
+                                            } catch (e) {}
+                                            return null;
+                                        })()
+                                    """.trimIndent()
+
+                                    webView.evaluateJavascript(viewerJs) { viewerResult ->
+                                        if (detectedCompleted) return@evaluateJavascript
+                                        val rawViewer = if (viewerResult != null && viewerResult != "null") {
+                                            viewerResult.trim().removeSurrounding("\"").removePrefix("@")
+                                        } else null
+
+                                        val mediumCookies = cookieManager.getCookie("https://medium.com") ?: ""
+                                        val hasAuthCookies = com.intellidream.daily.model.ArticleExtractor.hasAuthenticatedMediumCookies(mediumCookies)
+
+                                        var resolvedUsername: String? = null
+                                        if (!rawViewer.isNullOrEmpty()) {
+                                            resolvedUsername = rawViewer
+                                        } else if (path.startsWith("/@")) {
                                             val parts = path.removePrefix("/@").split("/")
-                                            val detected = parts.firstOrNull()?.trim()
-                                            if (!detected.isNullOrEmpty()) {
-                                                detectedCompleted = true
-                                                onConnect(detected)
-                                                onDismiss()
-                                                return true
+                                            val first = parts.firstOrNull()?.trim()
+                                            if (!first.isNullOrEmpty()) {
+                                                resolvedUsername = first
                                             }
-                                        } else if (host != "medium.com" && host != "www.medium.com" && host != "api.medium.com" && host.endsWith(".medium.com")) {
+                                        } else if (host != "medium.com" && host != "www.medium.com" && host.endsWith(".medium.com")) {
                                             val sub = host.substringBefore(".medium.com").trim()
                                             if (sub.isNotEmpty()) {
-                                                detectedCompleted = true
-                                                onConnect(sub)
-                                                onDismiss()
-                                                return true
+                                                resolvedUsername = sub
                                             }
-                                        } else if (path == "/" || path == "" || path == "/?source=logo") {
-                                            webView?.post {
+                                        }
+
+                                        if ((hasAuthCookies || !rawViewer.isNullOrEmpty()) && !resolvedUsername.isNullOrEmpty()) {
+                                            detectedCompleted = true
+                                            cookieManager.flush()
+                                            onConnect(resolvedUsername)
+                                            onDismiss()
+                                        } else if (!didRequestProfileRedirect && (path == "/" || path.isEmpty())) {
+                                            didRequestProfileRedirect = true
+                                            webView.post {
                                                 webView.loadUrl("https://medium.com/me")
                                             }
                                         }
                                     }
-                                    return false
                                 }
 
                                 webChromeClient = object : WebChromeClient() {
@@ -351,21 +394,17 @@ fun MediumLoginSheet(
 
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                        val url = request?.url?.toString() ?: return false
-                                        if (checkUrl(url, view)) {
-                                            return true
-                                        }
+                                        // Never cancel legitimate OAuth redirects; allow WebView to complete the flow
                                         return false
                                     }
 
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                         isLoadingWeb = true
-                                        checkUrl(url, view)
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         isLoadingWeb = false
-                                        checkUrl(url, view)
+                                        verifySession(url, view)
                                     }
                                 }
 
