@@ -614,6 +614,34 @@ class NewsParsersTest {
         assertEquals("Teodora Preda", article.author)
         assertEquals("https://recorder.ro/wp-content/uploads/2026/10/Thumb_Explicativ_Alegeri_SUA_CLEAN.jpg", article.imageUrl)
     }
+
+    @Test
+    fun testMediumImageOptimizationAndScrapedItemParsing() {
+        val sampleMiroUrl = "https://miro.medium.com/v2/resize:fill:160:112/1*AbCdEf12345.jpeg"
+        val optimized = optimizeMediumImageUrl(sampleMiroUrl)
+        assertEquals("https://miro.medium.com/v2/resize:fit:800/1*AbCdEf12345.jpeg", optimized)
+
+        val scraped = ScrapedMediumArticle(
+            title = "How to Build a Micro-SaaS in 2026",
+            url = "https://medium.com/@marclou/how-to-build-micro-saas-2026-12345",
+            author = "Marc Lou in Entrepreneurship",
+            authorUrl = "https://medium.com/@marclou",
+            imageUrl = "https://miro.medium.com/v2/resize:fill:200:150/1*test.jpg",
+            description = "Step by step guide to launching quickly."
+        )
+
+        var author = scraped.author
+        var pubName = "Medium"
+        val inIdx = author.indexOf(" in ")
+        if (inIdx > 0) {
+            pubName = author.substring(inIdx + 4).trim()
+            author = author.substring(0, inIdx).trim()
+        }
+
+        assertEquals("Marc Lou", author)
+        assertEquals("Entrepreneurship", pubName)
+        assertEquals("https://miro.medium.com/v2/resize:fit:800/1*test.jpg", optimizeMediumImageUrl(scraped.imageUrl))
+    }
 }
 
 

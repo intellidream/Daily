@@ -619,4 +619,43 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertEqual(recorder?.category, .local)
         XCTAssertEqual(recorder?.url, "https://recorder.ro/feed/")
     }
+    
+    #if canImport(WebKit)
+    @MainActor
+    func testMediumImageOptimizationAndReadingListParsing() {
+        let sampleMiroUrl = "https://miro.medium.com/v2/resize:fill:160:112/1*AbCdEf12345.jpeg"
+        let optimized = HeadlessReadabilityParser.optimizeMediumImageUrl(sampleMiroUrl)
+        XCTAssertEqual(optimized, "https://miro.medium.com/v2/resize:fit:800/1*AbCdEf12345.jpeg")
+        
+        let sampleJson = """
+        [
+            {
+                "title": "How to Build a Micro-SaaS in 2026",
+                "url": "https://medium.com/@marclou/how-to-build-micro-saas-2026-12345",
+                "author": "Marc Lou in Entrepreneurship",
+                "authorUrl": "https://medium.com/@marclou",
+                "imageUrl": "https://miro.medium.com/v2/resize:fill:200:150/1*test.jpg",
+                "description": "Step by step guide to launching quickly."
+            }
+        ]
+        """
+        guard let data = sampleJson.data(using: .utf8),
+              let items = try? JSONDecoder().decode([ScrapedMediumItem].self, from: data) else {
+            XCTFail("Failed to decode ScrapedMediumItem")
+            return
+        }
+        
+        XCTAssertEqual(items.count, 1)
+        let item = items[0]
+        var author = item.author
+        var pubName = "Medium"
+        if let range = author.range(of: " in ") {
+            pubName = String(author[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            author = String(author[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        XCTAssertEqual(author, "Marc Lou")
+        XCTAssertEqual(pubName, "Entrepreneurship")
+        XCTAssertEqual(HeadlessReadabilityParser.optimizeMediumImageUrl(item.imageUrl), "https://miro.medium.com/v2/resize:fit:800/1*test.jpg")
+    }
+    #endif
 }

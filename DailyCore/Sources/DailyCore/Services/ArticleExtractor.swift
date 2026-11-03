@@ -6,6 +6,24 @@ import WebKit
 /// Distraction-free article extraction engine providing parity with WinUI,
 /// powered by an in-memory Mozilla Readability engine over headless WebKit
 /// with a multi-candidate scoring heuristic fallback.
+public struct ScrapedMediumItem: Decodable, Sendable {
+    public let title: String
+    public let url: String
+    public let author: String
+    public let authorUrl: String
+    public let imageUrl: String
+    public let description: String
+
+    public init(title: String, url: String, author: String, authorUrl: String, imageUrl: String, description: String) {
+        self.title = title
+        self.url = url
+        self.author = author
+        self.authorUrl = authorUrl
+        self.imageUrl = imageUrl
+        self.description = description
+    }
+}
+
 public final class ArticleExtractor: @unchecked Sendable {
     
     public static let shared = ArticleExtractor()
@@ -32,6 +50,19 @@ public final class ArticleExtractor: @unchecked Sendable {
         guard let url = URL(string: safeUrlString) else {
             throw URLError(.badURL)
         }
+        
+        let isMedium = safeUrlString.contains("medium.com") || (baseArticle?.publicationName?.contains("Medium") == true)
+        #if canImport(WebKit)
+        if isMedium {
+            if let mediumArticle = await HeadlessReadabilityParser.shared.extractMediumArticle(
+                url: url,
+                baseArticle: baseArticle,
+                extractor: self
+            ), let content = mediumArticle.content, content.count > 100 {
+                return mediumArticle
+            }
+        }
+        #endif
         
         let (data, response) = try await urlSession.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
@@ -754,6 +785,297 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             print("[ArticleExtractor] Readability evaluation error: \(error)")
             return nil
         }
+    }
+    
+    // MARK: - Medium WebKit Extraction & Scraper (WinUI Parity)
+    
+    private final class NavigationObserver: NSObject, WKNavigationDelegate {
+        var onFinished: (@MainActor (Bool) -> Void)?
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Task { @MainActor in
+                self.onFinished?(true)
+                self.onFinished = nil
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            Task { @MainActor in
+                self.onFinished?(false)
+                self.onFinished = nil
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            Task { @MainActor in
+                self.onFinished?(false)
+                self.onFinished = nil
+            }
+        }
+    }
+    
+    private func createAuthenticatedWebView() -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
+        let prefs = WKWebpagePreferences()
+        prefs.allowsContentJavaScript = true
+        config.defaultWebpagePreferences = prefs
+        let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
+        #if os(macOS)
+        wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+        #else
+        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+        #endif
+        return wv
+    }
+    
+    public func extractMediumArticle(
+        url: URL,
+        baseArticle: NewsArticle?,
+        extractor: ArticleExtractor
+    ) async -> NewsArticle? {
+        let wv = createAuthenticatedWebView()
+        let observer = NavigationObserver()
+        wv.navigationDelegate = observer
+        
+        _ = await withCheckedContinuation { continuation in
+            var finished = false
+            observer.onFinished = { success in
+                if !finished {
+                    finished = true
+                    continuation.resume(returning: success)
+                }
+            }
+            wv.load(URLRequest(url: url))
+            
+            Task {
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                await MainActor.run {
+                    if !finished {
+                        finished = true
+                        continuation.resume(returning: false)
+                    }
+                }
+            }
+        }
+        
+        // Give 2s for React/Next.js hydration and member payload rendering
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        
+        let cleanupScript = """
+        (function(){
+            var selectors=['#cmp-app-container','.cookie-banner','#cookie-consent','.gdpr-modal',
+            '[class*="cookie"]','[id*="cookie"]','[class*="consent"]','[class*="paywall"]',
+            '[id*="consent"]','[class*="overlay"]','[id*="piano"]'];
+            selectors.forEach(function(s){document.querySelectorAll(s).forEach(function(e){e.remove();});});
+            document.body.style.overflow='auto';document.documentElement.style.overflow='auto';
+            var main=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role="main"]');
+            if(main){main.style.display='block';main.style.visibility='visible';main.style.opacity='1';}
+        })()
+        """
+        _ = try? await wv.evaluateJavaScript(cleanupScript)
+        
+        let extractScript = """
+        (function(){
+            var selectors='article, main, [itemprop="articleBody"], .article-body, .article-content, .post-content, .entry-content, .layout-article-body';
+            var el=document.querySelector(selectors);
+            if(el && el.innerText && el.innerText.length > 200) return '<html><head><meta charset="utf-8"/></head><body>'+el.outerHTML+'</body></html>';
+            if(document.body && document.body.innerText && document.body.innerText.length > 500) {
+                return document.documentElement.outerHTML;
+            }
+            return null;
+        })()
+        """
+        
+        var extractedHtml: String? = nil
+        for _ in 0..<8 {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
+                extractedHtml = result
+                break
+            }
+        }
+        
+        if extractedHtml == nil {
+            if let fullHtml = try? await wv.evaluateJavaScript("document.documentElement.outerHTML") as? String, fullHtml.count > 500 {
+                extractedHtml = fullHtml
+            }
+        }
+        
+        guard let html = extractedHtml else { return nil }
+        return await self.parse(html: html, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor)
+    }
+    
+    public func scrapeMediumReadingList(urlString: String) async -> [NewsArticle] {
+        guard let url = URL(string: urlString) else { return [] }
+        let wv = createAuthenticatedWebView()
+        let observer = NavigationObserver()
+        wv.navigationDelegate = observer
+        
+        _ = await withCheckedContinuation { continuation in
+            var finished = false
+            observer.onFinished = { success in
+                if !finished {
+                    finished = true
+                    continuation.resume(returning: success)
+                }
+            }
+            wv.load(URLRequest(url: url))
+            
+            Task {
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                await MainActor.run {
+                    if !finished {
+                        finished = true
+                        continuation.resume(returning: false)
+                    }
+                }
+            }
+        }
+        
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        
+        for _ in 0..<6 {
+            if let count = try? await wv.evaluateJavaScript("document.querySelectorAll('article').length") as? Int, count > 0 {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+        }
+        
+        let script = """
+        (function() {
+            var articles = [];
+            var items = document.querySelectorAll('article');
+            
+            function getStoryUrl(item) {
+                var titleEl = item.querySelector('h2');
+                if (titleEl) {
+                    var a = titleEl.querySelector('a') || titleEl.closest('a');
+                    if (a && a.href) return a.href;
+                }
+                var links = item.querySelectorAll('a');
+                for (var i = 0; i < links.length; i++) {
+                    var href = links[i].href;
+                    if (!href) continue;
+                    var urlObj;
+                    try { urlObj = new URL(href); } catch(e) { continue; }
+                    var pathname = urlObj.pathname;
+                    if (pathname.includes('/tag/') || pathname.includes('/tagged/') || pathname.includes('/me') || pathname === '/' || pathname === '') continue;
+                    var parts = pathname.split('/').filter(Boolean);
+                    if (parts.length === 1 && parts[0].startsWith('@')) continue;
+                    if (pathname.includes('/p/') || parts.length >= 2 || (parts.length === 1 && !parts[0].startsWith('@'))) return href;
+                }
+                return '';
+            }
+
+            function getAuthorInfo(item) {
+                var links = item.querySelectorAll('a');
+                for (var i = 0; i < links.length; i++) {
+                    var href = links[i].href;
+                    if (!href) continue;
+                    try {
+                        var urlObj = new URL(href);
+                        if (urlObj.hostname === 'medium.com' && urlObj.pathname.startsWith('/@')) {
+                            var parts = urlObj.pathname.split('/').filter(Boolean);
+                            if (parts.length === 1) {
+                                return { url: href, name: (links[i].innerText || links[i].textContent || '').trim() };
+                            }
+                        }
+                        if (urlObj.hostname.endsWith('.medium.com') && urlObj.hostname.split('.').length === 3) {
+                            var sub = urlObj.hostname.split('.')[0];
+                            if (sub !== 'www' && sub !== 'api' && urlObj.pathname === '/') {
+                                return { url: href, name: (links[i].innerText || links[i].textContent || '').trim() };
+                            }
+                        }
+                    } catch(e) {}
+                }
+                return null;
+            }
+
+            items.forEach(function(item) {
+                try {
+                    var titleEl = item.querySelector('h2');
+                    var title = titleEl ? titleEl.innerText : '';
+                    var storyUrl = getStoryUrl(item);
+                    var authorInfo = getAuthorInfo(item);
+                    var authorName = authorInfo ? authorInfo.name : '';
+                    var authorUrl = authorInfo ? authorInfo.url : '';
+                    if (!authorName) {
+                        var authorEl = item.querySelector('p');
+                        if (authorEl) authorName = authorEl.innerText;
+                    }
+                    var description = '';
+                    var h3El = item.querySelector('h3');
+                    if (h3El) {
+                        description = h3El.innerText;
+                    } else {
+                        var pElements = item.querySelectorAll('p');
+                        pElements.forEach(function(p) {
+                            var txt = p.innerText || '';
+                            if (txt.length > 30 && !txt.includes('min read') && !txt.includes('member-only')) {
+                                description = txt;
+                            }
+                        });
+                    }
+                    var img = item.querySelector('img');
+                    var imageUrl = img ? img.src : '';
+                    title = title.trim();
+                    authorName = (authorName || '').trim();
+                    description = (description || '').trim();
+                    if (title && storyUrl) {
+                        articles.push({
+                            title: title,
+                            url: storyUrl,
+                            author: authorName || 'Medium',
+                            authorUrl: authorUrl || '',
+                            imageUrl: imageUrl,
+                            description: description
+                        });
+                    }
+                } catch(e) {}
+            });
+            return JSON.stringify(articles);
+        })();
+        """
+        
+        guard let jsonString = try? await wv.evaluateJavaScript(script) as? String,
+              let data = jsonString.data(using: .utf8),
+              let scraped = try? JSONDecoder().decode([ScrapedMediumItem].self, from: data),
+              !scraped.isEmpty else {
+            return []
+        }
+        
+        return scraped.map { item in
+            var author = item.author
+            var pubName = "Medium"
+            if let range = author.range(of: " in ") {
+                pubName = String(author[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                author = String(author[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            
+            let optImg = Self.optimizeMediumImageUrl(item.imageUrl)
+            return NewsArticle(
+                id: UUID().uuidString,
+                title: item.title,
+                link: item.url,
+                publishDate: Date(),
+                imageUrl: optImg.isEmpty ? nil : optImg,
+                description: item.description.isEmpty ? "Author: \(author). Read this story on Medium." : item.description,
+                content: nil,
+                author: author,
+                publicationName: pubName,
+                publicationIconUrl: "https://www.google.com/s2/favicons?domain=medium.com&sz=64",
+                category: .tech
+            )
+        }
+    }
+    
+    nonisolated public static func optimizeMediumImageUrl(_ url: String) -> String {
+        guard url.contains("miro.medium.com") else { return url }
+        let pattern = "v2/resize:[^/]+(/format:[^/]+)?"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return url }
+        let range = NSRange(location: 0, length: (url as NSString).length)
+        return regex.stringByReplacingMatches(in: url, range: range, withTemplate: "v2/resize:fit:800")
     }
 }
 #endif

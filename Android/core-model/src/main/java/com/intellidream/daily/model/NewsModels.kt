@@ -240,3 +240,18 @@ data class FeedSearchResult(
 ) {
     val id: String get() = url
 }
+
+@Serializable
+data class ScrapedMediumArticle(
+    val title: String = "",
+    val url: String = "",
+    val author: String = "",
+    val authorUrl: String = "",
+    val imageUrl: String = "",
+    val description: String = ""
+)
+
+fun optimizeMediumImageUrl(url: String): String {
+    if (!url.contains("miro.medium.com")) return url
+    return url.replace(Regex("v2/resize:[^/]+(/format:[^/]+)?"), "v2/resize:fit:800")
+}

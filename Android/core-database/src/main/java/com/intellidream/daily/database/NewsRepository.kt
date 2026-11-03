@@ -43,6 +43,8 @@ interface NewsSyncHandler {
     suspend fun pushSubscription(subscription: RssSubscription): Boolean
     suspend fun pullSavedArticles(userId: String): List<SavedArticle>
     suspend fun pushSavedArticle(article: SavedArticle): Boolean
+    suspend fun scrapeMediumReadingList(readingListUrl: String): List<NewsArticle>? = null
+    suspend fun extractMediumArticle(url: String, baseArticle: NewsArticle? = null): NewsArticle? = null
 }
 
 class NewsRepository(
@@ -310,6 +312,13 @@ class NewsRepository(
     }
 
     private suspend fun fetchFeedItems(feed: FeedSource): List<NewsArticle> = withContext(Dispatchers.IO) {
+        if (feed.id == "medium_reading_list") {
+            val scraped = syncHandler?.scrapeMediumReadingList(feed.url)
+            if (!scraped.isNullOrEmpty()) {
+                return@withContext scraped
+            }
+        }
+
         val targetUrl = when {
             feed.url.contains("economica.net/rss") -> "https://www.economica.net/feed"
             else -> feed.url
@@ -331,6 +340,16 @@ class NewsRepository(
 
     suspend fun fetchFullArticle(article: NewsArticle): NewsArticle = withContext(Dispatchers.IO) {
         try {
+            val isMedium = article.link.contains("medium.com") || 
+                           article.publicationName?.contains("Medium", ignoreCase = true) == true
+            if (isMedium) {
+                val extractedMedium = syncHandler?.extractMediumArticle(article.link, article)
+                val medContent = extractedMedium?.content
+                if (extractedMedium != null && !medContent.isNullOrBlank() && medContent.length > 100) {
+                    return@withContext extractedMedium
+                }
+            }
+
             val html = syncHandler?.fetchUrl(article.link) ?: downloadString(article.link)
             if (!html.isNullOrBlank()) {
                 ArticleExtractor.shared.parseHtml(html, article.link, article)
@@ -359,6 +378,13 @@ class NewsRepository(
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
                 conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml,application/atom+xml,application/json")
                 conn.setRequestProperty("Accept-Language", "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7")
+                try {
+                    val cm = android.webkit.CookieManager.getInstance()
+                    val cookies = cm.getCookie(currentUrl) ?: cm.getCookie("https://medium.com")
+                    if (!cookies.isNullOrBlank()) {
+                        conn.setRequestProperty("Cookie", cookies)
+                    }
+                } catch (_: Throwable) {}
                 val responseCode = conn.responseCode
                 if (responseCode in 300..399) {
                     val location = conn.getHeaderField("Location")
@@ -416,7 +442,8 @@ class NewsRepository(
 
     fun mediumReadingListFeedSource(username: String?, customUrl: String?): FeedSource? {
         if (username.isNullOrBlank()) return null
-        val targetUrl = customUrl ?: "https://medium.com/feed/@${username.trim().removePrefix("@")}"
+        val clean = username.trim().removePrefix("@")
+        val targetUrl = if (!customUrl.isNullOrBlank()) customUrl else "https://medium.com/@$clean/list/reading-list"
         return FeedSource(
             id = "medium_reading_list",
             name = "Medium Reading List",

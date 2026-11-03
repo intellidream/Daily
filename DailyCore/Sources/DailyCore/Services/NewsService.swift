@@ -215,7 +215,10 @@ public final class NewsService: ObservableObject {
     public var mediumReadingListFeedSource: FeedSource? {
         let settings = SettingsService.shared.settings
         guard let username = settings.newsMediumUsername, !username.isEmpty else { return nil }
-        let url = settings.newsMediumReadingListUrl ?? "https://medium.com/feed/@\(username)"
+        let clean = username.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n"))
+        let url = (settings.newsMediumReadingListUrl?.isEmpty == false)
+            ? settings.newsMediumReadingListUrl!
+            : "https://medium.com/@\(clean)/list/reading-list"
         return FeedSource(
             id: "medium_reading_list",
             name: "Medium Reading List",
@@ -238,6 +241,7 @@ public final class NewsService: ObservableObject {
     
     public func isSubscribedToMediumAuthor(username: String) -> Bool {
         let cleanUser = username.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n"))
+        guard !cleanUser.isEmpty else { return false }
         let feedUrl = "https://medium.com/feed/@\(cleanUser)"
         return feeds.contains(where: { $0.url == feedUrl })
     }
@@ -249,11 +253,21 @@ public final class NewsService: ObservableObject {
         session: URLSession
     ) async throws -> [NewsArticle] {
         if feed.id == "medium_reading_list" {
-            let username = mediumUsername ?? ""
+            let cleanUser = mediumUsername?.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n")) ?? ""
+            #if canImport(WebKit)
+            let readingListUrl = (mediumReadingListUrl?.isEmpty == false)
+                ? mediumReadingListUrl!
+                : (!cleanUser.isEmpty ? "https://medium.com/@\(cleanUser)/list/reading-list" : feed.url)
+            
+            let scraped = await HeadlessReadabilityParser.shared.scrapeMediumReadingList(urlString: readingListUrl)
+            if !scraped.isEmpty {
+                return scraped
+            }
+            #endif
             
             var targetUrl = feed.url
-            if !targetUrl.contains("/feed/") && !username.isEmpty {
-                targetUrl = "https://medium.com/feed/@\(username)"
+            if !targetUrl.contains("/feed/") && !cleanUser.isEmpty {
+                targetUrl = "https://medium.com/feed/@\(cleanUser)"
             }
             
             if let url = URL(string: targetUrl) {
@@ -267,7 +281,7 @@ public final class NewsService: ObservableObject {
                         }
                     }
                 } catch {
-                    print("[NewsService] Medium RSS fetch error: \(error)")
+                    print("[NewsService] Medium RSS fetch fallback error: \(error)")
                 }
             }
         }

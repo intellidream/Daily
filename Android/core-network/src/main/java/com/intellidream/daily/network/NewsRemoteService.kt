@@ -45,6 +45,13 @@ class NewsRemoteService(
                 header("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
                 header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/rss+xml,application/atom+xml,application/json")
                 header("Accept-Language", "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7")
+                try {
+                    val cm = android.webkit.CookieManager.getInstance()
+                    val cookies = cm.getCookie(safeUrl) ?: cm.getCookie("https://medium.com")
+                    if (!cookies.isNullOrBlank()) {
+                        header("Cookie", cookies)
+                    }
+                } catch (_: Throwable) {}
             }
             if (response.status.value in 200..299) {
                 response.bodyAsText()

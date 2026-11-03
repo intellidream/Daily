@@ -301,6 +301,34 @@ When retrieving recommendation feed items concurrently in the briefing engine or
   - Unit tests verified redirect URL parsing across root domains, subdomains, `/me` navigation, and callback URLs on both Swift (`NewsServiceTests.testMediumOAuthRedirectUrlParsing`) and Kotlin (`NewsParsersTest.testMediumOAuthRedirectUrlParsing`).
   - macOS, iOS, and Android applications compiled with zero errors and deployed to physical iPhone 16 Pro ("Schmitz") and Google Pixel 9 Pro ("Trapper").
 
+### 6.9 Medium Reading List Scraping & Authenticated Member Article Extraction Parity (November 2026)
+- **Problem Statement**:
+  - After OAuth sign-in, the Medium Reading List failed to load articles on iOS, macOS, and Android.
+  - Opening Medium articles (both from reading lists and author feeds) failed to access paid member content, falling back to truncated paywall teasers.
+- **Root Cause & Architectural Alignment**:
+  - Medium does not publish an RSS feed for Reading Lists (`/feed/@username` returns stories authored by the user, not saved stories).
+  - Medium Reading List and unlocked member stories require an authenticated browser engine (cookies: `uid`, `sid`, `session`, etc.) and client-side JavaScript execution (React/Next.js hydration).
+  - WinUI achieved gold standard by:
+    1. Scraping `https://medium.com/@username/list/reading-list` via background `WebView2` using `document.querySelectorAll('article')`.
+    2. Forcing `needsWebViewFallback = true` for all `medium.com` articles, navigating `ReaderWebView` with authenticated session cookies, waiting for hydration, cleaning overlays, and extracting full article DOM.
+- **Implementation**:
+  - **iOS & macOS (`DailyCore`)**:
+    - Added `ScrapedMediumItem` and `optimizeMediumImageUrl` (replacing Miro CDN thumbnail segments with `v2/resize:fit:800`).
+    - Implemented `HeadlessReadabilityParser.extractMediumArticle(url:baseArticle:extractor:)` utilizing `WKWebView` backed by persistent `WKWebsiteDataStore.default()`, overlay cleanup, and article DOM extraction before passing to Readability.
+    - Implemented `HeadlessReadabilityParser.scrapeMediumReadingList(urlString:)` executing WinUI's exact scraping JavaScript and mapping items into `[NewsArticle]`.
+    - Updated `NewsService.mediumReadingListFeedSource` and `fetchFeedItems` to invoke `scrapeMediumReadingList`.
+  - **Android (`core-model`, `core-database`, `core-network`, `app`)**:
+    - Added `ScrapedMediumArticle` and `optimizeMediumImageUrl` in `NewsModels.kt`.
+    - Added `scrapeMediumReadingList` and `extractMediumArticle` to `NewsSyncHandler`.
+    - In `NewsRepository.kt`, wired `medium_reading_list` to `syncHandler?.scrapeMediumReadingList` and `fetchFullArticle` to `syncHandler?.extractMediumArticle` for Medium URLs.
+    - In `NewsRepository.downloadString` and `NewsRemoteService.fetchUrl`, attached `Cookie` headers from `CookieManager.getInstance()`.
+    - Created `MediumWebViewBridge.kt` in `com.intellidream.daily.news` providing headless `WebView` scraping and member extraction on `Dispatchers.Main`.
+    - Connected `MediumWebViewBridge` in `DailyApp.kt`.
+- **Verification**:
+  - Swift unit tests in `NewsServiceTests` passed (20/20).
+  - Kotlin unit tests in `NewsParsersTest` passed.
+  - Built natively and deployed live to physical iPhone 16 Pro ("Schmitz") and Google Pixel 9 Pro ("Trapper"). Zero regressions on non-Medium feeds or WinUI.
+
 
 
 
