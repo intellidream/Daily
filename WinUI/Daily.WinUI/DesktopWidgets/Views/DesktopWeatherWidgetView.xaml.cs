@@ -45,8 +45,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
             try
             {
                 var settings = SettingsService.Load();
-                var locationService = App.Current.Services?.GetService<ILocationService>();
-                var coords = locationService != null ? await locationService.GetCurrentCoordinatesAsync() : null;
+                var locationService = App.Current.Services?.GetService<LocationService>() ?? new LocationService();
+                var coords = await locationService.GetCurrentCoordinatesAsync();
 
                 double lat = coords?.Latitude ?? settings.LastLatitude ?? 44.4323;
                 double lon = coords?.Longitude ?? settings.LastLongitude ?? 26.1063;
@@ -72,7 +72,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     SmallConditionText.Text = condition;
                     SmallHighLowText.Text = $"H: {highTemp}° · L: {lowTemp}°";
 
-                    MediumLocationText.Text = string.IsNullOrEmpty(weather.Country) ? locName : $"{locName}, {weather.Country}";
+                    MediumLocationText.Text = locName;
                     MediumConditionSubtitle.Text = $"{condition} · Feels like {(int)Math.Round(weather.FeelsLike)}°";
                     MediumTempText.Text = $"{currentTemp}°C";
                     MediumHighLowDetail.Text = $"High: {highTemp}° · Low: {lowTemp}°";

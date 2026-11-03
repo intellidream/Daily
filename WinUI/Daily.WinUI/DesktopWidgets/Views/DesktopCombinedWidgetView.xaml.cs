@@ -65,7 +65,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                         var smokes = await habitsService.GetLogsAsync("smokes", DateTime.Today);
                         int smokeCount = smokes?.Count ?? 0;
-                        int maxSmokes = settings.SmokesBaselineDaily > 0 ? settings.SmokesBaselineDaily : 40;
+                        var settingsService = App.Current.Services?.GetService<ISettingsService>();
+                        int maxSmokes = (settingsService?.Settings?.SmokesBaselineDaily > 0) ? settingsService.Settings.SmokesBaselineDaily : 40;
                         SmokesMetricText.Text = smokeCount == 0 ? "Smoke-Free 🌟" : $"{smokeCount} / {maxSmokes} smokes";
                     }
                 }

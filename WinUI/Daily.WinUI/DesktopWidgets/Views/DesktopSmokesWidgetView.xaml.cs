@@ -82,8 +82,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 int cigarettes = logs?.Count(l => (l.Metadata?.ToLowerInvariant().Contains("heated") != true) && (l.Unit?.ToLowerInvariant() != "heated")) ?? 0;
                 int heated = totalSmokes - cigarettes;
 
-                var settings = Daily_WinUI.Services.SettingsService.Load();
-                int maxSmokes = settings.SmokesBaselineDaily > 0 ? settings.SmokesBaselineDaily : 40;
+                var settingsService = App.Current.Services?.GetService<ISettingsService>();
+                int maxSmokes = (settingsService?.Settings?.SmokesBaselineDaily > 0) ? settingsService.Settings.SmokesBaselineDaily : 40;
 
                 // Lungs fill fraction: 0.0 (healthy pink) to 1.0 (tar darkened) based on baseline daily intake
                 double fillFraction = Math.Clamp((double)totalSmokes / (double)maxSmokes, 0.0, 1.0);
