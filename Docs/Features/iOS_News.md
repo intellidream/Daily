@@ -268,6 +268,38 @@ Shared between iOS and upcoming macOS apps without any UIKit dependencies:
 ### 7.3 Verification & Quality Assurance
 - **Unit Tests**:
   - `testRepublicaShortArticleExtraction`: Validates extraction of `https://republica.ro/se-pare-ca-am-murit`. Verifies title (*"Se pare că am murit"*), author (*"Cristian Tudor Popescu"*), editorial prose (*"Circulă pe facebook un clip..."*), and absence of cookie strings (`_cc_id`, `cookie-script`, `Cookie`, `Îți recomandăm`).
+
+---
+
+## 8. High-Precision Explicit Body Extraction & Anti-Navigation Menu Guard (Ziarul Financiar Live/CEC Bank Fix)
+
+### 8.1 Issue & Root Cause Analysis
+- **Problem**: When opening Ziarul Financiar (ZF.ro) articles on non-WinUI platforms, the reader displayed a live broadcast/video ticker header:
+  `"LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI – Care sunt cele mai căutate locuinţe în zona de nord a Capitalei?"`
+  instead of the actual article body. WinUI remained unaffected.
+- **Root Cause Investigation**:
+  1. **Premature Recommendation Box Pruning**: In `HeadlessReadabilityParser.swift`, a DOM cleanup loop selected `.box, section, div, aside` and removed any element containing `"recomand"`, `"newsletter"`, or `"abonează-te"` if `!box.querySelector("[itemprop='articleBody']")`. On ZF pages, the outer `<div class="article">` wraps both the article body (`.text-content`) and a recommendations carousel (`.bong.carousel` with title `"Articole recomandate"`). Because ZF uses `.text-content` rather than Schema.org `[itemprop='articleBody']`, this loop mistakenly deleted the entire `<div class="article">` from the DOM!
+  2. **Readability Header Fallback**: With the main article container deleted, Mozilla Readability parsed the remaining DOM, selecting the global `<div id="header">` and its navigation menu (`<nav class="menu clear">`) as the "article" since it contained links, images, and live broadcast tickers.
+  3. **Readability Class Stripping**: Even when the article container was preserved, Mozilla Readability's `_cleanClasses` stripped classes from all nodes (turning `<div class="text-content">` into a generic `<div>`), causing post-parse explicit body isolation (`tempDiv.querySelector(".text-content")`) to fail.
+
+### 8.2 Architectural Resolution
+1. **Explicit High-Confidence Container Fast-Path**:
+   - In `HeadlessReadabilityParser.swift`, before running Readability or pruning outer boxes, inspect the DOM directly for explicit editorial selectors (`.text-content`, `[itemprop='articleBody']`, `.articleContent`, `.single__content`, `.entry-content`, `.article-body`, `.wp-block-post-content`, `.pagebuilder-article`, `.articleIntro`).
+   - If found and containing substantial editorial prose (> 100 characters), sanitize inner noise (`script`, `style`, `adocean`, `.social`, `.utils`) and return the exact editorial HTML directly with zero outer header pollution.
+2. **Global Navigation & Header Junk Removal**:
+   - Added `"header"`, `"#header"`, `".header"`, `"nav"`, `".menu"`, `".band"`, `".bong"`, `".carousel"`, `"footer"`, `"#footer"`, `".footer"` to the `junkSelectors` list, ensuring Readability can never select header/navigation bars.
+3. **Anti-Navigation Menu Guard**:
+   - In `ArticleExtractor.swift`, added a strict anti-regression filter rejecting any extracted body containing `role="menu"`, `role="menuitem"`, `id="header"`, or `class="menu"`, automatically falling back to heuristic parsing.
+4. **Author Sanitization Parity**:
+   - Extracted byline handles multi-line author nodes by isolating `[itemprop='name']` and taking the primary name line, preventing job titles (e.g. `"Autor fondator"`) from corrupting the author field.
+
+### 8.3 Verification & Quality Assurance
+- **Unit Tests**:
+  - `testHeadlessReadabilityOnRealZfArticle`: Evaluates 10 real ZF article pages and an inline test fixture with live broadcast banners, asserting clean content length (> 100 chars), zero menu/menuitem artifacts, zero header divs, and zero live broadcast tickers.
+- **Physical Device Delivery**:
+  - Built natively for macOS (`Daily.app`) and verified clean build.
+  - Deployed and installed on physical iPhone 16 Pro ("Schmitz", `00008140-000E2C863EFB001C`) via `xcrun devicectl`.
+
   - `testHeuristicFallbackShortArticleExtraction`: Validates that the heuristic fallback correctly scores and extracts short articles (< 200 chars) while ignoring cookie banners and recommendation boxes.
   - Full suite of 52 tests across `DailyCoreTests` passing with 0 failures.
 - **Simulator Live Inspection**:

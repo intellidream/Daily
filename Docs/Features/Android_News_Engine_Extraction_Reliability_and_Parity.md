@@ -182,6 +182,31 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
   - Drag-to-Dismiss: Verified downward swipe dismissal from both the top drag handle/toolbar (`screen_emulator_dismissed_ok.png`) and directly from the top of the article body (`screen_emulator_zf_dismissed.png`).
 - **Physical Device: Google Pixel 9 Pro ("TRAPPER")**:
   - Build successfully deployed and verified live via wireless ADB (`192.168.3.8:46477`).
+
+---
+
+## 7. High-Precision Explicit Body Extraction & Anti-Navigation Menu Guard (Ziarul Financiar Live/CEC Bank Fix)
+
+### A. Issue & Context
+- ZF.ro articles displayed broadcast live / video ticker text (`"LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI..."`) or truncated content on mobile/desktop readers when navigation menus leaked into the reader body.
+- WinUI served as the reference standard by utilizing `SmartReader` link density thresholding.
+
+### B. Architectural Resolution
+1. **Multi-Candidate Semantic Scoring Parity**:
+   - In `ArticleExtractor.kt`, introduced container bonuses matching Apple DailyCore: `articlebody` (+1500), `<article>` (+500), and `text-content`/`articlecontent` (+400).
+   - This prioritizes direct editorial blocks over large composite wrapper divs containing recommended reading sidebars or carousels.
+2. **Strict Navigation Menu & Header Rejection**:
+   - Added `"header"`, `"menu"`, `"band"`, `"bong"`, and `"carousel"` to candidate junk classes.
+   - Any container candidate containing `role="menu"`, `role="menuitem"`, `id="header"`, or `class="menu"` is immediately disqualified.
+3. **Author Sanitization Parity**:
+   - `sanitizeAuthor()` isolates the first non-empty line, stripping secondary job titles (`"Autor fondator"`, etc.) from multi-line byline spans.
+
+### C. Verification Summary
+- **Unit Tests**:
+  - `NewsParsersTest.testRealZfArticleExtraction`: Verified on 10 live ZF article pages and an inline test fixture with live broadcast tickers, asserting clean length, zero menu/menuitem artifacts, zero header divs, and zero live broadcast tickers.
+- **Physical Device Delivery**:
+  - Built (`./gradlew assembleDebug`) and installed successfully on physical Google Pixel 9 Pro ("TRAPPER") and physical Samsung Galaxy Z Fold 8 ("RADAR").
+
   - Zero crashes or exceptions in logcat.
 
 ---
@@ -228,6 +253,31 @@ A comprehensive stress test was executed against the top 5 articles of all 18 de
   - Confirmed immediate zero-latency rendering of cached thumbnails upon scrolling back up, with zero flicker or stutter.
 - **Physical Device: Google Pixel 9 Pro ("TRAPPER")**:
   - Build successfully deployed and verified live via wireless ADB (`192.168.3.8:46477`).
+
+---
+
+## 7. High-Precision Explicit Body Extraction & Anti-Navigation Menu Guard (Ziarul Financiar Live/CEC Bank Fix)
+
+### A. Issue & Context
+- ZF.ro articles displayed broadcast live / video ticker text (`"LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI..."`) or truncated content on mobile/desktop readers when navigation menus leaked into the reader body.
+- WinUI served as the reference standard by utilizing `SmartReader` link density thresholding.
+
+### B. Architectural Resolution
+1. **Multi-Candidate Semantic Scoring Parity**:
+   - In `ArticleExtractor.kt`, introduced container bonuses matching Apple DailyCore: `articlebody` (+1500), `<article>` (+500), and `text-content`/`articlecontent` (+400).
+   - This prioritizes direct editorial blocks over large composite wrapper divs containing recommended reading sidebars or carousels.
+2. **Strict Navigation Menu & Header Rejection**:
+   - Added `"header"`, `"menu"`, `"band"`, `"bong"`, and `"carousel"` to candidate junk classes.
+   - Any container candidate containing `role="menu"`, `role="menuitem"`, `id="header"`, or `class="menu"` is immediately disqualified.
+3. **Author Sanitization Parity**:
+   - `sanitizeAuthor()` isolates the first non-empty line, stripping secondary job titles (`"Autor fondator"`, etc.) from multi-line byline spans.
+
+### C. Verification Summary
+- **Unit Tests**:
+  - `NewsParsersTest.testRealZfArticleExtraction`: Verified on 10 live ZF article pages and an inline test fixture with live broadcast tickers, asserting clean length, zero menu/menuitem artifacts, zero header divs, and zero live broadcast tickers.
+- **Physical Device Delivery**:
+  - Built (`./gradlew assembleDebug`) and installed successfully on physical Google Pixel 9 Pro ("TRAPPER") and physical Samsung Galaxy Z Fold 8 ("RADAR").
+
 
 
 

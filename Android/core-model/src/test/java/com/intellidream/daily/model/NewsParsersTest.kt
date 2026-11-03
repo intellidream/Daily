@@ -458,5 +458,64 @@ class NewsParsersTest {
         assertTrue(content.contains("Somnul este aliatul cel mai puternic"))
         assertTrue(!content.contains("crossFooterBody"))
     }
+
+    @Test
+    fun testRealZfArticleExtraction() {
+        val fixtureHtml = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>Studiu CPAG: Următoarea etapă a convergenţei</title></head>
+        <body>
+            <div id="header" class="big-wrapper">
+                <nav class="menu clear">
+                    <ul role="menu">
+                        <li itemprop="name" role="menuitem"><a href="/zf-live/">ZF Live</a></li>
+                        <li itemprop="name" role="menuitem"><a href="/cec-bank/">LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI</a></li>
+                    </ul>
+                </nav>
+            </div>
+            <div class="article">
+                <h1>Studiu CPAG: Următoarea etapă a convergenţei</h1>
+                <div class="text-content">
+                    <p>România nu mai beneficiază de avantajul costurilor mici, care s-a disipat considerabil în perioada 2021-2024.</p>
+                    <p>Productivitatea companiilor autohtone este sub productivitatea afiliatelor străine.</p>
+                    <p>Atingerea a 90% din productivitatea medie a companiilor străine ar genera 6,7 miliarde euro.</p>
+                </div>
+                <div class="bong carousel">
+                    <div class="recommendations">
+                        <p>Articole recomandate</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """.trimIndent()
+
+        val fixtureArticle = ArticleExtractor.shared.parseHtml(fixtureHtml, "https://www.zf.ro/zf-24/studiu-cpag-test-23273461")
+        assertNotNull(fixtureArticle.content)
+        val fixtureContent = fixtureArticle.content!!
+        assertTrue(fixtureContent.contains("România nu mai beneficiază de avantajul costurilor mici"))
+        assertTrue(fixtureContent.contains("Productivitatea companiilor autohtone"))
+        assertTrue(!fixtureContent.contains("LIVE: CEC BANK"))
+        assertTrue(!fixtureContent.contains("role=\"menu\""))
+        assertTrue(!fixtureContent.contains("id=\"header\""))
+        assertTrue(!fixtureContent.contains("Articole recomandate"))
+
+        for (i in 1..10) {
+            val file = java.io.File("/tmp/zf_item_$i.html")
+            if (!file.exists()) continue
+            val html = file.readText()
+            val article = ArticleExtractor.shared.parseHtml(html, "https://www.zf.ro/test-$i")
+            assertNotNull(article.content)
+            val content = article.content!!
+            println("ANDROID_ZF_ITEM_$i Title: ${article.title.take(40)}... ContentLen: ${content.length}")
+            assertTrue("Item $i must have content > 100", content.length > 100)
+            assertTrue("Item $i must not contain menu", !content.contains("role=\"menu\""))
+            assertTrue("Item $i must not contain menuitem", !content.contains("role=\"menuitem\""))
+            assertTrue("Item $i must not contain header div", !content.contains("id=\"header\""))
+            assertTrue("Item $i must not contain CEC", !content.contains("CEC Bank pentru afaceri româneşti"))
+        }
+    }
 }
+
 

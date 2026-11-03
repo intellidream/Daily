@@ -69,7 +69,26 @@ class ArticleExtractor {
             val charCount = cleanContainer.length
             val pCount = countOccurrences("<p>", cleanContainer)
             val commaCount = countOccurrences(",", cleanContainer)
-            val score = charCount + (pCount * 60) + (commaCount * 5)
+
+            // Anti-regression guard: Reject any container that is actually a navigation menu or header
+            if (cleanContainer.contains("role=\"menu\"") ||
+                cleanContainer.contains("role=\"menuitem\"") ||
+                cleanContainer.contains("id=\"header\"") ||
+                cleanContainer.contains("class=\"menu")) {
+                continue
+            }
+
+            var semanticBonus = 0
+            val lowerContainer = containerHtml.lowercase(Locale.ROOT)
+            if (lowerContainer.contains("articlebody")) {
+                semanticBonus = 1500
+            } else if (lowerContainer.startsWith("<article")) {
+                semanticBonus = 500
+            } else if (lowerContainer.contains("text-content") || lowerContainer.contains("articlecontent")) {
+                semanticBonus = 400
+            }
+
+            val score = charCount + (pCount * 60) + (commaCount * 5) + semanticBonus
 
             if (score > bestScore && (charCount > 80 || pCount >= 1)) {
                 bestScore = score
@@ -195,7 +214,8 @@ class ArticleExtractor {
         val candidates = mutableListOf<String>()
         val junkClasses = listOf(
             "marketing", "upnext", "up-next", "card-marketing", "teaser", "related",
-            "recommendation", "social", "ad-", "advertisement", "newsletter", "promo", "comment"
+            "recommendation", "social", "ad-", "advertisement", "newsletter", "promo", "comment",
+            "header", "menu", "band", "bong", "carousel"
         )
 
         // 1. Check <article> tags
@@ -327,7 +347,8 @@ class ArticleExtractor {
         var clean = stripComments(html)
         val junkClasses = listOf(
             "marketing", "upnext", "up-next", "card-marketing", "teaser", "related",
-            "recommendation", "social", "ad-", "advertisement", "newsletter", "promo", "comment"
+            "recommendation", "social", "ad-", "advertisement", "newsletter", "promo", "comment",
+            "header", "menu", "band", "bong", "carousel"
         )
         for (junk in junkClasses) {
             clean = stripTagsWithClass(clean, junk)
@@ -439,6 +460,10 @@ class ArticleExtractor {
 
     fun sanitizeAuthor(raw: String): String {
         var author = raw
+        val firstLine = author.lines().firstOrNull { it.trim().isNotEmpty() }
+        if (firstLine != null) {
+            author = firstLine
+        }
         val junkPhrases = listOf("Social Links", "NavigationContributor", "Navigation", "See all articles", "By ", "De către ", "Author: ")
         for (junk in junkPhrases) {
             author = author.replace(junk, "", ignoreCase = true)

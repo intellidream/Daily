@@ -47,7 +47,14 @@ public final class ArticleExtractor: @unchecked Sendable {
             baseArticle: baseArticle,
             extractor: self
         ), let content = readabilityArticle.content, content.count > 80 {
-            return readabilityArticle
+            // Anti-regression guard: Ensure the extracted body is not a leaked navigation header or menu
+            let isMenuArtifact = content.contains("role=\"menu\"") ||
+                                 content.contains("role=\"menuitem\"") ||
+                                 content.contains("id=\"header\"") ||
+                                 content.contains("class=\"menu")
+            if !isMenuArtifact {
+                return readabilityArticle
+            }
         }
         #endif
         
@@ -119,7 +126,7 @@ public final class ArticleExtractor: @unchecked Sendable {
         )
     }
     
-    private func extractBylineFromDom(from html: String) -> String? {
+    func extractBylineFromDom(from html: String) -> String? {
         let patterns = [
             "<[^>]+(?:class|itemprop)=[\"'][^\"']*(?:author|byline|article-author)[^\"']*[\"'][^>]*>([^<]+)</",
             "<a[^>]+rel=[\"']author[\"'][^>]*>([^<]+)</a>"
@@ -417,6 +424,9 @@ public final class ArticleExtractor: @unchecked Sendable {
     
     public func sanitizeAuthor(_ raw: String) -> String {
         var author = raw
+        if let firstLine = author.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            author = firstLine
+        }
         let junkPhrases = ["Social Links", "NavigationContributor", "Navigation", "See all articles"]
         for junk in junkPhrases {
             author = author.replacingOccurrences(of: junk, with: "", options: .caseInsensitive)
@@ -552,8 +562,54 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             try {
                 var doc = document.cloneNode(true);
                 
-                // Prune tracking, cookie consent, and advertising noise containers
+                // 1. Check for explicit high-confidence article body containers FIRST
+                var explicitSelectors = [
+                    "[itemprop='articleBody']",
+                    ".text-content",
+                    ".articleContent",
+                    ".single__content",
+                    ".entry-content",
+                    ".article-body",
+                    ".wp-block-post-content",
+                    ".pagebuilder-article",
+                    ".articlecontent",
+                    ".articleIntro"
+                ];
+                
+                var explicitNode = null;
+                for (var s = 0; s < explicitSelectors.length; s++) {
+                    var found = doc.querySelector(explicitSelectors[s]);
+                    if (found && (found.textContent || "").trim().length > 100) {
+                        explicitNode = found;
+                        break;
+                    }
+                }
+                
+                if (explicitNode) {
+                    // Clean junk child elements inside the explicit container
+                    var junkChildren = explicitNode.querySelectorAll("script, style, iframe, form, [id*='adocean'], [class*='adocean'], .recommendations, .bong, .social, .utils");
+                    for (var j = 0; j < junkChildren.length; j++) {
+                        junkChildren[j].remove();
+                    }
+                    
+                    var h1 = doc.querySelector("h1");
+                    var artTitle = h1 ? h1.textContent.trim() : (doc.title || "");
+                    var bylineEl = doc.querySelector("[rel='author'], [itemprop='author'], .author, .byline, .author-name, .article-author");
+                    var nameEl = bylineEl ? bylineEl.querySelector("[itemprop='name']") : null;
+                    var artByline = (nameEl || bylineEl) ? (nameEl || bylineEl).textContent.trim() : "";
+                    
+                    return JSON.stringify({
+                        title: artTitle,
+                        byline: artByline,
+                        excerpt: "",
+                        content: explicitNode.innerHTML || ""
+                    });
+                }
+                
+                // 2. Prune tracking, navigation, cookie consent, and advertising noise containers
                 var junkSelectors = [
+                    "header", "#header", ".header", "nav", ".menu", ".band",
+                    "footer", "#footer", ".footer",
                     "[id*='cookie']", "[class*='cookie']",
                     "[id*='consent']", "[class*='consent']",
                     "[id*='gdpr']", "[class*='gdpr']",
@@ -562,7 +618,8 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     ".recommendations", ".recomandam",
                     "[class*='newsletter']", "[id*='newsletter']",
                     "[class*='subscribe']", "[id*='subscribe']",
-                    ".box-article-newsletter", ".card-articles"
+                    ".box-article-newsletter", ".card-articles",
+                    ".bong", ".carousel", ".crossFooterBody"
                 ];
                 junkSelectors.forEach(function(sel) {
                     try {
@@ -573,14 +630,14 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     } catch(e) {}
                 });
                 
-                // Prune standalone recommendation or newsletter boxes that don't contain the article body
+                // Prune standalone recommendation or newsletter boxes that don't contain article body paragraphs
                 try {
-                    var boxes = doc.querySelectorAll(".box, section, div, aside");
+                    var boxes = doc.querySelectorAll(".box, aside");
                     for (var b = 0; b < boxes.length; b++) {
                         var box = boxes[b];
                         var txt = (box.textContent || "").toLowerCase();
                         if ((txt.includes("recomand") || txt.includes("newsletter") || txt.includes("abonează-te")) && 
-                            !box.querySelector("[itemprop='articleBody']")) {
+                            box.querySelectorAll("p").length < 3) {
                             box.remove();
                         }
                     }
@@ -637,7 +694,24 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             let ogImage = extractor.extractMetaContent(property: "og:image", from: html) ?? baseArticle?.imageUrl
             let ogDescription = extractor.extractMetaContent(property: "og:description", from: html) ?? readExcerpt ?? baseArticle?.description
             
-            var author = readByline ?? extractor.extractMetaContent(name: "author", from: html) ?? baseArticle?.author
+            var author: String? = nil
+            var rawAuthor = extractor.extractMetaContent(name: "author", from: html)
+            if rawAuthor == nil || rawAuthor?.contains("://") == true {
+                rawAuthor = extractor.extractMetaContent(property: "article:author", from: html)
+            }
+            if rawAuthor?.contains("://") == true {
+                rawAuthor = nil
+            }
+            if rawAuthor == nil {
+                rawAuthor = extractor.extractMetaContent(property: "og:article:author", from: html)
+            }
+            if rawAuthor == nil, let b = readByline?.trimmingCharacters(in: .whitespacesAndNewlines), !b.isEmpty {
+                rawAuthor = b
+            }
+            if rawAuthor == nil {
+                rawAuthor = extractor.extractBylineFromDom(from: html)
+            }
+            author = rawAuthor ?? baseArticle?.author
             if let rawAuthor = author {
                 author = extractor.sanitizeAuthor(rawAuthor)
             }

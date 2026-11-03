@@ -445,4 +445,72 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertTrue(content.contains("Somnul este aliatul cel mai puternic"))
         XCTAssertFalse(content.contains("crossFooterBody"))
     }
+    
+    #if canImport(WebKit)
+    func testHeadlessReadabilityOnRealZfArticle() async {
+        let fixtureHtml = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>Studiu CPAG: Următoarea etapă a convergenţei</title></head>
+        <body>
+            <div id="header" class="big-wrapper">
+                <nav class="menu clear">
+                    <ul role="menu">
+                        <li itemprop="name" role="menuitem"><a href="/zf-live/">ZF Live</a></li>
+                        <li itemprop="name" role="menuitem"><a href="/cec-bank/">LIVE: CEC BANK PENTRU AFACERI ROMÂNEŞTI</a></li>
+                    </ul>
+                </nav>
+            </div>
+            <div class="article">
+                <h1>Studiu CPAG: Următoarea etapă a convergenţei</h1>
+                <div class="text-content">
+                    <p>România nu mai beneficiază de avantajul costurilor mici, care s-a disipat considerabil în perioada 2021-2024.</p>
+                    <p>Productivitatea companiilor autohtone este sub productivitatea afiliatelor străine.</p>
+                    <p>Atingerea a 90% din productivitatea medie a companiilor străine ar genera 6,7 miliarde euro.</p>
+                </div>
+                <div class="bong carousel">
+                    <div class="recommendations">
+                        <p>Articole recomandate</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        let fixtureArticle = await HeadlessReadabilityParser.shared.parse(
+            html: fixtureHtml,
+            urlString: "https://www.zf.ro/zf-24/studiu-cpag-test-23273461",
+            baseArticle: nil,
+            extractor: ArticleExtractor.shared
+        )
+        XCTAssertNotNil(fixtureArticle?.content)
+        let fixtureContent = fixtureArticle?.content ?? ""
+        XCTAssertTrue(fixtureContent.contains("România nu mai beneficiază de avantajul costurilor mici"))
+        XCTAssertTrue(fixtureContent.contains("Productivitatea companiilor autohtone"))
+        XCTAssertFalse(fixtureContent.contains("LIVE: CEC BANK"))
+        XCTAssertFalse(fixtureContent.contains("role=\"menu\""))
+        XCTAssertFalse(fixtureContent.contains("id=\"header\""))
+        XCTAssertFalse(fixtureContent.contains("Articole recomandate"))
+
+        for i in 1...10 {
+            let path = "/tmp/zf_item_\(i).html"
+            guard let html = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            let article = await HeadlessReadabilityParser.shared.parse(
+                html: html,
+                urlString: "https://www.zf.ro/test-\(i)",
+                baseArticle: nil,
+                extractor: ArticleExtractor.shared
+            )
+            let content = article?.content ?? ""
+            let title = article?.title ?? "nil"
+            print("ZF_ITEM_\(i) Title: \(title.prefix(40))... ContentLen: \(content.count)")
+            XCTAssertTrue(content.count > 100, "Item \(i) should have content > 100")
+            XCTAssertFalse(content.contains("role=\"menu\""), "Item \(i) must not contain menu")
+            XCTAssertFalse(content.contains("role=\"menuitem\""), "Item \(i) must not contain menuitem")
+            XCTAssertFalse(content.contains("id=\"header\""), "Item \(i) must not contain header div")
+            XCTAssertFalse(content.contains("Pentru afaceri românești"), "Item \(i) must not contain nav menu")
+        }
+    }
+    #endif
 }
