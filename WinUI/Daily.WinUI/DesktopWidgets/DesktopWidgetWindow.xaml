@@ -13,9 +13,9 @@
                 CornerRadius="20"
                 BorderThickness="1"
                 BorderBrush="{ThemeResource CapsuleBorderBrush}"
-                Background="{ThemeResource CapsuleBackgroundBrush}"
+                Background="Transparent"
                 Padding="0"
-                Margin="4"
+                Margin="0"
                 Tapped="CardBorder_Tapped">
             
             <Grid>

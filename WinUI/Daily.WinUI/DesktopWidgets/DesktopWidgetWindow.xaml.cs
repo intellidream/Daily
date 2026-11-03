@@ -1,11 +1,13 @@
 using System;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
+using WinRT;
 using WinRT.Interop;
 
 namespace Daily_WinUI.DesktopWidgets
@@ -21,6 +23,10 @@ namespace Daily_WinUI.DesktopWidgets
         private readonly IntPtr _hwnd;
         private FrameworkElement? _currentView;
 
+        private DesktopAcrylicController? _acrylicController;
+        private MicaController? _micaController;
+        private SystemBackdropConfiguration? _backdropConfig;
+
         // ── Win32 P/Invoke ──────────────────────────────────────────────────────────
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
         [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -28,17 +34,6 @@ namespace Daily_WinUI.DesktopWidgets
         [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
         [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-        [DllImport("user32.dll", SetLastError = true)] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
-        [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MARGINS
-        {
-            public int cxLeftWidth;
-            public int cxRightWidth;
-            public int cyTopHeight;
-            public int cyBottomHeight;
-        }
 
         [DllImport("comctl32.dll", SetLastError = true)]
         private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, UIntPtr uIdSubclass, IntPtr dwRefData);
@@ -74,8 +69,6 @@ namespace Daily_WinUI.DesktopWidgets
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int WS_EX_APPWINDOW = 0x00040000;
-        private const int WS_EX_LAYERED = 0x00080000;
-        private const uint LWA_ALPHA = 0x00000002;
 
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
@@ -113,21 +106,23 @@ namespace Daily_WinUI.DesktopWidgets
 
             _hwnd = WindowNative.GetWindowHandle(this);
 
-            // Hide from Alt+Tab and taskbar, prevent activating as foreground window, enable layering for true transparency
+            // Hide from Alt+Tab and taskbar, prevent activating as foreground window
             int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-            SetWindowLong(_hwnd, GWL_EXSTYLE, (exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED) & ~WS_EX_APPWINDOW);
+            SetWindowLong(_hwnd, GWL_EXSTYLE, (exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW);
 
             // Windows 11 DWM rounded corners
             int cornerPref = DWMWCP_ROUND;
             DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
 
-            // Extend DWM frame for seamless glass
-            var margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
-            DwmExtendFrameIntoClientArea(_hwnd, ref margins);
-
             // Subclass to enforce MA_NOACTIVATE and prevent off-screen minimization
             _subclassProc = new SubclassProc(SubclassCallback);
             SetWindowSubclass(_hwnd, _subclassProc, new UIntPtr(1001), IntPtr.Zero);
+
+            this.Closed += DesktopWidgetWindow_Closed;
+            if (RootLayout != null)
+            {
+                RootLayout.ActualThemeChanged += (s, e) => ApplyTransparency();
+            }
 
             ApplyBackdrop();
             UpdateWindowSizeAndPosition();
@@ -195,11 +190,59 @@ namespace Daily_WinUI.DesktopWidgets
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
+        private void DesktopWidgetWindow_Closed(object sender, WindowEventArgs args)
+        {
+            if (_acrylicController != null)
+            {
+                _acrylicController.Dispose();
+                _acrylicController = null;
+            }
+            if (_micaController != null)
+            {
+                _micaController.Dispose();
+                _micaController = null;
+            }
+            _backdropConfig = null;
+        }
+
         public void ApplyBackdrop()
         {
-            if (Model.Backdrop == DesktopBackdropType.MicaAlt)
+            if (_acrylicController != null)
             {
-                this.SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.BaseAlt };
+                _acrylicController.Dispose();
+                _acrylicController = null;
+            }
+            if (_micaController != null)
+            {
+                _micaController.Dispose();
+                _micaController = null;
+            }
+
+            bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
+
+            _backdropConfig = new SystemBackdropConfiguration
+            {
+                IsInputActive = true, // Keeps acrylic / mica active even when unfocused!
+                Theme = isDark ? SystemBackdropTheme.Dark : SystemBackdropTheme.Light
+            };
+
+            if (Model.Backdrop == DesktopBackdropType.MicaAlt && MicaController.IsSupported())
+            {
+                _micaController = new MicaController { Kind = MicaKind.BaseAlt };
+                _micaController.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
+                _micaController.SetSystemBackdropConfiguration(_backdropConfig);
+            }
+            else if (DesktopAcrylicController.IsSupported())
+            {
+                _acrylicController = new DesktopAcrylicController
+                {
+                    TintOpacity = (float)Math.Clamp(Model.Opacity * 0.70, 0.15, 0.90),
+                    LuminosityOpacity = (float)Math.Clamp(Model.Opacity * 0.60, 0.10, 0.85),
+                    TintColor = isDark ? Windows.UI.Color.FromArgb(255, 14, 18, 25) : Windows.UI.Color.FromArgb(255, 245, 245, 245),
+                    FallbackColor = isDark ? Windows.UI.Color.FromArgb(220, 16, 20, 28) : Windows.UI.Color.FromArgb(220, 240, 240, 240)
+                };
+                _acrylicController.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
+                _acrylicController.SetSystemBackdropConfiguration(_backdropConfig);
             }
             else
             {
@@ -211,34 +254,31 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void ApplyTransparency()
         {
-            if (_hwnd != IntPtr.Zero)
-            {
-                // Ensure WS_EX_LAYERED is set on the window handle
-                int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-                if ((exStyle & WS_EX_LAYERED) == 0)
-                {
-                    SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-                }
+            bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
 
-                // Apply true OS-level window alpha transparency to the entire widget window (fereastra in sine)
-                // This allows the desktop wallpaper, icons and background to shine through the window itself!
-                byte bAlpha = (byte)Math.Clamp((int)(Model.Opacity * 255), 25, 255);
-                SetLayeredWindowAttributes(_hwnd, 0, bAlpha, LWA_ALPHA);
+            if (_backdropConfig != null)
+            {
+                _backdropConfig.IsInputActive = true;
+                _backdropConfig.Theme = isDark ? SystemBackdropTheme.Dark : SystemBackdropTheme.Light;
+            }
+
+            if (_acrylicController != null)
+            {
+                // Directly update the DesktopAcrylic tint and luminosity according to user's Opacity setting!
+                _acrylicController.TintOpacity = (float)Math.Clamp(Model.Opacity * 0.70, 0.15, 0.90);
+                _acrylicController.LuminosityOpacity = (float)Math.Clamp(Model.Opacity * 0.60, 0.10, 0.85);
+                _acrylicController.TintColor = isDark ? Windows.UI.Color.FromArgb(255, 14, 18, 25) : Windows.UI.Color.FromArgb(255, 245, 245, 245);
             }
 
             if (CardBorder != null)
             {
-                bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
-                if (isDark)
-                {
-                    // Translucent dark glass container
-                    CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(170, 12, 16, 23));
-                }
-                else
-                {
-                    // Translucent light glass container
-                    CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(190, 255, 255, 255));
-                }
+                // Subtle translucent glass container overlay that lets the desktop wallpaper blur shine through,
+                // while preserving high contrast for typography and interactive controls
+                byte alpha = (byte)Math.Clamp((int)(Model.Opacity * 40), 10, 75);
+                CardBorder.Background = isDark
+                    ? new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 255, 255, 255))
+                    : new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 255, 255, 255));
+                CardBorder.Opacity = 1.0;
             }
         }
 
