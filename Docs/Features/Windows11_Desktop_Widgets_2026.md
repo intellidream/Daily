@@ -103,19 +103,15 @@ Setarea `CloseToTray` a fost configurată implicit pe `true`. Când utilizatorul
 
 În etapa de finisare și paritate funcțională completă cu MacOS și Glance, au fost implementate următoarele îmbunătățiri majore:
 
-### A. Transparență Reală la Nivel de Fereastră & Wallpaper (DesktopAcrylicController)
-* **Analiza Cauzei Rădăcină**: La ferestrele WinUI 3 cu stilul `WS_EX_NOACTIVATE`, sistemul de backdrops XAML (`DesktopAcrylicBackdrop`) marchează implicit `SystemBackdropConfiguration.IsInputActive = false`, deoarece fereastra nu deține niciodată focusul de prim-plan. La deactivare, controller-ul implicit de Acrylic trece automat la culoarea solidă de fallback (un gri opac închis `#1C1C1C`), mascând complet tapetul desktop-ului. Modificarea opacității XAML doar pe elementele din interior (`CardBorder.Opacity`) nu făcea decât să estompeze conținutul peste un dreptunghi gri opac.
-* **Incompatibilitatea `WS_EX_LAYERED` cu DirectComposition**: Încercarea de a forța transparența la nivel de HWND prin `WS_EX_LAYERED` și `SetLayeredWindowAttributes` provoacă un conflict intern în swapchain-ul DirectX/DirectComposition al WinUI 3 (`Microsoft.UI.Xaml.dll`), generând excepția `0xc000027b` (`0x80070057 E_INVALIDARG`).
+### A. Eliminarea Layer-ului Redundant & Standardizarea pe Mica Alt Liquid Glass
+* **Problema Layer-ului Dublu de Bordură**: Anterior, fereastra widget-ului (`Window`) conținea în interior un element `<Border x:Name="CardBorder" CornerRadius="20" BorderThickness="1" ...>`. Deoarece fereastra nativă Win32 avea colțuri rotunjite DWM standard (`DWMWCP_ROUND`, ~8px), iar cardul din interior avea `CornerRadius="20"`, se crea un decupaj inestetic la toate cele 4 colțuri: un strat exterior ("extra layer din spate") cu margini mai puțin rotunjite care ieșea în relief în spatele capsulei rotunjite.
+* **Problema de Aspect a Materialului Acrylic (Ghosting & Smudging)**: Desktop Acrylic pe stratul de desktop eșantionează suprafața ecranului din spatele ferestrei. În regim unfocused (`WS_EX_NOACTIVATE`) și pe mașini virtuale/adaptoare GPU, buffer-ul DWM de captură reutilizează cadrele desenate anterior, creând bucle de feedback vizual ("hall of mirrors"), texte suprapuse fantomă și pete murdare de culoare la trecerea cursorului peste widgeturi.
 * **Soluția Nativă Implementată**:
-  1. Instanțierea directă a `DesktopAcrylicController` și `MicaController` din namespace-ul `Microsoft.UI.Composition.SystemBackdrops`.
-  2. Forțarea `SystemBackdropConfiguration.IsInputActive = true` permanent pe widgeturi, împiedicând trecerea la fallback-ul solid și menținând sampler-ul de wallpaper și blur-ul DWM permanent active.
-  3. Modularea directă a proprietăților `_acrylicController.TintOpacity` și `LuminosityOpacity` în funcție de nivelul de transparență ales:
-     - `100% (Solid Glass)`: $\text{TintOpacity} = 0.70$
-     - `85% (Subtle Glass)`: $\text{TintOpacity} = 0.60$
-     - `70% (Balanced Glass)`: $\text{TintOpacity} = 0.49$
-     - `50% (Translucent)`: $\text{TintOpacity} = 0.35$
-     - `30% (Clear Glass)`: $\text{TintOpacity} = 0.21$
-  4. Redefinirea fundalului `CardBorder` cu o tentă translucidă discretă (`Margin="0"`, `BorderBrush` subtil), permițând tapetului de pe desktop să fie vizibil prin întreaga fereastră a widget-ului, în timp ce textele, icoanele și butoanele își păstrează opacitatea completă (100%) și contrastul impecabil.
+  1. **Eliminarea `CardBorder`**: Am eliminat complet containerul secundar `CardBorder` din `DesktopWidgetWindow.xaml`. `RootLayout` este acum containerul direct, iar conturul widget-ului este definit exclusiv de fereastra nativă cu colțuri rotunjite DWM (`DWMWCP_ROUND`).
+  2. **Bordură Nativă DWM de 1px**: Am adăugat apelul P/Invoke `DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int))` (atributul 34 din Windows 11 Build 22000+), care trasează o bordură fină, uniformă și perfect curbată după raza DWM a ferestrei (`0x004A3C30` pe Dark, `0x00D0D0D0` pe Light).
+  3. **Standardizarea pe Mica Alt (`MicaKind.BaseAlt`)**: Am setat Mica Alt ca efect de sticlă implicit și recomandat pentru întreaga suită de widgeturi. Spre deosebire de Acrylic, Mica interoghează direct bitmap-ul tapetului Windows 11 de la nivelul DWM, oferind un aspect profund de Liquid Glass, impecabil, cu zero artefacte, zero ghosting și fără nicio pată de culoare la interacțiunea cu mausul.
+  4. **Migrare Automată**: În `DesktopWidgetManager.LoadWidgets()`, orice widget salvat anterior cu `Acrylic` este migrat automat la `MicaAlt`, persistând noua stare în `AppSettings.DesktopWidgetsConfigJson`.
+  5. **Modularea Transparenței pe Mica Alt**: Fiecare treaptă de opacitate din meniul contextual (30%, 50%, 70%, 85%, 100%) modulează canalul Alpha al fundalului `RootLayout` de la 0 (transparență completă, lăsând să se vadă textura pură a tapetului preluată de Mica Alt) până la o tentă închisă de 45% pe Dark Theme pentru contrast ridicat. Textul și controalele interactive rămân 100% opace și clare.
 
 ### B. Widget-ul Hero / Combined Brief
 * A fost eliminat rândul de footer ("All systems nominal · Offline cache synced"), eliberând spațiu vertical prețios pentru matricea celor 4 carduri metrice (Vreme, Hidratare, Fumat, SmartLedger).
