@@ -28,6 +28,17 @@ namespace Daily_WinUI.DesktopWidgets
         [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
         [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+        [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MARGINS
+        {
+            public int cxLeftWidth;
+            public int cxRightWidth;
+            public int cyTopHeight;
+            public int cyBottomHeight;
+        }
 
         [DllImport("comctl32.dll", SetLastError = true)]
         private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, UIntPtr uIdSubclass, IntPtr dwRefData);
@@ -63,6 +74,8 @@ namespace Daily_WinUI.DesktopWidgets
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int WS_EX_APPWINDOW = 0x00040000;
+        private const int WS_EX_LAYERED = 0x00080000;
+        private const uint LWA_ALPHA = 0x00000002;
 
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
@@ -87,8 +100,6 @@ namespace Daily_WinUI.DesktopWidgets
             Model = model;
             this.InitializeComponent();
 
-            ApplyBackdrop();
-
             // Configure borderless window
             AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
             if (AppWindow.Presenter is OverlappedPresenter presenter)
@@ -102,18 +113,23 @@ namespace Daily_WinUI.DesktopWidgets
 
             _hwnd = WindowNative.GetWindowHandle(this);
 
-            // Hide from Alt+Tab and taskbar, prevent activating as foreground window
+            // Hide from Alt+Tab and taskbar, prevent activating as foreground window, enable layering for true transparency
             int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-            SetWindowLong(_hwnd, GWL_EXSTYLE, (exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW);
+            SetWindowLong(_hwnd, GWL_EXSTYLE, (exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED) & ~WS_EX_APPWINDOW);
 
             // Windows 11 DWM rounded corners
             int cornerPref = DWMWCP_ROUND;
             DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
 
+            // Extend DWM frame for seamless glass
+            var margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
+            DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+
             // Subclass to enforce MA_NOACTIVATE and prevent off-screen minimization
             _subclassProc = new SubclassProc(SubclassCallback);
             SetWindowSubclass(_hwnd, _subclassProc, new UIntPtr(1001), IntPtr.Zero);
 
+            ApplyBackdrop();
             UpdateWindowSizeAndPosition();
             LoadWidgetView();
 
@@ -195,22 +211,34 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void ApplyTransparency()
         {
-            if (CardBorder == null) return;
-
-            // Make the glass effect translucent according to Model.Opacity
-            // while preserving crisp typography and controls
-            double op = Math.Clamp(Model.Opacity, 0.20, 1.0);
-            bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
-
-            if (isDark)
+            if (_hwnd != IntPtr.Zero)
             {
-                byte alpha = (byte)Math.Clamp((int)(op * 200), 25, 235);
-                CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 12, 16, 23));
+                // Ensure WS_EX_LAYERED is set on the window handle
+                int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
+                if ((exStyle & WS_EX_LAYERED) == 0)
+                {
+                    SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+                }
+
+                // Apply true OS-level window alpha transparency to the entire widget window (fereastra in sine)
+                // This allows the desktop wallpaper, icons and background to shine through the window itself!
+                byte bAlpha = (byte)Math.Clamp((int)(Model.Opacity * 255), 25, 255);
+                SetLayeredWindowAttributes(_hwnd, 0, bAlpha, LWA_ALPHA);
             }
-            else
+
+            if (CardBorder != null)
             {
-                byte alpha = (byte)Math.Clamp((int)(op * 220), 40, 245);
-                CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 255, 255, 255));
+                bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
+                if (isDark)
+                {
+                    // Translucent dark glass container
+                    CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(170, 12, 16, 23));
+                }
+                else
+                {
+                    // Translucent light glass container
+                    CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(190, 255, 255, 255));
+                }
             }
         }
 
