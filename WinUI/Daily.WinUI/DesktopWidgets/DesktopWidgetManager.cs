@@ -217,6 +217,21 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void AddWidget(DesktopWidgetType type, DesktopWidgetSize size, int x, int y)
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(() => AddWidget(type, size, x, y));
+                return;
+            }
+
+            // Ensure widgets are enabled in settings
+            var settings = SettingsService.Load();
+            if (!settings.DesktopWidgetsEnabled)
+            {
+                settings.DesktopWidgetsEnabled = true;
+                SettingsService.Save(settings);
+            }
+
             var model = new DesktopWidgetModel
             {
                 Type = type,
@@ -226,7 +241,11 @@ namespace Daily_WinUI.DesktopWidgets
                 IsLocked = false
             };
 
-            SpawnWidgetWindow(model);
+            var window = SpawnWidgetWindow(model);
+            window.IsExplicitlyHidden = false;
+            window.AppWindow.Show();
+            window.SendToBottom();
+
             SaveConfiguration();
         }
 

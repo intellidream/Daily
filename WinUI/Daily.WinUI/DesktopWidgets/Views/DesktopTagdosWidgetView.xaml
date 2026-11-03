@@ -95,7 +95,7 @@
             <!-- Bottom Stream Pipeline Status -->
             <Border Grid.Row="2" Background="#15EC4899" CornerRadius="8" Padding="10,4,10,4">
                 <Grid>
-                    <TextBlock Text="Work · Health · Personal · Tech" FontSize="10" Foreground="#FBCFE8" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="StreamNamesStatusText" Text="Work · Health · Personal · Tech" FontSize="10" Foreground="#FBCFE8" HorizontalAlignment="Left"/>
                     <TextBlock Text="Sync Ready ⚡" FontSize="10" Foreground="#34D399" HorizontalAlignment="Right"/>
                 </Grid>
             </Border>

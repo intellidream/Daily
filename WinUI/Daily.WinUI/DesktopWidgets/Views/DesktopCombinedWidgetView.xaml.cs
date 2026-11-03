@@ -65,7 +65,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                         var smokes = await habitsService.GetLogsAsync("smokes", DateTime.Today);
                         int smokeCount = smokes?.Count ?? 0;
-                        SmokesMetricText.Text = smokeCount == 0 ? "Smoke-Free 🌟" : $"{smokeCount} smoked today";
+                        int maxSmokes = settings.SmokesBaselineDaily > 0 ? settings.SmokesBaselineDaily : 40;
+                        SmokesMetricText.Text = smokeCount == 0 ? "Smoke-Free 🌟" : $"{smokeCount} / {maxSmokes} smokes";
                     }
                 }
                 catch { }
@@ -83,8 +84,17 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         var finService = App.Current.Services?.GetService<IFinancesService>();
                         if (finService != null)
                         {
-                            var net = await finService.GetNetWorthAsync();
-                            MoneyMetricText.Text = net > 0 ? $"{net:N0} Lei" : "Synced";
+                            var ledger = await finService.GetSmartLedgerAsync();
+                            if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
+                            {
+                                var parsed = SmartLedgerParser.Parse(ledger.LedgerText);
+                                MoneyMetricText.Text = $"{parsed.NetWorth:N0} Lei";
+                            }
+                            else
+                            {
+                                var net = await finService.GetNetWorthAsync();
+                                MoneyMetricText.Text = net > 0 ? $"{net:N0} Lei" : "0 Lei";
+                            }
                         }
                     }
                 }

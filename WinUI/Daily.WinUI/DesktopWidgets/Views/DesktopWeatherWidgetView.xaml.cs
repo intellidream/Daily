@@ -45,15 +45,23 @@ namespace Daily_WinUI.DesktopWidgets.Views
             try
             {
                 var settings = SettingsService.Load();
+                var locationService = App.Current.Services?.GetService<ILocationService>();
+                var coords = locationService != null ? await locationService.GetCurrentCoordinatesAsync() : null;
+
+                double lat = coords?.Latitude ?? settings.LastLatitude ?? 44.4323;
+                double lon = coords?.Longitude ?? settings.LastLongitude ?? 26.1063;
                 string locName = settings.LastLocationName ?? "Bucharest";
-                double lat = settings.LastLatitude ?? 44.4323;
-                double lon = settings.LastLongitude ?? 26.1063;
 
                 var client = new WeatherClient();
                 var weather = await client.GetCurrentWeatherAsync(lat, lon, settings.UnitSystem ?? "metric");
 
                 if (weather != null)
                 {
+                    if (!string.IsNullOrWhiteSpace(weather.LocationName))
+                    {
+                        locName = weather.LocationName;
+                    }
+
                     int currentTemp = (int)Math.Round(weather.Temperature);
                     int highTemp = (int)Math.Round(weather.TempMax);
                     int lowTemp = (int)Math.Round(weather.TempMin);
@@ -64,7 +72,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     SmallConditionText.Text = condition;
                     SmallHighLowText.Text = $"H: {highTemp}° · L: {lowTemp}°";
 
-                    MediumLocationText.Text = locName;
+                    MediumLocationText.Text = string.IsNullOrEmpty(weather.Country) ? locName : $"{locName}, {weather.Country}";
                     MediumConditionSubtitle.Text = $"{condition} · Feels like {(int)Math.Round(weather.FeelsLike)}°";
                     MediumTempText.Text = $"{currentTemp}°C";
                     MediumHighLowDetail.Text = $"High: {highTemp}° · Low: {lowTemp}°";

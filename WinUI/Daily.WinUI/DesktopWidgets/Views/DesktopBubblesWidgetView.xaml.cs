@@ -107,32 +107,32 @@ namespace Daily_WinUI.DesktopWidgets.Views
             }
         }
 
-        private async void Log150_Click(object sender, RoutedEventArgs e)
+        private async void LogCoffee100_Click(object sender, RoutedEventArgs e)
         {
-            await LogWaterAsync(150);
+            await LogDrinkAsync(100, "Coffee");
         }
 
-        private async void Log250_Click(object sender, RoutedEventArgs e)
+        private async void LogWater150_Click(object sender, RoutedEventArgs e)
         {
-            await LogWaterAsync(250);
+            await LogDrinkAsync(150, "Water");
         }
 
-        private async void Log500_Click(object sender, RoutedEventArgs e)
+        private async void LogWater300_Click(object sender, RoutedEventArgs e)
         {
-            await LogWaterAsync(500);
+            await LogDrinkAsync(300, "Water");
         }
 
-        private async Task LogWaterAsync(double amountMl)
+        private async Task LogDrinkAsync(double amountMl, string drinkType)
         {
             if (_habitsService == null) return;
             try
             {
-                await _habitsService.AddLogAsync("water", amountMl, "ml", DateTime.Now, "Water");
+                await _habitsService.AddLogAsync("water", amountMl, "ml", DateTime.Now, drinkType);
                 RefreshData();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[DesktopBubblesWidget] Error logging water: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[DesktopBubblesWidget] Error logging drink: {ex.Message}");
             }
         }
     }

@@ -193,7 +193,7 @@
                             <ProgressBar x:Name="WaterProgressBar" Value="0" Maximum="100" Height="6" CornerRadius="3"
                                          Foreground="#FF00E5FF" Background="#1FFFFFFF" />
 
-                            <!-- Quick Action Buttons: +100 Water, +150 Coffee, +300 Water -->
+                            <!-- Quick Action Buttons: +100 Coffee, +150 Water, +300 Water -->
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -201,25 +201,25 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- +100 Water -->
-                                <Button Grid.Column="0" x:Name="LogWater100Btn" Click="LogWater100Btn_Click"
+                                <!-- +100 Coffee -->
+                                <Button Grid.Column="0" x:Name="LogCoffee100Btn" Click="LogCoffee100Btn_Click"
                                         HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
-                                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1"
-                                        ToolTipService.ToolTip="Log 100 ml Water">
+                                        Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 100 ml Coffee">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
-                                        <TextBlock Text="100" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF"/>
+                                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFF59E0B" />
+                                        <TextBlock Text="100" FontSize="11" FontWeight="Bold" Foreground="#FFF59E0B"/>
                                     </StackPanel>
                                 </Button>
 
-                                <!-- +150 Coffee -->
-                                <Button Grid.Column="1" x:Name="LogCoffee150Btn" Click="LogCoffee150Btn_Click"
+                                <!-- +150 Water -->
+                                <Button Grid.Column="1" x:Name="LogWater150Btn" Click="LogWater150Btn_Click"
                                         HorizontalAlignment="Stretch" Height="28" Padding="0" CornerRadius="14"
-                                        Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1"
-                                        ToolTipService.ToolTip="Log 150 ml Coffee">
+                                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1"
+                                        ToolTipService.ToolTip="Log 150 ml Water">
                                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFF59E0B" />
-                                        <TextBlock Text="150" FontSize="11" FontWeight="Bold" Foreground="#FFF59E0B"/>
+                                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF" />
+                                        <TextBlock Text="150" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF"/>
                                     </StackPanel>
                                 </Button>
 

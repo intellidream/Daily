@@ -82,18 +82,23 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 int cigarettes = logs?.Count(l => (l.Metadata?.ToLowerInvariant().Contains("heated") != true) && (l.Unit?.ToLowerInvariant() != "heated")) ?? 0;
                 int heated = totalSmokes - cigarettes;
 
-                // Lungs fill fraction: 0.0 (healthy pink) to 1.0 (tar darkened) based on daily intake
-                double fillFraction = Math.Clamp((double)totalSmokes / 15.0, 0.0, 1.0);
+                var settings = Daily_WinUI.Services.SettingsService.Load();
+                int maxSmokes = settings.SmokesBaselineDaily > 0 ? settings.SmokesBaselineDaily : 40;
+
+                // Lungs fill fraction: 0.0 (healthy pink) to 1.0 (tar darkened) based on baseline daily intake
+                double fillFraction = Math.Clamp((double)totalSmokes / (double)maxSmokes, 0.0, 1.0);
 
                 SmallLungsControl.FillFraction = fillFraction;
                 MediumLungsControl.FillFraction = fillFraction;
 
                 SmallCountText.Text = totalSmokes.ToString();
+                SmallBaselineText.Text = $"of {maxSmokes} smokes";
                 MediumTotalCountText.Text = totalSmokes.ToString();
+                MediumBaselineText.Text = $"of {maxSmokes} smokes";
                 CigarettesCountText.Text = $"🚬 {cigarettes} Cigarettes";
                 HeatedCountText.Text = $"🔥 {heated} Heated";
 
-                // Craving-free calculation
+                // Craving-free calculation with exact UTC timezone parity
                 if (totalSmokes == 0)
                 {
                     SmallCravingText.Text = "Free: All Day";
@@ -103,7 +108,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 else
                 {
                     var lastLog = logs!.OrderByDescending(l => l.LoggedAt).First();
-                    var timeSince = DateTime.Now - lastLog.LoggedAt;
+                    var lastUtc = lastLog.LoggedAt.Kind == DateTimeKind.Utc ? lastLog.LoggedAt : lastLog.LoggedAt.ToUniversalTime();
+                    var timeSince = DateTime.UtcNow - lastUtc;
                     if (timeSince < TimeSpan.Zero) timeSince = TimeSpan.Zero;
 
                     string timeStr = timeSince.TotalHours >= 1 
@@ -113,7 +119,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     SmallCravingText.Text = $"Free: {timeStr}";
                     MediumCravingBadge.Text = $"Craving-Free: {timeStr}";
 
-                    int capacity = Math.Max(30, 100 - (totalSmokes * 5));
+                    int capacity = Math.Max(20, 100 - (int)((double)totalSmokes / maxSmokes * 70));
                     HealthStatusText.Text = $"Estimated lung recovery: {capacity}%";
                 }
             }

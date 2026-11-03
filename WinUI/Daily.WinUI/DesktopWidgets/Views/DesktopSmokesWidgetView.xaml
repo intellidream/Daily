@@ -41,7 +41,7 @@
 
             <!-- Header -->
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE9E9;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FB7185"/>
+                <FontIcon Glyph="&#xEC2C;" FontFamily="{StaticResource TablerIconsFont}" FontSize="14" Foreground="#FB7185"/>
                 <TextBlock Text="Smokes" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
             </StackPanel>
 
@@ -55,20 +55,34 @@
                 <controls:LungsControl x:Name="SmallLungsControl" Width="55" Height="65" Margin="0,0,6,0" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock x:Name="SmallCountText" Text="0" FontSize="18" FontWeight="Bold" Foreground="#FFFFFFFF"/>
-                    <TextBlock Text="today" FontSize="10" Foreground="#A0FFFFFF"/>
-                    <TextBlock x:Name="SmallCravingText" Text="Free: 4h" FontSize="9" Foreground="#34D399" Margin="0,2,0,0"/>
+                    <TextBlock x:Name="SmallBaselineText" Text="of 40 smokes" FontSize="10" Foreground="#A0FFFFFF"/>
+                    <TextBlock x:Name="SmallCravingText" Text="Free: All Day" FontSize="9" Foreground="#34D399" Margin="0,2,0,0"/>
                 </StackPanel>
             </Grid>
 
-            <!-- Quick Log Button -->
-            <Button Grid.Row="2" HorizontalAlignment="Stretch" Height="28" Padding="0"
-                    Background="#25FB7185" BorderBrush="#40FB7185" BorderThickness="1" CornerRadius="8"
-                    Click="LogCigarette_Click">
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                    <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FB7185"/>
-                    <TextBlock Text="+1 Smoke" FontSize="11" FontWeight="SemiBold" Foreground="#FB7185"/>
-                </StackPanel>
-            </Button>
+            <!-- Quick Log Buttons -->
+            <Grid Grid.Row="2" ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Height="26" Padding="0" HorizontalAlignment="Stretch"
+                        Background="#20EF4444" BorderBrush="#35EF4444" BorderThickness="1" CornerRadius="6"
+                        Click="LogCigarette_Click" ToolTipService.ToolTip="Log 1 Cigarette">
+                    <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xECC4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="10" Foreground="#FFEF4444"/>
+                        <TextBlock Text="Cig" FontSize="10" FontWeight="Bold" Foreground="#FFEF4444"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="1" Height="26" Padding="0" HorizontalAlignment="Stretch"
+                        Background="#203B82F6" BorderBrush="#353B82F6" BorderThickness="1" CornerRadius="6"
+                        Click="LogHeated_Click" ToolTipService.ToolTip="Log 1 Heated Tobacco">
+                    <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE945;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF3B82F6"/>
+                        <TextBlock Text="Heat" FontSize="10" FontWeight="Bold" Foreground="#FF3B82F6"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Grid>
 
         <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
@@ -83,7 +97,7 @@
             <Grid Grid.Row="0">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Border Width="26" Height="26" CornerRadius="13" Background="#25FB7185">
-                        <FontIcon Glyph="&#xE9E9;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FB7185" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <FontIcon Glyph="&#xEC2C;" FontFamily="{StaticResource TablerIconsFont}" FontSize="13" Foreground="#FB7185" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <StackPanel>
                         <TextBlock Text="Smoke-Free &amp; Lungs" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
@@ -93,7 +107,7 @@
 
                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock x:Name="MediumTotalCountText" Text="0" FontSize="16" FontWeight="Bold" Foreground="#FB7185"/>
-                    <TextBlock Text="smokes" FontSize="11" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="MediumBaselineText" Text="of 40 smokes" FontSize="11" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
                 </StackPanel>
             </Grid>
 
@@ -123,28 +137,28 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Quick Action Logging Chips -->
-            <Grid Grid.Row="2">
+            <!-- Quick Action Logging Chips (Glance Parity: Cig & Heat) -->
+            <Grid Grid.Row="2" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Margin="0,0,4,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
-                        Background="#20FB7185" BorderBrush="#35FB7185" BorderThickness="1" CornerRadius="8"
-                        Click="LogCigarette_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FB7185"/>
-                        <TextBlock Text="+ Cigarette" FontSize="11" FontWeight="SemiBold" Foreground="#FB7185"/>
+                <Button Grid.Column="0" Height="30" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20EF4444" BorderBrush="#35EF4444" BorderThickness="1" CornerRadius="8"
+                        Click="LogCigarette_Click" ToolTipService.ToolTip="Log 1 Cigarette">
+                    <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xECC4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="#FFEF4444"/>
+                        <TextBlock Text="Cig" FontSize="11" FontWeight="Bold" Foreground="#FFEF4444"/>
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="1" Margin="4,0,0,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
-                        Background="#20F59E0B" BorderBrush="#35F59E0B" BorderThickness="1" CornerRadius="8"
-                        Click="LogHeated_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FBBF24"/>
-                        <TextBlock Text="+ Heated" FontSize="11" FontWeight="SemiBold" Foreground="#FBBF24"/>
+                <Button Grid.Column="1" Height="30" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#203B82F6" BorderBrush="#353B82F6" BorderThickness="1" CornerRadius="8"
+                        Click="LogHeated_Click" ToolTipService.ToolTip="Log 1 Heated Tobacco Stick">
+                    <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE945;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF3B82F6"/>
+                        <TextBlock Text="Heat" FontSize="11" FontWeight="Bold" Foreground="#FF3B82F6"/>
                     </StackPanel>
                 </Button>
             </Grid>

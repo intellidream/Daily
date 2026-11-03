@@ -20,7 +20,7 @@
 
             <!-- Header -->
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE909;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8"/>
+                <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8"/>
                 <TextBlock Text="Hydration" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
             </StackPanel>
 
@@ -34,15 +34,38 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Quick Log Button -->
-            <Button Grid.Row="2" HorizontalAlignment="Stretch" Height="28" Padding="0"
-                    Background="#2538BDF8" BorderBrush="#4038BDF8" BorderThickness="1" CornerRadius="8"
-                    Click="Log250_Click">
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                    <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#38BDF8"/>
-                    <TextBlock Text="+250ml" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
-                </StackPanel>
-            </Button>
+            <!-- Quick Action Buttons -->
+            <Grid Grid.Row="2" ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Height="26" Padding="0" HorizontalAlignment="Stretch"
+                        Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1" CornerRadius="6"
+                        Click="LogCoffee100_Click" ToolTipService.ToolTip="100 ml Coffee">
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FFF59E0B"/>
+                        <TextBlock Text="100" FontSize="10" FontWeight="Bold" Foreground="#FFF59E0B"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="1" Height="26" Padding="0" HorizontalAlignment="Stretch"
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="6"
+                        Click="LogWater150_Click" ToolTipService.ToolTip="150 ml Water">
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FF00E5FF"/>
+                        <TextBlock Text="150" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Height="26" Padding="0" HorizontalAlignment="Stretch"
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="6"
+                        Click="LogWater300_Click" ToolTipService.ToolTip="300 ml Water">
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FF00E5FF"/>
+                        <TextBlock Text="300" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Grid>
 
         <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
@@ -57,7 +80,7 @@
             <Grid Grid.Row="0">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Border Width="26" Height="26" CornerRadius="13" Background="#2538BDF8">
-                        <FontIcon Glyph="&#xE909;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#38BDF8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#38BDF8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <StackPanel>
                         <TextBlock Text="Hydration &amp; Bubbles" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
@@ -79,7 +102,7 @@
                     <ProgressRing x:Name="MediumProgressRing" Width="70" Height="70" Value="0" Maximum="100" IsIndeterminate="False"
                                   Foreground="#38BDF8" Background="#2038BDF8" />
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE909;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
 
@@ -105,7 +128,7 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Quick Action Logging Chips -->
+            <!-- Quick Action Logging Chips (Parity: Coffee 100ml, Small Water 150ml, Large Water 300ml) -->
             <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -114,29 +137,29 @@
                 </Grid.ColumnDefinitions>
 
                 <Button Grid.Column="0" Margin="0,0,4,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
-                        Background="#2038BDF8" BorderBrush="#3538BDF8" BorderThickness="1" CornerRadius="8"
-                        Click="Log150_Click">
+                        Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1" CornerRadius="8"
+                        Click="LogCoffee100_Click" ToolTipService.ToolTip="Log 100 ml Coffee">
                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#38BDF8"/>
-                        <TextBlock Text="150 ml" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFF59E0B"/>
+                        <TextBlock Text="100 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FFF59E0B"/>
                     </StackPanel>
                 </Button>
 
                 <Button Grid.Column="1" Margin="2,0,2,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
-                        Background="#2038BDF8" BorderBrush="#3538BDF8" BorderThickness="1" CornerRadius="8"
-                        Click="Log250_Click">
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="8"
+                        Click="LogWater150_Click" ToolTipService.ToolTip="Log 150 ml Water">
                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#38BDF8"/>
-                        <TextBlock Text="250 ml" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF"/>
+                        <TextBlock Text="150 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF"/>
                     </StackPanel>
                 </Button>
 
                 <Button Grid.Column="2" Margin="4,0,0,0" Height="30" HorizontalAlignment="Stretch" Padding="0"
-                        Background="#2038BDF8" BorderBrush="#3538BDF8" BorderThickness="1" CornerRadius="8"
-                        Click="Log500_Click">
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="8"
+                        Click="LogWater300_Click" ToolTipService.ToolTip="Log 300 ml Water">
                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#38BDF8"/>
-                        <TextBlock Text="500 ml" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF00E5FF"/>
+                        <TextBlock Text="300 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FF00E5FF"/>
                     </StackPanel>
                 </Button>
             </Grid>

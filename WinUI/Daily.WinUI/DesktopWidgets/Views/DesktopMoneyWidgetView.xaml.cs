@@ -69,68 +69,71 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
             try
             {
+                var ledger = _financesService != null ? await _financesService.GetSmartLedgerAsync() : null;
+                var accounts = _financesService != null ? await _financesService.GetAccountsAsync() : null;
+                
+                decimal totalNet = 0;
+                decimal cardBal = 0;
+                decimal cashBal = 0;
+
+                if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
+                {
+                    var parsed = SmartLedgerParser.Parse(ledger.LedgerText);
+                    totalNet = parsed.NetWorth;
+
+                    var incoming = parsed.Sections.FirstOrDefault(s => string.Equals(s.Name, "Incoming", StringComparison.OrdinalIgnoreCase));
+                    if (incoming != null)
+                    {
+                        var cardItem = incoming.Items.FirstOrDefault(i => string.Equals(i.Key, "Card", StringComparison.OrdinalIgnoreCase));
+                        if (cardItem != null)
+                        {
+                            cardBal = cardItem.CalculatedAmount;
+                        }
+
+                        var cashItem = incoming.Items.FirstOrDefault(i => string.Equals(i.Key, "Cash", StringComparison.OrdinalIgnoreCase));
+                        if (cashItem != null)
+                        {
+                            cashBal = cashItem.CalculatedAmount;
+                        }
+                    }
+                }
+
+                if (accounts != null && accounts.Count > 0)
+                {
+                    if (totalNet <= 0) totalNet = accounts.Sum(a => a.CurrentBalance);
+                    if (cardBal <= 0)
+                    {
+                        var cardAcc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("card") == true);
+                        if (cardAcc != null) cardBal = cardAcc.CurrentBalance;
+                    }
+                    if (cashBal <= 0)
+                    {
+                        var cashAcc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("cash") == true);
+                        if (cashAcc != null) cashBal = cashAcc.CurrentBalance;
+                    }
+                }
+
                 var snapshot = FinancesWidgetControl.SharedSnapshot;
-                if (snapshot != null)
+                if (snapshot != null && snapshot.NetWorth > 0)
                 {
-                    UpdateUIFromSnapshot(snapshot);
-                    return;
+                    totalNet = snapshot.NetWorth;
                 }
 
-                if (_financesService != null)
-                {
-                    var ledger = await _financesService.GetSmartLedgerAsync();
-                    var accounts = await _financesService.GetAccountsAsync();
-                    decimal totalNet = 0;
+                decimal eurEst = totalNet > 0 ? totalNet / 4.97m : 0;
 
-                    var cardAcc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("card") == true);
-                    var cashAcc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("cash") == true);
+                SmallNetWorthText.Text = $"{totalNet:N0} Lei";
+                SmallNetWorthEurText.Text = $"~{eurEst:N0} €";
+                SmallBalancePillText.Text = $"Card: {cardBal:N0} · Cash: {cashBal:N0}";
 
-                    decimal cardBal = cardAcc?.CurrentBalance ?? 0;
-                    decimal cashBal = cashAcc?.CurrentBalance ?? 0;
-
-                    if (accounts.Count > 0)
-                    {
-                        totalNet = accounts.Sum(a => a.CurrentBalance);
-                    }
-                    else if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
-                    {
-                        var parsed = SmartLedgerParser.Parse(ledger.LedgerText);
-                        totalNet = parsed.NetWorth;
-                        cardBal = parsed.BalanceTotal;
-                    }
-
-                    decimal eurEst = totalNet > 0 ? totalNet / 4.97m : 0;
-
-                    SmallNetWorthText.Text = $"{totalNet:N0} Lei";
-                    SmallNetWorthEurText.Text = $"~{eurEst:N0} €";
-                    SmallBalancePillText.Text = $"Card: {cardBal:N0} · Cash: {cashBal:N0}";
-
-                    MediumNetWorthText.Text = $"{totalNet:N0} Lei";
-                    MediumEurSubtitle.Text = $"~{eurEst:N0} € Net Balance";
-                    CardBalanceText.Text = $"{cardBal:N0} Lei";
-                    CashBalanceText.Text = $"{cashBal:N0} Lei";
-                }
+                MediumNetWorthText.Text = $"{totalNet:N0} Lei";
+                MediumEurSubtitle.Text = $"~{eurEst:N0} € Net Balance";
+                CardBalanceText.Text = $"{cardBal:N0} Lei";
+                CashBalanceText.Text = $"{cashBal:N0} Lei";
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[DesktopMoneyWidget] Error refreshing: {ex.Message}");
             }
-        }
-
-        private void UpdateUIFromSnapshot(FinancesSnapshot snapshot)
-        {
-            SmallNetWorthText.Text = snapshot.SmartNetWorthDisplay;
-            SmallNetWorthEurText.Text = snapshot.SmartNetWorthEurDisplay;
-            SmallBalancePillText.Text = snapshot.SmartFlowDisplay;
-
-            MediumNetWorthText.Text = snapshot.SmartNetWorthDisplay;
-            MediumEurSubtitle.Text = $"{snapshot.SmartNetWorthEurDisplay} Net Balance";
-
-            var cardAcc = snapshot.Accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("card") == true);
-            var cashAcc = snapshot.Accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains("cash") == true);
-
-            CardBalanceText.Text = cardAcc != null ? $"{cardAcc.CurrentBalance:N0} Lei" : snapshot.SmartBalanceDisplay;
-            CashBalanceText.Text = cashAcc != null ? $"{cashAcc.CurrentBalance:N0} Lei" : $"{snapshot.Cash:N0} Lei";
         }
 
         private async void AdjustCardPlus100_Click(object sender, RoutedEventArgs e)
@@ -154,8 +157,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
             try
             {
                 var accounts = await _financesService.GetAccountsAsync();
-                var acc = accounts.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains(accountName.ToLowerInvariant()) == true);
-                if (acc != null)
+                var acc = accounts?.FirstOrDefault(a => a.Name?.ToLowerInvariant().Contains(accountName.ToLowerInvariant()) == true);
+                if (acc != null && acc.CurrentBalance > 0)
                 {
                     acc.CurrentBalance += delta;
                     await _financesService.AddTransactionAsync(new LocalTransaction
@@ -168,12 +171,12 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 }
                 else
                 {
-                    // Fallback to ledger adjustment
+                    // Adjust SmartLedger Incoming DSL text directly (1 unit = 100 Lei in Incoming section)
                     var ledger = await _financesService.GetSmartLedgerAsync();
-                    string currentText = ledger?.LedgerText ?? "";
-                    string sign = delta > 0 ? "+" : "-";
-                    string newText = $"{currentText.Trim()}\n{DateTime.Now:yyyy-MM-dd} QuickAdjust {accountName} {sign}{Math.Abs(delta)} Lei";
-                    await _financesService.SaveSmartLedgerAsync(newText);
+                    string currentText = ledger?.LedgerText ?? SmartLedgerParser.DefaultLedgerText;
+                    decimal rawDelta = delta / 100m;
+                    string updatedText = SmartLedgerParser.AdjustValue(currentText, accountName, rawDelta);
+                    await _financesService.SaveSmartLedgerAsync(updatedText);
                 }
 
                 RefreshData();

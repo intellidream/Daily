@@ -125,7 +125,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             return RecalculateTotals(ledgerText);
         }
 
-        private static string AdjustValue(string text, string targetAbbreviation, decimal amountDelta)
+        public static string AdjustValue(string text, string targetAbbreviation, decimal amountDelta)
         {
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             

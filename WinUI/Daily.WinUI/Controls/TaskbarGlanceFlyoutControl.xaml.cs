@@ -253,16 +253,16 @@ namespace Daily_WinUI.Controls
             }
         }
 
-        // ── Hydration Logging (Mac Parity: +100 Water, +150 Coffee, +300 Water) ──
+        // ── Hydration Logging (Mac Parity: +100 Coffee, +150 Water, +300 Water) ──
 
-        private async void LogWater100Btn_Click(object sender, RoutedEventArgs e)
+        private async void LogCoffee100Btn_Click(object sender, RoutedEventArgs e)
         {
-            await LogWaterAsync(100, "Water");
+            await LogWaterAsync(100, "Coffee");
         }
 
-        private async void LogCoffee150Btn_Click(object sender, RoutedEventArgs e)
+        private async void LogWater150Btn_Click(object sender, RoutedEventArgs e)
         {
-            await LogWaterAsync(150, "Coffee");
+            await LogWaterAsync(150, "Water");
         }
 
         private async void LogWater300Btn_Click(object sender, RoutedEventArgs e)

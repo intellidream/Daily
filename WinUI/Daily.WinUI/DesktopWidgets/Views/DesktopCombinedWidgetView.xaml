@@ -12,7 +12,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
@@ -31,7 +30,7 @@
         </Grid>
 
         <!-- Center 4-Module Matrix -->
-        <Grid Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+        <Grid Grid.Row="1" Margin="0,10,0,2" VerticalAlignment="Stretch">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
@@ -42,72 +41,64 @@
             </Grid.ColumnDefinitions>
 
             <!-- 1. Hydration -->
-            <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,4" Background="#1238BDF8" CornerRadius="10" Padding="8,6,8,6">
+            <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,4" Background="#1238BDF8" CornerRadius="10" Padding="8,8,8,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE909;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#38BDF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#38BDF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Hydration" FontSize="9" Foreground="#80FFFFFF"/>
-                        <TextBlock x:Name="HydrationMetricText" Text="1,750 / 2,500 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock Text="Hydration" FontSize="9.5" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="HydrationMetricText" Text="1,750 / 2,500 ml" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- 2. Smoke-Free -->
-            <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,4" Background="#12FB7185" CornerRadius="10" Padding="8,6,8,6">
+            <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,4" Background="#12FB7185" CornerRadius="10" Padding="8,8,8,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE9E9;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FB7185" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <FontIcon Glyph="&#xEC2C;" FontFamily="{StaticResource TablerIconsFont}" FontSize="15" Foreground="#FB7185" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Smokes" FontSize="9" Foreground="#80FFFFFF"/>
-                        <TextBlock x:Name="SmokesMetricText" Text="Smoke-Free 🌟" FontSize="11" FontWeight="SemiBold" Foreground="#34D399"/>
+                        <TextBlock Text="Smokes" FontSize="9.5" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="SmokesMetricText" Text="Smoke-Free 🌟" FontSize="11.5" FontWeight="SemiBold" Foreground="#34D399"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- 3. SmartLedger -->
-            <Border Grid.Row="1" Grid.Column="0" Margin="0,4,4,0" Background="#1210B981" CornerRadius="10" Padding="8,6,8,6">
+            <Border Grid.Row="1" Grid.Column="0" Margin="0,4,4,0" Background="#1210B981" CornerRadius="10" Padding="8,8,8,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#10B981" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#10B981" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Net Worth" FontSize="9" Foreground="#80FFFFFF"/>
-                        <TextBlock x:Name="MoneyMetricText" Text="14,250 Lei" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock Text="Net Worth" FontSize="9.5" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="MoneyMetricText" Text="14,250 Lei" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- 4. Sleep Recovery -->
-            <Border Grid.Row="1" Grid.Column="1" Margin="4,4,0,0" Background="#12818CF8" CornerRadius="10" Padding="8,6,8,6">
+            <Border Grid.Row="1" Grid.Column="1" Margin="4,4,0,0" Background="#12818CF8" CornerRadius="10" Padding="8,8,8,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#818CF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#818CF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Recovery" FontSize="9" Foreground="#80FFFFFF"/>
-                        <TextBlock x:Name="SleepMetricText" Text="88/100 · 7h 45m" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock Text="Recovery" FontSize="9.5" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="SleepMetricText" Text="88/100 · 7h 45m" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
                     </StackPanel>
                 </Grid>
             </Border>
         </Grid>
-
-        <!-- Bottom Executive Status -->
-        <Border Grid.Row="2" Background="#1500E5FF" CornerRadius="8" Padding="10,4,10,4">
-            <Grid>
-                <TextBlock x:Name="BottomSummaryText" Text="All systems nominal · Offline cache synced" FontSize="10" Foreground="#A5F3FC" HorizontalAlignment="Left"/>
-                <TextBlock Text="⚡ DayOne Orbit" FontSize="10" Foreground="#00E5FF" HorizontalAlignment="Right"/>
-            </Grid>
-        </Border>
     </Grid>
 </UserControl>

@@ -190,10 +190,35 @@ namespace Daily_WinUI.DesktopWidgets
                 this.SystemBackdrop = new DesktopAcrylicBackdrop();
             }
 
-            if (CardBorder != null)
+            ApplyTransparency();
+        }
+
+        public void ApplyTransparency()
+        {
+            if (CardBorder == null) return;
+
+            // Make the glass effect translucent according to Model.Opacity
+            // while preserving crisp typography and controls
+            double op = Math.Clamp(Model.Opacity, 0.20, 1.0);
+            bool isDark = RootLayout?.ActualTheme != ElementTheme.Light;
+
+            if (isDark)
             {
-                CardBorder.Opacity = Model.Opacity;
+                byte alpha = (byte)Math.Clamp((int)(op * 200), 25, 235);
+                CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 12, 16, 23));
             }
+            else
+            {
+                byte alpha = (byte)Math.Clamp((int)(op * 220), 40, 245);
+                CardBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 255, 255, 255));
+            }
+        }
+
+        public void SetWidgetOpacity(double opacity)
+        {
+            Model.Opacity = opacity;
+            ApplyTransparency();
+            DesktopWidgetManager.Instance.SaveConfiguration();
         }
 
         public void UpdateWindowSizeAndPosition()
@@ -377,6 +402,30 @@ namespace Daily_WinUI.DesktopWidgets
             backdropSubItem.Items.Add(micaItem);
             menu.Items.Add(backdropSubItem);
 
+            // Transparency Submenu
+            var transSubItem = new MenuFlyoutSubItem { Text = "Transparency" };
+            var op100 = new ToggleMenuFlyoutItem { Text = "100% (Solid Glass)", IsChecked = Math.Abs(Model.Opacity - 1.0) < 0.05 };
+            op100.Click += (s, e) => SetWidgetOpacity(1.0);
+            transSubItem.Items.Add(op100);
+
+            var op85 = new ToggleMenuFlyoutItem { Text = "85% (Subtle Glass)", IsChecked = Math.Abs(Model.Opacity - 0.85) < 0.05 };
+            op85.Click += (s, e) => SetWidgetOpacity(0.85);
+            transSubItem.Items.Add(op85);
+
+            var op70 = new ToggleMenuFlyoutItem { Text = "70% (Balanced Glass)", IsChecked = Math.Abs(Model.Opacity - 0.70) < 0.05 };
+            op70.Click += (s, e) => SetWidgetOpacity(0.70);
+            transSubItem.Items.Add(op70);
+
+            var op50 = new ToggleMenuFlyoutItem { Text = "50% (Translucent)", IsChecked = Math.Abs(Model.Opacity - 0.50) < 0.05 };
+            op50.Click += (s, e) => SetWidgetOpacity(0.50);
+            transSubItem.Items.Add(op50);
+
+            var op30 = new ToggleMenuFlyoutItem { Text = "30% (Clear Glass)", IsChecked = Math.Abs(Model.Opacity - 0.30) < 0.05 };
+            op30.Click += (s, e) => SetWidgetOpacity(0.30);
+            transSubItem.Items.Add(op30);
+
+            menu.Items.Add(transSubItem);
+
             menu.Items.Add(new MenuFlyoutSeparator());
 
             // Refresh Data
@@ -430,6 +479,49 @@ namespace Daily_WinUI.DesktopWidgets
             UpdateWindowSizeAndPosition();
             LoadWidgetView();
             DesktopWidgetManager.Instance.SaveConfiguration();
+        }
+
+        private void CardBorder_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            // If the user tapped on or inside a Button, do not navigate away
+            var src = e.OriginalSource as DependencyObject;
+            while (src != null && src != CardBorder)
+            {
+                if (src is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase || src is Button)
+                {
+                    return;
+                }
+                src = VisualTreeHelper.GetParent(src);
+            }
+
+            NavigateToAssociatedHub();
+        }
+
+        public void NavigateToAssociatedHub()
+        {
+            if (App.Current?.MainWindow is MainWindow mw)
+            {
+                mw.DispatcherQueue.TryEnqueue(() =>
+                {
+                    mw.ShowAndActivate();
+
+                    int tabIndex = Model.Type switch
+                    {
+                        DesktopWidgetType.Combined => 1, // Executive Brief / Home
+                        DesktopWidgetType.Money => 2,    // Finances Hub
+                        DesktopWidgetType.TagDos => 3,   // TagDos Hub
+                        DesktopWidgetType.Sleep => 4,    // Health Hub
+                        DesktopWidgetType.Stress => 4,   // Health Hub
+                        DesktopWidgetType.Bubbles => 5,  // Habits Hub (Hydration)
+                        DesktopWidgetType.Smokes => 5,   // Habits Hub (Smokes)
+                        DesktopWidgetType.Weather => 6,  // Weather Hub
+                        DesktopWidgetType.Cosmos => 9,   // Cosmos Hub
+                        _ => 1
+                    };
+
+                    mw.NavigateToTab(tabIndex);
+                });
+            }
         }
 
         public void SendToBottom()

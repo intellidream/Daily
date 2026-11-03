@@ -968,32 +968,68 @@ public sealed partial class MainWindow : Window
         DesktopWidgets.DesktopWidgetManager.Instance.ResetToDefaults();
     }
 
-    private void TrayAddCombinedWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Combined, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddCombinedWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddCombinedWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Combined, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
-    private void TrayAddBubblesWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Bubbles, DesktopWidgets.DesktopWidgetSize.Small, 200, 200);
+    private void TrayAddBubblesWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddBubblesWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Bubbles, DesktopWidgets.DesktopWidgetSize.Small, 200, 200));
+    }
 
-    private void TrayAddSmokesWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Smokes, DesktopWidgets.DesktopWidgetSize.Small, 200, 200);
+    private void TrayAddSmokesWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddSmokesWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Smokes, DesktopWidgets.DesktopWidgetSize.Small, 200, 200));
+    }
 
-    private void TrayAddMoneyWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Money, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddMoneyWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddMoneyWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Money, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
-    private void TrayAddSleepWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Sleep, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddSleepWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddSleepWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Sleep, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
-    private void TrayAddStressWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Stress, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddStressWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddStressWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Stress, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
-    private void TrayAddCosmosWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Cosmos, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddCosmosWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddCosmosWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Cosmos, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
-    private void TrayAddTagdosWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.TagDos, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddTagdosWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddTagdosWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.TagDos, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
-    private void TrayAddWeatherWidget_Click(object sender, RoutedEventArgs e) =>
-        DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Weather, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200);
+    private void TrayAddWeatherWidget_Click(object sender, RoutedEventArgs e)
+    {
+        LogTray("[TrayIcon] TrayAddWeatherWidget_Click invoked.");
+        DispatcherQueue.TryEnqueue(() =>
+            DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Weather, DesktopWidgets.DesktopWidgetSize.Medium, 200, 200));
+    }
 
     private void SetupThemeWatcher()
     {
