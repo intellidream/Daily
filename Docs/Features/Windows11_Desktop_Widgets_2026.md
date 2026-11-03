@@ -1,75 +1,54 @@
 # Windows 11 Desktop Widgets Architecture (2026)
 
-**Data:** 2 Noiembrie 2026  
-**Componente:** `WinUI/Daily.WinUI/DesktopWidgets/`, `WinUI/Daily.WinUI/DesktopWidgets/Views/`, `WinUI/Daily.WinUI/Services/DesktopWidgetManager.cs`, `WinUI/Daily.WinUI/Services/SettingsService.cs`, `WinUI/Daily.WinUI/MainWindow.xaml`, `WinUI/Daily.WinUI/App.xaml.cs`  
+**Data:** 2–3 Noiembrie 2026  
+**Componente:** `WinUI/Daily.WinUI/DesktopWidgets/`, `WinUI/Daily.WinUI/DesktopWidgets/Views/`, `WinUI/Daily.WinUI/DesktopWidgets/DesktopWidgetManager.cs`, `WinUI/Daily.WinUI/DesktopWidgets/DesktopWidgetWindow.xaml.cs`, `WinUI/Daily.WinUI/Services/SettingsService.cs`, `WinUI/Daily.WinUI/Controls/TaskbarGlanceFlyoutControl.xaml`, `WinUI/Daily.WinUI/MainWindow.xaml`, `WinUI/Daily.WinUI/App.xaml.cs`  
 **Platformă:** Windows 11 (ARM64 & x64), WinUI 3 (Windows App SDK 2.2 pe .NET 10)  
-**Arhitectură:** Native Win32 Desktop Wallpaper Layering (`HWND_BOTTOM`, `WS_EX_TOOLWINDOW`, `WS_EX_NOACTIVATE`, `MA_NOACTIVATE`, `DWMWCP_ROUND`), Windows 11 Mica Alt & Desktop Acrylic, Named Pipe IPC, System Tray Management  
+**Arhitectură:** Native Win32 Desktop Wallpaper Layering (`WS_EX_TOOLWINDOW`, `WS_EX_NOACTIVATE`, `MA_NOACTIVATE`, `DWMWCP_ROUND`, `SWP_HIDEWINDOW` stripping, DPI physical scaling), Windows 11 Desktop Acrylic & Mica Alt, Named Pipe IPC, System Tray Management & Taskbar Companion Header Integration  
 
 ---
 
 ## 1. Context & Obiectiv
 
-Sistemul de operare macOS (Sonoma și Sequoia) permite utilizatorilor să plaseze widgeturi interactive direct pe desktop (pe stratul de fundal/wallpaper), beneficiind de transparență Liquid Glass, acțiuni interactive (AppIntents) și actualizări în timp real fără a interfera cu ferestrele de lucru ale aplicațiilor.
+Sistemul de operare macOS (Sonoma și Sequoia) permite utilizatorilor să plaseze widgeturi interactive direct pe desktop (pe stratul de fundal/wallpaper), beneficiind de transparență Liquid Glass, acțiuni interactive și actualizări în timp real fără a interfera cu ferestrele de lucru ale aplicațiilor.
 
 Pe Windows 11, sistemul oficial **Windows Widgets Board** (`Win + W` / `Microsoft.Windows.Widgets.Providers`) prezintă limitări severe:
 1. Nu permite plasarea widgeturilor direct pe desktop-ul utilizatorului (sunt restricționate exclusiv la un sertar lateral de tip flyout).
 2. Forțează utilizarea unui format JSON primitiv de tip **Adaptive Cards**, lipsit de capabilități avansate de desenare vectorială, animații fluide, controale WinUI 3 personalizate sau layout dinamic.
 
-Pentru a oferi o experiență de **paritate 1:1 cu macOS**, am proiectat și implementat un subsistem nativ de **Desktop Widgets pentru Windows 11** bazat pe ferestre WinUI 3 flotante, ancorate la nivelul wallpaper-ului prin P/Invoke Win32 avansat, cu suport complet pentru Mica Alt / Desktop Acrylic, snapping magnetic la grid de 16px, meniu contextual bogat, persistență JSON și control complet din System Tray și IPC Named Pipe.
+Pentru a oferi o experiență de **paritate 1:1 cu macOS**, am proiectat și implementat un subsistem nativ de **Desktop Widgets pentru Windows 11** bazat pe ferestre WinUI 3 flotante, ancorate la nivelul wallpaper-ului prin P/Invoke Win32 avansat, cu suport complet pentru Mica Alt / Desktop Acrylic, snapping magnetic la grid de 16px, meniu contextual bogat, persistență JSON și control complet din System Tray, Taskbar Companion Flyout și IPC Named Pipe.
 
 ---
 
 ## 2. Arhitectura Tehnică & Win32 Layering
 
-### A. Subclasare și Ancorare pe Wallpaper (`HWND_BOTTOM`)
-Fiecare widget este o instanță a clasei `DesktopWidgetWindow` (subclasă `Microsoft.UI.Xaml.Window`), configurată fără chenar de titlu tradițional (`ExtendsContentIntoTitleBar = true`), cu fundal transparent și material de adâncime Windows 11.
+### A. Corecția Critică: Eliminarea `HWND_BOTTOM` și Fixarea pe Wallpaper
+În implementările naive pe Windows, încercarea de a trimite ferestrele la `HWND_BOTTOM ((IntPtr)1)` le împinge în spatele procesului `Progman` / ferestrelor `WorkerW` (stratul DWM care desenează wallpaper-ul Windows 11), făcându-le complet invizibile sub imaginea de fundal a desktop-ului.
 
-Pentru a se comporta exact ca un element nativ al wallpaper-ului, fereastra Win32 asociată (`HWND`) este configurată la inițializare (`SetWindowLong`):
-* **`WS_EX_TOOLWINDOW`**: Ascunde fereastra widget-ului din `Alt + Tab`, din Task View (`Win + Tab`) și din Windows Taskbar.
-* **`WS_EX_NOACTIVATE`**: Garantează că la afișare sau interacțiune, widgetul nu fură focusul de tastatură de la aplicația în care lucrează utilizatorul (Word, browser, IDE).
-* **`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND`**: Activează rotunjirea nativă standard a colțurilor Windows 11 prin Desktop Window Manager (DWM).
+Soluția arhitecturală robustă implementată în `DesktopWidgetWindow`:
+1. **`WS_EX_TOOLWINDOW`**: Ascunde fereastra widget-ului din `Alt + Tab`, din Task View (`Win + Tab`) și din Windows Taskbar.
+2. **`WS_EX_NOACTIVATE`**: Garantează că la afișare sau interacțiune, widgetul nu fură focusul de tastatură de la aplicația în care lucrează utilizatorul (Word, browser, IDE).
+3. **`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND`**: Activează rotunjirea nativă standard a colțurilor Windows 11 prin Desktop Window Manager (DWM).
+4. **Subclasare via `SetWindowSubclass`**:
+   - **`WM_MOUSEACTIVATE`**: Răspunde cu `MA_NOACTIVATE (3)`, permițând clicuri interactive pe butoanele din widget fără a fura focusul ferestrei active.
+   - **`WM_SYSCOMMAND` `SC_MINIMIZE`**: Suprimat complet pentru a împiedica minimizarea accidentală a widgeturilor.
+   - **`WM_WINDOWPOSCHANGING`**: Interceptează comenzile Windows Shell (`Win + D` sau "Show Desktop") care trimit ferestrele la coordonate negative (`pos.x <= -10000`) sau injectează flag-ul `SWP_HIDEWINDOW (0x0080)`. Fereastra curăță flag-ul de ascundere și aplică `SWP_SHOWWINDOW (0x0040)`, menținând widgeturile permanent vizibile pe desktop.
 
-Pentru a preveni ridicarea widget-ului peste ferestrele aplicațiilor active la clic sau drag, procedura de fereastră este subclasată (`ComCtl32.SetWindowSubclass`):
-1. **`WM_MOUSEACTIVATE`**: Răspunde întotdeauna cu `MA_NOACTIVATE (3)`, permițând recepționarea clicului de mouse pe butoanele interactive din widget fără a activa fereastra widget-ului în foreground.
-2. **`WM_WINDOWPOSCHANGING`**: Interceptează modificările poziției pe axa Z și setează `hwndInsertAfter = HWND_BOTTOM ((IntPtr)1)`, menținând fereastra permanent la baza stivei de ferestre desktop.
+### B. Standard de Dimensiuni & Scalare DPI în Pixeli Fizici
+Procesele WinUI 3 Windows App SDK rulează în regim Per-Monitor V2 DPI aware. Apelurile Win32 `SystemParametersInfo(SPI_GETWORKAREA)` și WinUI 3 `AppWindow.MoveAndResize` operează în **pixeli fizici**, nu puncte logice (DIPs).
 
-```csharp
-private IntPtr WindowSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, IntPtr dwRefData)
-{
-    const uint WM_MOUSEACTIVATE = 0x0021;
-    const int MA_NOACTIVATE = 3;
-    const uint WM_WINDOWPOSCHANGING = 0x0046;
-    const int HWND_BOTTOM = 1;
+`DesktopWidgetManager` calculează factorul de scalare nativ via `GetDpiForSystem()`:
+$$\text{scale} = \frac{\text{DPI}}{96.0}$$
+* **Small**: `(int)(170 * scale)` × `(int)(170 * scale)`
+* **Medium**: `(int)(360 * scale)` × `(int)(170 * scale)`
+* **Large**: `(int)(360 * scale)` × `(int)(360 * scale)`
 
-    if (uMsg == WM_MOUSEACTIVATE)
-    {
-        return (IntPtr)MA_NOACTIVATE;
-    }
+Coordonatele implicite sunt plasate precis pe marginea dreaptă a ecranului:
+$$\text{rightX} = \text{workArea.X} + \text{workArea.Width} - \text{mediumWidth} - \text{padding}$$
 
-    if (uMsg == WM_WINDOWPOSCHANGING)
-    {
-        var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-        wp.hwndInsertAfter = (IntPtr)HWND_BOTTOM;
-        Marshal.StructureToPtr(wp, lParam, false);
-    }
-
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-```
-
-### B. Standard de Dimensiuni (Grid & DPI Awareness)
-Dimensiunile respectă cu strictețe specificațiile de paritate stabilite pe macOS și iOS:
-* **Small**: 170 × 170 epx (pătrat compact)
-* **Medium**: 360 × 170 epx (panou orizontal informativ)
-* **Large**: 360 × 360 epx (tablou de bord complet)
-
-La redimensionare și poziționare, dimensiunile logice sunt convertite în pixeli fizici raportați la DPI-ul monitorului curent (`AppWindow.ResizeClient` și `AppWindow.Move`).
-
-### C. Drag & Drop cu Aliniere Magnetică (Snap-to-Grid)
-* Utilizatorul poate trage orice widget deblocat pe desktop cu mouse-ul sau touch-ul.
-* Se aplică o aliniere magnetică automată la un grid de **16px** (`SnapToGrid`), asigurând un aranjament curat și ordonat pe ecran.
-* Coordonatele sunt restricționate automat la spațiul util al ecranului principal (`DisplayArea.Primary.WorkArea`), prevenind pierderea widget-ului în afara ecranului.
-* La eliberarea cursorului (`PointerReleased`), noile coordonate `X` și `Y` sunt salvate imediat în configurația persistentă a aplicației.
+### C. Drag & Drop cu Aliniere Magnetică (Snap-to-Grid) & Clamping
+* Header-ul fiecărui widget conține un `DragHandle` subtil. La deblocare, utilizatorul poate trage widget-ul oriunde pe ecran.
+* La eliberarea cursorului (`PointerReleased`), poziția este aliniată magnetic la un grid de **16px** și constrânsă automat (`ClampModelToWorkArea`) în interiorul `DisplayArea.Primary.WorkArea` pentru a preveni ieșirea widgeturilor în afara ecranului.
+* Noile coordonate sunt serializate automat în JSON (`AppSettings.DesktopWidgetsConfigJson`).
 
 ---
 
@@ -81,8 +60,8 @@ Toate widgeturile consumă date în mod **offline-first** din serviciile locale 
 |---|---|---|
 | **CombinedWidget** | Medium, Large | Dashboard executiv complet: combină Vremea (icoană + temperatură), Hidratarea (progres ml / țintă), Fumatul (stare fumat), SmartLedger (Net Worth în Lei) și Recuperarea Somnului. |
 | **BubblesWidget** | Small, Medium, Large | Progres hidric cu inel circular de progres, volum curent / țintă ml, defalcare pe tipuri de băuturi (Apă, Cafea, Ceai) și butoane interactive rapide: `+150ml`, `+250ml`, `+500ml`. |
-| **SmokesWidget** | Small, Medium, Large | Plămâni vectoriali anatomici (`LungsControl`) cu umplere dinamică a sănătății (0.0 roz sănătos -> 1.0 gudron), numărător de țigări clasice și încălzite, badge pentru timpul scurs fără fumat și butoane interactive rapide: `+Cigarette`, `+Heated`. |
-| **MoneyWidget** | Small, Medium, Large | SmartLedger Net Worth în Lei și echivalent EUR (~€), balanțe Card vs Cash, cheltuieli de vârf și butoane interactive de ajustare rapidă: `+100 Card`, `-100 Card`, `+100 Cash`. |
+| **SmokesWidget** | Small, Medium, Large | Plămâni vectoriali anatomici (`LungsControl`) cu umplere dinamică a sănătății, numărător de țigări clasice și încălzite, badge pentru timpul scurs fără fumat și buton interactiv `+ 1 Smoke`. |
+| **MoneyWidget** | Small, Medium, Large | SmartLedger Net Worth în Lei și echivalent EUR (~€), balanțe Card vs Cash și butoane interactive de ajustare rapidă: `+100 Card`, `-100 Card`, `+100 Cash`. |
 | **SleepWidget** | Small, Medium, Large | Inel de scor recuperare somn, durată totală (`Xh Ym`), timeline orar culcat/trezit, hipnogramă proporțională pe stadii (Deep, REM, Light, Awake), puls de repaus (RHR) și HRV balance. |
 | **StressWidget** | Small, Medium, Large | Scor de stres autonom /100, status vegetativ, puls curent, variație HRV față de baseline și buton interactiv pentru sesiune de respirație ghidată de 1 minut. |
 | **CosmosWidget** | Small, Medium | Scor Stargazing /100, glyph și procent de iluminare pentru faza lunară, listă planete vizibile cu ochiul liber și predicție pentru următoarea trecere ISS. |
@@ -93,49 +72,40 @@ Toate widgeturile consumă date în mod **offline-first** din serviciile locale 
 
 ## 4. Gestiune, Meniu Contextual & System Tray
 
-### A. Meniu Contextual pe Desktop (Right-Click Flyout)
-Fiecare widget oferă la clic dreapta un meniu contextual complet:
-* **Dimensiune**: Comutare instantanee între Small, Medium și Large.
-* **Blocare Poziție (Lock/Unlock)**: Fixează widget-ul pentru a preveni deplasarea accidentală în timpul lucrului.
-* **Efect de Sticlă**: Comutare între **Desktop Acrylic** (sticlă translucidă blurată) și **Mica Alt** (nuanță profundă acordată la tema Windows 11).
-* **Actualizează Date**: Reîmprospătare imediată din baza de date SQLite locală.
-* **Adaugă Widget**: Submeniu dinamic ce permite instanțierea oricăruia dintre cele 9 tipuri de widgeturi.
-* **Închide Widget**: Elimină widget-ul de pe desktop și actualizează configurația.
+### A. Meniu Contextual pe Fiecare Widget (Right-Click Header)
+Utilizatorul poate da clic dreapta direct pe bara superioară / `DragHandle` a oricărui widget de pe desktop:
+* **Widget Size**: Comutare instantanee între Small, Medium și Large.
+* **Glass Backdrop**: Comutare între **Desktop Acrylic** (sticlă translucidă blurată) și **Mica Alt** (nuanță profundă acordată la tema Windows 11).
+* **Lock Position**: Blochează widget-ul pentru a ascunde drag handle-ul și a preveni deplasările accidentale.
+* **Refresh Data**: Reîmprospătare forțată din baza de date SQLite locală.
+* **Remove Widget**: Închide widget-ul și îl șterge din persistența JSON.
 
 ### B. Integrare în Meniul System Tray (`MainWindow.xaml`)
-În meniul contextual al iconiței din bara de sistem (System Tray) a fost adăugat submeniul dedicat **Desktop Widgets**:
-* `Afișează Toate` / `Ascunde Toate` (Toggle vizibilitate).
-* `Blochează Toate` / `Deblochează Toate`.
-* `Actualizează Toate`.
-* `Resetează la Layout Implicit` (redeschide aranjamentul default: Combined, Bubbles, Smokes, Money).
-* `Adaugă Widget`: Permite adăugarea rapidă a oricărui widget dorit.
+Iconița din System Tray (DayOne) oferă meniul contextual accesibil la **clic dreapta**:
+* `Show DayOne` (restaurează fereastra principală).
+* Submeniu **Desktop Widgets**:
+  - `Show / Hide Desktop Widgets` (comută vizibilitatea tuturor widgeturilor deodată).
+  - `Lock / Unlock Positions` (blochează/deblochează toate widgeturile).
+  - `Refresh All Widgets` (forțează recalcularea metricilor).
+  - `Reset to Default Layout` (recreează aranjamentul din fabrică: Combined, Bubbles, Smokes, Money).
+  - `Add Widget` (permite adăugarea oricărui widget din suita celor 9).
+* `Exit`.
 
-### C. Integrare Inter-Proces (IPC Named Pipe)
-Aplicația `Daily.WinUI` ascultă pe conducta `Daily.WinUI.Ipc`. Au fost adăugate comenzi dedicate pentru automatizare sau apeluri CLI:
-* `widgets:toggle` - Comută vizibilitatea tuturor widgeturilor de pe desktop.
-* `widgets:lock` - Comută starea de blocare a pozițiilor.
-* `widgets:refresh` - Reîmprospătează datele în toate widgeturile active.
-* `widgets:reset` - Resetează la layout-ul din fabrică.
+### C. Integrare în Header-ul Taskbar Companion Flyout ("DayOne Glance")
+La **clic stânga** pe iconița din System Tray, se deschide flyout-ul compact "DayOne Glance". În bara de sus a flyout-ului a fost integrat butonul dedicat **Desktop Widgets**, permițând accesul la aceleași comenzi de gestiune rapidă.
 
----
-
-## 5. Persistența Datelor & Ciclul de Viață (`DesktopWidgetManager`)
-
-* Configurația activă a widgeturilor este serializată în format JSON în `AppSettings.DesktopWidgetsConfigJson` prin intermediul `SettingsService`.
-* La prima lansare pe un sistem nou (sau la resetare), `DesktopWidgetManager` calculează automat o dispunere armonioasă pe marginea din dreapta a ecranului principal:
-  1. **Combined Widget** (Large, sus)
-  2. **Bubbles Widget** (Medium)
-  3. **Smokes Widget** (Medium)
-  4. **Money Widget** (Medium, jos)
-* La repornirea aplicației sau a sistemului Windows 11, toate widgeturile își reiau exact coordonatele, dimensiunile și stilul de fundal configurat.
+### D. Ciclu de Viață & Închidere la Tavă (`CloseToTray: true`)
+Setarea `CloseToTray` a fost configurată implicit pe `true`. Când utilizatorul apasă butonul de închidere `X` al ferestrei principale, aplicația rămâne activă în System Tray, iar toate widgeturile desktop rămân active și interactive pe desktop wallpaper.
 
 ---
 
-## 6. Verificare & Testare pe Mașina Virtuală Windows 11
+## 5. Verificare Live & Confirmare Vizuală pe Windows 11 VM
 
-Toate componentele au fost compilate și testate pe mașina virtuală Parallels **Windows 11 (ARM64)**:
+Toate componentele au fost compilate și verificate nativ pe mașina virtuală Parallels **Windows 11 (ARM64)**:
 1. **Compilare Nativă**: `dotnet build -c Debug -p:Platform=ARM64` s-a finalizat cu **`0 Error(s)`**.
-2. **Execuție Nativă**: Lansarea aplicației în sesiunea interactivă Windows 11 (`PID 11328`) a inițializat instanțele `DesktopWidgetWindow` fără excepții.
-3. **Inspectare HWND**: Verificarea prin script PowerShell (`enum_daily_hwnds.log`) a confirmat crearea și afișarea cu succes a tuturor ferestrelor pe stratul de desktop (`Visible: True`).
-4. **Validare IPC**: Comenzile `widgets:refresh` și `widgets:toggle` au fost executate prin Named Pipe și verificate vizual, ascunzând și reafișând widgeturile instantaneu.
-5. **Zero Regresii**: Toate funcționalitățile preexistente din WinUI 3 (Liquid Glass, Taskbar Companion Flyout, navigarea prin tab-uri, sincronizarea Supabase și cache-ul Room/SQLite) au rămas pe deplin funcționale.
+2. **Execuție Nativă în Session 1**: Lansarea aplicației `Daily.WinUI.exe` a inițializat ferestrele widgeturilor:
+   - `CombinedWidget` (Medium): `[998, 24 -> 1358, 194]`
+   - `BubblesWidget` (Small): `[998, 206 -> 1168, 376]`
+   - `SmokesWidget` (Small): `[1180, 206 -> 1350, 376]`
+   - `MoneyWidget` (Medium): `[998, 388 -> 1358, 558]`
+3. **Confirmare Vizuală pe Desktop**: Captura de ecran de pe mașina gazdă Mac a confirmat afișarea impecabilă a celor 4 widgeturi direct pe tapetul albastru Windows 11, cu date live sincronizate din cache-ul local (Vreme: 7°C, Fumat: 0 țigări / Smoke-Free 🌟, Hidratare: 0 ml, SmartLedger: 157,193 Lei / ~31,628 € Net Balance).
