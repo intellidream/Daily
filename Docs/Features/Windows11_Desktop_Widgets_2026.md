@@ -99,13 +99,59 @@ Setarea `CloseToTray` a fost configurată implicit pe `true`. Când utilizatorul
 
 ---
 
-## 5. Verificare Live & Confirmare Vizuală pe Windows 11 VM
+## 5. Rafinări Avansate, Paritate cu MacOS & Click-to-Hub Navigation
+
+În etapa de finisare și paritate funcțională completă cu MacOS și Glance, au fost implementate următoarele îmbunătățiri majore:
+
+### A. Transparență Configurăbilă (Glass Transparency)
+* Fiecărui widget i s-a adăugat submeniul **Transparency** în meniul contextual (clic dreapta pe header):
+  - `100% (Solid Glass)` ($\alpha = 1.0$)
+  - `85% (Subtle Glass)` ($\alpha = 0.85$)
+  - `70% (Balanced Glass)` ($\alpha = 0.70$)
+  - `50% (Translucent)` ($\alpha = 0.50$)
+  - `30% (Clear Glass)` ($\alpha = 0.30$)
+* Nivelul de transparență este modulat prin canalul Alpha al fundalului cardului (`CardBorder.Background`), asigurând că textul, valorile numerice și butoanele rămân 100% vizibile, contrastante și lizibile pe fundalul de Desktop Acrylic blurat.
+
+### B. Widget-ul Hero / Combined Brief
+* A fost eliminat rândul de footer ("All systems nominal · Offline cache synced"), eliberând spațiu vertical prețios pentru matricea celor 4 carduri metrice (Vreme, Hidratare, Fumat, SmartLedger).
+* Iconițele au fost corectate: picătură de apă `&#xEB42;` pentru Hidratare și glif Tabler `&#xEC2C;` pentru Fumat.
+* Clic pe widget activează direct fereastra principală a aplicației (`ShowAndActivate()`).
+
+### C. Widget-ul de Hidratare (Bubbles) & Corecție în Glance Flyout
+* În ambele dimensiuni (Small și Medium), widget-ul oferă cele 3 butoane standard:
+  - **Cafea 100 ml** (Chihlimbar `#F59E0B`, icon `&#xE706;`)
+  - **Apă Mică 150 ml** (Cian `#00E5FF`, icon `&#xEB42;`)
+  - **Apă Mare 300 ml** (Cian `#00E5FF`, icon `&#xEB42;`)
+* În Taskbar Glance Flyout (`TaskbarGlanceFlyoutControl.xaml`), a fost remediată inversarea butoanelor, aliniindu-se cu specificațiile din aplicația principală (Coloana 0 = Cafea 100ml, Coloana 1 = Apă 150ml, Coloana 2 = Apă 300ml).
+* Clic pe cardul de hidratare navighează direct la **Habits Hub (Tab 5)**.
+
+### D. Widget-ul Smokes (Plămâni & Tutun)
+* Iconițe dedicate de tutun și țigaretă (`&#xEC2C;` și `&#xECC4;`).
+* Butoane rapide conforme cu Glance: **`Cig`** (+1 Țigară) și **`Heat`** (+1 Tutun încălzit).
+* Afișare metrică dinamică: `0 of 40 smokes` (preluat din `ISettingsService.Settings.SmokesBaselineDaily`, cu fallback 40).
+* Corecție UTC pentru calculul timpului scurs de la ultima țigară (`DateTime.UtcNow - lastLog.LoggedAt.ToUniversalTime()`), eliminând decalajul de fus orar.
+* Clic pe card navighează direct la **Habits Hub (Tab 5)**.
+
+### E. Widget-ul Finances & SmartLedger
+* Parsare directă a balanțelor `Card` și `Cash` din secțiunea `**Incoming**` a textului SmartLedger (`SmartLedgerParser.Parse`), la paritate 1:1 cu logica din `MoneyWidget.swift` și `WidgetDataCoordinator.swift` pe MacOS.
+* Ajustare interactivă directă pe textul SmartLedger prin `SmartLedgerParser.AdjustValue`.
+* Clic pe card navighează direct la **Finances Hub (Tab 2)**.
+
+### F. Widget-ul Weather & TagDos
+* **Weather**: Afișează denumirea exactă a locației auto-detectate (`weather.LocationName` din OpenWeatherMap API), iar clic pe card navighează la **Weather Hub (Tab 6)**.
+* **TagDos**: Conectat la serviciul real `ITagdosService` (stream-uri active, taskuri necompletate, titlul stream-ului de focus), eliminând datele mock. Clic pe card navighează la **TagDos Hub (Tab 3)**.
+
+### G. Arhitectură Click-to-Hub Navigation
+* Fiecare widget suportă navigare directă prin atingere / clic pe card (`CardBorder_Tapped`), activând fereastra principală și deschizând tab-ul dedicat.
+* Apăsarea pe butoanele interactive din interiorul widgeturilor (`ButtonBase`) este exclusă din evenimentul de navigare, permițând logarea rapidă fără părăsirea desktop-ului.
+
+### H. Remediere Meniu System Tray (Add Widget)
+* Metodele `TrayAdd*` din `MainWindow.xaml.cs` au fost encapsulate în `DispatcherQueue.TryEnqueue` și consolidate în `DesktopWidgetManager.AddWidget` pentru garantarea execuției pe thread-ul UI WinUI 3 și activarea automată a widgeturilor.
+
+---
+
+## 6. Verificare Live & Confirmare Vizuală pe Windows 11 VM
 
 Toate componentele au fost compilate și verificate nativ pe mașina virtuală Parallels **Windows 11 (ARM64)**:
-1. **Compilare Nativă**: `dotnet build -c Debug -p:Platform=ARM64` s-a finalizat cu **`0 Error(s)`**.
-2. **Execuție Nativă în Session 1**: Lansarea aplicației `Daily.WinUI.exe` a inițializat ferestrele widgeturilor:
-   - `CombinedWidget` (Medium): `[998, 24 -> 1358, 194]`
-   - `BubblesWidget` (Small): `[998, 206 -> 1168, 376]`
-   - `SmokesWidget` (Small): `[1180, 206 -> 1350, 376]`
-   - `MoneyWidget` (Medium): `[998, 388 -> 1358, 558]`
-3. **Confirmare Vizuală pe Desktop**: Captura de ecran de pe mașina gazdă Mac a confirmat afișarea impecabilă a celor 4 widgeturi direct pe tapetul albastru Windows 11, cu date live sincronizate din cache-ul local (Vreme: 7°C, Fumat: 0 țigări / Smoke-Free 🌟, Hidratare: 0 ml, SmartLedger: 157,193 Lei / ~31,628 € Net Balance).
+1. **Compilare Nativă**: `dotnet build WinUI/Daily.WinUI/Daily.WinUI.csproj -c Debug -p:Platform=ARM64` s-a finalizat cu **`0 Error(s)`** și `0 Critical Warnings`.
+2. **Execuție & Stabilitate**: Binarul ARM64 actualizat a fost copiat și integrat în `bin\ARM64\Debug\net10.0-windows10.0.26100.0\win-arm64\Daily.WinUI.exe`.
