@@ -41,6 +41,20 @@ public final class ArticleExtractor: @unchecked Sendable {
         self.urlSession = URLSession(configuration: config, delegate: SecureRedirectDelegate(), delegateQueue: nil)
     }
     
+    /// Determines whether the article content is a Medium teaser/snippet rather than a full story.
+    public static func isMediumTeaser(_ content: String) -> Bool {
+        let lower = content.lowercased()
+        if lower.contains("continue reading on") ||
+           lower.contains("medium-feed-link") ||
+           lower.contains("medium-feed-item") ||
+           lower.contains("medium-feed-snippet") ||
+           lower.contains("member-only") ||
+           lower.contains("made this story available to medium members") {
+            return true
+        }
+        return false
+    }
+    
     /// Fetches the raw HTML from the article URL and extracts the clean article content.
     public func extract(from urlString: String, baseArticle: NewsArticle? = nil) async throws -> NewsArticle {
         var safeUrlString = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -55,8 +69,7 @@ public final class ArticleExtractor: @unchecked Sendable {
         
         let hasSubstantialBaseContent = (baseArticle?.content != nil) &&
             (baseArticle!.content!.count > 250) &&
-            !baseArticle!.content!.localizedCaseInsensitiveContains("Continue reading on Medium") &&
-            !baseArticle!.content!.localizedCaseInsensitiveContains("member-only story")
+            !Self.isMediumTeaser(baseArticle!.content!)
         
         if isMedium && hasSubstantialBaseContent {
             return baseArticle!
@@ -848,6 +861,19 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         let observer = NavigationObserver()
         wv.navigationDelegate = observer
         
+        // Ensure parent domain medium.com cookies are synced to custom subdomains (e.g. malshikay.medium.com)
+        if let host = url.host?.lowercased(), host.hasSuffix(".medium.com") && host != "medium.com" {
+            let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+            let allCookies = await cookieStore.allCookies()
+            for cookie in allCookies where cookie.domain.contains("medium.com") {
+                var props = cookie.properties ?? [:]
+                props[.domain] = host
+                if let newCookie = HTTPCookie(properties: props) {
+                    await cookieStore.setCookie(newCookie)
+                }
+            }
+        }
+        
         _ = await withCheckedContinuation { continuation in
             var finished = false
             observer.onFinished = { success in
@@ -925,8 +951,17 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         var lastLen = 0
         var stableCount = 0
         
-        for iteration in 0..<12 {
+        for iteration in 0..<14 {
             try? await Task.sleep(nanoseconds: 600_000_000)
+            
+            // Progressive scroll triggers to ensure deep hydration
+            if iteration == 1 || iteration == 4 {
+                _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight / 2);")
+            } else if iteration == 2 || iteration == 5 {
+                _ = try? await wv.evaluateJavaScript("window.scrollTo(0, document.body.scrollHeight);")
+            } else if iteration == 3 || iteration == 6 {
+                _ = try? await wv.evaluateJavaScript("window.scrollTo(0, 0);")
+            }
             
             if iteration % 4 == 0 && iteration > 0 {
                 _ = try? await wv.evaluateJavaScript(cleanupScript)
@@ -943,7 +978,13 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     lastLen = curLen
                 }
                 
-                if stableCount >= 2 || curLen > 3500 || (iteration >= 7 && curLen > 600) {
+                // Do not prematurely extract on early teaser SSR shells; wait for full content (>3000 chars)
+                // or ensure at least 7-8 iterations of hydration scrolls have taken place
+                let isHydrated = (curLen > 3000 && stableCount >= 2) || 
+                                 (iteration >= 7 && curLen > 1000 && stableCount >= 2) ||
+                                 (iteration >= 11 && curLen > 500)
+                
+                if isHydrated {
                     if let result = try? await wv.evaluateJavaScript(extractScript) as? String, !result.isEmpty {
                         extractedHtml = result
                         break
@@ -964,7 +1005,7 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         
         // Attempt parsing with Mozilla Readability engine
         if let readabilityArticle = await self.parse(html: html, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor),
-           let content = readabilityArticle.content, content.count > 250 {
+           let content = readabilityArticle.content, content.count > 300 {
             return readabilityArticle
         }
         

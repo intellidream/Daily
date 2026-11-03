@@ -119,7 +119,11 @@ Even when logged in, users observed that Medium articles across all platforms we
    - The WebView extraction triggers smooth scroll events (`window.scrollTo(0, document.body.scrollHeight / 2)`, `window.scrollTo(0, document.body.scrollHeight)`, `window.scrollTo(0, 0)`) to activate Medium's `IntersectionObserver` / lazy rendering.
    - The extraction loop tracks character length and paragraph count across iterations, waiting for text stabilization before extracting.
    - Cleaned `<article>` clone strips out interactive claps, responses stream, and follow buttons before passing to readability.
-4. **Resilient Fallback**:
+4. **Publication-Specific Snippet Classification & Subdomain Cookie Parity**:
+   - Universal `isMediumTeaser` classifier detects not only generic `"Continue reading on Medium"`, but also publication-specific variants (e.g. `"Continue reading on Starts With A Bang! »"`, `"Continue reading on Towards Data Science »"`), as well as RSS feed markers (`medium-feed-item`, `medium-feed-link`, `medium-feed-snippet`).
+   - Ensures that feeds with teasers never bypass headless extraction or present stub snippets to the user.
+   - Synchronizes root `.medium.com` session cookies to author and publication subdomains (e.g. `malshikay.medium.com`, `towardsdatascience.com`) across WebKit, Android WebView, and WinUI CoreWebView2.
+5. **Resilient Fallback**:
    - If SmartReader or Readability returns truncated text or fails to parse, the system safely falls back to the cleaned `<article>` DOM so no paragraphs are lost.
 
 ---
@@ -128,9 +132,10 @@ Even when logged in, users observed that Medium articles across all platforms we
 
 | Platform / Module | Test Suite / Command | Result | Verification Notes |
 | :--- | :--- | :--- | :--- |
-| **DailyCore (Swift)** | `swift test --package-path DailyCore --filter NewsServiceTests` | **Passed (22/22)** | Added `testMediumFullArticleContentPreservationWhenSubstantial` and `testMediumDomExtractionPreservesMemberStoryParagraphs` |
-| **Android (Kotlin)** | `./gradlew :core-model:testDebugUnitTest :core-database:testDebugUnitTest` | **Passed** | Added `testMediumDomExtractionPreservesMemberStoryParagraphs` in `NewsParsersTest.kt` |
+| **DailyCore (Swift)** | `swift test --package-path DailyCore --filter NewsServiceTests` | **Passed (23/23)** | Added `testMediumTeaserClassification`, verified `Starts With A Bang!` and `Yohan Malshika` |
+| **Android (Kotlin)** | `./gradlew :core-model:testDebugUnitTest :core-database:testDebugUnitTest` | **Passed** | Added `testMediumTeaserClassification` in `NewsParsersTest.kt` |
 | **macOS Native** | `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` | **BUILD SUCCEEDED** | Signed atomically with Apple Development credentials |
+| **Windows 11 VM** | `dotnet build -c Debug -p:Platform=ARM64` | **BUILD SUCCEEDED** | Native WinUI build with CoreWebView2 cookie sync and hydration |
 | **iOS Native** | `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' build` | **BUILD SUCCEEDED** | Clean build with embedded `DailyWidgetsExtension` |
 | **Android App** | `./gradlew assembleDebug` | **BUILD SUCCEEDED** | Verified R8 / DEX compilation without regressions |
 | **Physical iPhone Schmitz** | `xcrun devicectl device install app --device 00008140-000E2C863EFB001C` | **Installed** | Deployed live to iPhone 16 Pro |

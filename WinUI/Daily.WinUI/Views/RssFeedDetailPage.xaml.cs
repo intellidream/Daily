@@ -371,8 +371,7 @@ public sealed partial class RssFeedDetailPage : Page
 
         bool hasSubstantialContent = !string.IsNullOrWhiteSpace(item.Content) && 
                                      item.Content.Length > 250 && 
-                                     !item.Content.Contains("Continue reading on Medium", StringComparison.OrdinalIgnoreCase) &&
-                                     !item.Content.Contains("member-only story", StringComparison.OrdinalIgnoreCase);
+                                     !IsMediumTeaser(item.Content);
 
         if (isMedium && hasSubstantialContent)
         {
@@ -570,8 +569,12 @@ public sealed partial class RssFeedDetailPage : Page
                                 lastLen = curLen;
                             }
 
-                            // Extract once hydrated and stabilized (or if content is already very long, e.g. > 3500 chars)
-                            if (stableCount >= 2 || curLen > 3500 || (i >= 8 && curLen > 600))
+                            // Extract once hydrated and stabilized (or if content is already very long, e.g. > 3000 chars)
+                            bool isHydrated = (curLen > 3000 && stableCount >= 2) || 
+                                              (i >= 8 && curLen > 1000 && stableCount >= 2) ||
+                                              (i >= 15 && curLen > 500);
+
+                            if (isHydrated)
                             {
                                 var articleJson = await ReaderWebView.ExecuteScriptAsync(
                                     "(function(){" +
@@ -622,6 +625,26 @@ public sealed partial class RssFeedDetailPage : Page
             };
             
             ReaderWebView.CoreWebView2.NavigationCompleted += handler;
+
+            // Synchronize parent domain medium.com cookies to custom subdomains
+            if (!string.IsNullOrEmpty(item.Link) && item.Link.Contains(".medium.com") && !item.Link.Contains("://medium.com"))
+            {
+                try
+                {
+                    var cookieManager = ReaderWebView.CoreWebView2.CookieManager;
+                    var mediumCookies = await cookieManager.GetCookiesAsync("https://medium.com");
+                    var targetUri = new Uri(item.Link);
+                    foreach (var c in mediumCookies)
+                    {
+                        var copy = cookieManager.CreateCookie(c.Name, c.Value, targetUri.Host, c.Path);
+                        copy.IsHttpOnly = c.IsHttpOnly;
+                        copy.IsSecure = c.IsSecure;
+                        cookieManager.AddOrUpdateCookie(copy);
+                    }
+                }
+                catch { }
+            }
+
             ReaderWebView.CoreWebView2.Navigate(item.Link);
             
             // Wait up to 30s for the scraping to complete
@@ -1466,6 +1489,21 @@ public sealed partial class RssFeedDetailPage : Page
 
         ToolTipService.SetToolTip(fontIcon, toolTipText);
         return fontIcon;
+    }
+
+    private static bool IsMediumTeaser(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return true;
+        if (content.Contains("Continue reading on", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("medium-feed-link", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("medium-feed-item", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("medium-feed-snippet", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("member-only", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("made this story available to Medium members", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return false;
     }
 
     private static readonly Dictionary<string, List<RssItem>> _allFeedsCache = new();

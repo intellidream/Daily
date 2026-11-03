@@ -34,6 +34,17 @@ class MediumWebViewBridge(private val context: Context) {
                         val cm = CookieManager.getInstance()
                         cm.setAcceptCookie(true)
                         cm.setAcceptThirdPartyCookies(this, true)
+                        val mediumCookies = cm.getCookie("https://medium.com")
+                        if (!mediumCookies.isNullOrBlank() && !url.contains("://medium.com")) {
+                            val uri = android.net.Uri.parse(url)
+                            val host = uri.host
+                            if (host != null && host.endsWith(".medium.com")) {
+                                mediumCookies.split(";").forEach { cookieStr ->
+                                    cm.setCookie("https://$host", cookieStr.trim())
+                                }
+                                cm.flush()
+                            }
+                        }
                     } catch (_: Throwable) {}
                 }
 
@@ -160,6 +171,17 @@ class MediumWebViewBridge(private val context: Context) {
                         val cm = CookieManager.getInstance()
                         cm.setAcceptCookie(true)
                         cm.setAcceptThirdPartyCookies(this, true)
+                        val mediumCookies = cm.getCookie("https://medium.com")
+                        if (!mediumCookies.isNullOrBlank() && !url.contains("://medium.com")) {
+                            val uri = android.net.Uri.parse(url)
+                            val host = uri.host
+                            if (host != null && host.endsWith(".medium.com")) {
+                                mediumCookies.split(";").forEach { cookieStr ->
+                                    cm.setCookie("https://$host", cookieStr.trim())
+                                }
+                                cm.flush()
+                            }
+                        }
                     } catch (_: Throwable) {}
                 }
 
@@ -260,7 +282,10 @@ class MediumWebViewBridge(private val context: Context) {
                                         }
                                     }
 
-                                    val isReady = stableCount >= 2 || curLen > 3500 || (attempts >= 8 && curLen > 500) || attempts >= maxAttempts
+                                    val isReady = (curLen > 3000 && stableCount >= 2) ||
+                                                  (attempts >= 8 && curLen > 1000 && stableCount >= 2) ||
+                                                  (attempts >= 11 && curLen > 500) ||
+                                                  attempts >= maxAttempts
 
                                     if (isReady) {
                                         hasExtracted = true

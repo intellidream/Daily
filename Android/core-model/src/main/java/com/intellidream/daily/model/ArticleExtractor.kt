@@ -512,5 +512,16 @@ class ArticleExtractor {
 
     companion object {
         val shared = ArticleExtractor()
+
+        fun isMediumTeaser(content: String?): Boolean {
+            if (content.isNullOrBlank()) return true
+            val lower = content.lowercase(Locale.ROOT)
+            return lower.contains("continue reading on") ||
+                   lower.contains("medium-feed-link") ||
+                   lower.contains("medium-feed-item") ||
+                   lower.contains("medium-feed-snippet") ||
+                   lower.contains("member-only") ||
+                   lower.contains("made this story available to medium members")
+        }
     }
 }

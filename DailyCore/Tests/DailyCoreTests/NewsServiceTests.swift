@@ -684,6 +684,25 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertEqual(extracted.title, "Scaling Distributed Systems")
     }
     
+    func testMediumTeaserClassification() {
+        let bangSnippet = """
+        <div class="medium-feed-item"><p class="medium-feed-image"><a href="https://medium.com/starts-with-a-bang/test"><img src="test.jpg"></a></p><p class="medium-feed-snippet">The idea of grand unification is a tempting one for our Universe. But nature won't cooperate.</p><p class="medium-feed-link"><a href="https://medium.com/starts-with-a-bang/test">Continue reading on Starts With A Bang! »</a></p></div>
+        """
+        XCTAssertTrue(ArticleExtractor.isMediumTeaser(bangSnippet), "Publication-specific snippets like Starts With A Bang! must be recognized as teasers")
+        
+        let mediumSnippet = """
+        <div class="medium-feed-item"><p class="medium-feed-image"><a href="https://malshikay.medium.com/test"><img src="test.jpg"></a></p><p class="medium-feed-snippet">Understanding the risks of async void</p><p class="medium-feed-link"><a href="https://malshikay.medium.com/test">Continue reading on Medium »</a></p></div>
+        """
+        XCTAssertTrue(ArticleExtractor.isMediumTeaser(mediumSnippet), "Medium-generic snippets must be recognized as teasers")
+        
+        let fullArticle = """
+        <p>Paragraph 1 about astrophysics and the standard model.</p>
+        <p>Paragraph 2 detailing quantum chromodynamics and electroweak interactions.</p>
+        <p>Paragraph 3 comparing coupling constants and grand unified theories.</p>
+        """
+        XCTAssertFalse(ArticleExtractor.isMediumTeaser(fullArticle), "Full articles without feed item or continue reading links must not be classified as teasers")
+    }
+    
     func testMediumDomExtractionPreservesMemberStoryParagraphs() {
         let htmlWithMemberSections = """
         <!DOCTYPE html>

@@ -346,8 +346,7 @@ class NewsRepository(
             val articleContent = article.content
             val hasSubstantialContent = !articleContent.isNullOrBlank() && 
                                          articleContent.length > 250 && 
-                                         !articleContent.contains("Continue reading on Medium", ignoreCase = true) &&
-                                         !articleContent.contains("member-only story", ignoreCase = true)
+                                         !ArticleExtractor.isMediumTeaser(articleContent)
 
             if (isMedium && hasSubstantialContent) {
                 return@withContext article
@@ -748,6 +747,8 @@ class NewsRepository(
     fun normalizeFeedUrl(url: String): String = Companion.normalizeFeedUrl(url)
 
     companion object {
+        fun isMediumTeaser(content: String?): Boolean = ArticleExtractor.isMediumTeaser(content)
+
         fun normalizeFeedUrl(url: String): String {
             var u = url.trim().lowercase()
             if (u.startsWith("http://")) {
