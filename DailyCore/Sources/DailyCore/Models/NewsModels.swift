@@ -114,19 +114,51 @@ public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
     }
     
     public var isSubstackItem: Bool {
-        publicationName?.contains("Substack") == true ||
-        link.contains("substack.com") ||
-        (publicationIconUrl?.contains("substack") == true)
+        if publicationName?.localizedCaseInsensitiveContains("substack") == true ||
+           link.lowercased().contains("substack.com") ||
+           publicationIconUrl?.lowercased().contains("substack") == true ||
+           imageUrl?.lowercased().contains("substackcdn.com") == true ||
+           imageUrl?.lowercased().contains("substack-post-media") == true {
+            return true
+        }
+        if let c = content,
+           c.contains("substackcdn.com") ||
+           c.contains("substack-post-media") ||
+           c.contains("captioned-image-container") {
+            return true
+        }
+        return false
     }
     
     public var substackPublicationSlug: String? {
         guard let url = URL(string: link), let host = url.host?.lowercased() else { return nil }
+        let reservedHosts: Set<String> = ["www", "open", "api", "substack", "support", "on", "post"]
+        
         if host.hasSuffix(".substack.com") {
-            let parts = host.split(separator: ".")
-            if let first = parts.first, first != "www" && first != "api" {
-                return String(first)
+            let sub = String(host.dropLast(".substack.com".count))
+            if !sub.isEmpty && !sub.contains(".") && !reservedHosts.contains(sub) {
+                return sub
             }
         }
+        
+        let pathParts = url.path.split(separator: "/").map(String.init)
+        // https://open.substack.com/pub/{slug}/p/{post}
+        if host == "open.substack.com", pathParts.count >= 2, pathParts[0].lowercased() == "pub" {
+            let slug = pathParts[1].lowercased()
+            if !slug.isEmpty && !reservedHosts.contains(slug) {
+                return slug
+            }
+        }
+        
+        // https://substack.com/@{handle}...
+        if (host == "substack.com" || host == "www.substack.com"),
+           let first = pathParts.first, first.hasPrefix("@") {
+            let handle = String(first.dropFirst()).lowercased()
+            if !handle.isEmpty {
+                return handle
+            }
+        }
+        
         return nil
     }
     
@@ -134,11 +166,19 @@ public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
         if let slug = substackPublicationSlug {
             return "https://\(slug).substack.com/feed"
         }
-        if link.contains("substack.com") {
-            guard let url = URL(string: link), let host = url.host else { return nil }
-            return "\(url.scheme ?? "https")://\(host)/feed"
+        guard isSubstackItem, let url = URL(string: link), let host = url.host?.lowercased() else {
+            return nil
         }
-        return nil
+        // Never produce broken root feeds like https://substack.com/feed or https://open.substack.com/feed
+        let invalidFeedHosts: Set<String> = [
+            "substack.com", "www.substack.com", "open.substack.com",
+            "api.substack.com", "substackcdn.com"
+        ]
+        if invalidFeedHosts.contains(host) || host.hasSuffix(".substack.com") {
+            return nil
+        }
+        // Custom-domain Substack publication (e.g. newsletter.pragmaticengineer.com)
+        return "https://\(host)/feed"
     }
     
     public var relativeTimeFormatted: String {
@@ -423,15 +463,31 @@ public struct FeedSearchResult: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+public struct SubstackSubscriptionInfo: Hashable, Codable, Sendable {
+    public let name: String
+    public let feedUrl: String
+    public let iconUrl: String
+    public let subdomain: String
+    
+    public init(name: String, feedUrl: String, iconUrl: String, subdomain: String) {
+        self.name = name
+        self.feedUrl = feedUrl
+        self.iconUrl = iconUrl
+        self.subdomain = subdomain
+    }
+}
+
 public func extractSubstackInfo(from article: NewsArticle) -> (name: String, feedUrl: String)? {
-    if let feedUrl = article.substackFeedUrl {
-        let name = article.publicationName ?? article.substackPublicationSlug ?? "Substack"
-        return (name, feedUrl)
+    guard let feedUrl = article.substackFeedUrl else { return nil }
+    let pub = article.publicationName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !pub.isEmpty && pub.caseInsensitiveCompare("Substack") != .orderedSame && pub.caseInsensitiveCompare("Substack Inbox") != .orderedSame {
+        return (pub, feedUrl)
     }
-    if article.isSubstackItem, let url = URL(string: article.link), let host = url.host {
-        let feedUrl = "\(url.scheme ?? "https")://\(host)/feed"
-        let name = article.publicationName ?? host
-        return (name, feedUrl)
+    if let slug = article.substackPublicationSlug {
+        return (slug, feedUrl)
     }
-    return nil
+    if let host = URL(string: feedUrl)?.host?.replacingOccurrences(of: "www.", with: "") {
+        return (host, feedUrl)
+    }
+    return ("Substack", feedUrl)
 }

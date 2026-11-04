@@ -16,6 +16,7 @@ public struct NewsReaderView: View {
     @State private var isRecommendationsExpanded: Bool = false
     @State private var isHoveringBubble: Bool = false
     
+    @ObservedObject private var newsService = NewsService.shared
     @ObservedObject private var savedService = SavedArticlesService.shared
     @ObservedObject private var settingsService = SettingsService.shared
     @Environment(\.colorScheme) private var systemColorScheme
@@ -156,6 +157,36 @@ public struct NewsReaderView: View {
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .fixedSize(horizontal: true, vertical: false)
+                    
+                    if let substackInfo = extractSubstackInfo(from: currentArticle) {
+                        let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
+                        Button {
+                            if !isSubscribed {
+                                withAnimation {
+                                    newsService.subscribeToSubstackPublication(
+                                        name: substackInfo.name,
+                                        feedUrl: substackInfo.feedUrl,
+                                        iconUrl: currentArticle.publicationIconUrl ?? ""
+                                    )
+                                }
+                                triggerHaptic()
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                    .font(.system(size: 11))
+                                Text(isSubscribed ? "Subscribed" : "Subscribe")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundColor(isSubscribed ? .white.opacity(0.65) : ThemeColors.accentCyan)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             

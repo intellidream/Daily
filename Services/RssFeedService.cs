@@ -172,7 +172,7 @@ namespace Daily.Services
             }
         }
 
-        public async Task AddFeedAsync(string url, string name, string category, string userId)
+        public async Task AddFeedAsync(string url, string name, string category, string userId, string? iconUrl = null)
         {
             if (_databaseService == null) return;
             
@@ -193,6 +193,10 @@ namespace Daily.Services
             {
                 existing.Name = name;
                 existing.Category = category;
+                if (!string.IsNullOrWhiteSpace(iconUrl))
+                {
+                    existing.IconUrl = iconUrl;
+                }
                 existing.IsDeleted = false;
                 existing.SyncedAt = null;
                 existing.UpdatedAt = DateTime.UtcNow;
@@ -201,6 +205,9 @@ namespace Daily.Services
             }
             else
             {
+                string resolvedIcon = !string.IsNullOrWhiteSpace(iconUrl)
+                    ? iconUrl
+                    : $"https://www.google.com/s2/favicons?domain={new Uri(url).Host}&sz=64";
                 var newSub = new LocalRssSubscription
                 {
                     Id = GenerateGuid(url).ToString(),
@@ -208,7 +215,7 @@ namespace Daily.Services
                     Name = name,
                     Url = url,
                     Category = category,
-                    IconUrl = $"https://www.google.com/s2/favicons?domain={new Uri(url).Host}&sz=64",
+                    IconUrl = resolvedIcon,
                     CreatedAt = DateTime.UtcNow,
                     SyncedAt = null,
                     DisplayOrder = nextOrder
@@ -289,8 +296,10 @@ namespace Daily.Services
             var results = new List<FeedSearchResult>();
             if (string.IsNullOrWhiteSpace(query)) return results;
 
+            string trimmed = query.Trim();
+
             // 1. Check if the query is a direct URL
-            string targetUrl = query.Trim();
+            string targetUrl = trimmed;
             if (targetUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
                 targetUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
                 Regex.IsMatch(targetUrl, @"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}(/.*)?$"))
@@ -299,6 +308,24 @@ namespace Daily.Services
                     !targetUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
                     targetUrl = "https://" + targetUrl;
+                }
+
+                // Direct Substack subdomain shortcut (e.g. pragmaticengineer.substack.com)
+                if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var subUri) &&
+                    subUri.Host.EndsWith(".substack.com", StringComparison.OrdinalIgnoreCase) &&
+                    !subUri.Host.Equals("substack.com", StringComparison.OrdinalIgnoreCase) &&
+                    !subUri.Host.Equals("open.substack.com", StringComparison.OrdinalIgnoreCase) &&
+                    !subUri.Host.Equals("www.substack.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    string slug = subUri.Host.Substring(0, subUri.Host.Length - ".substack.com".Length);
+                    results.Add(new FeedSearchResult
+                    {
+                        Name = slug,
+                        Url = $"https://{slug}.substack.com/feed",
+                        IconUrl = "https://substack.com/favicon.ico",
+                        Website = $"https://{slug}.substack.com"
+                    });
+                    return results;
                 }
 
                 try
@@ -315,7 +342,188 @@ namespace Daily.Services
                 }
             }
 
-            // 2. Query Feedly search API
+            // 2. Parallel Substack Publication Discovery + Feedly Search API
+            string cleanSubstackQuery = trimmed.TrimStart('@');
+            var substackTask = SearchSubstackPublicationsAsync(cleanSubstackQuery);
+            var feedlyTask = SearchFeedlyFeedsAsync(trimmed);
+
+            await Task.WhenAll(substackTask, feedlyTask);
+
+            var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in substackTask.Result.Concat(feedlyTask.Result))
+            {
+                string norm = NormalizeSubscriptionUrl(item.Url);
+                if (!string.IsNullOrEmpty(norm) && seenUrls.Add(norm))
+                {
+                    results.Add(item);
+                }
+            }
+
+            return results;
+        }
+
+        public static string NormalizeSubscriptionUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+            string s = url.Trim().ToLowerInvariant();
+            if (s.StartsWith("http://")) s = s.Substring(7);
+            else if (s.StartsWith("https://")) s = s.Substring(8);
+            if (s.StartsWith("www.")) s = s.Substring(4);
+            return s.TrimEnd('/');
+        }
+
+        private static void AppendSubstackPubNode(JsonNode? pubNode, List<FeedSearchResult> target, HashSet<string> seen)
+        {
+            if (pubNode == null) return;
+            string subdomain = (pubNode["subdomain"]?.ToString() ?? "").Trim().ToLowerInvariant();
+            string customDomain = (pubNode["custom_domain"]?.ToString() ?? "").Trim().ToLowerInvariant();
+            bool customOptional = pubNode["custom_domain_optional"]?.GetValue<bool>() ?? false;
+
+            string host;
+            if (!string.IsNullOrEmpty(customDomain) && !customOptional && customDomain.Contains('.'))
+            {
+                host = customDomain;
+            }
+            else if (!string.IsNullOrEmpty(subdomain))
+            {
+                host = $"{subdomain}.substack.com";
+            }
+            else
+            {
+                return;
+            }
+
+            string feedUrl = $"https://{host}/feed";
+            if (!seen.Add(feedUrl.ToLowerInvariant())) return;
+
+            string name = (pubNode["name"]?.ToString() ?? "").Trim();
+            if (string.IsNullOrEmpty(name)) name = !string.IsNullOrEmpty(subdomain) ? subdomain : host;
+            string logo = pubNode["logo_url"]?.ToString()
+                          ?? pubNode["author_photo_url"]?.ToString()
+                          ?? "https://substack.com/favicon.ico";
+
+            target.Add(new FeedSearchResult
+            {
+                Name = name,
+                Url = feedUrl,
+                IconUrl = logo,
+                Website = $"https://{host}"
+            });
+        }
+
+        private async Task<List<FeedSearchResult>> SearchSubstackPublicationsAsync(string query)
+        {
+            var list = new List<FeedSearchResult>();
+            if (string.IsNullOrWhiteSpace(query)) return list;
+
+            try
+            {
+                string encoded = Uri.EscapeDataString(query);
+                string apiUrl = $"https://substack.com/api/v1/top/search?query={encoded}&page=0";
+                var responseStr = await GetStringWithFallbackAsync(apiUrl);
+                var root = JsonNode.Parse(responseStr);
+                if (root == null) return list;
+
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (root["results"] is JsonArray resArr)
+                {
+                    foreach (var r in resArr) AppendSubstackPubNode(r, list, seen);
+                }
+                if (root["publications"] is JsonArray pubsArr)
+                {
+                    foreach (var p in pubsArr) AppendSubstackPubNode(p, list, seen);
+                }
+                if (root["items"] is JsonArray itemsArr)
+                {
+                    foreach (var group in itemsArr)
+                    {
+                        if (group == null) continue;
+                        string type = group["type"]?.ToString() ?? "";
+                        if (group["results"] is not JsonArray groupRes) continue;
+
+                        if (type.Contains("publication", StringComparison.OrdinalIgnoreCase))
+                        {
+                            foreach (var r in groupRes) AppendSubstackPubNode(r, list, seen);
+                        }
+                        else if (type == "profileSearchResults")
+                        {
+                            foreach (var profile in groupRes)
+                            {
+                                if (profile?["publicationUsers"] is not JsonArray pubUsers) continue;
+                                var sorted = pubUsers
+                                    .Where(pu => pu != null)
+                                    .OrderBy(pu => (pu!["is_primary"]?.GetValue<bool>() == true) ? 0 : 1);
+                                foreach (var pu in sorted)
+                                {
+                                    string role = pu!["role"]?.ToString() ?? "";
+                                    bool isPrimary = pu["is_primary"]?.GetValue<bool>() ?? false;
+                                    if (role == "admin" || role == "contributor" || isPrimary)
+                                    {
+                                        AppendSubstackPubNode(pu["publication"], list, seen);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RssFeedService] Substack search error: {ex.Message}");
+            }
+
+            return list;
+        }
+
+        public async Task<List<FeedSearchResult>> FetchSubstackPublicSubscriptionsAsync(string handle)
+        {
+            var list = new List<FeedSearchResult>();
+            string cleanHandle = (handle ?? "").Trim().TrimStart('@');
+            if (string.IsNullOrEmpty(cleanHandle) || cleanHandle.Equals("user", StringComparison.OrdinalIgnoreCase))
+            {
+                return list;
+            }
+
+            try
+            {
+                string encoded = Uri.EscapeDataString(cleanHandle);
+                string apiUrl = $"https://substack.com/api/v1/user/{encoded}/public_profile";
+                var responseStr = await GetStringWithFallbackAsync(apiUrl);
+                var root = JsonNode.Parse(responseStr);
+                if (root == null) return list;
+
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (root["subscriptions"] is JsonArray subsArr)
+                {
+                    foreach (var s in subsArr)
+                    {
+                        AppendSubstackPubNode(s?["publication"] ?? s, list, seen);
+                    }
+                }
+                if (root["publicationUsers"] is JsonArray pubUsers)
+                {
+                    foreach (var pu in pubUsers)
+                    {
+                        if (pu?["is_primary"]?.GetValue<bool>() == true)
+                        {
+                            AppendSubstackPubNode(pu["publication"], list, seen);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RssFeedService] Substack public_profile error: {ex.Message}");
+            }
+
+            return list;
+        }
+
+        private async Task<List<FeedSearchResult>> SearchFeedlyFeedsAsync(string query)
+        {
+            var results = new List<FeedSearchResult>();
             try
             {
                 string encodedQuery = Uri.EscapeDataString(query);

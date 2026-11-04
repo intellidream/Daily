@@ -244,6 +244,117 @@ public struct ArticleWebView: UIViewRepresentable {
                     font-weight: 600;
                     font-size: 14px;
                 }
+                /* Substack Reader Refinements */
+                .substack-subtitle {
+                    font-size: 1.15em;
+                    color: \(metaColor);
+                    line-height: 1.45;
+                    margin: -6px 0 22px 0;
+                    font-weight: 400;
+                }
+                .captioned-image-container, .image2-inset {
+                    margin: 22px 0;
+                    width: 100%;
+                }
+                a.image-link {
+                    display: block;
+                    text-decoration: none !important;
+                }
+                .image-caption {
+                    font-size: 13px;
+                    color: \(metaColor);
+                    text-align: center;
+                    margin-top: 8px;
+                    line-height: 1.4;
+                }
+                .image-link-expand,
+                button.restack-image,
+                button.view-image,
+                .subscription-widget-wrap,
+                .subscription-widget-wrap-editor,
+                .subscription-widget,
+                .subscribe-widget,
+                .post-ufi,
+                .like-button-container,
+                .fake-input-wrapper {
+                    display: none !important;
+                }
+                .pullquote {
+                    margin: 28px 0;
+                    padding: 16px 22px;
+                    border-left: 4px solid #FF6719;
+                    background: \(isDark ? "rgba(255, 103, 25, 0.08)" : "rgba(255, 103, 25, 0.06)");
+                    border-radius: 0 12px 12px 0;
+                    font-size: 1.1em;
+                    font-weight: 500;
+                    line-height: 1.55;
+                }
+                .pullquote p:last-child {
+                    margin-bottom: 0;
+                }
+                .callout-block {
+                    margin: 24px 0;
+                    padding: 18px 20px;
+                    background: \(isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)");
+                    border: 1px solid \(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)");
+                    border-radius: 14px;
+                }
+                .callout-block h4 {
+                    margin-top: 0;
+                }
+                .callout-block p:last-child {
+                    margin-bottom: 0;
+                }
+                .embedded-post-wrap, .embedded-post {
+                    margin: 24px 0;
+                    padding: 16px 18px;
+                    background: \(isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)");
+                    border: 1px solid \(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)");
+                    border-radius: 14px;
+                }
+                img.embedded-post-publication-logo {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 6px;
+                    display: inline-block;
+                    vertical-align: middle;
+                    margin: 0 8px 0 0;
+                }
+                .button-wrapper {
+                    text-align: center;
+                    margin: 24px 0;
+                }
+                .button-wrapper a.button {
+                    display: inline-block;
+                    padding: 10px 22px;
+                    border-radius: 999px;
+                    background: \(isDark ? "rgba(102, 178, 255, 0.16)" : "rgba(0, 102, 204, 0.10)");
+                    border: 1px solid \(isDark ? "rgba(102, 178, 255, 0.35)" : "rgba(0, 102, 204, 0.30)");
+                    color: \(linkColor) !important;
+                    font-weight: 600;
+                    font-size: 0.92em;
+                    text-decoration: none !important;
+                }
+                .footnote-anchor {
+                    font-size: 0.75em;
+                    vertical-align: super;
+                    padding: 1px 6px;
+                    border-radius: 6px;
+                    background: \(isDark ? "rgba(102, 178, 255, 0.15)" : "rgba(0, 102, 204, 0.10)");
+                    margin: 0 2px;
+                    text-decoration: none !important;
+                }
+                .footnote {
+                    font-size: 0.88em;
+                    color: \(metaColor);
+                    border-top: 1px solid \(isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)");
+                    padding-top: 12px;
+                    margin-top: 16px;
+                }
+                .substack-paid-card {
+                    border-color: rgba(255, 103, 25, 0.35);
+                    background: \(isDark ? "rgba(255, 103, 25, 0.08)" : "rgba(255, 103, 25, 0.05)");
+                }
             </style>
         </head>
         <body>

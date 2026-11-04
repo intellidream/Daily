@@ -373,30 +373,63 @@ public sealed partial class RssFeedDetailPage : Page
         bool needsWebViewFallback = false;
 
         bool isMedium = !string.IsNullOrEmpty(item.Link) && 
-                         (item.Link.Contains("medium.com") || 
-                          (item.PublicationName != null && item.PublicationName.Contains("Medium")));
+                         (item.Link.Contains("medium.com", StringComparison.OrdinalIgnoreCase) || 
+                          (item.PublicationName != null && item.PublicationName.Contains("Medium", StringComparison.OrdinalIgnoreCase)));
 
-        bool isSubstack = !string.IsNullOrEmpty(item.Link) && 
-                          (item.Link.Contains("substack.com") || 
-                           (item.PublicationName != null && item.PublicationName.Contains("Substack")));
+        bool isSubstack = IsItemSubstack(item);
 
         bool hasSubstantialContent = !string.IsNullOrWhiteSpace(item.Content) && 
                                      item.Content.Length > 250 && 
                                      !IsMediumTeaser(item.Content) &&
                                      !IsSubstackTeaser(item.Content);
 
-        if ((isMedium || isSubstack) && hasSubstantialContent)
+        var appSettingsForSubstack = isSubstack ? SettingsService.Load() : null;
+        bool shouldUpgradeSubstackBonus = isSubstack &&
+                                          hasSubstantialContent &&
+                                          HasSubstackBonusPaywall(item.Content) &&
+                                          !string.IsNullOrEmpty(appSettingsForSubstack?.SubstackUsername);
+
+        if (isMedium && hasSubstantialContent)
         {
-            if (isSubstack && item.Content != null)
-            {
-                item.Content = StripSubstackTrackingAndNoise(item.Content);
-            }
             fullArticle = item;
             needsWebViewFallback = false;
         }
-        else if (isMedium || isSubstack)
+        else if (isSubstack && hasSubstantialContent && !shouldUpgradeSubstackBonus)
         {
-            System.Diagnostics.Debug.WriteLine($"[Reader] Forcing WebView2 fallback for {(isMedium ? "Medium" : "Substack")} link to preserve cookie authentication: {item.Link}");
+            string purified = StripSubstackTrackingAndNoise(item.Content!);
+            if (!string.IsNullOrEmpty(item.ImageUrl))
+            {
+                purified = DeduplicateSubstackFeaturedImage(purified, item.ImageUrl);
+            }
+            fullArticle = new RssItem
+            {
+                Title = item.Title,
+                Link = item.Link,
+                Content = purified,
+                Description = item.Description,
+                Author = item.Author,
+                PublishDate = item.PublishDate,
+                PublicationName = item.PublicationName,
+                PublicationIconUrl = item.PublicationIconUrl,
+                ImageUrl = item.ImageUrl
+            };
+            needsWebViewFallback = false;
+        }
+        else if (isSubstack)
+        {
+            fullArticle = await ExtractSubstackArticleAsync(item);
+            if (fullArticle != null && !string.IsNullOrWhiteSpace(fullArticle.Content) && fullArticle.Content.Length > 100)
+            {
+                needsWebViewFallback = false;
+            }
+            else
+            {
+                needsWebViewFallback = true;
+            }
+        }
+        else if (isMedium)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Reader] Forcing WebView2 fallback for Medium link to preserve cookie authentication: {item.Link}");
             needsWebViewFallback = true;
         }
         else
@@ -437,9 +470,17 @@ public sealed partial class RssFeedDetailPage : Page
         {
             try
             {
-                // Preserve correct publication name/icon from the clicked item
-                fullArticle.PublicationName = item.PublicationName;
-                fullArticle.PublicationIconUrl = item.PublicationIconUrl;
+                // Preserve publication name/icon from the clicked item unless Substack API upgraded generic placeholders
+                if (string.IsNullOrEmpty(fullArticle.PublicationName) ||
+                    (!string.IsNullOrEmpty(item.PublicationName) && item.PublicationName != "Substack" && item.PublicationName != "Substack Inbox"))
+                {
+                    fullArticle.PublicationName = item.PublicationName;
+                }
+                if (string.IsNullOrEmpty(fullArticle.PublicationIconUrl) ||
+                    (!string.IsNullOrEmpty(item.PublicationIconUrl) && item.PublicationIconUrl != "https://substack.com/favicon.ico"))
+                {
+                    fullArticle.PublicationIconUrl = item.PublicationIconUrl;
+                }
 
                 if (string.IsNullOrEmpty(fullArticle.ImageUrl) && !string.IsNullOrEmpty(item.ImageUrl))
                 {
@@ -451,6 +492,7 @@ public sealed partial class RssFeedDetailPage : Page
                 }
 
                 _currentRenderedArticle = fullArticle;
+                UpdateReaderToolbarStates();
                 string html = GenerateReaderHtml(fullArticle);
                 
                 // Set visibility to Visible with Opacity 0 to allow WebView2 to initialize
@@ -1073,6 +1115,145 @@ public sealed partial class RssFeedDetailPage : Page
             font-style: italic;
             opacity: 0.9;
         }}
+        .paywall-card {{
+            background: {(isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)")};
+            border: 1px solid {(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)")};
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            margin: 32px 0;
+        }}
+        .paywall-icon {{
+            font-size: 32px;
+            margin-bottom: 12px;
+        }}
+        .open-browser-btn {{
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 20px;
+            background: {(isDark ? "rgba(102, 178, 255, 0.15)" : "rgba(0, 102, 204, 0.1)")};
+            color: {linkColor} !important;
+            border: 1px solid {(isDark ? "rgba(102, 178, 255, 0.3)" : "rgba(0, 102, 204, 0.3)")};
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            text-decoration: none !important;
+        }}
+        .substack-subtitle {{
+            font-size: 1.15em;
+            color: {metaColor};
+            line-height: 1.45;
+            margin: -6px 0 22px 0;
+            font-weight: 400;
+        }}
+        .captioned-image-container, .image2-inset {{
+            margin: 22px 0;
+            width: 100%;
+        }}
+        a.image-link {{
+            display: block;
+            text-decoration: none !important;
+        }}
+        .image-caption {{
+            font-size: 13px;
+            color: {metaColor};
+            text-align: center;
+            margin-top: 8px;
+            line-height: 1.4;
+        }}
+        .image-link-expand,
+        button.restack-image,
+        button.view-image,
+        .subscription-widget-wrap,
+        .subscription-widget-wrap-editor,
+        .subscription-widget,
+        .subscribe-widget,
+        .post-ufi,
+        .like-button-container,
+        .fake-input-wrapper {{
+            display: none !important;
+        }}
+        .pullquote {{
+            margin: 28px 0;
+            padding: 16px 22px;
+            border-left: 4px solid #FF6719;
+            background: {(isDark ? "rgba(255, 103, 25, 0.08)" : "rgba(255, 103, 25, 0.06)")};
+            border-radius: 0 12px 12px 0;
+            font-size: 1.1em;
+            font-weight: 500;
+            line-height: 1.55;
+        }}
+        .pullquote p:last-child {{
+            margin-bottom: 0;
+        }}
+        .callout-block {{
+            margin: 24px 0;
+            padding: 18px 20px;
+            background: {(isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)")};
+            border: 1px solid {(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)")};
+            border-radius: 14px;
+        }}
+        .callout-block h4 {{
+            margin-top: 0;
+        }}
+        .callout-block p:last-child {{
+            margin-bottom: 0;
+        }}
+        .embedded-post-wrap, .embedded-post {{
+            margin: 24px 0;
+            padding: 16px 18px;
+            background: {(isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)")};
+            border: 1px solid {(isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)")};
+            border-radius: 14px;
+        }}
+        img.embedded-post-publication-logo {{
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 8px 0 0;
+        }}
+        .button-wrapper {{
+            text-align: center;
+            margin: 24px 0;
+        }}
+        .button-wrapper a.button {{
+            display: inline-block;
+            padding: 10px 22px;
+            border-radius: 999px;
+            background: {(isDark ? "rgba(102, 178, 255, 0.16)" : "rgba(0, 102, 204, 0.10)")};
+            border: 1px solid {(isDark ? "rgba(102, 178, 255, 0.35)" : "rgba(0, 102, 204, 0.30)")};
+            color: {linkColor} !important;
+            font-weight: 600;
+            font-size: 0.92em;
+            text-decoration: none !important;
+        }}
+        .footnote-anchor {{
+            font-size: 0.75em;
+            vertical-align: super;
+            padding: 1px 6px;
+            border-radius: 6px;
+            background: {(isDark ? "rgba(102, 178, 255, 0.15)" : "rgba(0, 102, 204, 0.10)")};
+            margin: 0 2px;
+            text-decoration: none !important;
+        }}
+        .footnote {{
+            font-size: 0.88em;
+            color: {metaColor};
+            border-top: 1px solid {(isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)")};
+            padding-top: 12px;
+            margin-top: 16px;
+        }}
+        .substack-paid-card {{
+            border-color: rgba(255, 103, 25, 0.35);
+            background: {(isDark ? "rgba(255, 103, 25, 0.08)" : "rgba(255, 103, 25, 0.05)")};
+        }}
+        .substack-paid-card .open-browser-btn {{
+            background: rgba(255, 103, 25, 0.18);
+            border-color: rgba(255, 103, 25, 0.45);
+            color: #FF6719 !important;
+        }}
     </style>
 </head>
 <body>
@@ -1154,6 +1335,57 @@ public sealed partial class RssFeedDetailPage : Page
         return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x80, 0x80, 0x80));
     }
 
+    private bool IsAlreadySubscribedToFeedUrl(string? feedUrl)
+    {
+        if (string.IsNullOrWhiteSpace(feedUrl) || _rssService.Feeds == null) return false;
+        string targetNorm = Daily.Services.RssFeedService.NormalizeSubscriptionUrl(feedUrl);
+        return _rssService.Feeds.Any(f => Daily.Services.RssFeedService.NormalizeSubscriptionUrl(f.Url) == targetNorm);
+    }
+
+    private string? ResolveSubscribableFeedUrl(RssItem item, out string resolvedName, out string resolvedCategory)
+    {
+        resolvedName = item.PublicationName ?? "Feed";
+        resolvedCategory = "Tech";
+
+        if (IsItemSubstack(item))
+        {
+            var (slug, feedUrl) = ExtractSubstackInfo(item.Link, true);
+            if (!string.IsNullOrEmpty(feedUrl))
+            {
+                string pubName = item.PublicationName ?? slug ?? "Substack";
+                if (pubName == "Substack Inbox" || pubName == "Substack")
+                {
+                    pubName = slug ?? "Substack";
+                }
+                resolvedName = pubName;
+                resolvedCategory = "Tech";
+                return feedUrl;
+            }
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(item.Link) && item.Link.Contains("medium.com", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var uri = new Uri(item.Link);
+                foreach (var segment in uri.Segments)
+                {
+                    var cleanSegment = segment.Trim('/');
+                    if (cleanSegment.StartsWith("@"))
+                    {
+                        resolvedName = !string.IsNullOrEmpty(item.Author) ? item.Author : cleanSegment;
+                        resolvedCategory = "Coding";
+                        return $"https://medium.com/feed/{cleanSegment}";
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
     private void UpdateReaderToolbarStates()
     {
         if (_selectedItem == null) return;
@@ -1166,6 +1398,24 @@ public sealed partial class RssFeedDetailPage : Page
 
         ReaderFavoriteIcon.Foreground = isFavorite ? FavoriteActiveBrush : GetMutedBrush();
         ReaderReadLaterIcon.Foreground = isReadLater ? ReadLaterActiveBrush : GetMutedBrush();
+
+        if (ReaderSubscribeButton != null)
+        {
+            var targetItem = _currentRenderedArticle ?? _selectedItem;
+            string? feedUrl = ResolveSubscribableFeedUrl(targetItem, out _, out _);
+            if (!string.IsNullOrEmpty(feedUrl))
+            {
+                bool subscribed = IsAlreadySubscribedToFeedUrl(feedUrl);
+                ReaderSubscribeButton.Visibility = Visibility.Visible;
+                ReaderSubscribeButton.IsEnabled = !subscribed;
+                ReaderSubscribeIcon.Glyph = subscribed ? "\uE73E" : "\uE710";
+                ReaderSubscribeText.Text = subscribed ? "Subscribed" : "Subscribe";
+            }
+            else
+            {
+                ReaderSubscribeButton.Visibility = Visibility.Collapsed;
+            }
+        }
     }
 
     private async void FavoriteButton_Click(object sender, RoutedEventArgs e)
@@ -1184,6 +1434,35 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
+    private async void ReaderSubscribeButton_Click(object sender, RoutedEventArgs e)
+    {
+        var targetItem = _currentRenderedArticle ?? _selectedItem;
+        if (targetItem == null) return;
+
+        string? feedUrl = ResolveSubscribableFeedUrl(targetItem, out string pubName, out string category);
+        if (string.IsNullOrEmpty(feedUrl) || IsAlreadySubscribedToFeedUrl(feedUrl)) return;
+
+        ReaderSubscribeButton.IsEnabled = false;
+        try
+        {
+            string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
+            await _rssService.AddFeedAsync(feedUrl, pubName, category, userId, targetItem.PublicationIconUrl);
+            UpdateReaderToolbarStates();
+        }
+        catch (Exception ex)
+        {
+            ReaderSubscribeButton.IsEnabled = true;
+            var errorDialog = new ContentDialog
+            {
+                Title = "Subscription Failed",
+                Content = $"Failed to subscribe to {pubName}: {ex.Message}",
+                CloseButtonText = "OK",
+                XamlRoot = this.XamlRoot
+            };
+            await errorDialog.ShowAsync();
+        }
+    }
+
     private async void SubscribeAuthorButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.RssItemViewModel vm)
@@ -1193,7 +1472,7 @@ public sealed partial class RssFeedDetailPage : Page
             {
                 if (vm.IsSubstackItem)
                 {
-                    var (slug, feedUrl) = ExtractSubstackInfo(vm.Link);
+                    var (slug, feedUrl) = ExtractSubstackInfo(vm.Link, true);
                     if (string.IsNullOrEmpty(feedUrl) || string.IsNullOrEmpty(slug))
                     {
                         throw new Exception("Could not resolve Substack publication from article URL.");
@@ -1205,7 +1484,8 @@ public sealed partial class RssFeedDetailPage : Page
                         pubName = slug;
                     }
                     string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
-                    await _rssService.AddFeedAsync(feedUrl, pubName, "Tech", userId);
+                    await _rssService.AddFeedAsync(feedUrl, pubName, "Tech", userId, vm.PublicationIconUrl);
+                    UpdateReaderToolbarStates();
 
                     var successDialog = new ContentDialog
                     {
@@ -1679,52 +1959,532 @@ public sealed partial class RssFeedDetailPage : Page
         return false;
     }
 
+    private static readonly System.Net.Http.HttpClient _substackApiClient = CreateSubstackApiClient();
+
+    private static System.Net.Http.HttpClient CreateSubstackApiClient()
+    {
+        var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
+        return client;
+    }
+
+    public static bool IsItemSubstack(RssItem? item)
+    {
+        if (item == null) return false;
+        if (item.PublicationName != null && item.PublicationName.Contains("Substack", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!string.IsNullOrEmpty(item.Link) && item.Link.Contains("substack.com", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!string.IsNullOrEmpty(item.ImageUrl) &&
+            (item.ImageUrl.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) ||
+             item.ImageUrl.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase))) return true;
+        if (!string.IsNullOrEmpty(item.PublicationIconUrl) &&
+            (item.PublicationIconUrl.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) ||
+             item.PublicationIconUrl.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase) ||
+             item.PublicationIconUrl.Contains("substack.com", StringComparison.OrdinalIgnoreCase))) return true;
+        if (!string.IsNullOrEmpty(item.Content) &&
+            (item.Content.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) ||
+             item.Content.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase) ||
+             item.Content.Contains("captioned-image-container", StringComparison.OrdinalIgnoreCase))) return true;
+        return false;
+    }
+
     private static bool IsSubstackTeaser(string? content)
     {
         if (string.IsNullOrWhiteSpace(content)) return true;
-        if (content.Contains("this post is for paid subscribers", StringComparison.OrdinalIgnoreCase) ||
+        if (content.Contains("class=\"paywall\"", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("data-component-name=\"paywall\"", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("this post is for paid subscribers", StringComparison.OrdinalIgnoreCase) ||
             content.Contains("this post is for subscribers", StringComparison.OrdinalIgnoreCase) ||
-            content.Contains("subscribe to unlock", StringComparison.OrdinalIgnoreCase) ||
-            content.Contains("subscription-widget-wrap", StringComparison.OrdinalIgnoreCase) ||
-            (content.Contains("read more", StringComparison.OrdinalIgnoreCase) && (content.Contains("substack.com/p/") || content.Contains("paywall"))))
+            content.Contains("subscribe to continue reading", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("keep reading with a", StringComparison.OrdinalIgnoreCase) ||
+            content.Contains("subscribe to unlock", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (content.Contains("read more", StringComparison.OrdinalIgnoreCase) &&
+            (content.Contains("substack.com/p/", StringComparison.OrdinalIgnoreCase) ||
+             content.Contains("paywall", StringComparison.OrdinalIgnoreCase) ||
+             content.Length < 2500))
         {
             return true;
         }
         return false;
     }
 
+    private static bool HasSubstackBonusPaywall(string? content)
+    {
+        return !string.IsNullOrEmpty(content) &&
+               content.Contains("this post has bonus content for paid subscribers", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string StripSubstackTrackingAndNoise(string html)
     {
         if (string.IsNullOrEmpty(html)) return html;
-        var clean = Regex.Replace(html, @"<div[^>]*class=""[^""]*(?:subscription-widget-wrap|subscribe-widget|post-footer)[^""]*""[\s\S]*?</div>", "", RegexOptions.IgnoreCase);
-        clean = Regex.Replace(clean, @"<div[^>]*class=""[^""]*(?:like-button-container|share-dialog|comment-widget)[^""]*""[\s\S]*?</div>", "", RegexOptions.IgnoreCase);
+        var clean = html;
+
+        // 1. Remove 1x1 Substack email open tracking pixels
+        clean = Regex.Replace(clean, @"<img[^>]+(?:substack\.com/o/|eotrx\.substackcdn\.com)[^>]*>", "", RegexOptions.IgnoreCase);
+
+        // 2. Remove Pencraft image action overlay toolbars (Restack / Maximize buttons & SVGs on every image)
+        clean = Regex.Replace(clean, @"<div[^>]*class=""[^""]*image-link-expand[^""]*""[^>]*>[\s\S]*?</div>\s*</div>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"<button[^>]*class=""[^""]*(?:restack-image|view-image|icon-container|buttonBase)[^""]*""[^>]*>[\s\S]*?</button>", "", RegexOptions.IgnoreCase);
+
+        // 3. Unwrap <picture> and strip low-res <source srcset> so crisp <img src> is always used
+        clean = Regex.Replace(clean, @"<source[^>]+(?:substackcdn\.com|substack-post-media)[^>]*>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"</?picture[^>]*>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"(<img[^>]+(?:substackcdn\.com|substack-post-media)[^>]*?)\s+srcset=""[^""]*""", "$1", RegexOptions.IgnoreCase);
+
+        // 4. Remove nested inline subscription forms & upgrade widgets completely
+        clean = Regex.Replace(clean, @"<div[^>]*class=""[^""]*subscription-widget-wrap[^""]*""[^>]*>[\s\S]*?</form>\s*</div>\s*</div>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"<div[^>]*class=""[^""]*subscription-widget[^""]*""[^>]*>[\s\S]*?</form>\s*</div>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"<form[^>]*class=""[^""]*subscription-widget[^""]*""[^>]*>[\s\S]*?</form>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"<div[^>]*class=""[^""]*fake-input-wrapper[^""]*""[^>]*>[\s\S]*?</div>\s*</div>", "", RegexOptions.IgnoreCase);
+        clean = Regex.Replace(clean, @"<div[^>]*class=""[^""]*(?:subscription-widget-wrap|subscribe-widget|post-ufi|post-footer|like-button-container|share-dialog|comment-widget)[^""]*""[\s\S]*?</div>", "", RegexOptions.IgnoreCase);
+
+        // 5. Remove inline Subscribe / Share CTA buttons while keeping legitimate external link buttons intact
+        clean = Regex.Replace(clean, @"<(?:p|div)[^>]*class=""[^""]*button-wrapper[^""]*""[^>]*>\s*<a[^>]*href=""[^""]*(?:/subscribe|action=share|utm_source=substack)[^""]*""[^>]*>[\s\S]*?</a>\s*</(?:p|div)>", "", RegexOptions.IgnoreCase);
+
+        // 6. Upgrade narrow Substack CDN image widths inside HTML
+        clean = Regex.Replace(clean, @"(https://substackcdn\.com/image/fetch/[^""'\s>]*?)w_(?:1\d\d|2\d\d|3\d\d|4\d\d|5\d\d|6\d\d|7\d\d|8\d\d)\b", "$1w_1200", RegexOptions.IgnoreCase);
+
         return clean;
     }
 
-    public static (string? slug, string? feedUrl) ExtractSubstackInfo(string urlString)
+    private static string NormalizeSubstackAssetKey(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return "";
+        string decoded = Uri.UnescapeDataString(url);
+        if (decoded.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase) ||
+            decoded.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) ||
+            decoded.Contains("bucketeer-", StringComparison.OrdinalIgnoreCase))
+        {
+            string noQuery = decoded.Split('?')[0];
+            string lastSeg = noQuery.TrimEnd('/').Split('/').LastOrDefault() ?? "";
+            if (lastSeg.Length > 12) return lastSeg.ToLowerInvariant();
+        }
+        return System.Net.WebUtility.HtmlDecode(url).Split('?')[0].Trim().ToLowerInvariant();
+    }
+
+    public static string DeduplicateSubstackFeaturedImage(string content, string? featuredImage)
+    {
+        if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(featuredImage)) return content;
+        var imgMatch = Regex.Match(content, @"<img[^>]+src\s*=\s*[""']([^""']+)[""'][^>]*>", RegexOptions.IgnoreCase);
+        if (!imgMatch.Success) return content;
+
+        string s1 = NormalizeSubstackAssetKey(imgMatch.Groups[1].Value);
+        string s2 = NormalizeSubstackAssetKey(featuredImage);
+        if (string.IsNullOrEmpty(s1) || string.IsNullOrEmpty(s2)) return content;
+
+        if (s1.Contains(s2, StringComparison.OrdinalIgnoreCase) || s2.Contains(s1, StringComparison.OrdinalIgnoreCase))
+        {
+            string modified = content.Remove(imgMatch.Index, imgMatch.Length);
+            modified = Regex.Replace(modified, @"<a[^>]*class=[""'][^""']*image-link[^""']*[""'][^>]*>\s*(?:<div[^>]*>\s*</div>\s*)?</a>", "", RegexOptions.IgnoreCase);
+            for (int i = 0; i < 2; i++)
+            {
+                modified = Regex.Replace(modified, @"<(?:figure|div|p)[^>]*>\s*</(?:figure|div|p)>", "", RegexOptions.IgnoreCase);
+            }
+            return modified.Trim();
+        }
+        return content;
+    }
+
+    public static (string? slug, string? feedUrl) ExtractSubstackInfo(string? urlString, bool isKnownSubstack = false)
     {
         if (string.IsNullOrWhiteSpace(urlString)) return (null, null);
         try
         {
             var uri = new Uri(urlString);
             var host = uri.Host.ToLowerInvariant();
-            if (host.EndsWith(".substack.com", StringComparison.OrdinalIgnoreCase) && host != "substack.com")
+            if (host.StartsWith("www.")) host = host.Substring(4);
+            var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+            if (host == "open.substack.com")
             {
-                var slug = host.Replace(".substack.com", "");
-                return (slug, $"https://{slug}.substack.com/feed");
+                if (segments.Length >= 2 && segments[0].Equals("pub", StringComparison.OrdinalIgnoreCase))
+                {
+                    var pubSlug = segments[1].ToLowerInvariant();
+                    return (pubSlug, $"https://{pubSlug}.substack.com/feed");
+                }
+                return (null, null);
             }
+
+            if (host.EndsWith(".substack.com", StringComparison.OrdinalIgnoreCase) &&
+                host != "substack.com" && host != "substackcdn.com")
+            {
+                var slug = host.Substring(0, host.Length - ".substack.com".Length);
+                if (slug != "api" && slug != "open" && slug != "eotrx")
+                {
+                    return (slug, $"https://{slug}.substack.com/feed");
+                }
+                return (null, null);
+            }
+
             if (host == "substack.com")
             {
-                var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 if (segments.Length > 0 && segments[0].StartsWith("@"))
                 {
-                    var handle = segments[0].TrimStart('@');
-                    return (handle, $"https://substack.com/@{handle}/feed");
+                    var handle = segments[0].TrimStart('@').ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(handle))
+                    {
+                        return (handle, $"https://{handle}.substack.com/feed");
+                    }
+                }
+                if (segments.Length >= 2 && segments[0].Equals("profile", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null == segments[1] ? (null, null) : (null, null); // numeric profile requires API lookup
+                }
+                // Never return https://substack.com/feed (invalid root feed)
+                return (null, null);
+            }
+
+            // Custom-domain Substack publication (e.g. newsletter.pragmaticengineer.com/p/...)
+            if (isKnownSubstack || (segments.Length >= 2 && segments[0].Equals("p", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!host.Contains("medium.com"))
+                {
+                    return (host, $"https://{host}/feed");
                 }
             }
         }
-        catch {}
+        catch { }
         return (null, null);
+    }
+
+    internal static async Task<string> ExecuteAsyncScriptOnWebViewAsync(Microsoft.Web.WebView2.Core.CoreWebView2 core, string asyncFunctionJs, int timeoutMs = 8000)
+    {
+        string slot = "__dailyAsync_" + Guid.NewGuid().ToString("N");
+        string startJs = $"window['{slot}'] = {{ done: false, val: '' }}; ({asyncFunctionJs})().then(function(v) {{ window['{slot}'] = {{ done: true, val: (typeof v === 'string' ? v : JSON.stringify(v || '')) }}; }}).catch(function() {{ window['{slot}'] = {{ done: true, val: '' }}; }}); true;";
+        await core.ExecuteScriptAsync(startJs);
+
+        int elapsed = 0;
+        while (elapsed < timeoutMs)
+        {
+            await Task.Delay(140);
+            elapsed += 140;
+            var pollRaw = await core.ExecuteScriptAsync($"window['{slot}'] ? JSON.stringify(window['{slot}']) : null");
+            if (!string.IsNullOrEmpty(pollRaw) && pollRaw != "null")
+            {
+                string? unescaped = System.Text.Json.JsonSerializer.Deserialize<string>(pollRaw);
+                if (!string.IsNullOrEmpty(unescaped))
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(unescaped);
+                    if (doc.RootElement.TryGetProperty("done", out var doneProp) && doneProp.GetBoolean())
+                    {
+                        try { await core.ExecuteScriptAsync($"delete window['{slot}'];"); } catch { }
+                        return doc.RootElement.TryGetProperty("val", out var valProp) ? (valProp.GetString() ?? "") : "";
+                    }
+                }
+            }
+        }
+        try { await core.ExecuteScriptAsync($"delete window['{slot}'];"); } catch { }
+        return "";
+    }
+
+    private async Task EnsureSubstackOriginOnBackgroundWebViewAsync()
+    {
+        await EnsureWebViewInitializedAsync();
+        if (BackgroundWebView.CoreWebView2 == null) return;
+
+        string currentSrc = BackgroundWebView.CoreWebView2.Source ?? "";
+        if (Uri.TryCreate(currentSrc, UriKind.Absolute, out var curUri) &&
+            curUri.Host.Equals("substack.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var navTcs = new TaskCompletionSource<bool>();
+        Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
+        handler = (s, e) =>
+        {
+            BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
+            navTcs.TrySetResult(e.IsSuccess);
+        };
+        BackgroundWebView.CoreWebView2.NavigationCompleted += handler;
+        BackgroundWebView.Source = new Uri("https://substack.com/404");
+
+        var finished = await Task.WhenAny(navTcs.Task, Task.Delay(8000));
+        if (finished != navTcs.Task)
+        {
+            BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
+        }
+    }
+
+    private async Task<bool> HasAuthenticatedSubstackCookieAsync()
+    {
+        try
+        {
+            await EnsureWebViewInitializedAsync();
+            if (BackgroundWebView.CoreWebView2 == null) return false;
+            var cookies = await BackgroundWebView.CoreWebView2.CookieManager.GetCookiesAsync("https://substack.com");
+            return cookies.Any(c => (c.Name == "substack.sid" || c.Name == "connect.sid") && !string.IsNullOrWhiteSpace(c.Value));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static DateTime ParseSubstackDate(string? raw)
+    {
+        if (!string.IsNullOrWhiteSpace(raw) &&
+            DateTimeOffset.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dto))
+        {
+            return dto.LocalDateTime;
+        }
+        return DateTime.Now;
+    }
+
+    private async Task<RssItem?> ExtractSubstackArticleAsync(RssItem baseItem)
+    {
+        if (string.IsNullOrWhiteSpace(baseItem.Link)) return null;
+        string urlStr = baseItem.Link.Trim();
+        if (urlStr.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            urlStr = "https://" + urlStr.Substring(7);
+        if (!Uri.TryCreate(urlStr, UriKind.Absolute, out var uri)) return null;
+
+        bool hasAuth = await HasAuthenticatedSubstackCookieAsync();
+
+        string? directPostId = null;
+        var pidMatch = Regex.Match(urlStr, @"/p-(\d+)");
+        if (pidMatch.Success) directPostId = pidMatch.Groups[1].Value;
+
+        string? apiHost = null;
+        string? postSlug = null;
+        var pathParts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        int pIdx = Array.FindIndex(pathParts, s => s.Equals("p", StringComparison.OrdinalIgnoreCase));
+        if (pIdx >= 0 && pIdx + 1 < pathParts.Length)
+        {
+            postSlug = pathParts[pIdx + 1];
+            if (uri.Host.Equals("open.substack.com", StringComparison.OrdinalIgnoreCase) &&
+                pathParts.Length >= 2 && pathParts[0].Equals("pub", StringComparison.OrdinalIgnoreCase))
+            {
+                apiHost = $"{pathParts[1]}.substack.com";
+            }
+            else
+            {
+                apiHost = uri.Host;
+            }
+        }
+
+        (RssItem? article, bool needsUpgrade) BuildFromApiJson(string rawJson)
+        {
+            var root = System.Text.Json.Nodes.JsonNode.Parse(rawJson);
+            if (root == null) return (null, false);
+            var post = root["post"] ?? root;
+            var pub = root["publication"];
+            string? bodyHtml = post["body_html"]?.ToString();
+            if (string.IsNullOrEmpty(bodyHtml)) return (null, false);
+
+            string? pid = post["id"]?.ToString();
+            if (string.IsNullOrEmpty(directPostId) && !string.IsNullOrEmpty(pid))
+            {
+                directPostId = pid;
+            }
+
+            string audience = post["audience"]?.ToString() ?? "everyone";
+            bool isTeaser = IsSubstackTeaser(bodyHtml) || bodyHtml.Length < 250;
+            bool needsBonus = HasSubstackBonusPaywall(bodyHtml);
+            bool upgrade = hasAuth && (audience == "only_paid" || isTeaser || needsBonus);
+
+            string title = post["title"]?.ToString() ?? baseItem.Title ?? "Substack Post";
+            string subtitle = (post["subtitle"]?.ToString() ?? "").Trim();
+            string canonicalUrl = post["canonical_url"]?.ToString() ?? baseItem.Link;
+            string? rawCover = post["cover_image"]?.ToString() ?? baseItem.ImageUrl;
+            string? coverImg = !string.IsNullOrEmpty(rawCover) ? Daily.Services.RssFeedService.OptimizeSubstackImageUrl(rawCover) : null;
+            DateTime pubDate = post["post_date"] != null ? ParseSubstackDate(post["post_date"]?.ToString()) : baseItem.PublishDate;
+
+            string? author = baseItem.Author;
+            if (post["publishedBylines"] is System.Text.Json.Nodes.JsonArray bylines && bylines.Count > 0)
+            {
+                var names = bylines.Select(b => b?["name"]?.ToString()).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                if (names.Count > 0) author = string.Join(", ", names);
+            }
+
+            string? pubName = pub?["name"]?.ToString() ?? baseItem.PublicationName;
+            string? pubIcon = pub?["logo_url"]?.ToString() ?? baseItem.PublicationIconUrl;
+            if ((string.IsNullOrEmpty(pubName) || pubName == "Substack" || pubName == "Substack Inbox") &&
+                post["publishedBylines"] is System.Text.Json.Nodes.JsonArray bylines2 &&
+                bylines2.FirstOrDefault()?["publicationUsers"] is System.Text.Json.Nodes.JsonArray pubUsers)
+            {
+                var firstPub = pubUsers.FirstOrDefault()?["publication"];
+                if (firstPub != null)
+                {
+                    pubName = firstPub["name"]?.ToString() ?? pubName;
+                    pubIcon = firstPub["logo_url"]?.ToString() ?? pubIcon;
+                }
+            }
+
+            bodyHtml = StripSubstackTrackingAndNoise(bodyHtml);
+            if (!string.IsNullOrEmpty(coverImg))
+            {
+                bodyHtml = DeduplicateSubstackFeaturedImage(bodyHtml, coverImg);
+            }
+
+            if (!string.IsNullOrEmpty(subtitle) && !bodyHtml.Contains(subtitle, StringComparison.OrdinalIgnoreCase))
+            {
+                string escapedSub = System.Net.WebUtility.HtmlEncode(subtitle);
+                bodyHtml = $"<p class=\"substack-subtitle\">{escapedSub}</p>\n" + bodyHtml;
+            }
+
+            if (audience == "only_paid" && (bodyHtml.Length < 700 || IsSubstackTeaser(bodyHtml)))
+            {
+                string displayPub = System.Net.WebUtility.HtmlEncode(pubName ?? "this publication");
+                bodyHtml += $@"
+                <div class=""paywall-card substack-paid-card"">
+                    <div class=""paywall-icon"">&#x1F512;</div>
+                    <h3>Substack Paid Story</h3>
+                    <p>This post is exclusive to paid subscribers of {displayPub}.</p>
+                    <a href=""{canonicalUrl}"" class=""open-browser-btn"">Unlock on Substack</a>
+                </div>";
+            }
+
+            return (new RssItem
+            {
+                Title = System.Net.WebUtility.HtmlDecode(title),
+                Link = canonicalUrl,
+                Content = bodyHtml,
+                Description = !string.IsNullOrEmpty(subtitle) ? subtitle : baseItem.Description,
+                Author = author,
+                PublishDate = pubDate,
+                PublicationName = pubName,
+                PublicationIconUrl = pubIcon,
+                ImageUrl = coverImg
+            }, upgrade);
+        }
+
+        // Step 1: Fast public post JSON lookup (/api/v1/posts/{slug})
+        RssItem? publicCandidate = null;
+        if (string.IsNullOrEmpty(directPostId) && !string.IsNullOrEmpty(apiHost) && !string.IsNullOrEmpty(postSlug))
+        {
+            try
+            {
+                var raw = await _substackApiClient.GetStringAsync($"https://{apiHost}/api/v1/posts/{postSlug}");
+                var (built, needsUpgrade) = BuildFromApiJson(raw);
+                if (built != null)
+                {
+                    if (!needsUpgrade && !string.IsNullOrEmpty(built.Content) && built.Content.Length > 200)
+                    {
+                        return built;
+                    }
+                    publicCandidate = built;
+                }
+            }
+            catch { }
+        }
+
+        // Step 2: Same-origin authenticated /api/v1/posts/by-id/{id} via BackgroundWebView on substack.com
+        if (!string.IsNullOrEmpty(directPostId))
+        {
+            if (hasAuth)
+            {
+                try
+                {
+                    await EnsureSubstackOriginOnBackgroundWebViewAsync();
+                    if (BackgroundWebView.CoreWebView2 != null)
+                    {
+                        string fetchPostJs = $@"async function() {{
+                            try {{
+                                const res = await fetch('https://substack.com/api/v1/posts/by-id/{directPostId}', {{
+                                    credentials: 'include',
+                                    headers: {{ 'Accept': 'application/json' }}
+                                }});
+                                if (!res.ok) return '';
+                                return await res.text();
+                            }} catch (e) {{
+                                return '';
+                            }}
+                        }}";
+                        string authRaw = await ExecuteAsyncScriptOnWebViewAsync(BackgroundWebView.CoreWebView2, fetchPostJs);
+                        if (!string.IsNullOrEmpty(authRaw))
+                        {
+                            var (built, _) = BuildFromApiJson(authRaw);
+                            if (built != null && !string.IsNullOrEmpty(built.Content) && built.Content.Length > 100)
+                            {
+                                return built;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            else
+            {
+                try
+                {
+                    var raw = await _substackApiClient.GetStringAsync($"https://substack.com/api/v1/posts/by-id/{directPostId}");
+                    var (built, _) = BuildFromApiJson(raw);
+                    if (built != null && !string.IsNullOrEmpty(built.Content) && built.Content.Length > 100)
+                    {
+                        return built;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (publicCandidate != null && !string.IsNullOrEmpty(publicCandidate.Content) && publicCandidate.Content.Length > 200)
+        {
+            return publicCandidate;
+        }
+
+        // Step 3: Clean DOM fallback targeting ONLY .body.markup / .available-content
+        try
+        {
+            await EnsureWebViewInitializedAsync();
+            if (BackgroundWebView.CoreWebView2 != null)
+            {
+                var navTcs = new TaskCompletionSource<bool>();
+                Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
+                handler = (s, e) =>
+                {
+                    BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
+                    navTcs.TrySetResult(e.IsSuccess);
+                };
+                BackgroundWebView.CoreWebView2.NavigationCompleted += handler;
+                BackgroundWebView.Source = uri;
+                var done = await Task.WhenAny(navTcs.Task, Task.Delay(10000));
+                if (done != navTcs.Task) BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
+                await Task.Delay(900);
+
+                string domBodyJs = @"(function() {
+                    var junk = document.querySelectorAll('.subscription-widget-wrap, .subscription-widget-wrap-editor, .subscribe-widget, .post-ufi, .post-footer, .like-button-container, .share-dialog, .comment-widget, .comments-page, .image-link-expand, button.restack-image, button.view-image');
+                    junk.forEach(function(el) { el.remove(); });
+                    var bodyMarkup = document.querySelector('.body.markup, .available-content, [data-testid=""post-body""]');
+                    if (bodyMarkup && (bodyMarkup.innerText || '').trim().length > 120) {
+                        return bodyMarkup.innerHTML;
+                    }
+                    return null;
+                })()";
+                var domRaw = await BackgroundWebView.ExecuteScriptAsync(domBodyJs);
+                if (!string.IsNullOrEmpty(domRaw) && domRaw != "null")
+                {
+                    string? htmlBody = System.Text.Json.JsonSerializer.Deserialize<string>(domRaw);
+                    if (!string.IsNullOrEmpty(htmlBody) && htmlBody.Length > 120)
+                    {
+                        htmlBody = StripSubstackTrackingAndNoise(htmlBody);
+                        if (!string.IsNullOrEmpty(baseItem.ImageUrl))
+                        {
+                            htmlBody = DeduplicateSubstackFeaturedImage(htmlBody, baseItem.ImageUrl);
+                        }
+                        return new RssItem
+                        {
+                            Title = baseItem.Title,
+                            Link = baseItem.Link,
+                            Content = htmlBody,
+                            Description = baseItem.Description,
+                            Author = baseItem.Author,
+                            PublishDate = baseItem.PublishDate,
+                            PublicationName = baseItem.PublicationName,
+                            PublicationIconUrl = baseItem.PublicationIconUrl,
+                            ImageUrl = baseItem.ImageUrl
+                        };
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return publicCandidate;
     }
 
     private static readonly Dictionary<string, List<RssItem>> _allFeedsCache = new();
@@ -2524,6 +3284,235 @@ public sealed partial class RssFeedDetailPage : Page
         }
     }
 
+    internal static async Task<List<RssItem>> ScrapeSubstackInboxSharedAsync(WebView2 webView, Daily.Services.IRssFeedService rssService)
+    {
+        var itemsList = new List<RssItem>();
+        if (webView.CoreWebView2 == null) return itemsList;
+
+        // Ensure WebView is on substack.com origin so credentials: 'include' sends .substack.com session cookies
+        string currentSrc = webView.CoreWebView2.Source ?? "";
+        if (!Uri.TryCreate(currentSrc, UriKind.Absolute, out var curUri) ||
+            !curUri.Host.Equals("substack.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var warmTcs = new TaskCompletionSource<bool>();
+            Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? warmHandler = null;
+            warmHandler = (s, e) =>
+            {
+                webView.CoreWebView2.NavigationCompleted -= warmHandler;
+                warmTcs.TrySetResult(e.IsSuccess);
+            };
+            webView.CoreWebView2.NavigationCompleted += warmHandler;
+            webView.Source = new Uri("https://substack.com/404");
+            var warmDone = await Task.WhenAny(warmTcs.Task, Task.Delay(8000));
+            if (warmDone != warmTcs.Task)
+            {
+                webView.CoreWebView2.NavigationCompleted -= warmHandler;
+            }
+        }
+
+        // 1. Primary: Authenticated JSON Reader API (/api/v1/reader/posts?limit=35) joined with /api/v1/subscriptions
+        string apiInboxJs = @"async function() {
+            try {
+                const [postsRes, subsRes] = await Promise.all([
+                    fetch('https://substack.com/api/v1/reader/posts?limit=35', {
+                        credentials: 'include',
+                        headers: { 'Accept': 'application/json' }
+                    }),
+                    fetch('https://substack.com/api/v1/subscriptions', {
+                        credentials: 'include',
+                        headers: { 'Accept': 'application/json' }
+                    }).catch(() => null)
+                ]);
+                if (!postsRes.ok) return '';
+                const data = await postsRes.json();
+                const pubsById = {};
+                if (subsRes && subsRes.ok) {
+                    const subData = await subsRes.json();
+                    if (Array.isArray(subData.publications)) {
+                        subData.publications.forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+                    }
+                    if (Array.isArray(subData.subscriptions)) {
+                        subData.subscriptions.forEach(s => {
+                            if (s && s.publication && s.publication.id) pubsById[s.publication.id] = s.publication;
+                        });
+                    }
+                }
+                if (Array.isArray(data.publications)) {
+                    data.publications.forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+                } else if (data.publications && typeof data.publications === 'object') {
+                    Object.values(data.publications).forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+                }
+                const rawPosts = Array.isArray(data.posts) ? data.posts : (Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []));
+                const items = [];
+                rawPosts.forEach(p => {
+                    const post = p.post || p;
+                    if (!post || !post.title) return;
+                    let pub = post.publication || p.publication || pubsById[post.publication_id];
+                    if (!pub && Array.isArray(post.publishedBylines) && post.publishedBylines.length > 0) {
+                        const pu = (post.publishedBylines[0].publicationUsers || []).find(u => u.publication && (!post.publication_id || u.publication.id === post.publication_id)) || (post.publishedBylines[0].publicationUsers || [])[0];
+                        if (pu && pu.publication) pub = pu.publication;
+                    }
+                    let url = post.canonical_url || '';
+                    if (!url && pub && post.slug) {
+                        const host = (pub.custom_domain && !pub.custom_domain_optional) ? pub.custom_domain : (pub.subdomain ? pub.subdomain + '.substack.com' : '');
+                        if (host) url = 'https://' + host + '/p/' + post.slug;
+                    }
+                    if (!url && post.id) {
+                        url = 'https://substack.com/home/post/p-' + post.id;
+                    }
+                    if (!url) return;
+                    let author = '';
+                    if (Array.isArray(post.publishedBylines) && post.publishedBylines.length > 0) {
+                        author = post.publishedBylines.map(b => b.name).filter(Boolean).join(', ');
+                    }
+                    items.push({
+                        title: post.title || '',
+                        url: url,
+                        publication: (pub && pub.name) ? pub.name : '',
+                        publicationIcon: (pub && pub.logo_url) ? pub.logo_url : '',
+                        author: author,
+                        imageUrl: post.cover_image || '',
+                        description: post.subtitle || post.description || post.truncated_body_text || '',
+                        date: post.post_date || null,
+                        bodyHtml: post.body_html || null
+                    });
+                });
+                return JSON.stringify(items);
+            } catch (e) {
+                return '';
+            }
+        }";
+
+        static List<RssItem> MapScrapedItems(List<ScrapedSubstackArticle> scrapedItems)
+        {
+            var mapped = new List<RssItem>();
+            foreach (var scraped in scrapedItems)
+            {
+                string pubName = !string.IsNullOrEmpty(scraped.publication) ? scraped.publication : "Substack";
+                string pubIcon = !string.IsNullOrEmpty(scraped.publicationIcon)
+                    ? Daily.Services.RssFeedService.OptimizeSubstackImageUrl(scraped.publicationIcon)
+                    : "https://substack.com/favicon.ico";
+                string? cleanBody = null;
+                if (!string.IsNullOrEmpty(scraped.bodyHtml) && scraped.bodyHtml.Length > 250)
+                {
+                    cleanBody = StripSubstackTrackingAndNoise(scraped.bodyHtml);
+                }
+                mapped.Add(new RssItem
+                {
+                    Title = scraped.title,
+                    Link = scraped.url,
+                    Content = cleanBody,
+                    Description = !string.IsNullOrEmpty(scraped.description)
+                        ? scraped.description
+                        : $"Substack post from {pubName}",
+                    Author = !string.IsNullOrEmpty(scraped.author) ? scraped.author : pubName,
+                    PublishDate = ParseSubstackDate(scraped.date),
+                    ImageUrl = Daily.Services.RssFeedService.OptimizeSubstackImageUrl(scraped.imageUrl),
+                    PublicationName = pubName,
+                    PublicationIconUrl = pubIcon
+                });
+            }
+            return mapped;
+        }
+
+        string apiJson = await ExecuteAsyncScriptOnWebViewAsync(webView.CoreWebView2, apiInboxJs, 9000);
+        if (!string.IsNullOrWhiteSpace(apiJson))
+        {
+            try
+            {
+                var apiScraped = System.Text.Json.JsonSerializer.Deserialize<List<ScrapedSubstackArticle>>(apiJson);
+                if (apiScraped != null && apiScraped.Count > 0)
+                {
+                    return MapScrapedItems(apiScraped);
+                }
+            }
+            catch { }
+        }
+
+        // 2. Fallback: DOM scraping on https://substack.com/inbox
+        try
+        {
+            var navigationTcs = new TaskCompletionSource<bool>();
+            Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
+            handler = (sender, args) =>
+            {
+                webView.CoreWebView2.NavigationCompleted -= handler;
+                navigationTcs.TrySetResult(args.IsSuccess);
+            };
+            webView.CoreWebView2.NavigationCompleted += handler;
+            webView.Source = new Uri("https://substack.com/inbox");
+            var completed = await Task.WhenAny(navigationTcs.Task, Task.Delay(12000));
+            if (completed != navigationTcs.Task)
+            {
+                webView.CoreWebView2.NavigationCompleted -= handler;
+            }
+            else
+            {
+                await Task.Delay(1400);
+                string domJs = @"(function() {
+                    var items = [];
+                    var seen = {};
+                    var cards = document.querySelectorAll('article, [data-testid*=""post""], div[class*=""reader-post""]');
+                    if (cards.length === 0) cards = document.querySelectorAll('a[href*=""/p/""]');
+                    cards.forEach(function(card) {
+                        var a = card.tagName === 'A' ? card : (card.querySelector('a[href*=""/p/""]') || card.querySelector('a'));
+                        if (!a || !a.href) return;
+                        var href = a.href;
+                        if (seen[href]) return;
+                        seen[href] = true;
+                        var titleEl = card.querySelector('h1, h2, h3, [class*=""title""]') || a;
+                        var title = titleEl ? (titleEl.innerText || '').trim() : '';
+                        if (!title) return;
+                        var pubEl = card.querySelector('[class*=""publication""], [class*=""pub-name""], a[href*=""substack.com""]:not([href*=""/p/""])');
+                        var pubName = pubEl ? (pubEl.innerText || '').trim() : '';
+                        var authorEl = card.querySelector('[class*=""byline""], [class*=""author""]');
+                        var author = authorEl ? (authorEl.innerText || '').trim() : '';
+                        var descEl = card.querySelector('p, [class*=""subtitle""], [class*=""description""]');
+                        var desc = descEl ? (descEl.innerText || '').trim() : '';
+                        var imgEl = card.querySelector('img');
+                        var imgUrl = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+                        items.push({ title: title, url: href, publication: pubName, author: author, imageUrl: imgUrl, description: desc });
+                    });
+                    return JSON.stringify(items);
+                })();";
+                var jsonResult = await webView.ExecuteScriptAsync(domJs);
+                if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null" && jsonResult != "\"[]\"")
+                {
+                    var json = System.Text.Json.JsonSerializer.Deserialize<string>(jsonResult);
+                    if (!string.IsNullOrEmpty(json))
+                    {
+                        var domScraped = System.Text.Json.JsonSerializer.Deserialize<List<ScrapedSubstackArticle>>(json);
+                        if (domScraped != null && domScraped.Count > 0)
+                        {
+                            return MapScrapedItems(domScraped);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        // 3. Final fallback: aggregate subscribed Substack RSS feeds if session cookie expired
+        if (rssService.Feeds != null)
+        {
+            var substackFeeds = rssService.Feeds.Where(f =>
+                (f.Url != null && f.Url.Contains("substack.com", StringComparison.OrdinalIgnoreCase)) ||
+                (f.IconUrl != null && f.IconUrl.Contains("substack", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (substackFeeds.Count > 0)
+            {
+                var tasks = substackFeeds.Select(async f =>
+                {
+                    try { return await rssService.FetchFeedItemsAsync(f) ?? new List<RssItem>(); }
+                    catch { return new List<RssItem>(); }
+                });
+                var batches = await Task.WhenAll(tasks);
+                itemsList = batches.SelectMany(x => x).OrderByDescending(i => i.PublishDate).Take(40).ToList();
+            }
+        }
+
+        return itemsList;
+    }
+
     private async Task LoadSubstackInboxAsync()
     {
         LoadingPanel.Visibility = Visibility.Visible;
@@ -2547,115 +3536,13 @@ public sealed partial class RssFeedDetailPage : Page
         try
         {
             await EnsureWebViewInitializedAsync();
-
-            var navigationTcs = new TaskCompletionSource<bool>();
-            Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
-            handler = (sender, args) =>
+            var itemsList = await ScrapeSubstackInboxSharedAsync(BackgroundWebView, _rssService);
+            _articles.Clear();
+            foreach (var rssItem in itemsList)
             {
-                BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
-                if (args.IsSuccess)
-                {
-                    navigationTcs.TrySetResult(true);
-                }
-                else
-                {
-                    navigationTcs.TrySetException(new Exception($"Navigation failed with error status: {args.WebErrorStatus}"));
-                }
-            };
-            BackgroundWebView.CoreWebView2.NavigationCompleted += handler;
-
-            BackgroundWebView.Source = new Uri("https://substack.com/inbox");
-
-            var timeoutTask = Task.Delay(15000);
-            var completedTask = await Task.WhenAny(navigationTcs.Task, timeoutTask);
-
-            if (completedTask == timeoutTask)
-            {
-                BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
-                throw new TimeoutException("The request to load Substack Inbox timed out. Please check your connection.");
+                _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(rssItem));
             }
-
-            await navigationTcs.Task;
-            await Task.Delay(1800);
-
-            string javascript = @"
-(function() {
-    var items = [];
-    var seen = {};
-    var cards = document.querySelectorAll('article, [data-testid*=""post""], div[class*=""reader-post""]');
-    if (cards.length === 0) {
-        cards = document.querySelectorAll('a[href*=""/p/""]');
-    }
-    
-    cards.forEach(function(card) {
-        var a = card.tagName === 'A' ? card : (card.querySelector('a[href*=""/p/""]') || card.querySelector('a'));
-        if (!a || !a.href) return;
-        var href = a.href;
-        if (seen[href]) return;
-        seen[href] = true;
-        
-        var titleEl = card.querySelector('h1, h2, h3, [class*=""title""]') || a;
-        var title = titleEl ? (titleEl.innerText || '').trim() : '';
-        if (!title) return;
-        
-        var pubEl = card.querySelector('[class*=""publication""], [class*=""pub-name""], a[href*=""substack.com""]:not([href*=""/p/""])');
-        var pubName = pubEl ? (pubEl.innerText || '').trim() : '';
-        
-        var authorEl = card.querySelector('[class*=""byline""], [class*=""author""]');
-        var author = authorEl ? (authorEl.innerText || '').trim() : '';
-        
-        var descEl = card.querySelector('p, [class*=""subtitle""], [class*=""description""]');
-        var desc = descEl ? (descEl.innerText || '').trim() : '';
-        
-        var imgEl = card.querySelector('img');
-        var imgUrl = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
-        
-        items.push({
-            title: title,
-            url: href,
-            publication: pubName,
-            author: author,
-            imageUrl: imgUrl,
-            description: desc
-        });
-    });
-    return JSON.stringify(items);
-})();";
-
-            var jsonResult = await BackgroundWebView.ExecuteScriptAsync(javascript);
-            if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null" && jsonResult != "\"[]\"")
-            {
-                var json = System.Text.Json.JsonSerializer.Deserialize<string>(jsonResult);
-                if (!string.IsNullOrEmpty(json))
-                {
-                    var scrapedItems = System.Text.Json.JsonSerializer.Deserialize<List<ScrapedSubstackArticle>>(json);
-                    if (scrapedItems != null && scrapedItems.Count > 0)
-                    {
-                        _articles.Clear();
-                        var itemsList = new List<RssItem>();
-                        foreach (var scraped in scrapedItems)
-                        {
-                            string pubName = !string.IsNullOrEmpty(scraped.publication) ? scraped.publication : "Substack";
-                            var rssItem = new RssItem
-                            {
-                                Title = scraped.title,
-                                Link = scraped.url,
-                                Description = !string.IsNullOrEmpty(scraped.description)
-                                    ? scraped.description
-                                    : $"Substack post from {pubName}",
-                                Author = !string.IsNullOrEmpty(scraped.author) ? scraped.author : pubName,
-                                PublishDate = DateTime.Now,
-                                ImageUrl = Daily.Services.RssFeedService.OptimizeSubstackImageUrl(scraped.imageUrl),
-                                PublicationName = pubName,
-                                PublicationIconUrl = "https://substack.com/favicon.ico"
-                            };
-                            _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(rssItem));
-                            itemsList.Add(rssItem);
-                        }
-                        _rssService.SetItemsAndNotify(itemsList);
-                    }
-                }
-            }
+            _rssService.SetItemsAndNotify(itemsList);
         }
         catch (Exception ex)
         {
@@ -2684,9 +3571,12 @@ public sealed partial class RssFeedDetailPage : Page
         public string title { get; set; } = string.Empty;
         public string url { get; set; } = string.Empty;
         public string publication { get; set; } = string.Empty;
+        public string? publicationIcon { get; set; }
         public string author { get; set; } = string.Empty;
         public string imageUrl { get; set; } = string.Empty;
         public string description { get; set; } = string.Empty;
+        public string? date { get; set; }
+        public string? bodyHtml { get; set; }
     }
 
     public class ScrapedMediumArticle

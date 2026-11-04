@@ -337,7 +337,7 @@
                             </Grid.ColumnDefinitions>
                             <AutoSuggestBox x:Name="FeedSearchBox" 
                                             QueryIcon="Find" 
-                                            PlaceholderText="Search feeds by name or enter URL (e.g. techcrunch.com)..." 
+                                            PlaceholderText="Search feeds or Substack publishers, or enter URL (e.g. techcrunch.com)..." 
                                             QuerySubmitted="FeedSearchBox_QuerySubmitted" 
                                             KeyDown="FeedSearchBox_KeyDown" />
                             <Button Grid.Column="1" x:Name="AddCustomFeedBtn" Content="Add Feed" Click="AddCustomFeedBtn_Click" Style="{ThemeResource DefaultButtonStyle}" />
@@ -428,7 +428,14 @@
                         </ListView>
 
                         <!-- Subscribed Feeds List -->
-                        <TextBlock Text="Subscribed Feeds" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Margin="0,8,0,2"/>
+                        <Grid Margin="0,8,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Subscribed Feeds" FontSize="12" FontWeight="SemiBold" Opacity="0.8" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="SyncSubstackFeedsBtn" Content="Sync Substack" Click="SubstackSyncBtn_Click" FontSize="11" Padding="8,4" Visibility="Collapsed" />
+                        </Grid>
                         
                         <ListView x:Name="CurrentFeedsListView" 
                                   CanReorderItems="True" 
@@ -607,6 +614,7 @@
                             </StackPanel>
                             
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="SubstackSyncBtn" Content="Sync Subscriptions" Click="SubstackSyncBtn_Click" Visibility="Collapsed"/>
                                 <Button x:Name="SubstackLoginBtn" Content="Login to Substack" Click="SubstackLoginBtn_Click" Style="{ThemeResource AccentButtonStyle}"/>
                                 <Button x:Name="SubstackDisconnectBtn" Content="Disconnect" Click="SubstackDisconnectBtn_Click" Visibility="Collapsed"/>
                             </StackPanel>
@@ -619,6 +627,7 @@
                                  FontSize="12" 
                                  LostFocus="SubstackUsernameTextBox_LostFocus"
                                  Visibility="Collapsed"/>
+                        <WebView2 x:Name="SubstackSyncWebView" Width="0" Height="0" Opacity="0" Visibility="Visible"/>
                     </StackPanel>
                 </StackPanel>
             </Border>

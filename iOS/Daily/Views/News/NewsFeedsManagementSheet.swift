@@ -29,7 +29,7 @@ public struct NewsFeedsManagementSheet: View {
                             
                             // Discovery Results
                             if isSearching {
-                                ProgressView("Searching Feedly & Websites...")
+                                ProgressView("Searching Substack, Feedly & Websites...")
                                     .tint(ThemeColors.accentCyan)
                                     .foregroundColor(.white)
                                     .padding(.vertical, 20)
@@ -66,7 +66,7 @@ public struct NewsFeedsManagementSheet: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(ThemeColors.fgMutedDark)
                 
-                TextField("Search feeds or enter URL...", text: $searchQuery)
+                TextField("Search feeds, Substack publishers, or URL...", text: $searchQuery)
                     .foregroundColor(.white)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -133,13 +133,14 @@ public struct NewsFeedsManagementSheet: View {
                         
                         Spacer()
                         
-                        let isSubscribed = newsService.feeds.contains { $0.url == result.url }
+                        let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: result.url)
                         if isSubscribed {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(ThemeColors.success)
                         } else {
                             Button("Subscribe") {
-                                newsService.addFeed(name: result.name, url: result.url, category: .other)
+                                let cat: FeedCategory = (result.url.contains("substack") || result.iconUrl.contains("substack")) ? .tech : .other
+                                newsService.addFeed(name: result.name, url: result.url, iconUrl: result.iconUrl, category: cat)
                             }
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(ThemeColors.accentCyan)
@@ -229,6 +230,30 @@ public struct NewsFeedsManagementSheet: View {
                     .foregroundColor(ThemeColors.accentCyan)
                     .tracking(0.6)
                 Spacer()
+                if let subUser = SettingsService.shared.settings.newsSubstackUsername, !subUser.isEmpty {
+                    Button {
+                        Task { _ = await newsService.syncSubstackSubscriptions() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if newsService.isSyncingSubstack {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(ThemeColors.accentCyan)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            Text(newsService.isSyncingSubstack ? "Syncing..." : "Sync Substack")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(ThemeColors.accentCyan.opacity(0.14)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(newsService.isSyncingSubstack)
+                }
             }
             
             ForEach(newsService.feeds) { feed in

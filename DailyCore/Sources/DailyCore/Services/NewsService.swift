@@ -12,6 +12,7 @@ public final class NewsService: ObservableObject {
     @Published public private(set) var articles: [NewsArticle] = []
     @Published public private(set) var topHeadline: NewsArticle?
     @Published public private(set) var isLoading: Bool = false
+    @Published public private(set) var isSyncingSubstack: Bool = false
     @Published public private(set) var errorMessage: String?
     
     public let allNewsFeedSource = FeedSource(
@@ -43,6 +44,9 @@ public final class NewsService: ObservableObject {
         loadFeeds()
         Task {
             await syncSubscriptionsWithSupabase()
+            if let subUser = SettingsService.shared.settings.newsSubstackUsername, !subUser.isEmpty {
+                _ = await syncSubstackSubscriptions()
+            }
             await loadFeed(selectedFeed)
         }
     }
@@ -123,7 +127,7 @@ public final class NewsService: ObservableObject {
         let mediumUser = SettingsService.shared.settings.newsMediumUsername
         let mediumUrl = SettingsService.shared.settings.newsMediumReadingListUrl
         
-        let fetchedArticles: [NewsArticle] = await Task.detached(priority: .userInitiated) {
+        var fetchedArticles: [NewsArticle] = await Task.detached(priority: .userInitiated) {
             do {
                 return try await Self.fetchFeedItems(
                     feed,
@@ -136,6 +140,38 @@ public final class NewsService: ObservableObject {
                 return []
             }
         }.value
+        
+        // Fallback for Substack Inbox when browser session is inactive: aggregate synced Substack feeds
+        if feed.id == "substack_inbox" && fetchedArticles.isEmpty {
+            _ = await syncSubstackSubscriptions()
+            let substackFeeds = feeds.filter { f in
+                f.url.lowercased().contains("substack.com") ||
+                f.iconUrl.lowercased().contains("substack") ||
+                f.iconUrl.lowercased().contains("bucketeer-")
+            }
+            if !substackFeeds.isEmpty {
+                fetchedArticles = await Task.detached(priority: .userInitiated) {
+                    var combined: [NewsArticle] = []
+                    await withTaskGroup(of: [NewsArticle].self) { group in
+                        for sf in substackFeeds {
+                            group.addTask {
+                                (try? await Self.fetchFeedItems(
+                                    sf,
+                                    mediumUsername: mediumUser,
+                                    mediumReadingListUrl: mediumUrl,
+                                    session: session
+                                )) ?? []
+                            }
+                        }
+                        for await items in group {
+                            combined.append(contentsOf: items.prefix(8))
+                        }
+                    }
+                    combined.sort { $0.publishDate > $1.publishDate }
+                    return combined
+                }.value
+            }
+        }
         
         if !fetchedArticles.isEmpty {
             feedCache[feed.url] = (articles: fetchedArticles, timestamp: Date())
@@ -262,13 +298,87 @@ public final class NewsService: ObservableObject {
         )
     }
     
-    public func subscribeToSubstackPublication(name: String, feedUrl: String) {
-        if feeds.contains(where: { $0.url == feedUrl }) { return }
-        addFeed(name: name, url: feedUrl, category: .tech)
+    private static func normalizeSubscriptionUrl(_ url: String) -> String {
+        var u = url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if u.hasPrefix("http://") {
+            u = "https://" + u.dropFirst(7)
+        }
+        while u.hasSuffix("/") {
+            u.removeLast()
+        }
+        return u
+    }
+    
+    public func subscribeToSubstackPublication(name: String, feedUrl: String, iconUrl: String = "") {
+        if isSubscribedToSubstack(feedUrl: feedUrl) { return }
+        addFeed(name: name, url: feedUrl, iconUrl: iconUrl, category: .tech)
     }
     
     public func isSubscribedToSubstack(feedUrl: String) -> Bool {
-        feeds.contains(where: { $0.url == feedUrl })
+        let target = Self.normalizeSubscriptionUrl(feedUrl)
+        guard !target.isEmpty else { return false }
+        let targetHost = URL(string: target)?.host?.lowercased().replacingOccurrences(of: "www.", with: "")
+        return feeds.contains { existing in
+            let norm = Self.normalizeSubscriptionUrl(existing.url)
+            if norm == target { return true }
+            if let th = targetHost, !th.isEmpty, th != "substack.com", th != "medium.com",
+               let eh = URL(string: norm)?.host?.lowercased().replacingOccurrences(of: "www.", with: ""),
+               eh == th {
+                return true
+            }
+            return false
+        }
+    }
+    
+    /// Discovers and imports the user's existing Substack subscriptions into Daily's feeds list and syncs with Supabase.
+    @discardableResult
+    public func syncSubstackSubscriptions() async -> Int {
+        guard !isSyncingSubstack else { return 0 }
+        isSyncingSubstack = true
+        defer { isSyncingSubstack = false }
+        
+        #if canImport(WebKit)
+        let handle = SettingsService.shared.settings.newsSubstackUsername
+        let subs = await HeadlessReadabilityParser.shared.fetchSubstackUserSubscriptions(handle: handle)
+        guard !subs.isEmpty else { return 0 }
+        
+        var addedCount = 0
+        var updatedIcons = false
+        for sub in subs {
+            if isSubscribedToSubstack(feedUrl: sub.feedUrl) {
+                // Upgrade generic favicon to high-res Substack publication logo if available
+                if !sub.iconUrl.isEmpty && !sub.iconUrl.contains("favicon"),
+                   let idx = feeds.firstIndex(where: { Self.normalizeSubscriptionUrl($0.url) == Self.normalizeSubscriptionUrl(sub.feedUrl) }),
+                   (feeds[idx].iconUrl.isEmpty || feeds[idx].iconUrl.contains("google.com/s2/favicons") || feeds[idx].iconUrl.contains("favicon.ico")) {
+                    feeds[idx].iconUrl = sub.iconUrl
+                    updatedIcons = true
+                }
+                continue
+            }
+            let newFeed = FeedSource(
+                name: sub.name,
+                url: sub.feedUrl,
+                iconUrl: sub.iconUrl,
+                type: .rss,
+                category: .tech,
+                displayOrder: feeds.count
+            )
+            feeds.append(newFeed)
+            addedCount += 1
+            Task {
+                await pushSubscriptionToSupabase(newFeed)
+            }
+        }
+        
+        if addedCount > 0 || updatedIcons {
+            saveFeeds()
+            feedCache.removeValue(forKey: "all_news")
+            feedCache.removeValue(forKey: "https://substack.com/inbox")
+        }
+        return subs.count
+        #else
+        return 0
+        #endif
     }
     
     nonisolated private static func fetchFeedItems(
@@ -372,21 +482,29 @@ public final class NewsService: ObservableObject {
         }
     }
     
-    public func addFeed(name: String, url: String, category: FeedCategory) {
+    public func addFeed(name: String, url: String, iconUrl: String = "", category: FeedCategory) {
         var safeUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
         if safeUrl.hasPrefix("http://") {
             safeUrl = "https://" + safeUrl.dropFirst(7)
+        }
+        // Automatically normalize bare Substack publication URLs (e.g. https://pragmaticengineer.substack.com -> /feed)
+        if let parsed = URL(string: safeUrl), let host = parsed.host?.lowercased(),
+           host.hasSuffix(".substack.com"), host != "www.substack.com", host != "open.substack.com",
+           (parsed.path.isEmpty || parsed.path == "/") {
+            safeUrl = "https://\(host)/feed"
         }
         let type: FeedType = safeUrl.contains("wp-json") ? .wpJson : .rss
         let newFeed = FeedSource(
             name: name,
             url: safeUrl,
+            iconUrl: iconUrl,
             type: type,
             category: category,
             displayOrder: feeds.count
         )
         feeds.append(newFeed)
         saveFeeds()
+        feedCache.removeValue(forKey: "all_news")
         
         Task {
             await pushSubscriptionToSupabase(newFeed)
@@ -407,25 +525,134 @@ public final class NewsService: ObservableObject {
         saveFeeds()
     }
     
-    // MARK: - Feed Discovery (Feedly + URL Sniffing)
+    // MARK: - Feed Discovery (Substack Publishers + Feedly + URL Sniffing)
     
     public func discoverFeeds(query: String) async -> [FeedSearchResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         
-        // 1. Direct URL Sniffing
+        // 1. Direct URL Sniffing (and bare Substack subdomain URLs)
         if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") || trimmed.contains(".") {
             var target = trimmed
             if !target.hasPrefix("http://") && !target.hasPrefix("https://") {
                 target = "https://" + target
+            }
+            if let u = URL(string: target), let host = u.host?.lowercased(),
+               host.hasSuffix(".substack.com"), host != "www.substack.com", host != "open.substack.com" {
+                let slug = String(host.dropLast(".substack.com".count))
+                let feedUrl = "https://\(host)/feed"
+                if let sniffed = await sniffFeedsFromUrl(target), !sniffed.isEmpty {
+                    return sniffed
+                }
+                return [FeedSearchResult(name: slug, url: feedUrl, iconUrl: "https://substack.com/favicon.ico", website: "https://\(host)")]
             }
             if let sniffed = await sniffFeedsFromUrl(target), !sniffed.isEmpty {
                 return sniffed
             }
         }
         
-        // 2. Feedly Search API
-        guard let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        // 2. Parallel Substack Publication Discovery + Feedly Search API
+        let cleanQuery = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
+        async let substackTask = searchSubstackPublications(query: cleanQuery)
+        async let feedlyTask = searchFeedlyFeeds(query: trimmed)
+        
+        let (substackResults, feedlyResults) = await (substackTask, feedlyTask)
+        var merged: [FeedSearchResult] = []
+        var seen = Set<String>()
+        
+        for item in substackResults + feedlyResults {
+            let norm = Self.normalizeSubscriptionUrl(item.url)
+            if !norm.isEmpty && seen.insert(norm).inserted {
+                merged.append(item)
+            }
+        }
+        return merged
+    }
+    
+    public static func parseSubstackSearchResponse(_ data: Data) -> [FeedSearchResult] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
+        }
+        var out: [FeedSearchResult] = []
+        var seen = Set<String>()
+        
+        func appendPub(_ pub: [String: Any]) {
+            let subdomain = (pub["subdomain"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            let customDomain = (pub["custom_domain"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            let customOptional = (pub["custom_domain_optional"] as? Bool) ?? false
+            
+            let host: String
+            if !customDomain.isEmpty && !customOptional && customDomain.contains(".") {
+                host = customDomain
+            } else if !subdomain.isEmpty {
+                host = "\(subdomain).substack.com"
+            } else {
+                return
+            }
+            let feedUrl = "https://\(host)/feed"
+            guard seen.insert(feedUrl.lowercased()).inserted else { return }
+            let name = (pub["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? subdomain
+            let logo = (pub["logo_url"] as? String) ?? (pub["author_photo_url"] as? String) ?? "https://substack.com/favicon.ico"
+            out.append(FeedSearchResult(
+                name: name.isEmpty ? host : name,
+                url: feedUrl,
+                iconUrl: logo,
+                website: "https://\(host)"
+            ))
+        }
+        
+        if let results = json["results"] as? [[String: Any]] {
+            for r in results { appendPub(r) }
+        }
+        if let pubs = json["publications"] as? [[String: Any]] {
+            for p in pubs { appendPub(p) }
+        }
+        if let items = json["items"] as? [[String: Any]] {
+            for group in items {
+                let groupType = (group["type"] as? String) ?? ""
+                guard let results = group["results"] as? [[String: Any]] else { continue }
+                if groupType.lowercased().contains("publication") {
+                    for r in results { appendPub(r) }
+                } else if groupType == "profileSearchResults" {
+                    for profile in results {
+                        if let pubUsers = profile["publicationUsers"] as? [[String: Any]] {
+                            let sorted = pubUsers.sorted {
+                                (($0["is_primary"] as? Bool) == true ? 0 : 1) < (($1["is_primary"] as? Bool) == true ? 0 : 1)
+                            }
+                            for pu in sorted {
+                                let role = (pu["role"] as? String) ?? ""
+                                if role == "admin" || role == "contributor" || (pu["is_primary"] as? Bool) == true {
+                                    if let pub = pu["publication"] as? [String: Any] {
+                                        appendPub(pub)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return out
+    }
+    
+    private func searchSubstackPublications(query: String) async -> [FeedSearchResult] {
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://substack.com/api/v1/top/search?query=\(encoded)&page=0") else {
+            return []
+        }
+        do {
+            let (data, response) = try await urlSession.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                return []
+            }
+            return Self.parseSubstackSearchResponse(data)
+        } catch {
+            return []
+        }
+    }
+    
+    private func searchFeedlyFeeds(query: String) async -> [FeedSearchResult] {
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let feedlyUrl = URL(string: "https://cloud.feedly.com/v3/search/feeds?query=\(encoded)") else {
             return []
         }

@@ -821,5 +821,89 @@ final class NewsServiceTests: XCTestCase {
         XCTAssertFalse(content.contains("medium.com/_/stat"), "1x1 Medium RSS stat tracking pixel must be stripped")
         XCTAssertFalse(content.contains("stories in your inbox"), "Inline newsletter spam box must be stripped")
     }
+    
+    func testSubstackPencraftCleanupAndCustomDomainFeedResolution() async throws {
+        await ArticleExtractor.clearCache()
+        
+        // 1. Substack Pencraft HTML cleanup: strips restack/view-image SVG buttons & nested subscribe forms while keeping real content & book buttons
+        let rawSubstackHtml = """
+        <p>First paragraph of the Substack engineering deep dive with plenty of detail so it exceeds 250 characters easily.</p>
+        <div class="captioned-image-container"><figure><a class="image-link image2 is-viewable-img" href="https://substackcdn.com/image/fetch/$s_!WYGs!,f_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F25c874c2-9b02-4a24-9046-879cb1500023_1920x899.png"><div class="image2-inset"><picture><source type="image/webp" srcset="https://substackcdn.com/image/fetch/$s_!WYGs!,w_424/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F25c874c2-9b02-4a24-9046-879cb1500023_1920x899.png 424w"><img src="https://substackcdn.com/image/fetch/$s_!WYGs!,w_1456/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F25c874c2-9b02-4a24-9046-879cb1500023_1920x899.png" srcset="https://substackcdn.com/image/fetch/w_424/foo.png 424w" alt="Hero"></picture><div class="image-link-expand"><div class="pencraft pc-display-flex"><button class="pencraft icon-container restack-image buttonBase-GK1x3M"><svg><path d="M0 0"/></svg></button><button class="pencraft icon-container view-image buttonBase-GK1x3M"><svg><path d="M1 1"/></svg></button></div></div></div></a></figure></div>
+        <div class="subscription-widget-wrap-editor"><div class="subscription-widget show-subscribe"><div class="preamble"><p class="cta-caption">Subscribe for free</p></div><form class="subscription-widget-subscribe"><input type="email" class="email-input" placeholder="Type your email"><input type="submit" class="button primary" value="Subscribe"><div class="fake-input-wrapper"><div class="fake-input"></div><div class="fake-button"></div></div></form></div></div>
+        <p class="button-wrapper"><a class="button primary" href="https://www.lennysnewsletter.com/subscribe?"><span>Subscribe now</span></a></p>
+        <p class="button-wrapper"><a class="button primary" href="https://www.oreilly.com/library/view/resilient-systems/"><span>Get the ebook</span></a></p>
+        <p>Second substantive paragraph confirming the article body remains completely intact after purification.</p>
+        """
+        
+        XCTAssertFalse(ArticleExtractor.isSubstackTeaser(rawSubstackHtml), "Free Substack RSS posts containing inline signup widgets must not be misclassified as paywall teasers")
+        
+        let customDomainArticle = NewsArticle(
+            id: "pragmatic-1",
+            title: "How Software Engineering Is Changing",
+            link: "https://newsletter.pragmaticengineer.com/p/how-software-engineering-is-changing",
+            publishDate: Date(),
+            imageUrl: "https://substackcdn.com/image/fetch/$s_!ABCD!,w_1200/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F25c874c2-9b02-4a24-9046-879cb1500023_1920x899.png",
+            content: rawSubstackHtml,
+            author: "Gergely Orosz",
+            publicationName: "The Pragmatic Engineer",
+            category: .tech
+        )
+        
+        // Custom-domain Substack detection & feed URL
+        XCTAssertTrue(customDomainArticle.isSubstackItem)
+        XCTAssertEqual(customDomainArticle.substackFeedUrl, "https://newsletter.pragmaticengineer.com/feed")
+        XCTAssertEqual(extractSubstackInfo(from: customDomainArticle)?.name, "The Pragmatic Engineer")
+        XCTAssertEqual(extractSubstackInfo(from: customDomainArticle)?.feedUrl, "https://newsletter.pragmaticengineer.com/feed")
+        
+        // open.substack.com & substack.com/home/post URL handling
+        let openSubstackArt = NewsArticle(title: "Post", link: "https://open.substack.com/pub/astralcodexten/p/some-post")
+        XCTAssertEqual(openSubstackArt.substackFeedUrl, "https://astralcodexten.substack.com/feed")
+        let genericInboxArt = NewsArticle(title: "Inbox Post", link: "https://substack.com/home/post/p-123456")
+        XCTAssertNil(genericInboxArt.substackFeedUrl, "Must never generate broken https://substack.com/feed")
+        
+        // Fast-path purification + S3 UUID cover-image deduplication
+        let extracted = try await ArticleExtractor.shared.extract(from: customDomainArticle.link, baseArticle: customDomainArticle)
+        let purified = try XCTUnwrap(extracted.content)
+        XCTAssertFalse(purified.contains("restack-image"), "Pencraft restack button must be stripped")
+        XCTAssertFalse(purified.contains("view-image"), "Pencraft view-image button must be stripped")
+        XCTAssertFalse(purified.contains("email-input"), "Nested inline subscription form input must be stripped")
+        XCTAssertFalse(purified.contains("Subscribe now"), "Inline Subscribe CTA button must be stripped")
+        XCTAssertTrue(purified.contains("Get the ebook"), "Legitimate external resource buttons must be preserved")
+        XCTAssertFalse(purified.contains("25c874c2-9b02-4a24-9046-879cb1500023_1920x899.png"), "Duplicate leading cover image must be deduplicated even across different substackcdn $s_! prefixes")
+        
+        // Substack top/search JSON parser
+        let sampleSearchJson = """
+        {
+          "items": [
+            {
+              "type": "profileSearchResults",
+              "results": [
+                {
+                  "name": "Gergely Orosz",
+                  "handle": "pragmaticengineer",
+                  "publicationUsers": [
+                    {
+                      "role": "admin",
+                      "is_primary": true,
+                      "publication": {
+                        "name": "The Pragmatic Engineer",
+                        "subdomain": "pragmaticengineer",
+                        "custom_domain": "newsletter.pragmaticengineer.com",
+                        "custom_domain_optional": false,
+                        "logo_url": "https://substack-post-media.s3.amazonaws.com/public/images/logo.png"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let searchResults = await MainActor.run { NewsService.parseSubstackSearchResponse(sampleSearchJson) }
+        XCTAssertEqual(searchResults.count, 1)
+        XCTAssertEqual(searchResults.first?.name, "The Pragmatic Engineer")
+        XCTAssertEqual(searchResults.first?.url, "https://newsletter.pragmaticengineer.com/feed")
+    }
     #endif
 }

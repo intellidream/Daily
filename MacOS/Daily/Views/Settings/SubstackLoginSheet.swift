@@ -116,12 +116,20 @@ public struct SubstackLoginSheet: View {
         settingsService.update {
             $0.newsSubstackUsername = clean
         }
+        Task { @MainActor in
+            HeadlessReadabilityParser.shared.resetSubstackWebView()
+            _ = await NewsService.shared.syncSubstackSubscriptions()
+        }
         dismiss()
     }
     
     private func handleDetectedUsername(_ username: String) {
         settingsService.update {
             $0.newsSubstackUsername = username
+        }
+        Task { @MainActor in
+            HeadlessReadabilityParser.shared.resetSubstackWebView()
+            _ = await NewsService.shared.syncSubstackSubscriptions()
         }
         dismiss()
     }

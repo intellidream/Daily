@@ -27,7 +27,8 @@ namespace Daily.Services
         Task DeleteSubscriptionAsync(string id);
         Task ReorderSubscriptionsAsync(List<LocalRssSubscription> subscriptions);
         Task<List<FeedSearchResult>> DiscoverFeedsAsync(string query);
-        Task AddFeedAsync(string url, string name, string category, string userId);
+        Task<List<FeedSearchResult>> FetchSubstackPublicSubscriptionsAsync(string handle);
+        Task AddFeedAsync(string url, string name, string category, string userId, string? iconUrl = null);
         void SetItemsAndNotify(List<RssItem> items);
     }
 }

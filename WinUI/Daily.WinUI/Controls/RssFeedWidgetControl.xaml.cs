@@ -893,112 +893,10 @@ public sealed partial class RssFeedWidgetControl : UserControl
         try
         {
             await EnsureWebViewInitializedAsync();
-
-            var navigationTcs = new TaskCompletionSource<bool>();
-            Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
-            handler = (sender, args) =>
+            var itemsList = await Daily_WinUI.Views.RssFeedDetailPage.ScrapeSubstackInboxSharedAsync(BackgroundWebView, _rssService);
+            if (itemsList.Count > 0)
             {
-                BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
-                if (args.IsSuccess)
-                {
-                    navigationTcs.TrySetResult(true);
-                }
-                else
-                {
-                    navigationTcs.TrySetException(new Exception($"Navigation failed with error status: {args.WebErrorStatus}"));
-                }
-            };
-            BackgroundWebView.CoreWebView2.NavigationCompleted += handler;
-
-            BackgroundWebView.Source = new Uri("https://substack.com/inbox");
-
-            var timeoutTask = Task.Delay(15000);
-            var completedTask = await Task.WhenAny(navigationTcs.Task, timeoutTask);
-
-            if (completedTask == timeoutTask)
-            {
-                BackgroundWebView.CoreWebView2.NavigationCompleted -= handler;
-                throw new TimeoutException("The request to load Substack Inbox timed out.");
-            }
-
-            await navigationTcs.Task;
-            await Task.Delay(1500);
-
-            string javascript = @"
-(function() {
-    var items = [];
-    var seen = {};
-    var cards = document.querySelectorAll('article, [data-testid*=""post""], div[class*=""reader-post""]');
-    if (cards.length === 0) {
-        cards = document.querySelectorAll('a[href*=""/p/""]');
-    }
-    
-    cards.forEach(function(card) {
-        var a = card.tagName === 'A' ? card : (card.querySelector('a[href*=""/p/""]') || card.querySelector('a'));
-        if (!a || !a.href) return;
-        var href = a.href;
-        if (seen[href]) return;
-        seen[href] = true;
-        
-        var titleEl = card.querySelector('h1, h2, h3, [class*=""title""]') || a;
-        var title = titleEl ? (titleEl.innerText || '').trim() : '';
-        if (!title) return;
-        
-        var pubEl = card.querySelector('[class*=""publication""], [class*=""pub-name""], a[href*=""substack.com""]:not([href*=""/p/""])');
-        var pubName = pubEl ? (pubEl.innerText || '').trim() : '';
-        
-        var authorEl = card.querySelector('[class*=""byline""], [class*=""author""]');
-        var author = authorEl ? (authorEl.innerText || '').trim() : '';
-        
-        var descEl = card.querySelector('p, [class*=""subtitle""], [class*=""description""]');
-        var desc = descEl ? (descEl.innerText || '').trim() : '';
-        
-        var imgEl = card.querySelector('img');
-        var imgUrl = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
-        
-        items.push({
-            title: title,
-            url: href,
-            publication: pubName,
-            author: author,
-            imageUrl: imgUrl,
-            description: desc
-        });
-    });
-    return JSON.stringify(items);
-})();";
-
-            var jsonResult = await BackgroundWebView.ExecuteScriptAsync(javascript);
-            if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null" && jsonResult != "\"[]\"")
-            {
-                var json = System.Text.Json.JsonSerializer.Deserialize<string>(jsonResult);
-                if (!string.IsNullOrEmpty(json))
-                {
-                    var scrapedItems = System.Text.Json.JsonSerializer.Deserialize<List<ScrapedSubstackArticle>>(json);
-                    if (scrapedItems != null && scrapedItems.Count > 0)
-                    {
-                        var itemsList = new List<RssItem>();
-                        foreach (var scraped in scrapedItems)
-                        {
-                            string pubName = !string.IsNullOrEmpty(scraped.publication) ? scraped.publication : "Substack";
-                            var rssItem = new RssItem
-                            {
-                                Title = scraped.title,
-                                Link = scraped.url,
-                                Description = !string.IsNullOrEmpty(scraped.description) 
-                                    ? scraped.description 
-                                    : $"Substack post from {pubName}",
-                                Author = !string.IsNullOrEmpty(scraped.author) ? scraped.author : pubName,
-                                PublishDate = DateTime.Now,
-                                ImageUrl = Daily.Services.RssFeedService.OptimizeSubstackImageUrl(scraped.imageUrl),
-                                PublicationName = pubName,
-                                PublicationIconUrl = "https://substack.com/favicon.ico"
-                            };
-                            itemsList.Add(rssItem);
-                        }
-                        _rssService.SetItemsAndNotify(itemsList);
-                    }
-                }
+                _rssService.SetItemsAndNotify(itemsList);
             }
         }
         catch (Exception ex)
@@ -1010,16 +908,6 @@ public sealed partial class RssFeedWidgetControl : UserControl
             _isWidgetLoadingCustomFeed = false;
             UpdateWidgetArticles();
         }
-    }
-
-    public class ScrapedSubstackArticle
-    {
-        public string title { get; set; } = string.Empty;
-        public string url { get; set; } = string.Empty;
-        public string publication { get; set; } = string.Empty;
-        public string author { get; set; } = string.Empty;
-        public string imageUrl { get; set; } = string.Empty;
-        public string description { get; set; } = string.Empty;
     }
 
     private async Task LoadAllNewsFeedAsync()

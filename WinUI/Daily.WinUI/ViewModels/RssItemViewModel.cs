@@ -54,9 +54,24 @@ namespace Daily_WinUI.ViewModels
 
         public bool IsSubstackItem => 
             PublicationName == "Substack Inbox" || 
-            (Link != null && (Link.Contains("substack.com") || Link.Contains(".substack.com")));
+            (Link != null && (Link.Contains("substack.com", StringComparison.OrdinalIgnoreCase) || Link.Contains(".substack.com", StringComparison.OrdinalIgnoreCase))) ||
+            (ImageUrl != null && (ImageUrl.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) || ImageUrl.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase))) ||
+            (PublicationIconUrl != null && (PublicationIconUrl.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) || PublicationIconUrl.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase) || PublicationIconUrl.Contains("substack.com", StringComparison.OrdinalIgnoreCase))) ||
+            (Item.Content != null && (Item.Content.Contains("substackcdn.com", StringComparison.OrdinalIgnoreCase) || Item.Content.Contains("substack-post-media", StringComparison.OrdinalIgnoreCase) || Item.Content.Contains("captioned-image-container", StringComparison.OrdinalIgnoreCase)));
 
-        public bool CanSubscribe => IsMediumItem || IsSubstackItem;
+        public bool CanSubscribe
+        {
+            get
+            {
+                if (IsMediumItem) return true;
+                if (IsSubstackItem)
+                {
+                    var (_, feedUrl) = Daily_WinUI.Views.RssFeedDetailPage.ExtractSubstackInfo(Link, true);
+                    return !string.IsNullOrEmpty(feedUrl);
+                }
+                return false;
+            }
+        }
 
         private bool _isFavorite;
         public bool IsFavorite

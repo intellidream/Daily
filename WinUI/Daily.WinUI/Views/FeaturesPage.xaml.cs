@@ -1514,7 +1514,7 @@ public sealed partial class FeaturesPage : Page
                 btn.IsEnabled = false;
                 
                 string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
-                await _rssService.AddFeedAsync(result.Url, result.Name, category, userId);
+                await _rssService.AddFeedAsync(result.Url, result.Name, category, userId, result.IconUrl);
                 
                 await LoadFeedsListAsync();
                 
@@ -1879,27 +1879,50 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
+    private bool _isSyncingSubstack = false;
+
     private void UpdateSubstackUi()
     {
         if (!string.IsNullOrEmpty(_settings.SubstackUsername))
         {
             SubstackStatusText.Text = $"Status: Linked as @{_settings.SubstackUsername}";
-            SubstackHelpText.Text = "Your Substack account is connected. Inbox articles and subscriber stories are available.";
+            SubstackHelpText.Text = "Your Substack account is connected. Inbox articles and subscribed publications sync automatically.";
             SubstackLoginBtn.Content = "Reconnect / Change Account";
             SubstackDisconnectBtn.Visibility = Visibility.Visible;
+            SubstackSyncBtn.Visibility = Visibility.Visible;
+            SyncSubstackFeedsBtn.Visibility = Visibility.Visible;
             SubstackUsernameTextBox.Visibility = Visibility.Visible;
             SubstackUsernameTextBox.Text = _settings.SubstackUsername;
 
-            _ = CheckSubstackSessionAsync();
+            _ = CheckSubstackSessionAndAutoSyncAsync();
         }
         else
         {
             SubstackStatusText.Text = "Status: Not Configured";
-            SubstackHelpText.Text = "Account username and session cookies sync upon login.";
+            SubstackHelpText.Text = "Account username, session cookies, and existing subscriptions sync upon login.";
             SubstackLoginBtn.Content = "Login to Substack";
             SubstackDisconnectBtn.Visibility = Visibility.Collapsed;
+            SubstackSyncBtn.Visibility = Visibility.Collapsed;
+            SyncSubstackFeedsBtn.Visibility = Visibility.Collapsed;
             SubstackUsernameTextBox.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private async Task CheckSubstackSessionAndAutoSyncAsync()
+    {
+        await CheckSubstackSessionAsync();
+        try
+        {
+            var subs = await _rssService.GetSubscriptionsAsync();
+            bool hasAnySubstackFeed = subs.Any(s =>
+                (s.Url != null && s.Url.Contains("substack.com", StringComparison.OrdinalIgnoreCase)) ||
+                (s.IconUrl != null && s.IconUrl.Contains("substack", StringComparison.OrdinalIgnoreCase)));
+            if (!hasAnySubstackFeed && !string.IsNullOrEmpty(_settings.SubstackUsername))
+            {
+                await SyncSubstackSubscriptionsAsync(silent: true);
+            }
+        }
+        catch { }
     }
 
     private async Task CheckSubstackSessionAsync()
@@ -1948,11 +1971,200 @@ public sealed partial class FeaturesPage : Page
         }
     }
 
+    private async void SubstackSyncBtn_Click(object sender, RoutedEventArgs e)
+    {
+        await SyncSubstackSubscriptionsAsync(silent: false);
+    }
+
+    private async Task SyncSubstackSubscriptionsAsync(bool silent = false)
+    {
+        if (_isSyncingSubstack || string.IsNullOrEmpty(_settings.SubstackUsername)) return;
+        _isSyncingSubstack = true;
+        SubstackSyncBtn.IsEnabled = false;
+        SyncSubstackFeedsBtn.IsEnabled = false;
+        SubstackSyncBtn.Content = "Syncing...";
+        SyncSubstackFeedsBtn.Content = "Syncing...";
+
+        try
+        {
+            var discovered = new List<Daily.Models.FeedSearchResult>();
+            var seenFeeds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // 1. Authenticated /api/v1/subscriptions via shared WebView2 profile on https://substack.com
+            try
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string userDataFolder = System.IO.Path.Combine(localAppData, "Daily.WinUI", "WebView2");
+                System.IO.Directory.CreateDirectory(userDataFolder);
+
+                if (SubstackSyncWebView.CoreWebView2 == null)
+                {
+                    var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+                    var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
+                    await SubstackSyncWebView.EnsureCoreWebView2Async(env);
+                }
+
+                string curSrc = SubstackSyncWebView.CoreWebView2.Source ?? "";
+                if (!Uri.TryCreate(curSrc, UriKind.Absolute, out var curUri) ||
+                    !curUri.Host.Equals("substack.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    var navTcs = new TaskCompletionSource<bool>();
+                    Windows.Foundation.TypedEventHandler<Microsoft.Web.WebView2.Core.CoreWebView2, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? handler = null;
+                    handler = (s, args) =>
+                    {
+                        SubstackSyncWebView.CoreWebView2.NavigationCompleted -= handler;
+                        navTcs.TrySetResult(args.IsSuccess);
+                    };
+                    SubstackSyncWebView.CoreWebView2.NavigationCompleted += handler;
+                    SubstackSyncWebView.Source = new Uri("https://substack.com/404");
+                    var finished = await Task.WhenAny(navTcs.Task, Task.Delay(8000));
+                    if (finished != navTcs.Task)
+                    {
+                        SubstackSyncWebView.CoreWebView2.NavigationCompleted -= handler;
+                    }
+                }
+
+                string authSubsJs = @"async function() {
+                    try {
+                        const res = await fetch('https://substack.com/api/v1/subscriptions', {
+                            credentials: 'include',
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        if (!res.ok) return '';
+                        const data = await res.json();
+                        const pubsById = {};
+                        const out = [];
+                        if (Array.isArray(data.publications)) {
+                            data.publications.forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+                        }
+                        if (Array.isArray(data.subscriptions)) {
+                            data.subscriptions.forEach(s => {
+                                const p = s.publication || pubsById[s.publication_id];
+                                if (p && (p.subdomain || p.custom_domain)) {
+                                    const useCustom = p.custom_domain && !p.custom_domain_optional && p.custom_domain.indexOf('.') !== -1;
+                                    const host = useCustom ? p.custom_domain : (p.subdomain + '.substack.com');
+                                    out.push({
+                                        Name: p.name || p.subdomain || host,
+                                        Url: 'https://' + host + '/feed',
+                                        IconUrl: p.logo_url || 'https://substack.com/favicon.ico',
+                                        Website: 'https://' + host
+                                    });
+                                }
+                            });
+                        }
+                        if (out.length === 0 && Array.isArray(data.publications)) {
+                            data.publications.forEach(p => {
+                                if (p && (p.subdomain || p.custom_domain)) {
+                                    const useCustom = p.custom_domain && !p.custom_domain_optional && p.custom_domain.indexOf('.') !== -1;
+                                    const host = useCustom ? p.custom_domain : (p.subdomain + '.substack.com');
+                                    out.push({
+                                        Name: p.name || p.subdomain || host,
+                                        Url: 'https://' + host + '/feed',
+                                        IconUrl: p.logo_url || 'https://substack.com/favicon.ico',
+                                        Website: 'https://' + host
+                                    });
+                                }
+                            });
+                        }
+                        return JSON.stringify(out);
+                    } catch (e) {
+                        return '';
+                    }
+                }";
+
+                string rawSubs = await RssFeedDetailPage.ExecuteAsyncScriptOnWebViewAsync(SubstackSyncWebView.CoreWebView2, authSubsJs, 8000);
+                if (!string.IsNullOrWhiteSpace(rawSubs))
+                {
+                    var authItems = System.Text.Json.JsonSerializer.Deserialize<List<Daily.Models.FeedSearchResult>>(rawSubs);
+                    if (authItems != null)
+                    {
+                        foreach (var item in authItems)
+                        {
+                            string norm = Daily.Services.RssFeedService.NormalizeSubscriptionUrl(item.Url);
+                            if (!string.IsNullOrEmpty(norm) && seenFeeds.Add(norm))
+                            {
+                                discovered.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Authenticated Substack subscriptions fetch error: {ex.Message}");
+            }
+
+            // 2. Public profile subscriptions fallback (/api/v1/user/{handle}/public_profile)
+            var publicSubs = await _rssService.FetchSubstackPublicSubscriptionsAsync(_settings.SubstackUsername);
+            foreach (var item in publicSubs)
+            {
+                string norm = Daily.Services.RssFeedService.NormalizeSubscriptionUrl(item.Url);
+                if (!string.IsNullOrEmpty(norm) && seenFeeds.Add(norm))
+                {
+                    discovered.Add(item);
+                }
+            }
+
+            var existingSubs = await _rssService.GetSubscriptionsAsync();
+            var existingNorm = existingSubs
+                .Select(s => Daily.Services.RssFeedService.NormalizeSubscriptionUrl(s.Url))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            string userId = Daily_WinUI.App.SupabaseClient.Auth.CurrentSession?.User?.Id ?? "local_user";
+            int addedCount = 0;
+
+            foreach (var pub in discovered)
+            {
+                string norm = Daily.Services.RssFeedService.NormalizeSubscriptionUrl(pub.Url);
+                if (!string.IsNullOrEmpty(norm) && !existingNorm.Contains(norm))
+                {
+                    await _rssService.AddFeedAsync(pub.Url, pub.Name, "Tech", userId, pub.IconUrl);
+                    existingNorm.Add(norm);
+                    addedCount++;
+                }
+            }
+
+            await LoadFeedsListAsync();
+
+            if (!silent)
+            {
+                SubstackHelpText.Text = addedCount > 0
+                    ? $"Imported {addedCount} new Substack subscription{(addedCount == 1 ? "" : "s")} ({discovered.Count} total found)."
+                    : (discovered.Count > 0
+                        ? $"All {discovered.Count} Substack subscriptions are already in your feeds."
+                        : "No public or active Substack subscriptions found yet — try reconnecting if your session expired.");
+            }
+            else if (addedCount > 0)
+            {
+                SubstackHelpText.Text = $"Automatically synced {addedCount} Substack subscription{(addedCount == 1 ? "" : "s")}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!silent)
+            {
+                SubstackHelpText.Text = $"Sync failed: {ex.Message}";
+            }
+        }
+        finally
+        {
+            _isSyncingSubstack = false;
+            SubstackSyncBtn.IsEnabled = true;
+            SyncSubstackFeedsBtn.IsEnabled = true;
+            SubstackSyncBtn.Content = "Sync Subscriptions";
+            SyncSubstackFeedsBtn.Content = "Sync Substack";
+        }
+    }
+
     private void SubstackLoginBtn_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            var loginWindow = new SubstackLoginWindow(_settings, UpdateSubstackUi, this.ActualTheme);
+            var loginWindow = new SubstackLoginWindow(_settings, () =>
+            {
+                UpdateSubstackUi();
+                _ = SyncSubstackSubscriptionsAsync(silent: false);
+            }, this.ActualTheme);
             loginWindow.Activate();
         }
         catch (Exception ex)
@@ -2010,9 +2222,14 @@ public sealed partial class FeaturesPage : Page
             var text = tb.Text?.Trim().TrimStart('@');
             if (!string.IsNullOrEmpty(text))
             {
+                bool changed = !string.Equals(_settings.SubstackUsername, text, StringComparison.OrdinalIgnoreCase);
                 _settings.SubstackUsername = text;
                 SettingsService.Save(_settings);
                 UpdateSubstackUi();
+                if (changed)
+                {
+                    _ = SyncSubstackSubscriptionsAsync(silent: false);
+                }
             }
             else
             {

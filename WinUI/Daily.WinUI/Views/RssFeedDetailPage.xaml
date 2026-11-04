@@ -481,6 +481,14 @@
                 </Grid>
                 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                    <!-- Reader Subscribe to Publisher/Author Button -->
+                    <Button x:Name="ReaderSubscribeButton" Click="ReaderSubscribeButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Height="36" Padding="12,0" Visibility="Collapsed" ToolTipService.ToolTip="Subscribe to Publication">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <FontIcon x:Name="ReaderSubscribeIcon" Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
+                            <TextBlock x:Name="ReaderSubscribeText" Text="Subscribe" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
                     <!-- Reader Favorite Button -->
                     <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
                         <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>

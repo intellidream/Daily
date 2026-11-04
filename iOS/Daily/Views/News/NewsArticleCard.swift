@@ -6,6 +6,7 @@ public struct NewsArticleCard: View {
     public let article: NewsArticle
     public let onTap: () -> Void
     
+    @ObservedObject private var newsService = NewsService.shared
     @ObservedObject private var savedService = SavedArticlesService.shared
     @ObservedObject private var settingsService = SettingsService.shared
     
@@ -109,8 +110,8 @@ public struct NewsArticleCard: View {
                     
                     // Actions Footer: Read Later, Favorite, Share
                     HStack(spacing: 16) {
-                        if let author = article.author, !author.isEmpty {
-                            HStack(spacing: 6) {
+                        HStack(spacing: 6) {
+                            if let author = article.author, !author.isEmpty {
                                 HStack(spacing: 4) {
                                     Image(systemName: "person.fill")
                                         .font(.system(size: 10))
@@ -119,56 +120,60 @@ public struct NewsArticleCard: View {
                                 }
                                 .foregroundColor(ThemeColors.fgMutedDark)
                                 .lineLimit(1)
-                                
-                                if let mediumUser = extractMediumUsername(from: article) {
-                                    let isSubscribed = NewsService.shared.isSubscribedToMediumAuthor(username: mediumUser)
-                                    Button {
-                                        if !isSubscribed {
-                                            withAnimation {
-                                                NewsService.shared.subscribeToMediumAuthor(username: mediumUser, authorName: author)
-                                            }
-                                            triggerHaptic()
+                            }
+                            
+                            if let mediumUser = extractMediumUsername(from: article) {
+                                let isSubscribed = newsService.isSubscribedToMediumAuthor(username: mediumUser)
+                                Button {
+                                    if !isSubscribed {
+                                        withAnimation {
+                                            newsService.subscribeToMediumAuthor(username: mediumUser, authorName: article.author)
                                         }
-                                    } label: {
-                                        HStack(spacing: 3) {
-                                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
-                                                .font(.system(size: 10))
-                                            Text(isSubscribed ? "Following" : "Follow")
-                                                .font(.system(size: 10, weight: .bold))
-                                        }
-                                        .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(
-                                            Capsule().fill(isSubscribed ? Color.white.opacity(0.06) : ThemeColors.accentCyan.opacity(0.12))
-                                        )
+                                        triggerHaptic()
                                     }
-                                    .buttonStyle(.plain)
-                                } else if let substackInfo = extractSubstackInfo(from: article) {
-                                    let isSubscribed = NewsService.shared.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
-                                    Button {
-                                        if !isSubscribed {
-                                            withAnimation {
-                                                NewsService.shared.subscribeToSubstackPublication(name: substackInfo.name, feedUrl: substackInfo.feedUrl)
-                                            }
-                                            triggerHaptic()
-                                        }
-                                    } label: {
-                                        HStack(spacing: 3) {
-                                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
-                                                .font(.system(size: 10))
-                                            Text(isSubscribed ? "Subscribed" : "Subscribe")
-                                                .font(.system(size: 10, weight: .bold))
-                                        }
-                                        .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(
-                                            Capsule().fill(isSubscribed ? Color.white.opacity(0.06) : ThemeColors.accentCyan.opacity(0.12))
-                                        )
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                            .font(.system(size: 10))
+                                        Text(isSubscribed ? "Following" : "Follow")
+                                            .font(.system(size: 10, weight: .bold))
                                     }
-                                    .buttonStyle(.plain)
+                                    .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule().fill(isSubscribed ? Color.white.opacity(0.06) : ThemeColors.accentCyan.opacity(0.12))
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                            } else if let substackInfo = extractSubstackInfo(from: article) {
+                                let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
+                                Button {
+                                    if !isSubscribed {
+                                        withAnimation {
+                                            newsService.subscribeToSubstackPublication(
+                                                name: substackInfo.name,
+                                                feedUrl: substackInfo.feedUrl,
+                                                iconUrl: article.publicationIconUrl ?? ""
+                                            )
+                                        }
+                                        triggerHaptic()
+                                    }
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                            .font(.system(size: 10))
+                                        Text(isSubscribed ? "Subscribed" : "Subscribe")
+                                            .font(.system(size: 10, weight: .bold))
+                                    }
+                                    .foregroundColor(isSubscribed ? .white.opacity(0.6) : ThemeColors.accentCyan)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule().fill(isSubscribed ? Color.white.opacity(0.06) : ThemeColors.accentCyan.opacity(0.12))
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         

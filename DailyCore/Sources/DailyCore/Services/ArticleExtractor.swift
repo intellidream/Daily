@@ -46,7 +46,7 @@ public final class ArticleExtractor: @unchecked Sendable {
     
     public static let shared = ArticleExtractor()
     
-    private let urlSession: URLSession
+    fileprivate let urlSession: URLSession
     
     public init() {
         let config = URLSessionConfiguration.default
@@ -76,16 +76,24 @@ public final class ArticleExtractor: @unchecked Sendable {
     /// Determines whether the article content is a Substack teaser/preview rather than a full story.
     public static func isSubstackTeaser(_ content: String) -> Bool {
         let lower = content.lowercased()
-        if lower.contains("read more") && (lower.contains("substack.com/p/") || lower.contains("paywall")) {
+        if lower.contains("class=\"paywall\"") ||
+           lower.contains("data-component-name=\"paywall\"") ||
+           lower.contains("this post is for paid subscribers") ||
+           lower.contains("this post is for subscribers") ||
+           lower.contains("subscribe to continue reading") ||
+           lower.contains("keep reading with a") ||
+           lower.contains("subscribe to unlock") {
             return true
         }
-        if lower.contains("this post is for paid subscribers") ||
-           lower.contains("this post is for subscribers") ||
-           lower.contains("subscribe to unlock") ||
-           lower.contains("subscription-widget-wrap") {
+        if lower.contains("read more") && (lower.contains("substack.com/p/") || lower.contains("paywall") || content.count < 2500) {
             return true
         }
         return false
+    }
+    
+    /// Detects whether a free Substack post advertises locked bonus sections for paid subscribers.
+    public static func hasSubstackBonusPaywall(_ content: String) -> Bool {
+        content.lowercased().contains("this post has bonus content for paid subscribers")
     }
     
     /// Returns true when a Medium `uid` cookie represents a real signed-in user rather than a logged-out guest (`lo_*`).
@@ -153,19 +161,88 @@ public final class ArticleExtractor: @unchecked Sendable {
         return cleaned
     }
     
-    /// Strips Substack newsletter subscription widgets, like buttons, comment prompts, and footer CTA elements.
+    /// Strips Substack Pencraft image overlay buttons/SVGs, inline subscription forms, tracking pixels, and footer CTA noise.
     public static func stripSubstackTrackingAndNoise(_ html: String) -> String {
         var clean = html
+        
+        // 1. Remove 1x1 Substack email open tracking pixels
         clean = clean.replacingOccurrences(
-            of: "<div[^>]*class=\"[^\"]*(?:subscription-widget-wrap|subscribe-widget|post-footer)[^\"]*\"[\\s\\S]*?</div>",
+            of: "<img[^>]+(?:substack\\.com/o/|eotrx\\.substackcdn\\.com)[^>]*>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        
+        // 2. Remove Pencraft image action overlay toolbars (Restack / Maximize buttons & SVGs on every image)
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*image-link-expand[^\"]*\"[^>]*>[\\s\\S]*?</div>\\s*</div>",
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
         clean = clean.replacingOccurrences(
-            of: "<div[^>]*class=\"[^\"]*(?:like-button-container|share-dialog|comment-widget)[^\"]*\"[\\s\\S]*?</div>",
+            of: "<button[^>]*class=\"[^\"]*(?:restack-image|view-image|icon-container|buttonBase)[^\"]*\"[^>]*>[\\s\\S]*?</button>",
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
+        
+        // 3. Unwrap <picture> and strip low-res <source srcset="...424w..."> so crisp <img src> is always used
+        clean = clean.replacingOccurrences(
+            of: "<source[^>]+(?:substackcdn\\.com|substack-post-media)[^>]*>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        clean = clean.replacingOccurrences(
+            of: "</?picture[^>]*>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        // Strip low-res srcset on Substack <img> tags while preserving high-res src
+        clean = clean.replacingOccurrences(
+            of: "(<img[^>]+(?:substackcdn\\.com|substack-post-media)[^>]*?)\\s+srcset=\"[^\"]*\"",
+            with: "$1",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        
+        // 4. Remove nested inline subscription forms & upgrade widgets completely (including inner fake-input divs)
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*subscription-widget-wrap[^\"]*\"[^>]*>[\\s\\S]*?</form>\\s*</div>\\s*</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*subscription-widget[^\"]*\"[^>]*>[\\s\\S]*?</form>\\s*</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        clean = clean.replacingOccurrences(
+            of: "<form[^>]*class=\"[^\"]*subscription-widget[^\"]*\"[^>]*>[\\s\\S]*?</form>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*fake-input-wrapper[^\"]*\"[^>]*>[\\s\\S]*?</div>\\s*</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        clean = clean.replacingOccurrences(
+            of: "<div[^>]*class=\"[^\"]*(?:subscription-widget-wrap|subscribe-widget|post-ufi|post-footer|like-button-container|share-dialog|comment-widget)[^\"]*\"[^>]*>[\\s\\S]*?</div>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        
+        // 5. Remove inline Subscribe / Share CTA buttons while keeping legitimate external link buttons intact
+        clean = clean.replacingOccurrences(
+            of: "<(?:p|div)[^>]*class=\"[^\"]*button-wrapper[^\"]*\"[^>]*>\\s*<a[^>]*href=\"[^\"]*(?:/subscribe|action=share|utm_source=substack)[^\"]*\"[^>]*>[\\s\\S]*?</a>\\s*</(?:p|div)>",
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        
+        // 6. Upgrade narrow Substack CDN image widths inside HTML
+        clean = clean.replacingOccurrences(
+            of: "(https://substackcdn\\.com/image/fetch/[^\"'\\s>]*?)w_(?:1\\d\\d|2\\d\\d|3\\d\\d|4\\d\\d|5\\d\\d|6\\d\\d|7\\d\\d|8\\d\\d)\\b",
+            with: "$1w_1200",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        
         return clean
     }
     
@@ -228,8 +305,8 @@ public final class ArticleExtractor: @unchecked Sendable {
             return await cacheAndReturn(cleanBase, for: safeUrlString)
         }
         
-        let isSubstack = safeUrlString.contains("substack.com") ||
-                         (baseArticle?.publicationName?.localizedCaseInsensitiveContains("substack") == true) ||
+        let isSubstack = (baseArticle?.isSubstackItem == true) ||
+                         safeUrlString.lowercased().contains("substack.com") ||
                          Self.isSubstackTeaser(baseArticle?.content ?? "") ||
                          Self.isSubstackTeaser(baseArticle?.description ?? "")
         
@@ -237,9 +314,22 @@ public final class ArticleExtractor: @unchecked Sendable {
             (baseArticle!.content!.count > 250) &&
             !Self.isSubstackTeaser(baseArticle!.content!)
         
-        if isSubstack && hasSubstantialSubstackBaseContent, var cleanBase = baseArticle {
+        var shouldUpgradePaidBonus = false
+        #if canImport(WebKit)
+        if isSubstack && hasSubstantialSubstackBaseContent,
+           let raw = baseArticle?.content,
+           Self.hasSubstackBonusPaywall(raw) {
+            shouldUpgradePaidBonus = await HeadlessReadabilityParser.shared.hasAuthenticatedSubstackSession()
+        }
+        #endif
+        
+        if isSubstack && hasSubstantialSubstackBaseContent && !shouldUpgradePaidBonus, var cleanBase = baseArticle {
             if let rawContent = cleanBase.content {
-                cleanBase.content = Self.stripSubstackTrackingAndNoise(rawContent)
+                var purified = Self.stripSubstackTrackingAndNoise(rawContent)
+                if let featImg = cleanBase.imageUrl, !featImg.isEmpty {
+                    purified = deduplicateFeaturedImage(content: purified, featuredImage: featImg)
+                }
+                cleanBase.content = purified
             }
             return await cacheAndReturn(cleanBase, for: safeUrlString)
         }
@@ -641,9 +731,16 @@ public final class ArticleExtractor: @unchecked Sendable {
         
         if shouldRemove {
             var modified = ns.replacingCharacters(in: match.range, with: "")
-            // Cleanup empty wrapper tags surrounding the image spot
+            // Cleanup empty wrapper tags surrounding the image spot (including Substack image-link / image2-inset wrappers)
+            modified = modified.replacingOccurrences(
+                of: "<a[^>]*class=[\"'][^\"']*image-link[^\"']*[\"'][^>]*>\\s*(?:<div[^>]*>\\s*</div>\\s*)?</a>",
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
             let cleanWrapperPattern = "<(?:figure|div|p)[^>]*>\\s*</(?:figure|div|p)>"
-            modified = modified.replacingOccurrences(of: cleanWrapperPattern, with: "", options: [.regularExpression, .caseInsensitive])
+            for _ in 0..<2 {
+                modified = modified.replacingOccurrences(of: cleanWrapperPattern, with: "", options: [.regularExpression, .caseInsensitive])
+            }
             return modified.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         
@@ -651,6 +748,14 @@ public final class ArticleExtractor: @unchecked Sendable {
     }
     
     private func normalizeImageUrl(_ url: String) -> String {
+        let decoded = url.removingPercentEncoding ?? url
+        // Match underlying S3 asset filename for Substack CDN transformed URLs regardless of $s_! signature or width prefix
+        if decoded.contains("substack-post-media") || decoded.contains("substackcdn.com") || decoded.contains("bucketeer-") {
+            if let lastSlash = decoded.components(separatedBy: "?").first?.components(separatedBy: "/").last,
+               lastSlash.count > 12 {
+                return lastSlash.lowercased()
+            }
+        }
         guard let u = URL(string: url) else { return url.lowercased() }
         let host = u.host?.lowercased() ?? ""
         let path = u.path.lowercased()
@@ -765,6 +870,7 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
     #endif
     
     private var webView: WKWebView?
+    private var substackApiWebView: WKWebView?
     
     override init() {
         super.init()
@@ -1555,44 +1661,286 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         }
     }
     
-    public func scrapeSubstackInbox() async -> [NewsArticle] {
+    private func getWarmSubstackWebView() async -> WKWebView {
+        if let existing = substackApiWebView,
+           let host = existing.url?.host?.lowercased(),
+           (host == "substack.com" || host == "www.substack.com") {
+            return existing
+        }
         let wv = createAuthenticatedWebView()
         let observer = NavigationObserver()
         wv.navigationDelegate = observer
-        
-        guard let inboxUrl = URL(string: "https://substack.com/inbox") else { return [] }
-        
-        _ = await withCheckedContinuation { continuation in
-            var finished = false
-            observer.onFinished = { success in
-                if !finished {
-                    finished = true
-                    continuation.resume(returning: success)
-                }
-            }
-            wv.load(URLRequest(url: inboxUrl))
-            
-            Task {
-                try? await Task.sleep(nanoseconds: 12_000_000_000)
-                await MainActor.run {
+        if let homeUrl = URL(string: "https://substack.com/inbox") {
+            _ = await withCheckedContinuation { continuation in
+                var finished = false
+                observer.onFinished = { success in
                     if !finished {
                         finished = true
-                        continuation.resume(returning: false)
+                        continuation.resume(returning: success)
+                    }
+                }
+                wv.load(URLRequest(url: homeUrl))
+                Task {
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    await MainActor.run {
+                        if !finished {
+                            finished = true
+                            continuation.resume(returning: false)
+                        }
                     }
                 }
             }
+            try? await Task.sleep(nanoseconds: 400_000_000)
         }
+        self.substackApiWebView = wv
+        return wv
+    }
+    
+    public func resetSubstackWebView() {
+        self.substackApiWebView = nil
+    }
+    
+    public func fetchSubstackUserSubscriptions(handle: String? = nil) async -> [SubstackSubscriptionInfo] {
+        var discovered: [SubstackSubscriptionInfo] = []
+        var seenFeeds = Set<String>()
         
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        
-        for _ in 0..<6 {
-            if let count = try? await wv.evaluateJavaScript("document.querySelectorAll('article, [data-testid*=\"post\"], a[href*=\"/p/\"]').length") as? Int, count > 0 {
-                break
+        func appendSub(name: String, subdomain: String, customDomain: String?, logoUrl: String?) {
+            let cleanSub = subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let cleanCustom = customDomain?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            let feedUrl: String
+            if !cleanCustom.isEmpty && cleanCustom.contains(".") && !cleanCustom.contains("substack.com") {
+                feedUrl = "https://\(cleanCustom)/feed"
+            } else if !cleanSub.isEmpty {
+                feedUrl = "https://\(cleanSub).substack.com/feed"
+            } else {
+                return
             }
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            let key = feedUrl.lowercased()
+            guard seenFeeds.insert(key).inserted else { return }
+            let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let icon = (logoUrl?.isEmpty == false) ? logoUrl! : "https://substack.com/favicon.ico"
+            discovered.append(SubstackSubscriptionInfo(
+                name: cleanName.isEmpty ? cleanSub : cleanName,
+                feedUrl: feedUrl,
+                iconUrl: icon,
+                subdomain: cleanSub
+            ))
         }
         
-        let script = """
+        // 1. Authenticated same-origin /api/v1/subscriptions (captures both public and private user subscriptions)
+        if await hasAuthenticatedSubstackSession() {
+            let wv = await getWarmSubstackWebView()
+            let asyncSubJs = """
+            try {
+                const res = await fetch('https://substack.com/api/v1/subscriptions', {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) return '';
+                const data = await res.json();
+                const pubsById = {};
+                if (Array.isArray(data.publications)) {
+                    data.publications.forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+                }
+                const out = [];
+                const subs = Array.isArray(data.subscriptions) ? data.subscriptions : (Array.isArray(data) ? data : []);
+                subs.forEach(s => {
+                    if (s.membership_state && s.membership_state !== 'subscribed' && s.membership_state !== 'free_signup') {
+                        // Still allow active paid/free states
+                    }
+                    const p = s.publication || pubsById[s.publication_id];
+                    if (p && (p.subdomain || p.custom_domain)) {
+                        out.push({
+                            name: p.name || p.subdomain || '',
+                            subdomain: p.subdomain || '',
+                            custom_domain: p.custom_domain || '',
+                            logo_url: p.logo_url || p.author_photo_url || ''
+                        });
+                    }
+                });
+                if (out.length === 0 && Array.isArray(data.publications)) {
+                    data.publications.forEach(p => {
+                        if (p && (p.subdomain || p.custom_domain)) {
+                            out.push({
+                                name: p.name || p.subdomain || '',
+                                subdomain: p.subdomain || '',
+                                custom_domain: p.custom_domain || '',
+                                logo_url: p.logo_url || ''
+                            });
+                        }
+                    });
+                }
+                return JSON.stringify(out);
+            } catch (e) {
+                return '';
+            }
+            """
+            if let jsonStr = try? await wv.callAsyncJavaScript(asyncSubJs, arguments: [:], in: nil, contentWorld: .page) as? String,
+               !jsonStr.isEmpty,
+               let data = jsonStr.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                for item in arr {
+                    appendSub(
+                        name: item["name"] as? String ?? "",
+                        subdomain: item["subdomain"] as? String ?? "",
+                        customDomain: item["custom_domain"] as? String,
+                        logoUrl: item["logo_url"] as? String
+                    )
+                }
+            }
+        }
+        
+        // 2. Public profile API supplement/fallback when user handle is known
+        let cleanHandle = (handle ?? "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n/"))
+            .replacingOccurrences(of: ".substack.com", with: "")
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+        
+        if !cleanHandle.isEmpty,
+           let encoded = cleanHandle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+           let profileUrl = URL(string: "https://substack.com/api/v1/user/\(encoded)/public_profile") {
+            if let (data, resp) = try? await ArticleExtractor.shared.urlSession.data(from: profileUrl),
+               let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let subs = json["subscriptions"] as? [[String: Any]] {
+                    for s in subs {
+                        if let p = s["publication"] as? [String: Any] {
+                            appendSub(
+                                name: p["name"] as? String ?? "",
+                                subdomain: p["subdomain"] as? String ?? "",
+                                customDomain: p["custom_domain"] as? String,
+                                logoUrl: p["logo_url"] as? String
+                            )
+                        }
+                    }
+                }
+                // If the handle itself owns a primary publication (e.g. user entered a publisher handle directly)
+                if discovered.isEmpty, let primaryPub = json["primaryPublication"] as? [String: Any] {
+                    appendSub(
+                        name: primaryPub["name"] as? String ?? cleanHandle,
+                        subdomain: primaryPub["subdomain"] as? String ?? cleanHandle,
+                        customDomain: primaryPub["custom_domain"] as? String,
+                        logoUrl: primaryPub["logo_url"] as? String
+                    )
+                }
+            }
+        }
+        
+        return discovered
+    }
+    
+    public func scrapeSubstackInbox() async -> [NewsArticle] {
+        let wv = await getWarmSubstackWebView()
+        
+        // 1. Primary: Authenticated JSON Reader API (/api/v1/reader/posts) with publication metadata join
+        let apiInboxJs = """
+        try {
+            const [postsRes, subsRes] = await Promise.all([
+                fetch('https://substack.com/api/v1/reader/posts?limit=35', {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' }
+                }),
+                fetch('https://substack.com/api/v1/subscriptions', {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' }
+                }).catch(() => null)
+            ]);
+            if (!postsRes.ok) return '';
+            const data = await postsRes.json();
+            const pubsById = {};
+            if (subsRes && subsRes.ok) {
+                const subData = await subsRes.json();
+                if (Array.isArray(subData.publications)) {
+                    subData.publications.forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+                }
+                if (Array.isArray(subData.subscriptions)) {
+                    subData.subscriptions.forEach(s => {
+                        if (s && s.publication && s.publication.id) pubsById[s.publication.id] = s.publication;
+                    });
+                }
+            }
+            if (Array.isArray(data.publications)) {
+                data.publications.forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+            } else if (data.publications && typeof data.publications === 'object') {
+                Object.values(data.publications).forEach(p => { if (p && p.id) pubsById[p.id] = p; });
+            }
+            const rawPosts = Array.isArray(data.posts) ? data.posts : (Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []));
+            const items = [];
+            rawPosts.forEach(p => {
+                const post = p.post || p;
+                if (!post || !post.title) return;
+                let pub = post.publication || p.publication || pubsById[post.publication_id];
+                if (!pub && Array.isArray(post.publishedBylines) && post.publishedBylines.length > 0) {
+                    const pu = (post.publishedBylines[0].publicationUsers || []).find(u => u.publication && (!post.publication_id || u.publication.id === post.publication_id)) || (post.publishedBylines[0].publicationUsers || [])[0];
+                    if (pu && pu.publication) pub = pu.publication;
+                }
+                let url = post.canonical_url || '';
+                if (!url && pub && post.slug) {
+                    const host = (pub.custom_domain && !pub.custom_domain_optional) ? pub.custom_domain : (pub.subdomain ? pub.subdomain + '.substack.com' : '');
+                    if (host) url = 'https://' + host + '/p/' + post.slug;
+                }
+                if (!url && post.id) {
+                    url = 'https://substack.com/home/post/p-' + post.id;
+                }
+                if (!url) return;
+                let author = '';
+                if (Array.isArray(post.publishedBylines) && post.publishedBylines.length > 0) {
+                    author = post.publishedBylines.map(b => b.name).filter(Boolean).join(', ');
+                }
+                items.push({
+                    title: post.title || '',
+                    url: url,
+                    publication: (pub && pub.name) ? pub.name : '',
+                    publicationIcon: (pub && pub.logo_url) ? pub.logo_url : '',
+                    author: author,
+                    imageUrl: post.cover_image || '',
+                    description: post.subtitle || post.description || post.truncated_body_text || '',
+                    date: post.post_date || null,
+                    bodyHtml: post.body_html || null
+                });
+            });
+            return JSON.stringify(items);
+        } catch (e) {
+            return '';
+        }
+        """
+        
+        if let jsonStr = try? await wv.callAsyncJavaScript(apiInboxJs, arguments: [:], in: nil, contentWorld: .page) as? String,
+           !jsonStr.isEmpty,
+           let data = jsonStr.data(using: .utf8),
+           let apiItems = try? JSONDecoder().decode([ScrapedSubstackItem].self, from: data),
+           !apiItems.isEmpty {
+            return Self.mapScrapedSubstackItems(apiItems)
+        }
+        
+        // 2. Fallback: DOM scraping on https://substack.com/inbox
+        if wv.url?.path.contains("inbox") != true, let inboxUrl = URL(string: "https://substack.com/inbox") {
+            let observer = NavigationObserver()
+            wv.navigationDelegate = observer
+            _ = await withCheckedContinuation { continuation in
+                var finished = false
+                observer.onFinished = { success in
+                    if !finished {
+                        finished = true
+                        continuation.resume(returning: success)
+                    }
+                }
+                wv.load(URLRequest(url: inboxUrl))
+                Task {
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    await MainActor.run {
+                        if !finished {
+                            finished = true
+                            continuation.resume(returning: false)
+                        }
+                    }
+                }
+            }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+        }
+        
+        let domScript = """
         (function() {
             var items = [];
             var seen = {};
@@ -1628,36 +1976,62 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
                     title: title,
                     url: href,
                     publication: pubName,
+                    publicationIcon: '',
                     author: author,
                     imageUrl: imgUrl,
                     description: desc,
-                    date: null
+                    date: null,
+                    bodyHtml: null
                 });
             });
             return JSON.stringify(items);
         })()
         """
         
-        guard let jsonStr = try? await wv.evaluateJavaScript(script) as? String,
+        guard let jsonStr = try? await wv.evaluateJavaScript(domScript) as? String,
               let data = jsonStr.data(using: .utf8),
               let scraped = try? JSONDecoder().decode([ScrapedSubstackItem].self, from: data),
               !scraped.isEmpty else {
             return []
         }
         
+        return Self.mapScrapedSubstackItems(scraped)
+    }
+    
+    nonisolated private static func parseSubstackDate(_ raw: String?) -> Date {
+        guard let raw = raw, !raw.isEmpty else { return Date() }
+        let isoFrac = ISO8601DateFormatter()
+        isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = isoFrac.date(from: raw) { return d }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        if let d = iso.date(from: raw) { return d }
+        return HabitDateParser.parse(raw) ?? Date()
+    }
+    
+    nonisolated private static func mapScrapedSubstackItems(_ scraped: [ScrapedSubstackItem]) -> [NewsArticle] {
         return scraped.map { item in
             let optImg = Self.optimizeSubstackImageUrl(item.imageUrl)
+            let pubIcon = (item.publicationIcon?.isEmpty == false)
+                ? Self.optimizeSubstackImageUrl(item.publicationIcon!)
+                : "https://substack.com/favicon.ico"
+            let cleanBody: String?
+            if let bh = item.bodyHtml, bh.count > 250 {
+                cleanBody = ArticleExtractor.stripSubstackTrackingAndNoise(bh)
+            } else {
+                cleanBody = nil
+            }
             return NewsArticle(
                 id: item.url,
                 title: item.title,
                 link: item.url,
-                publishDate: Date(),
+                publishDate: parseSubstackDate(item.date),
                 imageUrl: optImg.isEmpty ? nil : optImg,
                 description: item.description.isEmpty ? "Substack Post from \(item.publication.isEmpty ? "Substack" : item.publication)" : item.description,
-                content: nil,
+                content: cleanBody,
                 author: item.author.isEmpty ? nil : item.author,
                 publicationName: item.publication.isEmpty ? "Substack" : item.publication,
-                publicationIconUrl: "https://substack.com/favicon.ico",
+                publicationIconUrl: pubIcon,
                 category: .tech
             )
         }
@@ -1668,6 +2042,164 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
         baseArticle: NewsArticle?,
         extractor: ArticleExtractor
     ) async -> NewsArticle? {
+        let hasAuth = await hasAuthenticatedSubstackSession()
+        
+        // Resolve direct post ID (e.g. substack.com/home/post/p-123456) or (apiHost, slug)
+        let urlStr = url.absoluteString
+        var directPostId: String?
+        if let idRegex = try? NSRegularExpression(pattern: "/p-(\\d+)"),
+           let m = idRegex.firstMatch(in: urlStr, range: NSRange(location: 0, length: (urlStr as NSString).length)) {
+            directPostId = (urlStr as NSString).substring(with: m.range(at: 1))
+        }
+        
+        var apiHost: String?
+        var postSlug: String?
+        let pathParts = url.path.split(separator: "/").map(String.init)
+        if let pIdx = pathParts.firstIndex(of: "p"), pIdx + 1 < pathParts.count {
+            postSlug = pathParts[pIdx + 1]
+            if url.host?.lowercased() == "open.substack.com",
+               pathParts.count >= 2, pathParts[0].lowercased() == "pub" {
+                apiHost = "\(pathParts[1]).substack.com"
+            } else {
+                apiHost = url.host
+            }
+        }
+        
+        func buildArticleFromSubstackApiJson(_ root: [String: Any]) -> (article: NewsArticle, needsAuthUpgrade: Bool)? {
+            let post = (root["post"] as? [String: Any]) ?? root
+            let pub = root["publication"] as? [String: Any]
+            guard var bodyHtml = post["body_html"] as? String else { return nil }
+            
+            let postId = (post["id"] as? Int).map(String.init) ?? (post["id"] as? String)
+            if directPostId == nil, let pid = postId {
+                directPostId = pid
+            }
+            
+            let audience = (post["audience"] as? String) ?? "everyone"
+            let isTeaser = ArticleExtractor.isSubstackTeaser(bodyHtml) || bodyHtml.count < 250
+            let needsBonus = ArticleExtractor.hasSubstackBonusPaywall(bodyHtml)
+            let needsUpgrade = hasAuth && (audience == "only_paid" || isTeaser || needsBonus)
+            
+            let title = (post["title"] as? String) ?? baseArticle?.title ?? "Substack Post"
+            let subtitle = (post["subtitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let canonicalUrl = (post["canonical_url"] as? String) ?? baseArticle?.link ?? urlStr
+            let rawCover = (post["cover_image"] as? String) ?? baseArticle?.imageUrl
+            let coverImg = rawCover.map { Self.optimizeSubstackImageUrl($0) }
+            let pubDate = (post["post_date"] as? String).map { Self.parseSubstackDate($0) } ?? baseArticle?.publishDate ?? Date()
+            
+            var author = baseArticle?.author
+            if let bylines = post["publishedBylines"] as? [[String: Any]], !bylines.isEmpty {
+                let names = bylines.compactMap { $0["name"] as? String }.filter { !$0.isEmpty }
+                if !names.isEmpty {
+                    author = names.joined(separator: ", ")
+                }
+            }
+            
+            var pubName = (pub?["name"] as? String) ?? baseArticle?.publicationName
+            var pubIcon = (pub?["logo_url"] as? String) ?? baseArticle?.publicationIconUrl
+            if (pubName == nil || pubName == "Substack"),
+               let bylines = post["publishedBylines"] as? [[String: Any]],
+               let pubUsers = bylines.first?["publicationUsers"] as? [[String: Any]],
+               let firstPub = pubUsers.first?["publication"] as? [String: Any] {
+                pubName = (firstPub["name"] as? String) ?? pubName
+                pubIcon = (firstPub["logo_url"] as? String) ?? pubIcon
+            }
+            
+            bodyHtml = ArticleExtractor.stripSubstackTrackingAndNoise(bodyHtml)
+            if let feat = coverImg, !feat.isEmpty {
+                bodyHtml = extractor.deduplicateFeaturedImage(content: bodyHtml, featuredImage: feat)
+            }
+            
+            if !subtitle.isEmpty && !bodyHtml.localizedCaseInsensitiveContains(subtitle) {
+                let escapedSub = subtitle
+                    .replacingOccurrences(of: "&", with: "&amp;")
+                    .replacingOccurrences(of: "<", with: "&lt;")
+                    .replacingOccurrences(of: ">", with: "&gt;")
+                bodyHtml = "<p class=\"substack-subtitle\">\(escapedSub)</p>\n" + bodyHtml
+            }
+            
+            if audience == "only_paid" && (bodyHtml.count < 700 || ArticleExtractor.isSubstackTeaser(bodyHtml)) {
+                let displayPub = pubName ?? "this publication"
+                bodyHtml += """
+                <div class="paywall-card substack-paid-card">
+                    <div class="paywall-icon">🔒</div>
+                    <h3>Substack Paid Story</h3>
+                    <p>This post is exclusive to paid subscribers of \(displayPub).</p>
+                    <a href="\(canonicalUrl)" class="open-browser-btn">Unlock on Substack</a>
+                </div>
+                """
+            }
+            
+            let built = NewsArticle(
+                id: baseArticle?.id ?? canonicalUrl,
+                title: extractor.decodeHtmlEntities(title),
+                link: canonicalUrl,
+                publishDate: pubDate,
+                imageUrl: coverImg,
+                description: !subtitle.isEmpty ? subtitle : (baseArticle?.description ?? ""),
+                content: bodyHtml,
+                author: author,
+                publicationName: pubName,
+                publicationIconUrl: pubIcon,
+                category: baseArticle?.category ?? .tech
+            )
+            return (built, needsUpgrade)
+        }
+        
+        // Step 1: Fast public post JSON lookup (/api/v1/posts/{slug}) — ~150ms, works on *.substack.com & custom domains
+        var publicCandidate: NewsArticle?
+        if directPostId == nil,
+           let host = apiHost, let slug = postSlug,
+           let apiUrl = URL(string: "https://\(host)/api/v1/posts/\(slug)"),
+           let (data, resp) = try? await extractor.urlSession.data(from: apiUrl),
+           let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let parsed = buildArticleFromSubstackApiJson(json) {
+            if !parsed.needsAuthUpgrade, let c = parsed.article.content, c.count > 200 {
+                return parsed.article
+            }
+            publicCandidate = parsed.article
+        }
+        
+        // Step 2: Authenticated same-origin /api/v1/posts/by-id/{id} via warm Substack WKWebView (unlocks paid & custom-domain subscriber posts!)
+        if let pid = directPostId {
+            if hasAuth {
+                let wv = await getWarmSubstackWebView()
+                let fetchPostJs = """
+                try {
+                    const res = await fetch('https://substack.com/api/v1/posts/by-id/\(pid)', {
+                        credentials: 'include',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    if (!res.ok) return '';
+                    return await res.text();
+                } catch (e) {
+                    return '';
+                }
+                """
+                if let jsonStr = try? await wv.callAsyncJavaScript(fetchPostJs, arguments: [:], in: nil, contentWorld: .page) as? String,
+                   !jsonStr.isEmpty,
+                   let data = jsonStr.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let parsed = buildArticleFromSubstackApiJson(json),
+                   let c = parsed.article.content, c.count > 100 {
+                    return parsed.article
+                }
+            } else if let byIdUrl = URL(string: "https://substack.com/api/v1/posts/by-id/\(pid)"),
+                      let (data, resp) = try? await extractor.urlSession.data(from: byIdUrl),
+                      let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let parsed = buildArticleFromSubstackApiJson(json),
+                      let c = parsed.article.content, c.count > 100 {
+                return parsed.article
+            }
+        }
+        
+        if let candidate = publicCandidate, let c = candidate.content, c.count > 200 {
+            return candidate
+        }
+        
+        // Step 3: DOM fallback targeting ONLY the clean Substack post body container (.body.markup / .available-content)
         let wv = createAuthenticatedWebView()
         let observer = NavigationObserver()
         wv.navigationDelegate = observer
@@ -1693,40 +2225,49 @@ public final class HeadlessReadabilityParser: NSObject, WKNavigationDelegate {
             }
         }
         
-        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        try? await Task.sleep(nanoseconds: 900_000_000)
         
         let cleanupScript = """
         (function() {
-            var junk = document.querySelectorAll('.subscription-widget-wrap, .subscribe-widget, .post-footer, .like-button-container, .share-dialog, .comment-widget');
+            var junk = document.querySelectorAll('.subscription-widget-wrap, .subscription-widget-wrap-editor, .subscribe-widget, .post-ufi, .post-footer, .like-button-container, .share-dialog, .comment-widget, .comments-page, .image-link-expand, button.restack-image, button.view-image');
             junk.forEach(function(el) { el.remove(); });
             
-            var article = document.querySelector('article, [itemprop="articleBody"], .post, .entry-content, main');
-            if (article && (article.innerText || '').length > 200) {
-                return article.outerHTML;
+            var bodyMarkup = document.querySelector('.body.markup, .available-content, [data-testid="post-body"]');
+            if (bodyMarkup && (bodyMarkup.innerText || '').trim().length > 120) {
+                return bodyMarkup.innerHTML;
             }
-            return document.body ? document.body.innerHTML : null;
+            var article = document.querySelector('article, .post, .entry-content');
+            if (article && (article.innerText || '').trim().length > 200) {
+                var dupHeader = article.querySelectorAll('.post-header, header, h1');
+                dupHeader.forEach(function(el) { el.remove(); });
+                return article.innerHTML;
+            }
+            return null;
         })()
         """
         
         guard let extractedHtml = try? await wv.evaluateJavaScript(cleanupScript) as? String,
-              extractedHtml.count > 200 else {
-            return nil
+              extractedHtml.count > 120 else {
+            return publicCandidate
         }
         
-        let cleanedHtml = ArticleExtractor.stripSubstackTrackingAndNoise(extractedHtml)
-        if let parsed = await parse(html: cleanedHtml, urlString: url.absoluteString, baseArticle: baseArticle, extractor: extractor) {
-            var art = parsed
-            if let content = art.content {
-                art.content = ArticleExtractor.stripSubstackTrackingAndNoise(content)
-            }
-            return art
+        var cleanedHtml = ArticleExtractor.stripSubstackTrackingAndNoise(extractedHtml)
+        if let feat = baseArticle?.imageUrl, !feat.isEmpty {
+            cleanedHtml = extractor.deduplicateFeaturedImage(content: cleanedHtml, featuredImage: feat)
         }
         
         if var fallback = baseArticle {
             fallback.content = cleanedHtml
             return fallback
         }
-        return nil
+        return NewsArticle(
+            id: urlStr,
+            title: url.lastPathComponent,
+            link: urlStr,
+            publishDate: Date(),
+            content: cleanedHtml,
+            publicationName: "Substack"
+        )
     }
     
     nonisolated public static func optimizeSubstackImageUrl(_ url: String) -> String {
@@ -1745,10 +2286,12 @@ public struct ScrapedSubstackItem: Codable, Sendable {
     public let title: String
     public let url: String
     public let publication: String
+    public let publicationIcon: String?
     public let author: String
     public let imageUrl: String
     public let description: String
     public let date: String?
+    public let bodyHtml: String?
 }
 #endif
 

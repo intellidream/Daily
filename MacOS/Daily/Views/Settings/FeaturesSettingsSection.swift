@@ -538,10 +538,12 @@ private struct MediumSetupSubSection: View {
 
 private struct SubstackSetupSubSection: View {
     @ObservedObject var settingsService: SettingsService
+    @ObservedObject private var newsService = NewsService.shared
     let hasActiveSubstackSession: Bool
     @Binding var showSubstackLoginSheet: Bool
     @Binding var clearSubstackSessionBeforeLogin: Bool
     @Binding var showDisconnectSubstackAlert: Bool
+    @State private var syncStatusMessage: String?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -608,6 +610,46 @@ private struct SubstackSetupSubSection: View {
                     .background(Capsule().fill(ThemeColors.accentCyan))
                 }
                 .buttonStyle(.plain)
+            }
+            
+            Button {
+                Task {
+                    let count = await newsService.syncSubstackSubscriptions()
+                    syncStatusMessage = count > 0
+                        ? "Synced \(count) Substack publication\(count == 1 ? "" : "s") into News."
+                        : (hasActiveSubstackSession ? "All Substack subscriptions are up to date." : "Reconnect browser session to sync private subscriptions.")
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    if newsService.isSyncingSubstack {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(ThemeColors.accentCyan)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    Text(newsService.isSyncingSubstack ? "Syncing Subscriptions..." : "Sync Subscriptions")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(ThemeColors.accentCyan)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(ThemeColors.accentCyan.opacity(0.14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(ThemeColors.accentCyan.opacity(0.28), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(newsService.isSyncingSubstack)
+            
+            if let syncMsg = syncStatusMessage {
+                Text(syncMsg)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(ThemeColors.accentCyan)
             }
             
             HStack(spacing: 10) {
