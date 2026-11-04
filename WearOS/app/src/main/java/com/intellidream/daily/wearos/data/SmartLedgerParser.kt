@@ -121,8 +121,83 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
 (Mașini x8y~(x7-27.000€)+(x8+-27.000€)$"""
 
+    fun normalizeLineEndings(text: String): String {
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+    }
+
+    fun normalizeLedgerText(text: String): String {
+        val unified = normalizeLineEndings(text)
+        return unified.split("\n").joinToString("\n") { rawLine ->
+            val trimmed = rawLine.trim()
+            val secName = extractSectionHeader(trimmed)
+            if (secName != null) "**$secName**" else rawLine
+        }
+    }
+
+    private fun isDividerLine(trimmed: String): Boolean {
+        return trimmed.isEmpty()
+            || trimmed == "---" || trimmed == "- - -"
+            || trimmed == "***" || trimmed == "* * *"
+            || trimmed == "___" || trimmed == "_ _ _"
+    }
+
+    private fun canonicalizeSectionName(rawName: String): String {
+        val clean = rawName.trim()
+        return when (clean.lowercase(Locale.ROOT)) {
+            "incoming" -> "Incoming"
+            "outgoing" -> "Outgoing"
+            "balance" -> "Balance"
+            "dentist" -> "Dentist"
+            "deposit" -> "Deposit"
+            "investments" -> "Investments"
+            else -> clean
+        }
+    }
+
+    fun extractSectionHeader(trimmed: String): String? {
+        if (isDividerLine(trimmed)) return null
+        if (trimmed.startsWith("(") || trimmed.startsWith("//") || trimmed.contains("=")) {
+            return null
+        }
+
+        if ((trimmed.startsWith("**") && trimmed.endsWith("**") && trimmed.length > 4)
+            || (trimmed.startsWith("__") && trimmed.endsWith("__") && trimmed.length > 4)
+        ) {
+            val inner = trimmed.substring(2, trimmed.length - 2).trim()
+            return if (inner.isNotEmpty()) canonicalizeSectionName(inner) else null
+        }
+
+        if (trimmed.startsWith("*") && trimmed.endsWith("*") && !trimmed.startsWith("**") && trimmed.length > 2) {
+            val inner = trimmed.substring(1, trimmed.length - 1).trim()
+            return if (inner.isNotEmpty() && !inner.contains("*")) canonicalizeSectionName(inner) else null
+        }
+        if (trimmed.startsWith("_") && trimmed.endsWith("_") && !trimmed.startsWith("__") && trimmed.length > 2) {
+            val inner = trimmed.substring(1, trimmed.length - 1).trim()
+            return if (inner.isNotEmpty() && !inner.contains("_")) canonicalizeSectionName(inner) else null
+        }
+
+        if (trimmed.startsWith("#")) {
+            val rest = trimmed.dropWhile { it == '#' }
+            if (rest.startsWith(" ") || rest.startsWith("\t")) {
+                val inner = rest.trim()
+                if (inner.isNotEmpty()) return canonicalizeSectionName(inner)
+            }
+        }
+
+        val candidate = if (trimmed.endsWith(":")) trimmed.dropLast(1).trim() else trimmed
+        return when (candidate.lowercase(Locale.ROOT)) {
+            "incoming" -> "Incoming"
+            "outgoing" -> "Outgoing"
+            "balance" -> "Balance"
+            "dentist" -> "Dentist"
+            "deposit" -> "Deposit"
+            "investments" -> "Investments"
+            else -> null
+        }
+    }
+
     fun parse(text: String, eurRate: Double = 5.0): ParsedLedgerResult {
-        val lines = text.lines()
+        val lines = normalizeLineEndings(text).split("\n")
         var currentSection = "Overview"
         var hasEncounteredDeposit = false
 
@@ -135,16 +210,18 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         for ((lineIndex, rawLine) in lines.withIndex()) {
             val line = rawLine.trim()
-            if (line.isEmpty() || line == "---" || line == "- - -") continue
+            if (isDividerLine(line)) continue
 
-            if (line.startsWith("**") && line.endsWith("**") && line.length > 4) {
-                val secName = line.substring(2, line.length - 2).trim()
+            val secName = extractSectionHeader(line)
+            if (secName != null) {
                 currentSection = secName
                 if (secName.equals("Deposit", ignoreCase = true)) {
                     hasEncounteredDeposit = true
                 }
                 continue
             }
+
+            if (line.startsWith("(") && line.endsWith(")")) continue
 
             if (line.contains("=")) {
                 val parts = line.split("=", limit = 2)
@@ -287,24 +364,26 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
     }
 
     fun adjustItemAmount(text: String, lineIndex: Int, deltaRaw: Double): String {
-        val lines = text.lines()
-        if (lineIndex !in lines.indices) return text
+        val normalizedText = normalizeLineEndings(text)
+        val lines = normalizedText.split("\n")
+        if (lineIndex !in lines.indices) return normalizedText
         val line = lines[lineIndex]
-        if (!line.contains("=")) return text
+        if (!line.contains("=")) return normalizedText
         val parts = line.split("=", limit = 2)
         val valuePart = parts[1].trim()
         val parsed = parseNumericString(valuePart, isScaled = false)
         val newRaw = (parsed.raw + deltaRaw).coerceAtLeast(0.0)
-        return setItemAmount(text, lineIndex, newRaw)
+        return setItemAmount(normalizedText, lineIndex, newRaw)
     }
 
     fun setItemAmount(text: String, lineIndex: Int, newRaw: Double): String {
-        val lines = text.lines().toMutableList()
-        if (lineIndex !in lines.indices) return text
+        val normalizedText = normalizeLineEndings(text)
+        val lines = normalizedText.split("\n").toMutableList()
+        if (lineIndex !in lines.indices) return normalizedText
 
         val oldLine = lines[lineIndex]
         val eqIdx = oldLine.indexOf("=")
-        if (eqIdx < 0) return text
+        if (eqIdx < 0) return normalizedText
 
         val keyPart = oldLine.substring(0, eqIdx + 1)
         val afterEq = oldLine.substring(eqIdx + 1)
@@ -350,8 +429,12 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         for ((idx, line) in updated.withIndex()) {
             val trimmed = line.trim()
-            if (trimmed.startsWith("**") && trimmed.endsWith("**") && trimmed.length > 4) {
-                currentSection = trimmed.substring(2, trimmed.length - 2).trim()
+            val secName = extractSectionHeader(trimmed)
+            if (secName != null) {
+                currentSection = secName
+                continue
+            }
+            if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
                 continue
             }
 

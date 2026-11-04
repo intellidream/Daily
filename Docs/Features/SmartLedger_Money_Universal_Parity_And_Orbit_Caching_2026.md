@@ -116,16 +116,43 @@ flowchart TD
 
 ---
 
-## 5. Summary of Verification Runs
+## 6. Multi-Format Notion Paste Adaptation & Canonical Normalization (Nov 4, 2026)
+
+### 6.1 Problem Statement
+When copying Smart Ledger documents from **Notion** across different operating systems, clipboard formatting differs significantly:
+- **Notion Mobile (iOS / Android)**: Copies single-asterisk Markdown headers (`*Incoming*`, `*Outgoing*`, `*Balance* `, `*Dentist*`, `*Deposit*`), horizontal dividers (`---`), and blank lines between entries.
+- **Notion Desktop (macOS / Windows 11)**: Copies plain-text headers without asterisks (`Incoming`, `Outgoing`, `Balance `, `Dentist`, `Deposit`), omits `---` dividers and blank lines, and uses `\r\n` (`CRLF`) line endings on Windows.
+
+### 6.2 Universal Dual-Layer Solution (Option 1)
+Implemented identically across **all 5 codebases** (`DailyCore` Swift for iOS/macOS, `Android` Kotlin, `WinUI 3` C#, `watchOS` Swift, and `Wear OS` Kotlin):
+
+1. **Multi-Format Section & Divider Recognition (`extractSectionHeader` / `isDividerLine`)**:
+   - Recognizes `**Section**`, `*Section*`, `__Section__`, `_Section_`, Markdown `# Section`, and plain-text canonical headers (`Incoming`, `Outgoing`, `Balance`, `Dentist`, `Deposit`, `Investments`, optional trailing `:`), case-insensitively (`canonicalizeSectionName`).
+   - Checks horizontal rules (`---`, `- - -`, `***`, `* * *`, `___`, `_ _ _`) *before* single-asterisk headers so `***` is never misparsed as a section name.
+   - Enforces pure-note skipping (`(...)` lines without `Total =`) during both parsing and `recalculateTotalsInLines` so notes containing `=` (e.g. `(Concediu = 14/23)`) never leak into numeric totals.
+   - Updates `addItem` to stop cleanly before `Total =` / `Total=` / `(Total` even when `---` dividers are absent (Notion Desktop format).
+
+2. **Canonical Normalization on Paste & Save (`normalizeLedgerText`)**:
+   - Normalizes `\r\n` and `\r` line endings to `\n` everywhere (`normalizeLineEndings`), eliminating a critical Foundation `CharacterSet.newlines` `lineIndex` mismatch bug in Swift when mutating Windows `CRLF` ledgers synced via Supabase.
+   - Rewrites recognized section headers canonically to `**SectionName**` on clipboard paste (`SmartLedgerEditorSheet` on iOS/macOS/Android, `EditRawDsl_Click` on WinUI) and store save (`SmartLedgerStore`, `SmartLedgerRepository`, `FinancesService`, `WatchSmartLedgerStore`, `WatchSmartLedgerRepository`), preserving 100% of item values, inline parentheses, `//` comments, and dividers while maintaining full Supabase backwards compatibility.
+
+### 6.3 Multi-Format Parity Verification
+- **Swift Unit Tests (`SmartLedgerParserTests`)**: `13/13` passed (`testNotionMobileVsDesktopPasteExactParity` verifying exact `157.192,97 Lei` / `~31.438,59 €` parity between Notion Mobile and Notion Desktop `CRLF` pastes, `+` stepper mutations, and `addItem` without `---`).
+- **Android JUnit Tests (`SmartLedgerParserTest`)**: `:core-model:testDebugUnitTest` passed (`BUILD SUCCESSFUL`).
+
+---
+
+## 7. Summary of Verification Runs
 
 | Target / Platform | Device / Environment | Build / Test Command | Result |
 | :--- | :--- | :--- | :--- |
-| **Swift Core** | Host macOS | `swift test --package-path DailyCore` | **56 / 56 Passed** |
-| **macOS App** | Host macOS (Apple Silicon) | `xcodebuild -scheme Daily -destination platform=macOS` | **BUILD SUCCEEDED** |
-| **iOS Simulator** | SimulaPhone (iPhone 17 Pro) | `xcodebuild -scheme Daily -destination id=E618B1DA...` | **BUILD SUCCEEDED & RUNNING** |
-| **iOS Foldable** | SimulaDuo (iPhone Duo) | `xcodebuild -scheme Daily -destination id=6BB33377...` | **BUILD SUCCEEDED & RUNNING** |
-| **iOS Physical** | Schmitz (iPhone 16 Pro) | `xcrun devicectl device install app --device 00008140...` | **INSTALLED ON DEVICE** |
-| **watchOS** | Apple Watch Series 12 / Ultra 2 | `xcodebuild -scheme "DailyWatch Watch App"` | **BUILD SUCCEEDED** |
-| **Android App** | Phone & Foldable targets | `cd Android && ./gradlew assembleDebug` | **BUILD SUCCESSFUL (11s)** |
-| **Wear OS App** | Pixel Watch 5 / OnePlus Watch 3 | `./gradlew assembleRelease` + `adb install` | **DEPLOYED & RUNNING (PID 6877 & 12682)** |
-| **Windows 11** | Parallels Windows 11 VM (ARM64) | `dotnet build WinUI\Daily.WinUI -c Debug -p:Platform=ARM64` | **0 Errors, BUILD PASSED** |
+| **Swift Core** | Host macOS | `swift test --package-path DailyCore --filter SmartLedgerParserTests` | **13 / 13 Passed (0.017s)** |
+| **Android Core** | Host macOS (JVM) | `./gradlew :core-model:testDebugUnitTest` | **BUILD SUCCESSFUL** |
+| **macOS App** | Host macOS (Apple Silicon) | `xcodebuild -scheme Daily -destination platform=macOS` | **BUILD SUCCEEDED & RUNNING** |
+| **iOS Simulator** | SimulaPhone (iPhone 18 Pro) | `xcodebuild -scheme Daily -destination id=11BE2EBB...` | **BUILD SUCCEEDED & RUNNING** |
+| **iOS Foldable** | SimulaDuo (iPhone Duo) | `xcrun simctl install & launch 6BB33377...` | **INSTALLED & RUNNING** |
+| **iOS Physical** | Schmitz (iPhone 16 Pro) | `xcodebuild -destination generic/platform=iOS` | **SIGNED BUILD READY / INSTALLED** |
+| **watchOS** | SimulaWatch & Ultra 2 (`Release`) | `xcodebuild -scheme "DailyWatch Watch App" -configuration Release` | **RELEASE BUILD SUCCEEDED & RUNNING** |
+| **Android App** | Pixel 9 Pro (`Trapper`) & Z Fold 8 (`RADAR`) | `./gradlew assembleDebug` + `adb install -r` | **DEPLOYED & RUNNING ON BOTH** |
+| **Wear OS App** | R8 Minified Release APK | `cd WearOS && ./gradlew assembleRelease` | **R8 RELEASE APK BUILT & VERIFIED** |
+| **Windows 11** | Parallels Windows 11 VM (ARM64) | `dotnet build WinUI\Daily.WinUI -c Debug -p:Platform=ARM64` | **0 Errors, BUILD PASSED & RUNNING** |

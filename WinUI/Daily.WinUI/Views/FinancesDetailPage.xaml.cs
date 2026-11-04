@@ -484,8 +484,9 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
     {
         if (_financesService == null || _isUpdatingFromService) return;
         
-        // Use the parser to ensure totals are re-calculated
-        var recalculated = Daily.Services.Finances.SmartLedgerParser.RecalculateTotals(_smartLedgerText);
+        // Normalize headers (**Section**) & line endings (\n), then ensure totals are re-calculated
+        var normalized = Daily.Services.Finances.SmartLedgerParser.NormalizeLedgerText(_smartLedgerText);
+        var recalculated = Daily.Services.Finances.SmartLedgerParser.RecalculateTotals(normalized);
         if (_smartLedgerText != recalculated)
         {
             _smartLedgerText = recalculated;
@@ -535,10 +536,41 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
-            MinHeight = 400,
+            MinHeight = 380,
             MinWidth = 550
         };
         ScrollViewer.SetVerticalScrollBarVisibility(textBox, ScrollBarVisibility.Auto);
+
+        var pasteButton = new Button
+        {
+            Content = "Paste from Clipboard",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(12, 6, 12, 6),
+            CornerRadius = new CornerRadius(10)
+        };
+        pasteButton.Click += async (_, _) =>
+        {
+            try
+            {
+                var pkg = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+                if (pkg != null && pkg.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+                {
+                    var clipText = await pkg.GetTextAsync();
+                    if (!string.IsNullOrWhiteSpace(clipText))
+                    {
+                        textBox.Text = Daily.Services.Finances.SmartLedgerParser.NormalizeLedgerText(clipText);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FinancesDetailPage] Paste clipboard error: {ex.Message}");
+            }
+        };
+
+        var container = new StackPanel { Spacing = 10 };
+        container.Children.Add(pasteButton);
+        container.Children.Add(textBox);
 
         var dialog = new ContentDialog
         {
@@ -546,13 +578,13 @@ public sealed partial class FinancesDetailPage : Page, INotifyPropertyChanged
             PrimaryButtonText = "Save & Recalculate",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
-            Content = textBox,
+            Content = container,
             XamlRoot = this.XamlRoot
         };
 
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            SmartLedgerText = textBox.Text;
+            SmartLedgerText = Daily.Services.Finances.SmartLedgerParser.NormalizeLedgerText(textBox.Text);
         }
     }
 

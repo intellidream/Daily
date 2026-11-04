@@ -394,4 +394,194 @@ final class SmartLedgerParserTests: XCTestCase {
         XCTAssertEqual(adjustedItem.currency, "EUR")
         XCTAssertEqual(adjustedItem.calculatedAmount, 13000.0, accuracy: 0.01)
     }
+    
+    // MARK: - Notion Mobile vs. Desktop (Mac/Windows) Paste Parity Tests
+    
+    func testNotionMobileVsDesktopPasteExactParity() {
+        let mobileNotionPaste = """
+        *Incoming*
+
+        ---
+
+        Card = 23 (Rz/13/Ing/10/Rev/0/Mom/9/!!!!/9)
+
+        Cash = 0 (SG-1/A/3M)//(MOM/50!)
+
+        ---
+
+        Total = 23
+
+        ---
+
+        *Outgoing*
+
+        Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27 = 0
+
+        V/N/Y/O/AI/M/W/E/I/Ap/Am/Sy/Ad/Sp = 3
+
+        Rata/Rds/Gaz/Înt/Hid/(45)/Mom/(5) = 2
+
+        Cora/Mega/Bringo/Fresh (Edn/0) = 0
+
+        Tigari (00/50) = 0 (SALA/$22!)
+
+        Car/Benzina/Honda (1/4) = 4 (SPL!/CER?)
+
+        Serviciu/(0/*100)/Outs/(0*200) = 0
+
+        Acasa/Tuns/Cadouri = 5 (M&T=0/!!!!!/5)
+
+        Vacante/Noi/Iesiri/Others = 9 (MOM/50)
+
+        Subs (APL-21.01-$5/RED-14.03-$1/CSP-29.05-$5)(PRL-11.08-$6/365-25.08-$7/NSK-29.8-$2)(MRG-31.8-$2/STRS-22.09-$1)(OURA-19.10-$4/EMG-13.12-$2/6) = 0
+
+        ---
+
+        Total = 23
+
+        ---
+
+        *Balance* 
+
+        ---
+
+        Total = 0
+
+        ---
+
+        *Dentist*
+
+        ---
+
+        (Total = 106)
+
+        ---
+
+        *Deposit*
+
+        ---
+
+        ECO/ME! = 0€
+
+        ECO/B!A = 41.023 (~7.750€)
+
+        EUR = 0€
+
+        ERO = 0€
+
+        DEP = 0
+
+        BIA = 8150€
+
+        ---
+
+        INT = 75.419,97 (-IMP-VER)//(~14.200€)
+
+        ---
+
+        (Concediu = 14/23)
+
+        ---
+
+        (Chirie x7y ~ 37.000€ // Plati x7y ~ 9.000€)
+
+        (Mașini x8y~(x7-27.000€)+(x8+-27.000€))
+        """
+        
+        // Simulate Windows CRLF clipboard without asterisks, dividers, or blank lines
+        let desktopNotionPasteCRLF = [
+            "Incoming",
+            "Card = 23 (Rz/13/Ing/10/Rev/0/Mom/9/!!!!/9)",
+            "Cash = 0 (SG-1/A/3M)//(MOM/50!)",
+            "Total = 23",
+            "Outgoing",
+            "Itp/Rvg/4.27//Ghs/Prk/Csc/Rca/1.27 = 0",
+            "V/N/Y/O/AI/M/W/E/I/Ap/Am/Sy/Ad/Sp = 3",
+            "Rata/Rds/Gaz/Înt/Hid/(45)/Mom/(5) = 2",
+            "Cora/Mega/Bringo/Fresh (Edn/0) = 0",
+            "Tigari (00/50) = 0 (SALA/$22!)",
+            "Car/Benzina/Honda (1/4) = 4 (SPL!/CER?)",
+            "Serviciu/(0/*100)/Outs/(0*200) = 0",
+            "Acasa/Tuns/Cadouri = 5 (M&T=0/!!!!!/5)",
+            "Vacante/Noi/Iesiri/Others = 9 (MOM/50)",
+            "Subs (APL-21.01-$5/RED-14.03-$1/CSP-29.05-$5)(PRL-11.08-$6/365-25.08-$7/NSK-29.8-$2)(MRG-31.8-$2/STRS-22.09-$1)(OURA-19.10-$4/EMG-13.12-$2/6) = 0",
+            "Total = 23",
+            "Balance ",
+            "Total = 0",
+            "Dentist",
+            "(Total = 106)",
+            "Deposit",
+            "ECO/ME! = 0€",
+            "ECO/B!A = 41.023 (~7.750€)",
+            "EUR = 0€",
+            "ERO = 0€",
+            "DEP = 0",
+            "BIA = 8150€",
+            "INT = 75.419,97 (-IMP-VER)//(~14.200€)",
+            "(Concediu = 14/23)",
+            "(Chirie x7y ~ 37.000€ // Plati x7y ~ 9.000€)",
+            "(Mașini x8y~(x7-27.000€)+(x8+-27.000€))"
+        ].joined(separator: "\r\n")
+        
+        let parser = SmartLedgerParser()
+        let mobileParsed = parser.parse(mobileNotionPaste, eurRate: 5.0)
+        let desktopParsed = parser.parse(desktopNotionPasteCRLF, eurRate: 5.0)
+        
+        // Expected totals:
+        // Incoming = 23 * 100 = 2.300 Lei
+        // Outgoing = 23 * 100 = 2.300 Lei
+        // Balance = 0 Lei
+        // Dentist = 106 * 100 = 10.600 Lei
+        // Deposit = 41.023 + (8.150 * 5) + 75.419,97 = 41.023 + 40.750 + 75.419,97 = 157.192,97 Lei
+        // Net Worth = 157.192,97 Lei (~31.438,594 €)
+        for parsed in [mobileParsed, desktopParsed] {
+            XCTAssertEqual(parsed.sections.map(\.name), ["Incoming", "Outgoing", "Balance", "Dentist", "Deposit"])
+            XCTAssertEqual(parsed.incomingTotal, 2300.0, accuracy: 0.01)
+            XCTAssertEqual(parsed.outgoingTotal, 2300.0, accuracy: 0.01)
+            XCTAssertEqual(parsed.balanceTotal, 0.0, accuracy: 0.01)
+            XCTAssertEqual(parsed.dentistTotal, 10600.0, accuracy: 0.01)
+            XCTAssertEqual(parsed.depositTotal, 157192.97, accuracy: 0.01)
+            XCTAssertEqual(parsed.netWorth, 157192.97, accuracy: 0.01)
+            XCTAssertEqual(parsed.netWorthEUR, 31438.594, accuracy: 0.01)
+        }
+        
+        // Verify item-by-item identity across all 5 sections
+        for (secMobile, secDesktop) in zip(mobileParsed.sections, desktopParsed.sections) {
+            XCTAssertEqual(secMobile.name, secDesktop.name)
+            XCTAssertEqual(secMobile.isScaled, secDesktop.isScaled)
+            XCTAssertEqual(secMobile.totalCalculated, secDesktop.totalCalculated, accuracy: 0.01)
+            XCTAssertEqual(secMobile.items.count, secDesktop.items.count)
+            for (itM, itD) in zip(secMobile.items, secDesktop.items) {
+                XCTAssertEqual(itM.key, itD.key)
+                XCTAssertEqual(itM.rawAmount, itD.rawAmount, accuracy: 0.01)
+                XCTAssertEqual(itM.calculatedAmount, itD.calculatedAmount, accuracy: 0.01)
+                XCTAssertEqual(itM.currency, itD.currency)
+                XCTAssertEqual(itM.isPureNote, itD.isPureNote)
+                XCTAssertEqual(itM.notes, itD.notes)
+            }
+        }
+        
+        // Verify canonical header normalization & CRLF cleanup
+        let normalizedMobile = parser.normalizeLedgerText(mobileNotionPaste)
+        let normalizedDesktop = parser.normalizeLedgerText(desktopNotionPasteCRLF)
+        XCTAssertFalse(normalizedDesktop.contains("\r"))
+        for expectedHeader in ["**Incoming**", "**Outgoing**", "**Balance**", "**Dentist**", "**Deposit**"] {
+            XCTAssertTrue(normalizedMobile.contains(expectedHeader))
+            XCTAssertTrue(normalizedDesktop.contains(expectedHeader))
+        }
+        
+        // Verify mutations (+1 on Card and addItem without ---) work deterministically on CRLF desktop paste
+        guard let cardDesktop = desktopParsed.sections.first?.items.first(where: { $0.key == "Card" }) else {
+            XCTFail("Desktop Card item missing")
+            return
+        }
+        let adjustedDesktop = parser.adjustItemAmount(in: desktopNotionPasteCRLF, lineIndex: cardDesktop.lineIndex, deltaRaw: 2)
+        let reParsedAdjusted = parser.parse(adjustedDesktop)
+        XCTAssertEqual(reParsedAdjusted.incomingTotal, 2500.0, accuracy: 0.01)
+        XCTAssertEqual(reParsedAdjusted.balanceTotal, 200.0, accuracy: 0.01)
+        
+        let withNewItem = parser.addItem(to: desktopNotionPasteCRLF, sectionName: "Outgoing", key: "Sala", rawAmount: 2, note: "Gym")
+        let reParsedAdded = parser.parse(withNewItem)
+        XCTAssertEqual(reParsedAdded.outgoingTotal, 2500.0, accuracy: 0.01)
+    }
 }

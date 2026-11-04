@@ -14,7 +14,7 @@ public final class SmartLedgerParser: Sendable {
     
     public func parse(_ text: String, eurRate: Double = 5.0) -> ParsedSmartLedger {
         var sections: [SmartLedgerSection] = []
-        let lines = text.components(separatedBy: CharacterSet.newlines)
+        let lines = normalizeLineEndings(text).components(separatedBy: "\n")
         
         var currentSectionName = "Overview"
         var currentItems: [SmartLedgerItem] = []
@@ -60,15 +60,14 @@ public final class SmartLedgerParser: Sendable {
         for (lineIndex, rawLine) in lines.enumerated() {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             
-            // Skip empty lines and divider hyphens
-            if line.isEmpty || line == "---" || line == "- - -" {
+            // Skip empty lines and divider rules (---, - - -, ***, ___)
+            if isDividerLine(line) {
                 continue
             }
             
-            // Check for Markdown section header: **SectionName**
-            if line.hasPrefix("**") && line.hasSuffix("**") && line.count > 4 {
+            // Check for section header (**Section**, *Section*, # Section, or canonical plain-text Section)
+            if let secName = extractSectionHeader(from: line) {
                 finishCurrentSection()
-                let secName = String(line.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
                 currentSectionName = secName
                 
                 if secName.caseInsensitiveCompare("Deposit") == .orderedSame {
@@ -199,6 +198,108 @@ public final class SmartLedgerParser: Sendable {
         )
     }
     
+    // MARK: - Line Ending, Divider & Universal Section Header Helpers
+    
+    /// Normalizes Windows/classic Mac line endings (`\r\n`, `\r`) to Unix `\n` for deterministic line indexing.
+    public func normalizeLineEndings(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+    
+    /// Normalizes a pasted or raw ledger document:
+    /// 1. Converts `\r\n` / `\r` to `\n`.
+    /// 2. Rewrites any recognized section header (`*Incoming*`, `Incoming`, `# Incoming`, `Balance `, etc.)
+    ///    into canonical `**SectionName**` format while keeping all item lines, notes, and dividers verbatim.
+    public func normalizeLedgerText(_ text: String) -> String {
+        let unified = normalizeLineEndings(text)
+        let lines = unified.components(separatedBy: "\n")
+        let normalizedLines = lines.map { rawLine -> String in
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if let secName = extractSectionHeader(from: trimmed) {
+                return "**\(secName)**"
+            }
+            return rawLine
+        }
+        return normalizedLines.joined(separator: "\n")
+    }
+    
+    private func isDividerLine(_ trimmed: String) -> Bool {
+        trimmed.isEmpty
+            || trimmed == "---" || trimmed == "- - -"
+            || trimmed == "***" || trimmed == "* * *"
+            || trimmed == "___" || trimmed == "_ _ _"
+    }
+    
+    private func canonicalizeSectionName(_ rawName: String) -> String {
+        let clean = rawName.trimmingCharacters(in: .whitespaces)
+        switch clean.lowercased() {
+        case "incoming": return "Incoming"
+        case "outgoing": return "Outgoing"
+        case "balance": return "Balance"
+        case "dentist": return "Dentist"
+        case "deposit": return "Deposit"
+        case "investments": return "Investments"
+        default: return clean
+        }
+    }
+    
+    /// Recognizes section headers across all supported clipboard/Notion formats:
+    /// - Bold Markdown: `**Incoming**`, `__Incoming__`
+    /// - Italic / Mobile Notion Markdown: `*Incoming*`, `_Incoming_`
+    /// - ATX Markdown headings: `# Incoming`, `## Outgoing`, `### Deposit`
+    /// - Plain-text Desktop Notion headers: `Incoming`, `Outgoing`, `Balance`, `Dentist`, `Deposit`, `Investments` (optional trailing `:`)
+    public func extractSectionHeader(from trimmed: String) -> String? {
+        if isDividerLine(trimmed) { return nil }
+        if trimmed.hasPrefix("(") || trimmed.hasPrefix("//") || trimmed.contains("=") {
+            return nil
+        }
+        
+        // 1. **Section** or __Section__
+        if (trimmed.hasPrefix("**") && trimmed.hasSuffix("**") && trimmed.count > 4)
+            || (trimmed.hasPrefix("__") && trimmed.hasSuffix("__") && trimmed.count > 4) {
+            let inner = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+            guard !inner.isEmpty else { return nil }
+            return canonicalizeSectionName(inner)
+        }
+        
+        // 2. *Section* or _Section_ (Notion Mobile clipboard format)
+        if trimmed.hasPrefix("*") && trimmed.hasSuffix("*") && !trimmed.hasPrefix("**") && trimmed.count > 2 {
+            let inner = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+            guard !inner.isEmpty && !inner.contains("*") else { return nil }
+            return canonicalizeSectionName(inner)
+        }
+        if trimmed.hasPrefix("_") && trimmed.hasSuffix("_") && !trimmed.hasPrefix("__") && trimmed.count > 2 {
+            let inner = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+            guard !inner.isEmpty && !inner.contains("_") else { return nil }
+            return canonicalizeSectionName(inner)
+        }
+        
+        // 3. ATX Markdown headings: # Section, ## Section, ### Section
+        if trimmed.hasPrefix("#") {
+            let hashesDropped = trimmed.drop(while: { $0 == "#" })
+            if hashesDropped.first == " " || hashesDropped.first == "\t" {
+                let inner = hashesDropped.trimmingCharacters(in: .whitespaces)
+                if !inner.isEmpty {
+                    return canonicalizeSectionName(inner)
+                }
+            }
+        }
+        
+        // 4. Plain-text Desktop Notion canonical section headers (optional trailing ':')
+        let candidate = trimmed.hasSuffix(":")
+            ? String(trimmed.dropLast()).trimmingCharacters(in: .whitespaces)
+            : trimmed
+        switch candidate.lowercased() {
+        case "incoming": return "Incoming"
+        case "outgoing": return "Outgoing"
+        case "balance": return "Balance"
+        case "dentist": return "Dentist"
+        case "deposit": return "Deposit"
+        case "investments": return "Investments"
+        default: return nil
+        }
+    }
+    
     // MARK: - Helper Parsing Methods
     
     /// Parses a raw value string into a tuple of (raw: Double, calculated: Double, isEUR: Bool).
@@ -291,24 +392,26 @@ public final class SmartLedgerParser: Sendable {
     /// Adjusts an existing item's raw amount by deltaRaw (e.g. +1 or -1 in scaled sections, or +100/-100 in unscaled).
     /// Preserves keys, parentheses notes, and comments, and automatically recalculates section totals and balance.
     public func adjustItemAmount(in text: String, lineIndex: Int, deltaRaw: Double) -> String {
-        let lines = text.components(separatedBy: "\n")
-        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        let normalizedText = normalizeLineEndings(text)
+        let lines = normalizedText.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return normalizedText }
         let line = lines[lineIndex]
-        guard line.contains("=") else { return text }
+        guard line.contains("=") else { return normalizedText }
         let parts = line.components(separatedBy: "=")
         let valuePart = parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespaces)
         let parsed = parseNumericString(valuePart, isScaled: false)
         let newRaw = max(0, parsed.raw + deltaRaw)
-        return setItemAmount(in: text, lineIndex: lineIndex, newRaw: newRaw)
+        return setItemAmount(in: normalizedText, lineIndex: lineIndex, newRaw: newRaw)
     }
     
     /// Sets an item's raw amount directly to newRaw at lineIndex.
     public func setItemAmount(in text: String, lineIndex: Int, newRaw: Double) -> String {
-        var lines = text.components(separatedBy: "\n")
-        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        let normalizedText = normalizeLineEndings(text)
+        var lines = normalizedText.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return normalizedText }
         
         let oldLine = lines[lineIndex]
-        guard let eqRange = oldLine.range(of: "=") else { return text }
+        guard let eqRange = oldLine.range(of: "=") else { return normalizedText }
         
         let keyPart = String(oldLine[..<eqRange.upperBound]) // e.g. "Card =" or "Tigari (40/45) ="
         let afterEq = String(oldLine[eqRange.upperBound...])
@@ -347,42 +450,48 @@ public final class SmartLedgerParser: Sendable {
     
     /// Adds a new category/item to a designated section.
     public func addItem(to text: String, sectionName: String, key: String, rawAmount: Double, note: String?) -> String {
-        var lines = text.components(separatedBy: "\n")
+        let normalizedText = normalizeLineEndings(text)
+        var lines = normalizedText.components(separatedBy: "\n")
         
         // Find section header index
         var sectionHeaderIndex = -1
         for (idx, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") {
-                let name = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
-                if name.caseInsensitiveCompare(sectionName) == .orderedSame {
-                    sectionHeaderIndex = idx
-                    break
-                }
+            if let name = extractSectionHeader(from: trimmed),
+               name.caseInsensitiveCompare(sectionName) == .orderedSame {
+                sectionHeaderIndex = idx
+                break
             }
         }
         
-        guard sectionHeaderIndex >= 0 else { return text }
+        guard sectionHeaderIndex >= 0 else { return normalizedText }
         
         // Find insertion point before next section or before Total =
         var insertIndex = lines.count
         for idx in (sectionHeaderIndex + 1)..<lines.count {
             let trimmed = lines[idx].trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") {
+            if extractSectionHeader(from: trimmed) != nil {
                 insertIndex = idx
                 break
             }
-            if trimmed == "---" {
+            if !trimmed.isEmpty && isDividerLine(trimmed) {
                 // Look ahead to check if Total = follows
                 var isBeforeTotal = false
                 for nextIdx in (idx + 1)..<min(idx + 5, lines.count) {
                     let nextTrimmed = lines[nextIdx].trimmingCharacters(in: .whitespaces)
-                    if nextTrimmed.hasPrefix("Total =") || nextTrimmed.hasPrefix("Total=") {
+                    let lowerNext = nextTrimmed.lowercased()
+                    if lowerNext.hasPrefix("total =") || lowerNext.hasPrefix("total=") || lowerNext.hasPrefix("(total") {
                         isBeforeTotal = true
                         break
                     }
                 }
                 if isBeforeTotal {
+                    insertIndex = idx
+                    break
+                }
+            } else {
+                let lowerTrimmed = trimmed.lowercased()
+                if lowerTrimmed.hasPrefix("total =") || lowerTrimmed.hasPrefix("total=") || lowerTrimmed.hasPrefix("(total") {
                     insertIndex = idx
                     break
                 }
@@ -403,8 +512,9 @@ public final class SmartLedgerParser: Sendable {
     
     /// Deletes an item from the text at lineIndex.
     public func deleteItem(from text: String, lineIndex: Int) -> String {
-        var lines = text.components(separatedBy: "\n")
-        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        let normalizedText = normalizeLineEndings(text)
+        var lines = normalizedText.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return normalizedText }
         
         lines.remove(at: lineIndex)
         
@@ -432,8 +542,11 @@ public final class SmartLedgerParser: Sendable {
         
         for (idx, line) in updated.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") && trimmed.count > 4 {
-                currentSection = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+            if let secName = extractSectionHeader(from: trimmed) {
+                currentSection = secName
+                continue
+            }
+            if trimmed.hasPrefix("(") && trimmed.hasSuffix(")") {
                 continue
             }
             

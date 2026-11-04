@@ -29,7 +29,7 @@ public struct SmartLedgerEditorSheet: View {
                     HStack(spacing: 12) {
                         Button {
                             if let clipboardString = UIPasteboard.general.string, !clipboardString.isEmpty {
-                                editingText = clipboardString
+                                editingText = SmartLedgerParser.shared.normalizeLedgerText(clipboardString)
                             }
                         } label: {
                             HStack(spacing: 6) {

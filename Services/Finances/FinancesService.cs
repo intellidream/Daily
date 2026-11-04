@@ -828,6 +828,10 @@ namespace Daily.Services.Finances
             {
                 ledgerText = SmartLedgerParser.DefaultLedgerText;
             }
+            else
+            {
+                ledgerText = SmartLedgerParser.NormalizeLedgerText(ledgerText);
+            }
 
             if (_sessionGuardian != null)
             {

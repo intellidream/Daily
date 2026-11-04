@@ -196,9 +196,107 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             return 0;
         }
 
+        public static string NormalizeLineEndings(string text)
+        {
+            return (text ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n");
+        }
+
+        public static string NormalizeLedgerText(string text)
+        {
+            string unified = NormalizeLineEndings(text);
+            var lines = unified.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].Trim();
+                string? secName = ExtractSectionHeader(trimmed);
+                if (!string.IsNullOrEmpty(secName))
+                {
+                    lines[i] = $"**{secName}**";
+                }
+            }
+            return string.Join("\n", lines);
+        }
+
+        private static bool IsDividerLine(string trimmed)
+        {
+            return string.IsNullOrEmpty(trimmed)
+                || trimmed == "---" || trimmed == "- - -"
+                || trimmed == "***" || trimmed == "* * *"
+                || trimmed == "___" || trimmed == "_ _ _";
+        }
+
+        private static string CanonicalizeSectionName(string rawName)
+        {
+            string clean = rawName.Trim();
+            return clean.ToLowerInvariant() switch
+            {
+                "incoming" => "Incoming",
+                "outgoing" => "Outgoing",
+                "balance" => "Balance",
+                "dentist" => "Dentist",
+                "deposit" => "Deposit",
+                "investments" => "Investments",
+                _ => clean
+            };
+        }
+
+        public static string? ExtractSectionHeader(string trimmed)
+        {
+            if (IsDividerLine(trimmed)) return null;
+            if (trimmed.StartsWith("(") || trimmed.StartsWith("//") || trimmed.Contains("="))
+            {
+                return null;
+            }
+
+            // 1. **Section** or __Section__
+            if ((trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
+                || (trimmed.StartsWith("__") && trimmed.EndsWith("__") && trimmed.Length > 4))
+            {
+                string inner = trimmed.Substring(2, trimmed.Length - 4).Trim();
+                return inner.Length > 0 ? CanonicalizeSectionName(inner) : null;
+            }
+
+            // 2. *Section* or _Section_ (Notion Mobile clipboard format)
+            if (trimmed.StartsWith("*") && trimmed.EndsWith("*") && !trimmed.StartsWith("**") && trimmed.Length > 2)
+            {
+                string inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
+                return inner.Length > 0 && !inner.Contains("*") ? CanonicalizeSectionName(inner) : null;
+            }
+            if (trimmed.StartsWith("_") && trimmed.EndsWith("_") && !trimmed.StartsWith("__") && trimmed.Length > 2)
+            {
+                string inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
+                return inner.Length > 0 && !inner.Contains("_") ? CanonicalizeSectionName(inner) : null;
+            }
+
+            // 3. ATX Markdown headings: # Section, ## Section, ### Section
+            if (trimmed.StartsWith("#"))
+            {
+                int i = 0;
+                while (i < trimmed.Length && trimmed[i] == '#') i++;
+                if (i < trimmed.Length && (trimmed[i] == ' ' || trimmed[i] == '\t'))
+                {
+                    string inner = trimmed.Substring(i).Trim();
+                    if (inner.Length > 0) return CanonicalizeSectionName(inner);
+                }
+            }
+
+            // 4. Plain-text Desktop Notion canonical section headers (optional trailing ':')
+            string candidate = trimmed.EndsWith(":") ? trimmed.Substring(0, trimmed.Length - 1).Trim() : trimmed;
+            return candidate.ToLowerInvariant() switch
+            {
+                "incoming" => "Incoming",
+                "outgoing" => "Outgoing",
+                "balance" => "Balance",
+                "dentist" => "Dentist",
+                "deposit" => "Deposit",
+                "investments" => "Investments",
+                _ => null
+            };
+        }
+
         public static string RecalculateTotals(string ledgerText)
         {
-            var lines = ledgerText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(ledgerText).Split('\n');
             var updated = RecalculateTotalsInLines(lines);
             return string.Join("\n", updated);
         }
@@ -217,9 +315,10 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             for (int idx = 0; idx < updated.Length; idx++)
             {
                 string trimmed = updated[idx].Trim();
-                if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
+                string? secName = ExtractSectionHeader(trimmed);
+                if (!string.IsNullOrEmpty(secName))
                 {
-                    currentSection = trimmed.Substring(2, trimmed.Length - 4).Trim();
+                    currentSection = secName;
                     continue;
                 }
 
@@ -285,15 +384,17 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         public static decimal ExtractTotal(string[] lines, string sectionHeader)
         {
+            string targetSec = ExtractSectionHeader(sectionHeader.Trim()) ?? sectionHeader.Replace("*", "").Trim();
             bool inSection = false;
             foreach (var line in lines)
             {
-                if (line.Trim() == sectionHeader) inSection = true;
-                else if (line.Trim().StartsWith("**") && line.Trim().EndsWith("**") && line.Trim() != sectionHeader)
+                string trimmed = line.Trim();
+                string? sec = ExtractSectionHeader(trimmed);
+                if (!string.IsNullOrEmpty(sec))
                 {
-                    inSection = false; // exited section
+                    inSection = string.Equals(sec, targetSec, StringComparison.OrdinalIgnoreCase);
                 }
-                else if (inSection && line.Trim().StartsWith("Total ="))
+                else if (inSection && trimmed.StartsWith("Total =", StringComparison.OrdinalIgnoreCase))
                 {
                     int commentIdx = line.IndexOf("//");
                     string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
@@ -309,7 +410,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
         {
             if (string.IsNullOrWhiteSpace(text)) return (0, 0, 0);
 
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(text).Split('\n');
             
             decimal cash = ExtractTotal(lines, "**Incoming**");
             
@@ -317,10 +418,16 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             bool inInvestments = false;
             foreach (var line in lines)
             {
-                if (line.Trim() == "**Deposit**" || line.Trim() == "**Investments**") inInvestments = true;
-                else if (line.Trim().StartsWith("**") && line.Trim() != "**Deposit**" && line.Trim() != "**Investments**") inInvestments = false;
+                string trimmed = line.Trim();
+                string? sec = ExtractSectionHeader(trimmed);
+                if (!string.IsNullOrEmpty(sec))
+                {
+                    inInvestments = string.Equals(sec, "Deposit", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(sec, "Investments", StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
 
-                if (inInvestments && line.Contains("=") && !line.StartsWith("Total"))
+                if (inInvestments && trimmed.Contains("=") && !trimmed.StartsWith("(") && !trimmed.StartsWith("Total", StringComparison.OrdinalIgnoreCase))
                 {
                     int commentIdx = line.IndexOf("//");
                     string mathPart = commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
@@ -345,15 +452,16 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             var results = new List<Daily.Models.Finances.AccountBalance>();
             if (string.IsNullOrWhiteSpace(text)) return results;
 
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(text).Split('\n');
             
             string currentSection = "";
             foreach (var line in lines)
             {
                 var trimmed = line.Trim();
-                if (trimmed.StartsWith("**") && trimmed.EndsWith("**"))
+                string? sec = ExtractSectionHeader(trimmed);
+                if (!string.IsNullOrEmpty(sec))
                 {
-                    currentSection = trimmed.Replace("*", "");
+                    currentSection = sec;
                     continue;
                 }
 
@@ -411,7 +519,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
         public static ParsedSmartLedger Parse(string text, decimal eurRate = 5.0m)
         {
             var sections = new List<SmartLedgerSection>();
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(text).Split('\n');
 
             string currentSectionName = "Overview";
             var currentItems = new List<SmartLedgerItem>();
@@ -461,15 +569,15 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
                 string rawLine = lines[lineIndex];
                 string line = rawLine.Trim();
 
-                if (string.IsNullOrEmpty(line) || line == "---" || line == "- - -")
+                if (IsDividerLine(line))
                 {
                     continue;
                 }
 
-                if (line.StartsWith("**") && line.EndsWith("**") && line.Length > 4)
+                string? secName = ExtractSectionHeader(line);
+                if (!string.IsNullOrEmpty(secName))
                 {
                     FinishCurrentSection();
-                    string secName = line.Substring(2, line.Length - 4).Trim();
                     currentSectionName = secName;
 
                     if (string.Equals(secName, "Deposit", StringComparison.OrdinalIgnoreCase))
@@ -679,7 +787,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         public static string AdjustItemAmount(string text, int lineIndex, decimal deltaRaw)
         {
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(text).Split('\n');
             if (lineIndex < 0 || lineIndex >= lines.Length) return text;
 
             string line = lines[lineIndex];
@@ -700,7 +808,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         public static string SetItemAmount(string text, int lineIndex, decimal newRaw)
         {
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(text).Split('\n');
             if (lineIndex < 0 || lineIndex >= lines.Length) return text;
 
             string oldLine = lines[lineIndex];
@@ -757,7 +865,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
                 return updatedText;
             }
 
-            var lines = updatedText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var lines = NormalizeLineEndings(updatedText).Split('\n');
             if (lineIndex < 0 || lineIndex >= lines.Length) return updatedText;
 
             string line = lines[lineIndex];
@@ -819,20 +927,17 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         public static string AddItem(string text, string sectionName, string key, decimal rawAmount, string? note = null, string currencySuffix = "")
         {
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+            var lines = NormalizeLineEndings(text).Split('\n').ToList();
             int sectionHeaderIndex = -1;
 
             for (int i = 0; i < lines.Count; i++)
             {
                 string trimmed = lines[i].Trim();
-                if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
+                string? secName = ExtractSectionHeader(trimmed);
+                if (!string.IsNullOrEmpty(secName) && string.Equals(secName, sectionName, StringComparison.OrdinalIgnoreCase))
                 {
-                    string secName = trimmed.Substring(2, trimmed.Length - 4).Trim();
-                    if (string.Equals(secName, sectionName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        sectionHeaderIndex = i;
-                        break;
-                    }
+                    sectionHeaderIndex = i;
+                    break;
                 }
             }
 
@@ -845,13 +950,13 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
             for (int idx = sectionHeaderIndex + 1; idx < lines.Count; idx++)
             {
                 string trimmed = lines[idx].Trim();
-                if (trimmed.StartsWith("**") && trimmed.EndsWith("**") && trimmed.Length > 4)
+                if (!string.IsNullOrEmpty(ExtractSectionHeader(trimmed)))
                 {
                     insertIndex = idx;
                     break;
                 }
 
-                if (trimmed == "---" || trimmed == "- - -")
+                if (!string.IsNullOrEmpty(trimmed) && IsDividerLine(trimmed))
                 {
                     bool isBeforeTotal = false;
                     int lookAheadMax = Math.Min(idx + 5, lines.Count);
@@ -874,7 +979,8 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
                     }
                 }
                 else if (trimmed.StartsWith("Total =", StringComparison.OrdinalIgnoreCase) ||
-                         trimmed.StartsWith("Total=", StringComparison.OrdinalIgnoreCase))
+                         trimmed.StartsWith("Total=", StringComparison.OrdinalIgnoreCase) ||
+                         trimmed.StartsWith("(Total", StringComparison.OrdinalIgnoreCase))
                 {
                     insertIndex = idx;
                     break;
@@ -898,7 +1004,7 @@ INT = 53.156,47 (-IMP-VER)//(~10.200€)
 
         public static string DeleteItem(string text, int lineIndex)
         {
-            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+            var lines = NormalizeLineEndings(text).Split('\n').ToList();
             if (lineIndex >= 0 && lineIndex < lines.Count)
             {
                 lines.RemoveAt(lineIndex);

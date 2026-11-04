@@ -15,9 +15,88 @@ import java.util.regex.Pattern
  */
 object SmartLedgerParser {
 
+    fun normalizeLineEndings(text: String): String {
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+    }
+
+    fun normalizeLedgerText(text: String): String {
+        val unified = normalizeLineEndings(text)
+        return unified.split("\n").joinToString("\n") { rawLine ->
+            val trimmed = rawLine.trim()
+            val secName = extractSectionHeader(trimmed)
+            if (secName != null) "**$secName**" else rawLine
+        }
+    }
+
+    private fun isDividerLine(trimmed: String): Boolean {
+        return trimmed.isEmpty()
+            || trimmed == "---" || trimmed == "- - -"
+            || trimmed == "***" || trimmed == "* * *"
+            || trimmed == "___" || trimmed == "_ _ _"
+    }
+
+    private fun canonicalizeSectionName(rawName: String): String {
+        val clean = rawName.trim()
+        return when (clean.lowercase(Locale.ROOT)) {
+            "incoming" -> "Incoming"
+            "outgoing" -> "Outgoing"
+            "balance" -> "Balance"
+            "dentist" -> "Dentist"
+            "deposit" -> "Deposit"
+            "investments" -> "Investments"
+            else -> clean
+        }
+    }
+
+    fun extractSectionHeader(trimmed: String): String? {
+        if (isDividerLine(trimmed)) return null
+        if (trimmed.startsWith("(") || trimmed.startsWith("//") || trimmed.contains("=")) {
+            return null
+        }
+
+        // 1. **Section** or __Section__
+        if ((trimmed.startsWith("**") && trimmed.endsWith("**") && trimmed.length > 4)
+            || (trimmed.startsWith("__") && trimmed.endsWith("__") && trimmed.length > 4)
+        ) {
+            val inner = trimmed.substring(2, trimmed.length - 2).trim()
+            return if (inner.isNotEmpty()) canonicalizeSectionName(inner) else null
+        }
+
+        // 2. *Section* or _Section_ (Notion Mobile clipboard format)
+        if (trimmed.startsWith("*") && trimmed.endsWith("*") && !trimmed.startsWith("**") && trimmed.length > 2) {
+            val inner = trimmed.substring(1, trimmed.length - 1).trim()
+            return if (inner.isNotEmpty() && !inner.contains("*")) canonicalizeSectionName(inner) else null
+        }
+        if (trimmed.startsWith("_") && trimmed.endsWith("_") && !trimmed.startsWith("__") && trimmed.length > 2) {
+            val inner = trimmed.substring(1, trimmed.length - 1).trim()
+            return if (inner.isNotEmpty() && !inner.contains("_")) canonicalizeSectionName(inner) else null
+        }
+
+        // 3. ATX Markdown headings: # Section, ## Section, ### Section
+        if (trimmed.startsWith("#")) {
+            val rest = trimmed.dropWhile { it == '#' }
+            if (rest.startsWith(" ") || rest.startsWith("\t")) {
+                val inner = rest.trim()
+                if (inner.isNotEmpty()) return canonicalizeSectionName(inner)
+            }
+        }
+
+        // 4. Plain-text Desktop Notion canonical section headers (optional trailing ':')
+        val candidate = if (trimmed.endsWith(":")) trimmed.dropLast(1).trim() else trimmed
+        return when (candidate.lowercase(Locale.ROOT)) {
+            "incoming" -> "Incoming"
+            "outgoing" -> "Outgoing"
+            "balance" -> "Balance"
+            "dentist" -> "Dentist"
+            "deposit" -> "Deposit"
+            "investments" -> "Investments"
+            else -> null
+        }
+    }
+
     fun parse(text: String, eurRate: Double = 5.0): ParsedSmartLedger {
         val sections = mutableListOf<SmartLedgerSection>()
-        val lines = text.lines()
+        val lines = normalizeLineEndings(text).split("\n")
 
         var currentSectionName = "Overview"
         val currentItems = mutableListOf<SmartLedgerItem>()
@@ -63,14 +142,14 @@ object SmartLedgerParser {
         for ((lineIndex, rawLine) in lines.withIndex()) {
             val line = rawLine.trim()
 
-            if (line.isEmpty() || line == "---" || line == "- - -") {
+            if (isDividerLine(line)) {
                 continue
             }
 
-            // Check for Markdown section header: **SectionName**
-            if (line.startsWith("**") && line.endsWith("**") && line.length > 4) {
+            // Check for section header (**Section**, *Section*, # Section, or canonical plain-text Section)
+            val secName = extractSectionHeader(line)
+            if (secName != null) {
                 finishCurrentSection()
-                val secName = line.substring(2, line.length - 2).trim()
                 currentSectionName = secName
 
                 if (secName.equals("Deposit", ignoreCase = true)) {
@@ -250,24 +329,26 @@ object SmartLedgerParser {
     }
 
     fun adjustItemAmount(text: String, lineIndex: Int, deltaRaw: Double): String {
-        val lines = text.lines()
-        if (lineIndex !in lines.indices) return text
+        val normalizedText = normalizeLineEndings(text)
+        val lines = normalizedText.split("\n")
+        if (lineIndex !in lines.indices) return normalizedText
         val line = lines[lineIndex]
-        if (!line.contains("=")) return text
+        if (!line.contains("=")) return normalizedText
         val parts = line.split("=", limit = 2)
         val valuePart = parts[1].trim()
         val parsed = parseNumericString(valuePart, isScaled = false)
         val newRaw = (parsed.raw + deltaRaw).coerceAtLeast(0.0)
-        return setItemAmount(text, lineIndex, newRaw)
+        return setItemAmount(normalizedText, lineIndex, newRaw)
     }
 
     fun setItemAmount(text: String, lineIndex: Int, newRaw: Double): String {
-        val lines = text.lines().toMutableList()
-        if (lineIndex !in lines.indices) return text
+        val normalizedText = normalizeLineEndings(text)
+        val lines = normalizedText.split("\n").toMutableList()
+        if (lineIndex !in lines.indices) return normalizedText
 
         val oldLine = lines[lineIndex]
         val eqIdx = oldLine.indexOf("=")
-        if (eqIdx < 0) return text
+        if (eqIdx < 0) return normalizedText
 
         val keyPart = oldLine.substring(0, eqIdx + 1) // e.g. "Card ="
         val afterEq = oldLine.substring(eqIdx + 1)
@@ -302,34 +383,36 @@ object SmartLedgerParser {
     }
 
     fun addItem(text: String, sectionName: String, key: String, rawAmount: Double, note: String?): String {
-        val lines = text.lines().toMutableList()
+        val normalizedText = normalizeLineEndings(text)
+        val lines = normalizedText.split("\n").toMutableList()
 
         var sectionHeaderIndex = -1
         for ((idx, line) in lines.withIndex()) {
             val trimmed = line.trim()
-            if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
-                val name = trimmed.substring(2, trimmed.length - 2).trim()
-                if (name.equals(sectionName, ignoreCase = true)) {
-                    sectionHeaderIndex = idx
-                    break
-                }
+            val name = extractSectionHeader(trimmed)
+            if (name != null && name.equals(sectionName, ignoreCase = true)) {
+                sectionHeaderIndex = idx
+                break
             }
         }
 
-        if (sectionHeaderIndex < 0) return text
+        if (sectionHeaderIndex < 0) return normalizedText
 
         var insertIndex = lines.size
         for (idx in (sectionHeaderIndex + 1) until lines.size) {
             val trimmed = lines[idx].trim()
-            if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
+            if (extractSectionHeader(trimmed) != null) {
                 insertIndex = idx
                 break
             }
-            if (trimmed == "---") {
+            if (trimmed.isNotEmpty() && isDividerLine(trimmed)) {
                 var isBeforeTotal = false
                 for (nextIdx in (idx + 1) until minOf(idx + 5, lines.size)) {
                     val nextTrimmed = lines[nextIdx].trim()
-                    if (nextTrimmed.startsWith("Total =", ignoreCase = true) || nextTrimmed.startsWith("Total=", ignoreCase = true)) {
+                    if (nextTrimmed.startsWith("Total =", ignoreCase = true)
+                        || nextTrimmed.startsWith("Total=", ignoreCase = true)
+                        || nextTrimmed.startsWith("(Total", ignoreCase = true)
+                    ) {
                         isBeforeTotal = true
                         break
                     }
@@ -338,6 +421,12 @@ object SmartLedgerParser {
                     insertIndex = idx
                     break
                 }
+            } else if (trimmed.startsWith("Total =", ignoreCase = true)
+                || trimmed.startsWith("Total=", ignoreCase = true)
+                || trimmed.startsWith("(Total", ignoreCase = true)
+            ) {
+                insertIndex = idx
+                break
             }
         }
 
@@ -354,8 +443,9 @@ object SmartLedgerParser {
     }
 
     fun deleteItem(text: String, lineIndex: Int): String {
-        val lines = text.lines().toMutableList()
-        if (lineIndex !in lines.indices) return text
+        val normalizedText = normalizeLineEndings(text)
+        val lines = normalizedText.split("\n").toMutableList()
+        if (lineIndex !in lines.indices) return normalizedText
 
         lines.removeAt(lineIndex)
 
@@ -381,8 +471,12 @@ object SmartLedgerParser {
 
         for ((idx, line) in updated.withIndex()) {
             val trimmed = line.trim()
-            if (trimmed.startsWith("**") && trimmed.endsWith("**") && trimmed.length > 4) {
-                currentSection = trimmed.substring(2, trimmed.length - 2).trim()
+            val secName = extractSectionHeader(trimmed)
+            if (secName != null) {
+                currentSection = secName
+                continue
+            }
+            if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
                 continue
             }
 

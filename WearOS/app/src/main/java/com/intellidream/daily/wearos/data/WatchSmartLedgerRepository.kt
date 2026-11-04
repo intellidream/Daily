@@ -148,7 +148,9 @@ class WatchSmartLedgerRepository private constructor(private val context: Contex
      */
     fun adjustItem(lineIndex: Int, deltaRaw: Double) {
         val currentText = _rawText.value
-        val updatedText = SmartLedgerParser.adjustItemAmount(currentText, lineIndex, deltaRaw)
+        val updatedText = SmartLedgerParser.normalizeLedgerText(
+            SmartLedgerParser.adjustItemAmount(currentText, lineIndex, deltaRaw)
+        )
         if (updatedText == currentText) return
 
         _rawText.value = updatedText

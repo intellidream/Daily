@@ -107,7 +107,7 @@ class SmartLedgerRepository(
 
     fun saveLedgerText(newText: String, triggerCloudPush: Boolean = true) {
         val trimmed = newText.trim()
-        val textToUse = if (trimmed.isEmpty()) DEFAULT_LEDGER_TEXT else newText
+        val textToUse = if (trimmed.isEmpty()) DEFAULT_LEDGER_TEXT else SmartLedgerParser.normalizeLedgerText(newText)
         _rawText.value = textToUse
         _parsedLedger.value = SmartLedgerParser.parse(textToUse)
         onLedgerChanged?.invoke()

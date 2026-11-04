@@ -197,7 +197,7 @@ public final class WatchSmartLedgerStore: ObservableObject {
             ?? defaults.string(forKey: rawTextKey2)
             ?? Self.defaultLedgerText
 
-        let updatedText = adjustItemAmountInText(currentText, lineIndex: lineIndex, deltaRaw: deltaRaw)
+        let updatedText = normalizeLedgerText(adjustItemAmountInText(currentText, lineIndex: lineIndex, deltaRaw: deltaRaw))
         saveLocalRawText(updatedText)
         parseDocument(updatedText)
 
@@ -295,8 +295,93 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
     // MARK: - Robust Smart Ledger DSL Parser Engine
 
+    private func normalizeLineEndings(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    private func normalizeLedgerText(_ text: String) -> String {
+        let unified = normalizeLineEndings(text)
+        let lines = unified.components(separatedBy: "\n")
+        return lines.map { rawLine -> String in
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if let secName = extractSectionHeader(from: trimmed) {
+                return "**\(secName)**"
+            }
+            return rawLine
+        }.joined(separator: "\n")
+    }
+
+    private func isDividerLine(_ trimmed: String) -> Bool {
+        trimmed.isEmpty
+            || trimmed == "---" || trimmed == "- - -"
+            || trimmed == "***" || trimmed == "* * *"
+            || trimmed == "___" || trimmed == "_ _ _"
+    }
+
+    private func canonicalizeSectionName(_ rawName: String) -> String {
+        let clean = rawName.trimmingCharacters(in: .whitespaces)
+        switch clean.lowercased() {
+        case "incoming": return "Incoming"
+        case "outgoing": return "Outgoing"
+        case "balance": return "Balance"
+        case "dentist": return "Dentist"
+        case "deposit": return "Deposit"
+        case "investments": return "Investments"
+        default: return clean
+        }
+    }
+
+    private func extractSectionHeader(from trimmed: String) -> String? {
+        if isDividerLine(trimmed) { return nil }
+        if trimmed.hasPrefix("(") || trimmed.hasPrefix("//") || trimmed.contains("=") {
+            return nil
+        }
+
+        if (trimmed.hasPrefix("**") && trimmed.hasSuffix("**") && trimmed.count > 4)
+            || (trimmed.hasPrefix("__") && trimmed.hasSuffix("__") && trimmed.count > 4) {
+            let inner = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+            guard !inner.isEmpty else { return nil }
+            return canonicalizeSectionName(inner)
+        }
+
+        if trimmed.hasPrefix("*") && trimmed.hasSuffix("*") && !trimmed.hasPrefix("**") && trimmed.count > 2 {
+            let inner = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+            guard !inner.isEmpty && !inner.contains("*") else { return nil }
+            return canonicalizeSectionName(inner)
+        }
+        if trimmed.hasPrefix("_") && trimmed.hasSuffix("_") && !trimmed.hasPrefix("__") && trimmed.count > 2 {
+            let inner = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+            guard !inner.isEmpty && !inner.contains("_") else { return nil }
+            return canonicalizeSectionName(inner)
+        }
+
+        if trimmed.hasPrefix("#") {
+            let hashesDropped = trimmed.drop(while: { $0 == "#" })
+            if hashesDropped.first == " " || hashesDropped.first == "\t" {
+                let inner = hashesDropped.trimmingCharacters(in: .whitespaces)
+                if !inner.isEmpty {
+                    return canonicalizeSectionName(inner)
+                }
+            }
+        }
+
+        let candidate = trimmed.hasSuffix(":")
+            ? String(trimmed.dropLast()).trimmingCharacters(in: .whitespaces)
+            : trimmed
+        switch candidate.lowercased() {
+        case "incoming": return "Incoming"
+        case "outgoing": return "Outgoing"
+        case "balance": return "Balance"
+        case "dentist": return "Dentist"
+        case "deposit": return "Deposit"
+        case "investments": return "Investments"
+        default: return nil
+        }
+    }
+
     private func parseDocument(_ text: String) {
-        let lines = text.components(separatedBy: CharacterSet.newlines)
+        let lines = normalizeLineEndings(text).components(separatedBy: "\n")
         var currentSection = "Overview"
         var hasEncounteredDeposit = false
 
@@ -309,14 +394,17 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
         for (lineIndex, rawLine) in lines.enumerated() {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line == "---" || line == "- - -" { continue }
+            if isDividerLine(line) { continue }
 
-            if line.hasPrefix("**") && line.hasSuffix("**") && line.count > 4 {
-                let secName = String(line.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+            if let secName = extractSectionHeader(from: line) {
                 currentSection = secName
                 if secName.caseInsensitiveCompare("Deposit") == .orderedSame {
                     hasEncounteredDeposit = true
                 }
+                continue
+            }
+
+            if line.hasPrefix("(") && line.hasSuffix(")") {
                 continue
             }
 
@@ -433,11 +521,12 @@ public final class WatchSmartLedgerStore: ObservableObject {
     }
 
     private func adjustItemAmountInText(_ text: String, lineIndex: Int, deltaRaw: Double) -> String {
-        var lines = text.components(separatedBy: "\n")
-        guard lineIndex >= 0 && lineIndex < lines.count else { return text }
+        let normalizedText = normalizeLineEndings(text)
+        var lines = normalizedText.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return normalizedText }
 
         let oldLine = lines[lineIndex]
-        guard let eqRange = oldLine.range(of: "=") else { return text }
+        guard let eqRange = oldLine.range(of: "=") else { return normalizedText }
 
         let keyPart = String(oldLine[..<eqRange.upperBound])
         let afterEq = String(oldLine[eqRange.upperBound...])
@@ -482,8 +571,11 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
         for (idx, line) in updated.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("**") && trimmed.hasSuffix("**") && trimmed.count > 4 {
-                currentSection = String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)
+            if let secName = extractSectionHeader(from: trimmed) {
+                currentSection = secName
+                continue
+            }
+            if trimmed.hasPrefix("(") && trimmed.hasSuffix(")") {
                 continue
             }
 

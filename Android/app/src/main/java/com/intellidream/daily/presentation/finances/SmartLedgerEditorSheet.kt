@@ -188,7 +188,7 @@ fun SmartLedgerEditorSheet(
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
                                 if (!clipText.isNullOrBlank()) {
-                                    editingText = clipText
+                                    editingText = SmartLedgerParser.normalizeLedgerText(clipText)
                                 }
                             }
                             .padding(horizontal = 14.dp, vertical = 7.dp)

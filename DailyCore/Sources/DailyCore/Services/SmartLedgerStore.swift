@@ -208,7 +208,9 @@ public final class SmartLedgerStore: ObservableObject {
     /// Updates the raw ledger text, saves to UserDefaults, triggers live re-parsing, and queues Supabase push.
     public func saveLedgerText(_ newText: String, triggerCloudSync: Bool = true) {
         let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let textToSave = trimmed.isEmpty ? Self.defaultLedgerText : newText
+        let textToSave = trimmed.isEmpty
+            ? Self.defaultLedgerText
+            : SmartLedgerParser.shared.normalizeLedgerText(newText)
         
         self.rawText = textToSave
         groupDefaults.set(textToSave, forKey: storageKey)
