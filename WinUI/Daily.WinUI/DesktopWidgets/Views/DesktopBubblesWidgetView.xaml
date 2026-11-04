@@ -45,7 +45,7 @@
                         Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1" CornerRadius="6"
                         Click="LogCoffee100_Click" ToolTipService.ToolTip="100 ml Coffee">
                     <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="9" Foreground="#FFF59E0B"/>
+                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="10" Foreground="#FFF59E0B"/>
                         <TextBlock Text="100" FontSize="10" FontWeight="Bold" Foreground="#FFF59E0B"/>
                     </StackPanel>
                 </Button>
@@ -140,7 +140,7 @@
                         Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1" CornerRadius="8"
                         Click="LogCoffee100_Click" ToolTipService.ToolTip="Log 100 ml Coffee">
                     <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
-                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFF59E0B"/>
+                        <FontIcon Glyph="&#xef0e;" FontFamily="{StaticResource TablerIconsFont}" FontSize="12" Foreground="#FFF59E0B"/>
                         <TextBlock Text="100 ml" FontSize="11" FontWeight="SemiBold" Foreground="#FFF59E0B"/>
                     </StackPanel>
                 </Button>

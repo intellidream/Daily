@@ -232,7 +232,7 @@ public struct MenuBarCompanionView: View {
         }
     }
     
-    // MARK: - 2. Hydration Card (Bubbles: 100 Water, 150 Coffee, 300 Water)
+    // MARK: - 2. Hydration Card (Bubbles: 100 Coffee, 150 Water, 300 Water)
     @ViewBuilder
     private var waterIntakeCard: some View {
         GlassCard(cornerRadius: 14, padding: 12) {
@@ -274,37 +274,17 @@ public struct MenuBarCompanionView: View {
                 }
                 .frame(height: 7)
                 
-                // Quick Log Buttons (Parity with iOS & Widgets: 100 Water, 150 Coffee, 300 Water)
+                // Quick Log Buttons (Parity with iOS & Widgets: 100 Coffee, 150 Water, 300 Water)
                 HStack(spacing: 8) {
-                    // +100 Water
+                    // +100 Coffee
                     Button {
                         triggerHaptic()
-                        habitsService.logWater(amountMl: 100, drink: "Water")
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "drop")
-                                .font(.system(size: 11))
-                            Text("100")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                        }
-                        .foregroundColor(ThemeColors.accentCyan)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                        .background(ThemeColors.accentCyan.opacity(0.14), in: Capsule())
-                        .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.28), lineWidth: 1))
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // +150 Coffee
-                    Button {
-                        triggerHaptic()
-                        habitsService.logWater(amountMl: 150, drink: "Coffee")
+                        habitsService.logWater(amountMl: 100, drink: "Coffee")
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "cup.and.saucer.fill")
                                 .font(.system(size: 10))
-                            Text("150")
+                            Text("100")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                         }
                         .foregroundColor(Color(hex: "#F59E0B"))
@@ -312,6 +292,26 @@ public struct MenuBarCompanionView: View {
                         .frame(height: 28)
                         .background(Color(hex: "#F59E0B").opacity(0.15), in: Capsule())
                         .overlay(Capsule().strokeBorder(Color(hex: "#F59E0B").opacity(0.3), lineWidth: 1))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // +150 Water
+                    Button {
+                        triggerHaptic()
+                        habitsService.logWater(amountMl: 150, drink: "Water")
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "drop")
+                                .font(.system(size: 11))
+                            Text("150")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                        }
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 28)
+                        .background(ThemeColors.accentCyan.opacity(0.14), in: Capsule())
+                        .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.28), lineWidth: 1))
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
