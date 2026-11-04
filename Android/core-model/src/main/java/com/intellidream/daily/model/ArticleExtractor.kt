@@ -439,7 +439,13 @@ class ArticleExtractor {
             val start = matcher.start()
             val end = matcher.end()
             var modified = content.substring(0, start) + content.substring(end)
-            modified = modified.replace(Regex("<(?:figure|div|p)[^>]*>\\s*</(?:figure|div|p)>", RegexOption.IGNORE_CASE), "")
+            modified = modified.replace(
+                Regex("<a[^>]*class=[\"'][^\"']*image-link[^\"']*[\"'][^>]*>\\s*(?:<div[^>]*>\\s*</div>\\s*)?</a>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            repeat(2) {
+                modified = modified.replace(Regex("<(?:figure|div|p)[^>]*>\\s*</(?:figure|div|p)>", RegexOption.IGNORE_CASE), "")
+            }
             return modified.trim()
         }
 
@@ -447,6 +453,20 @@ class ArticleExtractor {
     }
 
     private fun normalizeImageUrl(url: String): String {
+        val decoded = try {
+            java.net.URLDecoder.decode(url, "UTF-8")
+        } catch (_: Exception) {
+            url
+        }
+        if (decoded.contains("substack-post-media", ignoreCase = true) ||
+            decoded.contains("substackcdn.com", ignoreCase = true) ||
+            decoded.contains("bucketeer-", ignoreCase = true)
+        ) {
+            val lastPart = decoded.substringBefore("?").substringAfterLast("/")
+            if (lastPart.length > 12) {
+                return lastPart.lowercase(Locale.ROOT)
+            }
+        }
         return try {
             val uri = java.net.URI(url)
             (uri.host ?: "").lowercase(Locale.ROOT) + uri.path.lowercase(Locale.ROOT)
@@ -558,18 +578,98 @@ class ArticleExtractor {
         fun isSubstackTeaser(content: String?): Boolean {
             if (content.isNullOrBlank()) return true
             val lower = content.lowercase(Locale.ROOT)
-            return lower.contains("this post is for paid subscribers") ||
-                   lower.contains("upgrade to paid") ||
-                   lower.contains("subscription-widget-wrap") ||
-                   lower.contains("subscribe to get access") ||
-                   lower.contains("only available to paid subscribers")
+            if (lower.contains("class=\"paywall\"") ||
+                lower.contains("data-component-name=\"paywall\"") ||
+                lower.contains("this post is for paid subscribers") ||
+                lower.contains("this post is for subscribers") ||
+                lower.contains("subscribe to continue reading") ||
+                lower.contains("keep reading with a") ||
+                lower.contains("subscribe to unlock") ||
+                lower.contains("only available to paid subscribers")
+            ) {
+                return true
+            }
+            if (lower.contains("read more") && (lower.contains("substack.com/p/") || lower.contains("paywall") || content.length < 2500)) {
+                return true
+            }
+            return false
+        }
+
+        fun hasSubstackBonusPaywall(content: String?): Boolean {
+            if (content.isNullOrBlank()) return false
+            val lower = content.lowercase(Locale.ROOT)
+            return lower.contains("this post has bonus content for paid subscribers") ||
+                   lower.contains("paywall-jump")
         }
 
         fun stripSubstackTrackingAndNoise(html: String): String {
-            var cleaned = html.replace(Regex("<div[^>]*class=\"[^\"]*subscription-widget-wrap[^\"]*\"[\\s\\S]*?</div>\\s*</div>", RegexOption.IGNORE_CASE), "")
-            cleaned = cleaned.replace(Regex("<div[^>]*class=\"[^\"]*post-footer[^\"]*\"[\\s\\S]*?</div>", RegexOption.IGNORE_CASE), "")
-            cleaned = cleaned.replace(Regex("<div[^>]*class=\"[^\"]*like-button-container[^\"]*\"[\\s\\S]*?</div>", RegexOption.IGNORE_CASE), "")
-            return cleaned
+            var clean = html
+
+            // 1. Remove 1x1 Substack email open tracking pixels
+            clean = clean.replace(
+                Regex("<img[^>]+(?:substack\\.com/o/|eotrx\\.substackcdn\\.com)[^>]*>", RegexOption.IGNORE_CASE),
+                ""
+            )
+
+            // 2. Remove Pencraft image action overlay toolbars (Restack / Maximize buttons & SVGs on every image)
+            clean = clean.replace(
+                Regex("<div[^>]*class=\"[^\"]*image-link-expand[^\"]*\"[^>]*>[\\s\\S]*?</div>\\s*</div>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("<button[^>]*class=\"[^\"]*(?:restack-image|view-image|icon-container|buttonBase)[^\"]*\"[^>]*>[\\s\\S]*?</button>", RegexOption.IGNORE_CASE),
+                ""
+            )
+
+            // 3. Unwrap <picture> and strip low-res <source srcset="...424w..."> so crisp <img src> is always used
+            clean = clean.replace(
+                Regex("<source[^>]+(?:substackcdn\\.com|substack-post-media)[^>]*>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("</?picture[^>]*>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("(<img[^>]+(?:substackcdn\\.com|substack-post-media)[^>]*?)\\s+srcset=\"[^\"]*\"", RegexOption.IGNORE_CASE),
+                "$1"
+            )
+
+            // 4. Remove nested inline subscription forms & upgrade widgets completely (including inner fake-input divs)
+            clean = clean.replace(
+                Regex("<div[^>]*class=\"[^\"]*subscription-widget-wrap[^\"]*\"[^>]*>[\\s\\S]*?</form>\\s*</div>\\s*</div>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("<div[^>]*class=\"[^\"]*subscription-widget[^\"]*\"[^>]*>[\\s\\S]*?</form>\\s*</div>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("<form[^>]*class=\"[^\"]*subscription-widget[^\"]*\"[^>]*>[\\s\\S]*?</form>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("<div[^>]*class=\"[^\"]*fake-input-wrapper[^\"]*\"[^>]*>[\\s\\S]*?</div>\\s*</div>", RegexOption.IGNORE_CASE),
+                ""
+            )
+            clean = clean.replace(
+                Regex("<div[^>]*class=\"[^\"]*(?:subscription-widget-wrap|subscribe-widget|post-ufi|post-footer|like-button-container|share-dialog|comment-widget)[^\"]*\"[^>]*>[\\s\\S]*?</div>", RegexOption.IGNORE_CASE),
+                ""
+            )
+
+            // 5. Remove inline Subscribe / Share CTA buttons while keeping legitimate external link buttons intact
+            clean = clean.replace(
+                Regex("<(?:p|div)[^>]*class=\"[^\"]*button-wrapper[^\"]*\"[^>]*>\\s*<a[^>]*href=\"[^\"]*(?:/subscribe|action=share|utm_source=substack)[^\"]*\"[^>]*>[\\s\\S]*?</a>\\s*</(?:p|div)>", RegexOption.IGNORE_CASE),
+                ""
+            )
+
+            // 6. Upgrade narrow Substack CDN image widths inside HTML
+            clean = clean.replace(
+                Regex("(https://substackcdn\\.com/image/fetch/[^\"'\\s>]*?)w_(?:1\\d\\d|2\\d\\d|3\\d\\d|4\\d\\d|5\\d\\d|6\\d\\d|7\\d\\d|8\\d\\d)\\b", RegexOption.IGNORE_CASE),
+                "$1w_1200"
+            )
+
+            return clean
         }
 
         fun hasAuthenticatedSubstackCookies(cookieHeader: String?): Boolean {

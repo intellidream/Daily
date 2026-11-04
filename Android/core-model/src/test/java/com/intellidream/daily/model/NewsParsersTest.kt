@@ -691,6 +691,83 @@ class NewsParsersTest {
         """.trimIndent()
         assertFalse(ArticleExtractor.isMediumTeaser(fullArticle))
     }
+
+    @Test
+    fun testSubstackFeedResolutionAndCustomDomains() {
+        assertEquals(
+            "https://pragmaticengineer.substack.com/feed",
+            extractSubstackFeedUrl("https://pragmaticengineer.substack.com/p/ai-coding")
+        )
+        assertEquals(
+            "https://stratechery.substack.com/feed",
+            extractSubstackFeedUrl("https://open.substack.com/pub/stratechery/p/tech-2026")
+        )
+        assertEquals(
+            "https://lenny.substack.com/feed",
+            extractSubstackFeedUrl("https://substack.com/@lenny")
+        )
+        // Bare substack.com / open.substack.com must NEVER resolve to broken /feed
+        assertNull(extractSubstackFeedUrl("https://substack.com/inbox"))
+        assertNull(extractSubstackFeedUrl("https://substack.com/home"))
+        assertNull(extractSubstackFeedUrl("https://open.substack.com/"))
+
+        val customDomainSubstack = NewsArticle(
+            title = "Custom Domain Post",
+            link = "https://blog.bytebytego.com/p/how-discord-stores-trillions-of-messages",
+            imageUrl = "https://substackcdn.com/image/fetch/w_1456,c_limit,f_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F12345678-abcd-ef01-2345-6789abcdef01_1600x900.png",
+            publicationName = "ByteByteGo Newsletter"
+        )
+        assertTrue(customDomainSubstack.isSubstackItem)
+        assertEquals("https://blog.bytebytego.com/feed", extractSubstackFeedUrl(customDomainSubstack))
+    }
+
+    @Test
+    fun testSubstackNoisePurificationAndCoverDeduplication() {
+        val rawSubstackHtml = """
+            <div class="captioned-image-container">
+              <figure>
+                <a class="image-link image2" href="https://substackcdn.com/image/fetch/test">
+                  <div class="image2-inset">
+                    <picture>
+                      <source type="image/webp" srcset="https://substackcdn.com/image/fetch/w_424,c_limit,f_webp/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F99887766-1122-3344-5566-77889900aabb_1200x800.jpeg 424w" />
+                      <img src="https://substackcdn.com/image/fetch/${'$'}s_!AbCd!,w_800,c_limit,f_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F99887766-1122-3344-5566-77889900aabb_1200x800.jpeg" srcset="https://substackcdn.com/image/fetch/w_424/test.jpg 424w" />
+                    </picture>
+                    <div class="image-link-expand pencraft pc-display-flex">
+                      <button class="restack-image"><svg><path d="M0 0"/></svg></button>
+                      <button class="view-image"><svg><path d="M1 1"/></svg></button>
+                    </div>
+                  </div>
+                </a>
+              </figure>
+            </div>
+            <p>Full free Substack essay body that happens to include an inline subscribe widget.</p>
+            <div class="subscription-widget-wrap-editor">
+              <div class="subscription-widget show-subscribe">
+                <form class="subscription-widget-subscribe"><input type="email" /><input type="submit" value="Subscribe" /></form>
+              </div>
+            </div>
+            <p class="button-wrapper"><a class="button primary" href="https://example.substack.com/subscribe?utm_source=substack">Subscribe now</a></p>
+            <p class="button-wrapper"><a class="button primary" href="https://github.com/example/repo">View Source on GitHub</a></p>
+            <img src="https://eotrx.substackcdn.com/open?token=abc" width="1" height="1" />
+        """.trimIndent()
+
+        assertFalse(ArticleExtractor.isSubstackTeaser(rawSubstackHtml))
+
+        val purified = ArticleExtractor.stripSubstackTrackingAndNoise(rawSubstackHtml)
+        assertFalse(purified.contains("restack-image"))
+        assertFalse(purified.contains("image-link-expand"))
+        assertFalse(purified.contains("<source"))
+        assertFalse(purified.contains("subscription-widget"))
+        assertFalse(purified.contains("eotrx.substackcdn.com"))
+        assertFalse(purified.contains("Subscribe now"))
+        assertTrue(purified.contains("View Source on GitHub"))
+        assertTrue(purified.contains("w_1200"))
+
+        val coverUrlWithDifferentSig = "https://substackcdn.com/image/fetch/${'$'}s_!XyZ9!,w_1456,c_limit,f_auto/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F99887766-1122-3344-5566-77889900aabb_1200x800.jpeg"
+        val deduped = ArticleExtractor.shared.deduplicateFeaturedImage(purified, coverUrlWithDifferentSig)
+        assertFalse(deduped.contains("99887766-1122-3344-5566-77889900aabb_1200x800.jpeg"))
+        assertTrue(deduped.contains("Full free Substack essay body"))
+    }
 }
 
 

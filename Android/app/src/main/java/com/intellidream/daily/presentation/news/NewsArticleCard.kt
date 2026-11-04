@@ -173,33 +173,41 @@ fun NewsArticleCard(
                 }
             }
 
-            // Actions Footer: Author, Follow, Read Later, Favorite, Share
+            // Actions Footer: Author, Subscribe/Follow, Read Later, Favorite, Share
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val author = article.author
-                if (!author.isNullOrBlank()) {
+                val substackTarget = if (article.isSubstackItem) {
+                    com.intellidream.daily.model.extractSubstackFeedUrl(article)
+                        ?: article.substackPublicationSlug
+                } else null
+
+                if (!author.isNullOrBlank() || substackTarget != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.weight(1f, fill = false)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Person,
-                            contentDescription = null,
-                            tint = ThemeColors.textMuted,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = author,
-                            color = ThemeColors.textMuted,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (!author.isNullOrBlank()) {
+                            Icon(
+                                imageVector = Icons.Rounded.Person,
+                                contentDescription = null,
+                                tint = ThemeColors.textMuted,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = author,
+                                color = ThemeColors.textMuted,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
 
                         if (article.isMediumItem) {
                             val mediumUser = extractMediumUsername(article)
@@ -239,40 +247,40 @@ fun NewsArticleCard(
                             }
                         }
 
-                        if (article.isSubstackItem) {
-                            val pubSlug = article.substackPublicationSlug ?: com.intellidream.daily.model.extractSubstackPublicationSlug(article.link)
-                            if (pubSlug != null) {
+                        if (substackTarget != null) {
+                            if (!author.isNullOrBlank()) {
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isSubstackSubscribed) Color.White.copy(alpha = 0.06f)
-                                            else ThemeColors.accentCyan.copy(alpha = 0.12f)
-                                        )
-                                        .clickable {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            onSubscribeSubstackPublication?.invoke(pubSlug)
-                                        }
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isSubstackSubscribed) Icons.Rounded.CheckCircle else Icons.Rounded.Add,
-                                            contentDescription = null,
-                                            tint = if (isSubstackSubscribed) Color.White.copy(alpha = 0.6f) else ThemeColors.accentCyan,
-                                            modifier = Modifier.size(10.dp)
-                                        )
-                                        Text(
-                                            text = if (isSubstackSubscribed) "Subscribed" else "+ Subscribe",
-                                            color = if (isSubstackSubscribed) Color.White.copy(alpha = 0.6f) else ThemeColors.accentCyan,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSubstackSubscribed) Color.White.copy(alpha = 0.06f)
+                                        else ThemeColors.accentCyan.copy(alpha = 0.12f)
+                                    )
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onSubscribeSubstackPublication?.invoke(substackTarget)
                                     }
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSubstackSubscribed) Icons.Rounded.CheckCircle else Icons.Rounded.Add,
+                                        contentDescription = null,
+                                        tint = if (isSubstackSubscribed) Color.White.copy(alpha = 0.6f) else ThemeColors.accentCyan,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = if (isSubstackSubscribed) "Subscribed" else "+ Subscribe",
+                                        color = if (isSubstackSubscribed) Color.White.copy(alpha = 0.6f) else ThemeColors.accentCyan,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }

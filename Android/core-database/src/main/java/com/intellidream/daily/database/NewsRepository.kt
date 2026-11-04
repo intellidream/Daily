@@ -47,6 +47,8 @@ interface NewsSyncHandler {
     suspend fun extractMediumArticle(url: String, baseArticle: NewsArticle? = null): NewsArticle? = null
     suspend fun scrapeSubstackInbox(): List<NewsArticle>? = null
     suspend fun extractSubstackArticle(url: String, baseArticle: NewsArticle? = null): NewsArticle? = null
+    suspend fun fetchSubstackSubscriptions(handle: String? = null): List<FeedSearchResult> = emptyList()
+    fun hasAuthenticatedSubstackSession(): Boolean = false
 }
 
 class NewsRepository(
@@ -240,7 +242,8 @@ class NewsRepository(
         _errorMessage.value = null
 
         try {
-            val items = kotlinx.coroutines.withTimeoutOrNull(8000L) {
+            val timeoutMs = if (feed.id == "substack_inbox" || feed.id == "medium_reading_list") 22000L else 8000L
+            val items = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
                 fetchFeedItems(feed)
             } ?: emptyList()
             if (items.isNotEmpty()) {
@@ -324,6 +327,32 @@ class NewsRepository(
             if (!scraped.isNullOrEmpty()) {
                 return@withContext scraped
             }
+            // Fallback: aggregate latest stories from the user's subscribed Substack RSS feeds
+            val substackFeeds = _feeds.value.filter {
+                it.id != "substack_inbox" && (
+                    it.url.contains(".substack.com", ignoreCase = true) ||
+                    it.iconUrl.contains("substack", ignoreCase = true)
+                )
+            }
+            if (substackFeeds.isNotEmpty()) {
+                val fallbackAggregated = coroutineScope {
+                    substackFeeds.map { subFeed ->
+                        async {
+                            try {
+                                kotlinx.coroutines.withTimeoutOrNull(7000L) {
+                                    fetchFeedItems(subFeed).take(5)
+                                } ?: emptyList()
+                            } catch (_: Throwable) {
+                                emptyList()
+                            }
+                        }
+                    }.awaitAll().flatten()
+                }.sortedByDescending { it.publishDate }
+                if (fallbackAggregated.isNotEmpty()) {
+                    return@withContext fallbackAggregated
+                }
+            }
+            return@withContext emptyList()
         }
 
         val targetUrl = when {
@@ -367,8 +396,17 @@ class NewsRepository(
                                                 articleContent.length > 300 && 
                                                 !ArticleExtractor.isSubstackTeaser(articleContent)
 
-            if (isSubstack && hasSubstantialSubstackContent) {
-                return@withContext article
+            val shouldUpgradeSubstackBonus = isSubstack &&
+                                             hasSubstantialSubstackContent &&
+                                             ArticleExtractor.hasSubstackBonusPaywall(articleContent) &&
+                                             (syncHandler?.hasAuthenticatedSubstackSession() == true)
+
+            if (isSubstack && hasSubstantialSubstackContent && !shouldUpgradeSubstackBonus) {
+                var purified = ArticleExtractor.stripSubstackTrackingAndNoise(articleContent!!)
+                if (!article.imageUrl.isNullOrBlank()) {
+                    purified = ArticleExtractor.shared.deduplicateFeaturedImage(purified, article.imageUrl!!)
+                }
+                return@withContext article.copy(content = purified)
             }
 
             if (isMedium) {
@@ -531,32 +569,98 @@ class NewsRepository(
         )
     }
 
-    fun isSubscribedToSubstack(publicationSlug: String): Boolean {
-        val clean = publicationSlug.trim().lowercase()
-        val feedUrl = "https://$clean.substack.com/feed"
-        return _feeds.value.any { it.url.equals(feedUrl, ignoreCase = true) }
+    private fun resolveSubstackFeedTarget(slugOrFeedUrl: String): String? {
+        val clean = slugOrFeedUrl.trim()
+        if (clean.isBlank()) return null
+        val lower = clean.lowercase()
+        if (lower == "https://substack.com/feed" || lower == "http://substack.com/feed" || lower == "https://open.substack.com/feed") {
+            return null
+        }
+        return if (lower.startsWith("http://") || lower.startsWith("https://")) {
+            clean
+        } else {
+            val slug = lower.removePrefix("@")
+            if (slug.isBlank() || slug == "substack" || slug == "www" || slug == "open") null
+            else "https://$slug.substack.com/feed"
+        }
     }
 
-    suspend fun subscribeToSubstackPublication(publicationSlug: String, publicationName: String? = null, userId: String = currentUserId) {
-        val clean = publicationSlug.trim().lowercase()
-        if (clean.isBlank()) return
-        val feedUrl = "https://$clean.substack.com/feed"
-        if (_feeds.value.any { it.url.equals(feedUrl, ignoreCase = true) }) return
-        val displayName = publicationName ?: clean.replaceFirstChar { it.uppercase() }
-        addFeed(name = displayName, url = feedUrl, category = FeedCategory.Other, userId = userId)
+    fun isSubscribedToSubstack(slugOrFeedUrl: String): Boolean {
+        val feedUrl = resolveSubstackFeedTarget(slugOrFeedUrl) ?: return false
+        val targetNorm = normalizeFeedUrl(feedUrl)
+        return _feeds.value.any { normalizeFeedUrl(it.url) == targetNorm }
     }
 
-    suspend fun unsubscribeFromSubstackPublication(publicationSlug: String, userId: String = currentUserId) {
-        val clean = publicationSlug.trim().lowercase()
-        val feedUrl = "https://$clean.substack.com/feed"
-        val feed = _feeds.value.firstOrNull { it.url.equals(feedUrl, ignoreCase = true) } ?: return
+    fun isSubscribedToSubstack(article: NewsArticle): Boolean {
+        val feedUrl = com.intellidream.daily.model.extractSubstackFeedUrl(article) ?: return false
+        return isSubscribedToSubstack(feedUrl)
+    }
+
+    suspend fun subscribeToSubstackPublication(
+        slugOrFeedUrl: String,
+        publicationName: String? = null,
+        iconUrl: String? = null,
+        userId: String = currentUserId
+    ) {
+        val feedUrl = resolveSubstackFeedTarget(slugOrFeedUrl) ?: return
+        val targetNorm = normalizeFeedUrl(feedUrl)
+        if (_feeds.value.any { normalizeFeedUrl(it.url) == targetNorm }) return
+        val fallbackName = slugOrFeedUrl.trim().removePrefix("https://").removePrefix("http://")
+            .substringBefore(".substack.com").substringBefore("/").replaceFirstChar { it.uppercase() }
+        val displayName = publicationName?.takeIf {
+            it.isNotBlank() && !it.equals("Substack", ignoreCase = true) && !it.equals("Substack Inbox", ignoreCase = true)
+        } ?: fallbackName
+        addFeed(
+            name = displayName,
+            url = feedUrl,
+            category = FeedCategory.Other,
+            userId = userId,
+            iconUrl = iconUrl ?: ""
+        )
+    }
+
+    suspend fun unsubscribeFromSubstackPublication(slugOrFeedUrl: String, userId: String = currentUserId) {
+        val feedUrl = resolveSubstackFeedTarget(slugOrFeedUrl) ?: return
+        val targetNorm = normalizeFeedUrl(feedUrl)
+        val feed = _feeds.value.firstOrNull { normalizeFeedUrl(it.url) == targetNorm } ?: return
         deleteFeed(feed.id, userId)
+    }
+
+    suspend fun syncSubstackSubscriptions(handle: String? = null, userId: String = currentUserId): Int = withContext(Dispatchers.IO) {
+        val discovered = syncHandler?.fetchSubstackSubscriptions(handle) ?: return@withContext 0
+        if (discovered.isEmpty()) return@withContext 0
+        var addedCount = 0
+        for (sub in discovered) {
+            val norm = normalizeFeedUrl(sub.url)
+            if (_feeds.value.none { normalizeFeedUrl(it.url) == norm }) {
+                addFeed(
+                    name = sub.name,
+                    url = sub.url,
+                    category = FeedCategory.Other,
+                    userId = userId,
+                    iconUrl = sub.iconUrl
+                )
+                addedCount++
+            }
+        }
+        feedCache.remove("substack_inbox")
+        feedCache.remove("all_news")
+        addedCount
     }
 
     // MARK: - Feed Management
 
-    suspend fun addFeed(name: String, url: String, category: FeedCategory, userId: String = currentUserId) {
+    suspend fun addFeed(
+        name: String,
+        url: String,
+        category: FeedCategory,
+        userId: String = currentUserId,
+        iconUrl: String = ""
+    ) {
         val norm = normalizeFeedUrl(url)
+        if (norm == "https://substack.com/feed" || norm == "https://www.substack.com/feed" || norm == "https://open.substack.com/feed") {
+            return
+        }
         val existing = _feeds.value.firstOrNull { normalizeFeedUrl(it.url) == norm }
         if (existing != null) {
             return
@@ -565,6 +669,7 @@ class NewsRepository(
         val newFeed = FeedSource(
             name = name,
             url = url,
+            iconUrl = iconUrl,
             type = type,
             category = category,
             displayOrder = _feeds.value.size

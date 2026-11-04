@@ -378,23 +378,26 @@ public sealed partial class RssFeedDetailPage : Page
 
         bool isSubstack = IsItemSubstack(item);
 
-        bool hasSubstantialContent = !string.IsNullOrWhiteSpace(item.Content) && 
-                                     item.Content.Length > 250 && 
-                                     !IsMediumTeaser(item.Content) &&
-                                     !IsSubstackTeaser(item.Content);
+        bool hasSubstantialMediumContent = !string.IsNullOrWhiteSpace(item.Content) && 
+                                           item.Content.Length > 250 && 
+                                           !IsMediumTeaser(item.Content);
+
+        bool hasSubstantialSubstackContent = !string.IsNullOrWhiteSpace(item.Content) && 
+                                             item.Content.Length > 250 && 
+                                             !IsSubstackTeaser(item.Content);
 
         var appSettingsForSubstack = isSubstack ? SettingsService.Load() : null;
         bool shouldUpgradeSubstackBonus = isSubstack &&
-                                          hasSubstantialContent &&
+                                          hasSubstantialSubstackContent &&
                                           HasSubstackBonusPaywall(item.Content) &&
                                           !string.IsNullOrEmpty(appSettingsForSubstack?.SubstackUsername);
 
-        if (isMedium && hasSubstantialContent)
+        if (isMedium && hasSubstantialMediumContent)
         {
             fullArticle = item;
             needsWebViewFallback = false;
         }
-        else if (isSubstack && hasSubstantialContent && !shouldUpgradeSubstackBonus)
+        else if (isSubstack && hasSubstantialSubstackContent && !shouldUpgradeSubstackBonus)
         {
             string purified = StripSubstackTrackingAndNoise(item.Content!);
             if (!string.IsNullOrEmpty(item.ImageUrl))

@@ -106,6 +106,19 @@ class DailyApp : Application() {
             override suspend fun extractMediumArticle(url: String, baseArticle: com.intellidream.daily.model.NewsArticle?): com.intellidream.daily.model.NewsArticle? = mediumBridge.extractArticle(url, baseArticle)
             override suspend fun scrapeSubstackInbox(): List<com.intellidream.daily.model.NewsArticle>? = substackBridge.scrapeInbox()
             override suspend fun extractSubstackArticle(url: String, baseArticle: com.intellidream.daily.model.NewsArticle?): com.intellidream.daily.model.NewsArticle? = substackBridge.extractArticle(url, baseArticle)
+            override suspend fun fetchSubstackSubscriptions(handle: String?): List<com.intellidream.daily.model.FeedSearchResult> {
+                val combined = mutableListOf<com.intellidream.daily.model.FeedSearchResult>()
+                val seen = mutableSetOf<String>()
+                fun norm(u: String) = com.intellidream.daily.database.NewsRepository.normalizeFeedUrl(u)
+                for (item in substackBridge.fetchAuthenticatedSubscriptions()) {
+                    if (seen.add(norm(item.url))) combined.add(item)
+                }
+                for (item in newsRemoteService.fetchSubstackPublicSubscriptions(handle)) {
+                    if (seen.add(norm(item.url))) combined.add(item)
+                }
+                return combined
+            }
+            override fun hasAuthenticatedSubstackSession(): Boolean = substackBridge.hasAuthenticatedSession()
         }
         newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao(), syncHandler = newsHandler)
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)

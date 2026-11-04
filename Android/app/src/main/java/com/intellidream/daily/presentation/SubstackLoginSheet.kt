@@ -322,6 +322,15 @@ fun SubstackLoginSheet(
                                                         email: u.email
                                                     });
                                                 }
+                                                var profileLink = document.querySelector('a[href*="substack.com/@"], a[href^="/@"]');
+                                                if (profileLink) {
+                                                    var href = profileLink.getAttribute('href') || '';
+                                                    var idx = href.indexOf('/@');
+                                                    if (idx >= 0) {
+                                                        var h = href.substring(idx + 2).split('/')[0].split('?')[0];
+                                                        if (h) return JSON.stringify({ handle: h });
+                                                    }
+                                                }
                                             } catch (e) {}
                                             return null;
                                         })()
@@ -348,10 +357,12 @@ fun SubstackLoginSheet(
                                             detectedHandle = parts.firstOrNull()?.trim()
                                         }
 
-                                        if ((hasAuthCookies || !detectedHandle.isNullOrEmpty()) && !detectedHandle.isNullOrEmpty()) {
+                                        if (hasAuthCookies || !detectedHandle.isNullOrEmpty()) {
+                                            val resolvedHandle = detectedHandle?.takeIf { it.isNotBlank() }
+                                                ?: manualUsername.trim().removePrefix("@").ifEmpty { "substack" }
                                             detectedCompleted = true
                                             cookieManager.flush()
-                                            onConnect(detectedHandle)
+                                            onConnect(resolvedHandle)
                                             onDismiss()
                                         }
                                     }

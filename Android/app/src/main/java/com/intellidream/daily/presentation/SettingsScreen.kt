@@ -32,7 +32,9 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Newspaper
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -53,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,6 +64,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.intellidream.daily.DailyApp
 import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.GlassButton
 import com.intellidream.daily.designsystem.GlassCard
@@ -887,10 +891,17 @@ private fun NewsSettingsCard(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
 ) {
+    val context = LocalContext.current
+    val newsRepository = remember(context) {
+        (context.applicationContext as? DailyApp)?.newsRepository
+    }
+    val coroutineScope = rememberCoroutineScope()
     var showMediumDialog by remember { mutableStateOf(false) }
     var mediumUsernameInput by remember { mutableStateOf(settings.newsMediumUsername ?: "") }
     var showSubstackDialog by remember { mutableStateOf(false) }
     var substackUsernameInput by remember { mutableStateOf(settings.newsSubstackUsername ?: "") }
+    var isSyncingSubstack by remember { mutableStateOf(false) }
+    var substackSyncMessage by remember { mutableStateOf<String?>(null) }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -1267,6 +1278,64 @@ private fun NewsSettingsCard(
                         }
                     }
 
+                    // Sync Subscriptions Button
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(CircleShape)
+                            .background(ThemeColors.accentCyan.copy(alpha = 0.14f))
+                            .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.30f), CircleShape)
+                            .clickable(enabled = !isSyncingSubstack) {
+                                isSyncingSubstack = true
+                                substackSyncMessage = null
+                                coroutineScope.launch {
+                                    val added = newsRepository?.syncSubstackSubscriptions(configuredUsername) ?: 0
+                                    isSyncingSubstack = false
+                                    substackSyncMessage = if (added > 0) {
+                                        "Synced $added new Substack publications into News."
+                                    } else {
+                                        "All Substack subscriptions are up to date."
+                                    }
+                                }
+                            }
+                            .padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (isSyncingSubstack) {
+                                CircularProgressIndicator(
+                                    color = ThemeColors.accentCyan,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = null,
+                                    tint = ThemeColors.accentCyan,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Text(
+                                text = if (isSyncingSubstack) "Syncing Substack Subscriptions..." else "Sync Subscriptions",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ThemeColors.accentCyan
+                            )
+                        }
+                    }
+
+                    if (!substackSyncMessage.isNullOrBlank()) {
+                        Text(
+                            text = substackSyncMessage!!,
+                            fontSize = 11.sp,
+                            color = ThemeColors.accentCyan
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1384,6 +1453,16 @@ private fun NewsSettingsCard(
                 if (clean.isNotEmpty()) {
                     onUpdateSettings { s ->
                         s.copy(newsSubstackUsername = clean)
+                    }
+                    coroutineScope.launch {
+                        isSyncingSubstack = true
+                        val added = newsRepository?.syncSubstackSubscriptions(clean) ?: 0
+                        isSyncingSubstack = false
+                        substackSyncMessage = if (added > 0) {
+                            "Synced $added new Substack publications into News."
+                        } else {
+                            "Substack subscriptions synced."
+                        }
                     }
                 }
                 showSubstackDialog = false

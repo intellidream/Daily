@@ -198,6 +198,17 @@ fun NewsFeedView(
         }
     }
 
+    LaunchedEffect(settings.newsSubstackUsername) {
+        val handle = settings.newsSubstackUsername
+        val hasSubstackFeeds = feeds.any {
+            it.url.contains("substack.com", ignoreCase = true) ||
+            it.iconUrl.contains("substack", ignoreCase = true)
+        }
+        if (!hasSubstackFeeds && (!handle.isNullOrBlank() || repository.syncHandler?.hasAuthenticatedSubstackSession() == true)) {
+            repository.syncSubstackSubscriptions(handle)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -308,8 +319,7 @@ fun NewsFeedView(
                                     repository.isSubscribedToMediumAuthor(u)
                                 } else false,
                                 isSubstackSubscribed = if (article.isSubstackItem) {
-                                    val slug = article.substackPublicationSlug ?: com.intellidream.daily.model.extractSubstackPublicationSlug(article.link) ?: ""
-                                    repository.isSubscribedToSubstack(slug)
+                                    repository.isSubscribedToSubstack(article)
                                 } else false,
                                 onTap = { selectedArticleForReader = article },
                                 onToggleReadLater = {
@@ -327,12 +337,16 @@ fun NewsFeedView(
                                         }
                                     }
                                 },
-                                onSubscribeSubstackPublication = { slug ->
+                                onSubscribeSubstackPublication = { target ->
                                     scope.launch {
-                                        if (repository.isSubscribedToSubstack(slug)) {
-                                            repository.unsubscribeFromSubstackPublication(slug)
+                                        if (repository.isSubscribedToSubstack(target)) {
+                                            repository.unsubscribeFromSubstackPublication(target)
                                         } else {
-                                            repository.subscribeToSubstackPublication(slug, article.publicationName)
+                                            repository.subscribeToSubstackPublication(
+                                                slugOrFeedUrl = target,
+                                                publicationName = article.publicationName,
+                                                iconUrl = article.publicationIconUrl
+                                            )
                                         }
                                     }
                                 }
@@ -368,6 +382,7 @@ fun NewsFeedView(
     if (showManageFeedsSheet) {
         NewsFeedsManagementSheet(
             repository = repository,
+            substackUsername = settings.newsSubstackUsername,
             onDismiss = { showManageFeedsSheet = false }
         )
     }

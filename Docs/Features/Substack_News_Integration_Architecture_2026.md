@@ -5,99 +5,61 @@
 This document specifies the end-to-end architecture and implementation details for native Substack integration across all supported client platforms in Daily: **macOS**, **iOS**, **Android**, and **Windows 11 (WinUI 3)**.
 
 The feature extends Daily's News Reader and RSS engine to support:
-1. **Interactive In-App Web Authentication**: Seamless login to `https://substack.com/sign-in` via platform web engines (WKWebView on Darwin, Android WebKit WebView, and Microsoft Edge WebView2 on Windows) with automated extraction of `substack.sid` / `connect.sid` session cookies and `window._preloads.user` account handle.
-2. **Substack Account Management & Session Status**: Real-time session monitoring displaying `@handle (Session Active)` with live cookie validation, `(Session Inactive - Reconnect)` fallback, and zero-prompt token storage.
-3. **Substack Inbox Source Feed**: A dedicated feed source (`substack_inbox`) added to feed switchers, fetching newsletters and subscriptions directly from `https://substack.com/inbox` using authenticated headless DOM bridges.
-4. **Distraction-Free Reader Mode & Noise Stripping**: High-fidelity full-article extraction for subscriber posts with aggressive noise cleaning (stripping `.subscription-widget-wrap`, `.subscribe-widget`, `.post-footer`, `.like-button-container`, `.comment-widget`) and teaser detection (`isSubstackTeaser`).
-5. **Retina Image Optimization**: Intelligent rewrite of `substackcdn.com` media URLs (`w_\d+` -> `w_1200`) for high-DPI displays.
-6. **One-Tap Publication Subscriptions**: `+ Subscribe` / `Subscribed` button on Substack article cards and reader action bars to add publication RSS feeds (`https://{slug}.substack.com/feed` or `https://substack.com/@{handle}/feed`) directly to custom RSS feeds.
-7. **Zero-Regression Guarantee**: Complete preservation of existing news publication features (ZF, Recorder, Politico, Republica, Medium).
+1. **Interactive In-App Web Authentication**: Seamless login to `https://substack.com/sign-in` via platform web engines (`WKWebView` on Darwin, Android WebKit `WebView`, and Microsoft Edge `WebView2` on Windows) with automated extraction of `substack.sid` / `connect.sid` session cookies and account handle detection (`window._preloads.user` + profile DOM link fallback).
+2. **Substack Account Management & Automated Subscription Sync**:
+   - Real-time session monitoring displaying `@handle (Session Active)` with live cookie validation and `(Session Inactive - Reconnect)` fallback.
+   - Automatic & one-tap **Sync Subscriptions** (`Sync Substack`) importing all existing user Substack newsletters into Daily's feeds and Supabase via authenticated same-origin `https://substack.com/api/v1/subscriptions` (capturing both public & private subscriptions and custom domains) combined with public `https://substack.com/api/v1/user/{handle}/public_profile`.
+3. **API-First Substack Inbox (`substack_inbox`)**:
+   - Primary fast path via Substack's authenticated JSON API (`https://substack.com/api/v1/reader/posts?limit=35` joined with `/api/v1/subscriptions`) returning real ISO-8601 `post_date` timestamps, newsletter `logo_url` icons, `publication.name`, `canonical_url` (including custom domains), and pre-hydrated clean `body_html` for instant 0ms Reader opening.
+   - Multi-tier resilience: falls back to `/inbox` DOM scraping and finally aggregates subscribed Substack RSS feeds if offline or signed out.
+4. **Distraction-Free Editorial Reader & Pencraft Purification**:
+   - **API-First Extraction**: Queries `https://{host}/api/v1/posts/{slug}` for clean `body_html` + `subtitle` + `audience` without website chrome, and upgrades subscriber-only (`only_paid`) or bonus-content posts via same-origin authenticated `https://substack.com/api/v1/posts/by-id/{id}` (unlocking paid newsletters even on custom domains such as `pragmaticengineer.com` or `stratechery.com` where third-party cookies do not travel).
+   - **6-Pass Pencraft HTML Purifier (`stripSubstackTrackingAndNoise`)**: Strips Pencraft image action overlay toolbars/SVGs (`.image-link-expand`, `button.restack-image`, `button.view-image`), unwraps `<picture>` and strips low-res 424px `<source srcset>` thumbnails so crisp `w_1200` `<img src>` always renders, removes nested `.subscription-widget-wrap` / `<form>` widgets, strips 1x1 `eotrx.substackcdn.com` tracking pixels, and strips inline Subscribe/Share CTA buttons while preserving legitimate external link buttons.
+   - **S3 UUID Cover Image Deduplication**: Normalizes `substackcdn.com` / `substack-post-media` URLs by their percent-decoded S3 asset UUID filename so cover images are never duplicated even when RSS and body HTML carry different `$s_!...!` CDN signature tokens.
+   - **Substack Reader Typography CSS**: Dedicated styling across macOS, iOS, WinUI 3, and Android for `.substack-subtitle`, `.captioned-image-container`, `.image-caption`, `.pullquote`, `.callout-block`, `.embedded-post-wrap`, `.button-wrapper a.button`, `.footnote`, and `.substack-paid-card`.
+5. **Substack Publisher Discovery & One-Tap Subscriptions**:
+   - **Parallel Substack Search**: Queries `https://substack.com/api/v1/top/search?query={q}&page=0` in parallel alongside Feedly in Manage Feeds / Feed Discovery, plus direct `@handle`, `*.substack.com`, `open.substack.com/pub/{slug}`, and custom-domain Substack feed resolution (`https://{custom_domain}/feed`), while strictly rejecting invalid root `https://substack.com/feed`.
+   - **Always-Visible `+ Subscribe` / `Subscribed` Controls**: Displayed on all Substack article cards (even when `author` metadata is absent) and directly in the Reader top toolbar across all four platforms.
+6. **Zero-Regression Guarantee**: Strict isolation of `isSubstack` and `isSubstackTeaser` checks so Ziarul Financiar (ZF), Recorder, Politico, Republica, Medium, WordPress JSON, and standard RSS feeds remain 100% untouched.
 
 ---
 
-## 2. Architecture & Contracts
+## 2. Platform Implementations
 
-### 2.1 Schema & Data Models
+### 2.1 macOS & iOS (`DailyCore`, `MacOS/Daily`, `iOS/Daily`)
+- **`DailyCore/Sources/DailyCore/Models/NewsModels.swift`**: Upgraded `isSubstackItem` (including custom-domain Substack detection via `substackcdn.com` / `substack-post-media` / `captioned-image-container`), `extractSubstackPublicationSlug`, `extractSubstackFeedUrl`, and `extractSubstackInfo`.
+- **`DailyCore/Sources/DailyCore/Services/ArticleExtractor.swift`**:
+  - Fixed `isSubstackTeaser`, added `hasSubstackBonusPaywall`, upgraded 6-pass `stripSubstackTrackingAndNoise`, and S3 UUID `normalizeImageUrl` + `deduplicateFeaturedImage`.
+  - Upgraded `HeadlessReadabilityParser` with warm `https://substack.com/404` `WKWebView` origin runner (`callAsyncJavaScript`), `fetchSubstackUserSubscriptions(handle:)`, API-first `scrapeSubstackInbox()`, and 3-tier `extractSubstackArticle(url:baseArticle:extractor:)`.
+- **`DailyCore/Sources/DailyCore/Services/NewsService.swift`**: Parallel `searchSubstackPublications` in `discoverFeeds`, `syncSubstackSubscriptions(handle:)`, `iconUrl` preservation in `addFeed`, custom-domain support in `subscribeToSubstackPublication`, and RSS aggregation fallback for `substack_inbox`.
+- **`MacOS/Daily` & `iOS/Daily` Views**:
+  - `ArticleWebView.swift`: Added Substack editorial CSS rules.
+  - `NewsArticleCard.swift` & `NewsReaderView.swift`: Unconditional Substack `+ Subscribe` / `Subscribed` pill on cards and Reader top toolbar.
+  - `NewsFeedsManagementSheet.swift`, `FeaturesSettingsSection.swift`, `SubstackLoginSheet.swift`: Added `"Sync Substack"` / `"Sync Subscriptions"` buttons and automatic subscription import upon login.
 
-#### Shared Models (`DailyCore` & Android `core-model` & WinUI `Daily.WinUI`)
-- **`AppSettings`**:
-  - Swift: `public var newsSubstackUsername: String?`
-  - Kotlin: `val newsSubstackUsername: String? = null`
-  - C#: `public string? SubstackUsername { get; set; }`
-- **`NewsModels` / `RssModels`**:
-  - `isSubstackItem`: Boolean flag identifying if an item belongs to Substack (`substack.com` or `Substack Inbox`).
-  - `extractSubstackInfo(from url)`: Resolves `(slug, feedUrl)` from both subdomain formats (`https://{slug}.substack.com/...`) and root profile formats (`https://substack.com/@{handle}/...`).
-  - `optimizeSubstackImageUrl(url)`: Replaces low-res width clamps (`w_\d+`) with `w_1200` on `substackcdn.com` and `substack-post-media`.
-  - `isSubstackTeaser(content)`: Detects whether an article is a paywalled preview (`this post is for paid subscribers`, `subscribe to unlock`, `subscription-widget-wrap`).
-  - `stripSubstackTrackingAndNoise(html)`: Regex-based purifier removing subscription widgets, share popups, like footers, and tracking containers.
+### 2.2 Windows 11 (`WinUI/Daily.WinUI` & `Services/RssFeedService.cs`)
+- **`Services/IRssFeedService.cs` & `Services/RssFeedService.cs`**: Optional `iconUrl` parameter on `AddFeedAsync`, parallel Substack `/api/v1/top/search` discovery in `DiscoverFeedsAsync`, `FetchSubstackPublicSubscriptionsAsync`, and root `substack.com/feed` guard.
+- **`WinUI/Daily.WinUI/Views/RssFeedDetailPage.xaml(.cs)` & `Controls/RssFeedWidgetControl.xaml.cs`**:
+  - Added `ExecuteAsyncScriptOnWebViewAsync` Promise-polling bridge for `WebView2` (`ExecuteScriptAsync` does not natively await JS Promises).
+  - Implemented `ExtractSubstackArticleAsync` (`/api/v1/posts/{slug}` + authenticated `/api/v1/posts/by-id/{id}` + `.body.markup` fallback), `ScrapeSubstackInboxSharedAsync` (`/api/v1/reader/posts` + `/api/v1/subscriptions` join), 6-pass `StripSubstackTrackingAndNoise`, S3 UUID `DeduplicateSubstackFeaturedImage`, Substack Reader CSS, and `ReaderSubscribeButton` in Reader toolbar.
+- **`WinUI/Daily.WinUI/Views/FeaturesPage.xaml(.cs)`**: Added `"Sync Substack"` & `"Sync Subscriptions"` buttons, `SubstackSyncWebView`, and automatic subscription sync on login/startup.
 
----
-
-## 3. Platform Implementations
-
-### 3.1 macOS & iOS (Swift & SwiftUI)
-
-- **DailyCore Layer (`DailyCore`)**:
-  - `AppSettings.swift`: Added `newsSubstackUsername` to `AppSettings`, coding keys, decoder, and encoder.
-  - `NewsModels.swift`: Added `isSubstackItem`, `substackPublicationSlug`, `substackFeedUrl`, and `extractSubstackInfo(from:)`.
-  - `FeedParser.swift`: Applied `optimizeSubstackImageUrl` during XML enclosure and thumbnail parsing.
-  - `ArticleExtractor.swift`: Added `scrapeSubstackInbox()`, `extractSubstackArticle()`, `isSubstackTeaser()`, `stripSubstackTrackingAndNoise()`, and cookie validation.
-  - `NewsService.swift`: Added `substackInboxFeedSource`, `subscribeToSubstackPublication()`, and `isSubscribedToSubstack()`.
-- **macOS Native App (`MacOS/Daily`)**:
-  - `SubstackLoginSheet.swift`: WKWebView modal with custom user agent, cookie observer for `substack.sid` / `connect.sid`, and `window._preloads.user` evaluator.
-  - `FeaturesSettingsSection.swift`: Refactored into modular subviews (`MediumSetupSubSection`, `SubstackSetupSubSection`) to eliminate Swift 6 type-checker compilation timeouts.
-  - `NewsArticleCard.swift`, `NewsFeedView.swift`, `NewsReaderView.swift`: Integrated `+ Subscribe` buttons and Substack Inbox feed source.
-- **iOS Native App (`iOS/Daily`)**:
-  - `SubstackLoginSheet.swift`: UIKit `UIViewRepresentable` WKWebView sheet with `presentationDetents([.large])`.
-  - Full UI parity with macOS for article cards, reader view, and settings.
-  - Verified on **iOS Simulator (SimulaPhone)** and physical **iPhone Schmitz** via `xcrun devicectl`.
-
-### 3.2 Android (Kotlin & Jetpack Compose)
-
-- **`core-model` & `core-database`**:
-  - `AppSettings.kt`: Added `newsSubstackUsername`.
-  - `NewsModels.kt`: Added Substack slug extraction and image optimization.
-  - `ArticleExtractor.kt`: Added `isSubstackTeaser()`, `stripSubstackTrackingAndNoise()`, and cookie checker.
-  - `NewsRepository.kt`: Added Substack Inbox feed routing, full article extraction fallback via `NewsSyncHandler`, and publication subscription persistence.
-- **`app` Presentation Layer**:
-  - `SubstackWebViewBridge.kt`: Headless WebKit implementation for inbox scraping and subscriber article extraction using cookie injection and evaluated JavaScript.
-  - `SubstackLoginSheet.kt`: Modern Compose modal dialog embedding Android `WebView`, progress bar, and handle configuration.
-  - `DailyApp.kt`: Instantiated bridge and registered sync handlers on application startup.
-  - `SettingsScreen.kt`, `NewsArticleCard.kt`, `NewsFeedView.kt`, `NewsReaderSheet.kt`: Full UI integration.
-  - Verified on **Android Emulator** and physical **Google Pixel 9 Pro ("Trapper")** via wireless `adb`.
-
-### 3.3 Windows 11 (WinUI 3 & .NET 10)
-
-- **Shared Services (`Services/RssFeedService.cs`)**:
-  - Added `OptimizeSubstackImageUrl(string url)` with `Regex.Replace(url, @"w_\d+", "w_1200")`.
-  - Integrated into RSS image parsing pipelines.
-- **WinUI App (`WinUI/Daily.WinUI`)**:
-  - `RssItemViewModel.cs`: Added `IsSubstackItem` and `CanSubscribe`.
-  - `FeaturesPage.xaml` & `FeaturesPage.xaml.cs`: Added Substack Setup card, `SubstackLoginWindow` with WebView2 navigation to `https://substack.com/sign-in`, live session check, and cookie manager synchronization.
-  - `RssFeedDetailPage.xaml` & `RssFeedDetailPage.xaml.cs`: Added `_substackInboxSource`, `LoadSubstackInboxAsync()` using `BackgroundWebView`, Substack noise cleanup in reader fallback, and `+ Subscribe` button for Substack publications.
-  - `RssFeedWidgetControl.xaml.cs`: Integrated Substack Inbox into the desktop dashboard widget feed picker and background loader.
-  - Verified natively on Parallels **Windows 11 VM (ARM64)** with 0 build errors.
+### 2.3 Android (`core-model`, `core-network`, `core-database`, `app`)
+- **`Android/core-model`**: Upgraded `NewsModels.kt` (`isSubstackItem`, `extractSubstackPublicationSlug`, `extractSubstackFeedUrl`, `extractSubstackInfo`), `ArticleExtractor.kt` (6-pass `stripSubstackTrackingAndNoise`, `isSubstackTeaser`, `hasSubstackBonusPaywall`, S3 UUID `normalizeImageUrl`), and unit tests in `NewsParsersTest.kt`.
+- **`Android/core-network/NewsRemoteService.kt`**: Parallel `searchSubstackPublications` (`/api/v1/top/search`) alongside Feedly in `searchFeedly`, `fetchSubstackPublicSubscriptions`, and invalid root feed filtering.
+- **`Android/core-database/NewsRepository.kt` & `DailyApp.kt`**: Added `syncSubstackSubscriptions`, Substack RSS fast-path purification & cover deduplication in `fetchFullArticle`, custom-domain subscription support, and Substack Inbox RSS aggregation fallback.
+- **`Android/app/news/SubstackWebViewBridge.kt`**: Implemented `evaluateAsyncJs` Promise-polling bridge on `https://substack.com/404`, `fetchAuthenticatedSubscriptions`, API-first `scrapeInbox`, and 3-tier `extractArticle`.
+- **`Android/app/presentation`**: Upgraded `NewsArticleCard.kt`, `NewsFeedView.kt`, `NewsReaderSheet.kt` (toolbar `+ Subscribe` pill + Substack Reader CSS), `NewsFeedsManagementSheet.kt` (`Sync Substack`), `SubstackLoginSheet.kt`, and `SettingsScreen.kt` (`Sync Subscriptions` + auto-sync on connect).
 
 ---
 
-## 4. Verification Matrix
+## 3. Verification Matrix
 
-| Platform | Verification Environment | Build Command | Status |
+| Platform | Verification Environment | Build / Test Command | Status |
 | :--- | :--- | :--- | :--- |
-| **DailyCore** | macOS CLI / SwiftPM | `swift test --filter NewsServiceTests` | **PASSED (25/25 tests)** |
-| **macOS** | Host Mac (Apple Silicon) | `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily ... build` | **BUILD SUCCEEDED** |
-| **iOS Simulator** | SimulaPhone (iOS 18.2) | `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily ... build` | **BUILD SUCCEEDED** |
-| **iOS Device** | iPhone Schmitz | `xcrun devicectl device install app` | **DEPLOYED & VERIFIED** |
-| **Android** | Gradle Daemon | `./gradlew assembleDebug` | **BUILD SUCCESSFUL** |
-| **Android Device** | Pixel 9 Pro Trapper | `adb install -r app-debug.apk` | **DEPLOYED & VERIFIED** |
-| **Windows 11** | Parallels VM (ARM64) | `dotnet build -c Debug -p:Platform=ARM64` | **0 Errors, 0 Regressions** |
-
----
-
-## 5. Non-Regression Safeguards
-
-1. **Ziarul Financiar (ZF)**: Preserved specialized headline and section extraction, preventing generic teaser overwrites.
-2. **Recorder**: Preserved default feed configuration and audio/video link handling.
-3. **Politico**: Preserved `.article__content` multi-chunk container assembly and ad-separator stripping.
-4. **Republica**: Preserved short article extraction heuristic.
-5. **Medium**: Maintained complete separation between Medium and Substack session cookies, Reading List scrapers, and publication subscriber channels.
+| **DailyCore** | macOS SwiftPM | `swift test --package-path DailyCore --filter NewsServiceTests` | **PASSED (26/26 tests)** |
+| **macOS** | Host Mac (Apple Silicon) | `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` | **BUILD SUCCEEDED** |
+| **iOS Simulator** | SimulaPhone & SimulaDuo | `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily ... build` + `simctl install` | **BUILD SUCCEEDED & INSTALLED** |
+| **iOS Device** | iPhone ("Schmitz") | `xcodebuild ... -destination 'generic/platform=iOS' build` | **SIGNED DEVICE BUILD SUCCEEDED** |
+| **Windows 11** | Parallels VM (ARM64) | `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` | **0 Errors, 0 Regressions** |
+| **Android** | Unit Tests + Debug APK | `./gradlew :core-model:testDebugUnitTest` & `./gradlew assembleDebug` | **BUILD SUCCESSFUL** |

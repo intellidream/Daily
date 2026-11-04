@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -53,6 +54,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -116,8 +118,12 @@ fun NewsReaderSheet(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
+    val feeds by repository.feeds.collectAsState()
     val isReadLater = repository.isReadLater(currentArticle.link)
     val isFavorite = repository.isFavorite(currentArticle.link)
+    val isSubstackSubscribed = remember(currentArticle, feeds) {
+        if (currentArticle.isSubstackItem) repository.isSubscribedToSubstack(currentArticle) else false
+    }
     val coroutineScope = rememberCoroutineScope()
 
     // Smooth drag-to-dismiss translation offset with spring physics
@@ -251,6 +257,7 @@ fun NewsReaderSheet(
                             article = currentArticle,
                             isReadLater = isReadLater,
                             isFavorite = isFavorite,
+                            isSubstackSubscribed = isSubstackSubscribed,
                             fontSizeMultiplier = fontSizeMultiplier,
                             onDismiss = { dismissWithAnimation() },
                             onToggleReadLater = {
@@ -285,9 +292,18 @@ fun NewsReaderSheet(
                                     repository.subscribeToMediumAuthor(user, currentArticle.author)
                                 }
                             },
-                            onSubscribeSubstack = { slug ->
+                            onSubscribeSubstack = { target ->
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
-                                    repository.subscribeToSubstackPublication(slug, currentArticle.publicationName)
+                                    if (repository.isSubscribedToSubstack(target)) {
+                                        repository.unsubscribeFromSubstackPublication(target)
+                                    } else {
+                                        repository.subscribeToSubstackPublication(
+                                            slugOrFeedUrl = target,
+                                            publicationName = currentArticle.publicationName,
+                                            iconUrl = currentArticle.publicationIconUrl
+                                        )
+                                    }
                                 }
                             }
                         )
@@ -429,6 +445,7 @@ private fun ReaderTopToolbar(
     article: NewsArticle,
     isReadLater: Boolean,
     isFavorite: Boolean,
+    isSubstackSubscribed: Boolean = false,
     fontSizeMultiplier: Double,
     onDismiss: () -> Unit,
     onToggleReadLater: () -> Unit,
@@ -441,6 +458,9 @@ private fun ReaderTopToolbar(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showSizeSubmenu by remember { mutableStateOf(false) }
+    val substackTarget = if (article.isSubstackItem) {
+        com.intellidream.daily.model.extractSubstackFeedUrl(article) ?: article.substackPublicationSlug
+    } else null
 
     Row(
         modifier = Modifier
@@ -461,13 +481,13 @@ private fun ReaderTopToolbar(
             iconSize = 18.dp
         )
 
-        // Publication Title (horizontal scroll for long names)
+        // Publication Title + One-Tap Substack Subscribe Pill
         Row(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (!article.publicationIconUrl.isNullOrBlank()) {
                 DailyAsyncImage(
@@ -486,6 +506,44 @@ private fun ReaderTopToolbar(
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
+
+            if (substackTarget != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(
+                            if (isSubstackSubscribed) Color.White.copy(alpha = 0.10f)
+                            else ThemeColors.accentCyan.copy(alpha = 0.18f)
+                        )
+                        .border(
+                            0.5.dp,
+                            if (isSubstackSubscribed) Color.White.copy(alpha = 0.18f)
+                            else ThemeColors.accentCyan.copy(alpha = 0.40f),
+                            CircleShape
+                        )
+                        .clickable { onSubscribeSubstack(substackTarget) }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isSubstackSubscribed) Icons.Rounded.CheckCircle else Icons.Rounded.Add,
+                            contentDescription = null,
+                            tint = if (isSubstackSubscribed) Color.White.copy(alpha = 0.75f) else ThemeColors.accentCyan,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Text(
+                            text = if (isSubstackSubscribed) "Subscribed" else "+ Subscribe",
+                            color = if (isSubstackSubscribed) Color.White.copy(alpha = 0.75f) else ThemeColors.accentCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
         }
 
         // Action Buttons Row (Grouped with explicit 10.dp spacing to prevent overlap)
@@ -641,26 +699,30 @@ private fun ReaderTopToolbar(
                     }
                 }
 
-                if (article.isSubstackItem) {
-                    val pubSlug = article.substackPublicationSlug ?: com.intellidream.daily.model.extractSubstackPublicationSlug(article.link)
-                    if (pubSlug != null) {
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 4.dp))
-                        DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Add,
-                                    contentDescription = null,
-                                    tint = ThemeColors.accentCyan,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            text = { Text("Subscribe to $pubSlug", color = ThemeColors.accentCyan, fontSize = 13.sp) },
-                            onClick = {
-                                showMenu = false
-                                onSubscribeSubstack(pubSlug)
-                            }
-                        )
-                    }
+                if (substackTarget != null) {
+                    val pubLabel = article.publicationName ?: article.substackPublicationSlug ?: "Publication"
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 4.dp))
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (isSubstackSubscribed) Icons.Rounded.CheckCircle else Icons.Rounded.Add,
+                                contentDescription = null,
+                                tint = ThemeColors.accentCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = if (isSubstackSubscribed) "Unsubscribe from $pubLabel" else "Subscribe to $pubLabel",
+                                color = ThemeColors.accentCyan,
+                                fontSize = 13.sp
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onSubscribeSubstack(substackTarget)
+                        }
+                    )
                 }
             }
         }
@@ -939,6 +1001,90 @@ private fun generateReaderHtml(article: NewsArticle, isDark: Boolean, fontSizeMu
                 border-radius: 20px;
                 font-weight: 600;
                 font-size: 14px;
+            }
+            /* Substack Clean Editorial Typography & Pencraft Noise Suppression */
+            .substack-subtitle {
+                font-size: ${(baseFontSize * 1.15).toInt()}px;
+                line-height: 1.45;
+                color: $metaColor;
+                font-weight: 400;
+                margin: -6px 0 22px 0;
+            }
+            .image-link-expand, button.restack-image, button.view-image,
+            .subscription-widget-wrap, .subscription-widget-wrap-editor,
+            .subscribe-widget, .post-ufi, .post-footer, .like-button-container {
+                display: none !important;
+            }
+            .captioned-image-container {
+                margin: 24px 0;
+            }
+            .captioned-image-container figure {
+                margin: 0;
+            }
+            .captioned-image-container img, a.image-link img {
+                width: 100%;
+                height: auto;
+                border-radius: 12px;
+                margin: 0 auto;
+            }
+            .image-caption {
+                font-size: 13px;
+                color: $metaColor;
+                text-align: center;
+                margin-top: 8px;
+                line-height: 1.4;
+            }
+            .pullquote {
+                font-size: ${(baseFontSize * 1.22).toInt()}px;
+                font-weight: 600;
+                line-height: 1.45;
+                margin: 28px 0;
+                padding: 14px 20px;
+                border-left: 4px solid $linkColor;
+                background: ${if (isDark) "rgba(255,255,255,0.04)" else "rgba(0,0,0,0.04)"};
+                border-radius: 0 10px 10px 0;
+            }
+            .callout-block {
+                margin: 24px 0;
+                padding: 16px 18px;
+                border-radius: 12px;
+                background: ${if (isDark) "rgba(255,255,255,0.06)" else "rgba(0,0,0,0.05)"};
+                border: 1px solid ${if (isDark) "rgba(255,255,255,0.12)" else "rgba(0,0,0,0.10)"};
+            }
+            .embedded-post-wrap, .digest-post-embed {
+                margin: 22px 0;
+                padding: 14px 16px;
+                border-radius: 12px;
+                border: 1px solid ${if (isDark) "rgba(255,255,255,0.14)" else "rgba(0,0,0,0.12)"};
+                background: ${if (isDark) "rgba(255,255,255,0.04)" else "rgba(0,0,0,0.03)"};
+            }
+            .button-wrapper {
+                text-align: center;
+                margin: 22px 0;
+            }
+            .button-wrapper a.button {
+                display: inline-block;
+                padding: 10px 22px;
+                border-radius: 999px;
+                background: ${if (isDark) "rgba(102, 178, 255, 0.16)" else "rgba(0, 102, 204, 0.10)"};
+                border: 1px solid ${if (isDark) "rgba(102, 178, 255, 0.35)" else "rgba(0, 102, 204, 0.30)"};
+                color: $linkColor !important;
+                font-weight: 600;
+                font-size: 14px;
+                text-decoration: none;
+            }
+            a.footnote-anchor {
+                font-size: 0.78em;
+                vertical-align: super;
+                line-height: 0;
+                padding: 0 2px;
+            }
+            .footnote {
+                font-size: 0.88em;
+                color: $metaColor;
+                border-top: 1px solid ${if (isDark) "rgba(255,255,255,0.10)" else "rgba(0,0,0,0.10)"};
+                padding-top: 12px;
+                margin-top: 18px;
             }
         </style>
     </head>

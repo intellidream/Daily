@@ -307,8 +307,8 @@ public final class ArticleExtractor: @unchecked Sendable {
         
         let isSubstack = (baseArticle?.isSubstackItem == true) ||
                          safeUrlString.lowercased().contains("substack.com") ||
-                         Self.isSubstackTeaser(baseArticle?.content ?? "") ||
-                         Self.isSubstackTeaser(baseArticle?.description ?? "")
+                         (baseArticle?.content?.lowercased().contains("substackcdn.com") == true) ||
+                         (baseArticle?.content?.lowercased().contains("substack-post-media") == true)
         
         let hasSubstantialSubstackBaseContent = (baseArticle?.content != nil) &&
             (baseArticle!.content!.count > 250) &&

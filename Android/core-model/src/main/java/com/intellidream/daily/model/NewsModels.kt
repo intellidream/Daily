@@ -87,7 +87,12 @@ data class NewsArticle(
     val isSubstackItem: Boolean
         get() = publicationName?.contains("Substack", ignoreCase = true) == true ||
                 link.contains("substack.com", ignoreCase = true) ||
-                publicationIconUrl?.contains("substack", ignoreCase = true) == true
+                publicationIconUrl?.contains("substack", ignoreCase = true) == true ||
+                imageUrl?.contains("substackcdn.com", ignoreCase = true) == true ||
+                imageUrl?.contains("substack-post-media", ignoreCase = true) == true ||
+                content?.contains("substackcdn.com", ignoreCase = true) == true ||
+                content?.contains("substack-post-media", ignoreCase = true) == true ||
+                content?.contains("captioned-image-container", ignoreCase = true) == true
 
     val substackPublicationSlug: String?
         get() = extractSubstackPublicationSlug(this)
@@ -277,12 +282,31 @@ fun optimizeSubstackImageUrl(url: String): String {
 
 fun extractSubstackPublicationSlug(url: String): String? {
     return try {
-        val uri = java.net.URI(url)
+        val uri = java.net.URI(url.trim())
         val host = uri.host?.lowercase(Locale.ROOT) ?: return null
+        val path = uri.path ?: ""
+
+        // 1. Subdomain: https://{slug}.substack.com/...
         if (host.endsWith(".substack.com")) {
             val sub = host.substringBefore(".substack.com")
-            if (sub.isNotBlank() && sub != "www" && sub != "api") sub else null
-        } else null
+            if (sub.isNotBlank() && sub != "www" && sub != "api" && sub != "open" && sub != "substackcdn" && sub != "eotrx") {
+                return sub
+            }
+        }
+
+        // 2. open.substack.com/pub/{slug}/p/...
+        if (host == "open.substack.com" && path.startsWith("/pub/", ignoreCase = true)) {
+            val slug = path.substring(5).substringBefore("/").trim().lowercase(Locale.ROOT)
+            if (slug.isNotBlank()) return slug
+        }
+
+        // 3. substack.com/@{handle}
+        if ((host == "substack.com" || host == "www.substack.com") && path.startsWith("/@")) {
+            val handle = path.removePrefix("/@").substringBefore("/").trim().lowercase(Locale.ROOT)
+            if (handle.isNotBlank()) return handle
+        }
+
+        null
     } catch (_: Exception) {
         null
     }
@@ -292,41 +316,38 @@ fun extractSubstackPublicationSlug(article: NewsArticle): String? {
     return extractSubstackPublicationSlug(article.link)
 }
 
-fun extractSubstackFeedUrl(article: NewsArticle): String? {
-    val slug = extractSubstackPublicationSlug(article)
+fun extractSubstackFeedUrl(url: String, isKnownSubstack: Boolean = false): String? {
+    val slug = extractSubstackPublicationSlug(url)
     if (slug != null) {
         return "https://$slug.substack.com/feed"
     }
-    if (article.link.contains("substack.com", ignoreCase = true)) {
-        return try {
-            val uri = java.net.URI(article.link)
-            val scheme = uri.scheme ?: "https"
-            val host = uri.host ?: return null
-            "$scheme://$host/feed"
-        } catch (_: Exception) {
+    return try {
+        val uri = java.net.URI(url.trim())
+        val host = uri.host?.lowercase(Locale.ROOT) ?: return null
+        if (host == "substack.com" || host == "www.substack.com" || host == "open.substack.com" || host == "api.substack.com" || host.endsWith(".substack.com")) {
+            return null
+        }
+        if (isKnownSubstack && host.contains(".") && !host.contains("medium.com")) {
+            "https://$host/feed"
+        } else {
             null
         }
+    } catch (_: Exception) {
+        null
     }
-    return null
+}
+
+fun extractSubstackFeedUrl(article: NewsArticle): String? {
+    return extractSubstackFeedUrl(article.link, isKnownSubstack = article.isSubstackItem)
 }
 
 fun extractSubstackInfo(article: NewsArticle): Pair<String, String>? {
-    val feedUrl = extractSubstackFeedUrl(article)
-    if (feedUrl != null) {
-        val name = article.publicationName ?: extractSubstackPublicationSlug(article) ?: "Substack"
-        return Pair(name, feedUrl)
+    val feedUrl = extractSubstackFeedUrl(article) ?: return null
+    val pubName = article.publicationName?.takeIf { it.isNotBlank() && !it.equals("Substack", ignoreCase = true) && !it.equals("Substack Inbox", ignoreCase = true) }
+    val name = pubName ?: extractSubstackPublicationSlug(article)?.replaceFirstChar { it.uppercase() } ?: try {
+        java.net.URI(feedUrl).host ?: "Substack"
+    } catch (_: Exception) {
+        "Substack"
     }
-    if (article.isSubstackItem) {
-        return try {
-            val uri = java.net.URI(article.link)
-            val scheme = uri.scheme ?: "https"
-            val host = uri.host ?: return null
-            val feed = "$scheme://$host/feed"
-            val name = article.publicationName ?: host
-            Pair(name, feed)
-        } catch (_: Exception) {
-            null
-        }
-    }
-    return null
+    return Pair(name, feedUrl)
 }

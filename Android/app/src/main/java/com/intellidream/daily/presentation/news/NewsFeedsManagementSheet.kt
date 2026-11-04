@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material.icons.rounded.Search
 import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
@@ -78,6 +79,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun NewsFeedsManagementSheet(
     repository: NewsRepository,
+    substackUsername: String? = null,
     onDismiss: () -> Unit
 ) {
     val feeds by repository.feeds.collectAsState()
@@ -90,6 +92,8 @@ fun NewsFeedsManagementSheet(
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<FeedSearchResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
+    var isSyncingSubstack by remember { mutableStateOf(false) }
+    var syncSubstackStatus by remember { mutableStateOf<String?>(null) }
 
     var isAddingCustom by remember { mutableStateOf(false) }
     var customName by remember { mutableStateOf("") }
@@ -173,7 +177,7 @@ fun NewsFeedsManagementSheet(
                                 onValueChange = { searchQuery = it },
                                 placeholder = {
                                     Text(
-                                        text = "Search feeds or enter URL...",
+                                        text = "Search feeds, Substack, or enter URL...",
                                         color = ThemeColors.textMuted,
                                         fontSize = 13.sp
                                     )
@@ -238,7 +242,7 @@ fun NewsFeedsManagementSheet(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Searching Feedly & Websites...",
+                                text = "Searching Substack, Feedly & Websites...",
                                 color = ThemeColors.textSecondary,
                                 fontSize = 13.sp
                             )
@@ -317,7 +321,12 @@ fun NewsFeedsManagementSheet(
                                                     .clickable {
                                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                         scope.launch {
-                                                            repository.addFeed(result.name, result.url, FeedCategory.Other)
+                                                            repository.addFeed(
+                                                                name = result.name,
+                                                                url = result.url,
+                                                                category = FeedCategory.Other,
+                                                                iconUrl = result.iconUrl
+                                                            )
                                                         }
                                                     }
                                                     .padding(horizontal = 10.dp, vertical = 5.dp)
@@ -490,13 +499,68 @@ fun NewsFeedsManagementSheet(
 
                     // Subscriptions List
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "YOUR SUBSCRIPTIONS (${distinctFeeds.size})",
-                            color = ThemeColors.accentCyan,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.6.sp
-                        )
+                        val canSyncSubstack = !substackUsername.isNullOrBlank() ||
+                            (repository.syncHandler?.hasAuthenticatedSubstackSession() == true)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "YOUR SUBSCRIPTIONS (${distinctFeeds.size})",
+                                color = ThemeColors.accentCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            )
+
+                            if (canSyncSubstack) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(ThemeColors.accentCyan.copy(alpha = 0.14f))
+                                        .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.30f), CircleShape)
+                                        .clickable(enabled = !isSyncingSubstack) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            isSyncingSubstack = true
+                                            syncSubstackStatus = null
+                                            scope.launch {
+                                                val added = repository.syncSubstackSubscriptions(substackUsername)
+                                                isSyncingSubstack = false
+                                                syncSubstackStatus = if (added > 0) "Added $added" else "Up to date"
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        if (isSyncingSubstack) {
+                                            CircularProgressIndicator(
+                                                color = ThemeColors.accentCyan,
+                                                strokeWidth = 1.5.dp,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Refresh,
+                                                contentDescription = null,
+                                                tint = ThemeColors.accentCyan,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = syncSubstackStatus ?: if (isSyncingSubstack) "Syncing..." else "Sync Substack",
+                                            color = ThemeColors.accentCyan,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
                         distinctFeeds.forEach { feed ->
                             GlassCard(cornerRadius = 14.dp, padding = 12.dp) {
