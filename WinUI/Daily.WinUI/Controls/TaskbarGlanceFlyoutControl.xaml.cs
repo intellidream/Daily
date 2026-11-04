@@ -27,6 +27,10 @@ namespace Daily_WinUI.Controls
         private IHealthService? _healthService;
         private IHealthHubService? _healthHubService;
         private ISettingsService? _settingsService;
+        private IRefreshService? _refreshService;
+        private DispatcherTimer? _liveRefreshTimer;
+        private bool _eventsSubscribed = false;
+        private DateTime _lastRemoteSyncUtc = DateTime.MinValue;
         private readonly WeatherClient _weatherClient = new();
         private readonly LocationService _locationService = new();
 
@@ -47,7 +51,7 @@ namespace Daily_WinUI.Controls
         private void TaskbarGlanceFlyoutControl_Loaded(object sender, RoutedEventArgs e)
         {
             ResolveServices();
-            _ = LoadTelemetryAsync();
+            _ = LoadTelemetryAsync(forceRemoteHealth: true);
         }
 
         private void ResolveServices()
@@ -62,6 +66,8 @@ namespace Daily_WinUI.Controls
                     _healthService = sp.GetService<IHealthService>();
                     _healthHubService = sp.GetService<IHealthHubService>() ?? (_healthService as IHealthHubService);
                     _settingsService = sp.GetService<ISettingsService>();
+                    _refreshService = sp.GetService<IRefreshService>();
+                    SubscribeLiveEvents();
                 }
             }
             catch (Exception ex)
@@ -70,29 +76,303 @@ namespace Daily_WinUI.Controls
             }
         }
 
-        private async Task LoadTelemetryAsync()
+        private void SubscribeLiveEvents()
+        {
+            if (_eventsSubscribed) return;
+            if (_healthHubService == null && _refreshService == null) return;
+
+            if (_healthHubService != null)
+            {
+                _healthHubService.OnDailySummaryChanged += OnHealthDailySummaryChanged;
+            }
+
+            if (_refreshService != null)
+            {
+                _refreshService.RefreshRequested += OnAppRefreshRequested;
+                _refreshService.HealthRefreshRequested += OnAppRefreshRequested;
+                _refreshService.DetailRefreshRequested += OnAppRefreshRequested;
+            }
+
+            _eventsSubscribed = true;
+        }
+
+        private void OnHealthDailySummaryChanged(HealthDailySummaryRecord? summary)
+        {
+            DispatcherQueue?.TryEnqueue(async () =>
+            {
+                await ApplyHealthSummaryToUiAsync(summary);
+            });
+        }
+
+        private Task OnAppRefreshRequested()
+        {
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                _ = LoadTelemetryAsync(forceRemoteHealth: false);
+            });
+            return Task.CompletedTask;
+        }
+
+        public void OnFlyoutOpened()
+        {
+            ResolveServices();
+
+            // 1. Instant UI update from local/memory cache (<5ms)
+            _ = LoadTelemetryAsync(forceRemoteHealth: false);
+
+            // 2. Throttled background remote sync from Supabase so HR is always fresh on open
+            if ((DateTime.UtcNow - _lastRemoteSyncUtc) > TimeSpan.FromSeconds(20))
+            {
+                _lastRemoteSyncUtc = DateTime.UtcNow;
+                _ = RefreshRemoteHealthInBackgroundAsync();
+            }
+
+            // 3. Keep telemetry live while the Glance flyout remains open
+            if (_liveRefreshTimer == null)
+            {
+                _liveRefreshTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(45)
+                };
+                _liveRefreshTimer.Tick += (_, _) =>
+                {
+                    _lastRemoteSyncUtc = DateTime.UtcNow;
+                    _ = RefreshRemoteHealthInBackgroundAsync();
+                    _ = LoadTelemetryAsync(forceRemoteHealth: false);
+                };
+            }
+            _liveRefreshTimer.Start();
+        }
+
+        public void OnFlyoutClosed()
+        {
+            _liveRefreshTimer?.Stop();
+        }
+
+        private Task RefreshRemoteHealthInBackgroundAsync()
+        {
+            return Task.Run(async () =>
+            {
+                try
+                {
+                    if (_healthHubService == null) ResolveServices();
+                    if (_healthHubService != null)
+                    {
+                        var fresh = await _healthHubService.GetDailySummaryAsync(DateTime.Today, forceRefresh: true);
+                        DispatcherQueue?.TryEnqueue(async () =>
+                        {
+                            await ApplyHealthSummaryToUiAsync(fresh);
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TaskbarGlance] Remote health refresh warning: {ex.Message}");
+                }
+            });
+        }
+
+        private async Task ApplyHealthSummaryToUiAsync(HealthDailySummaryRecord? summary)
         {
             try
             {
-                // 1. Weather & Cosmos Ephemeris Telemetry
-                var coords = await _locationService.GetCurrentCoordinatesAsync();
-                var savedSettings = Daily_WinUI.Services.SettingsService.Load();
-                double obsLat = coords?.Latitude ?? savedSettings.LastLatitude ?? 44.4323;
-                double obsLon = coords?.Longitude ?? savedSettings.LastLongitude ?? 26.1063;
-                int? liveClouds = null;
-                if (coords.HasValue)
+                if (_healthHubService == null && _healthService == null)
                 {
-                    var snapshot = await _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, "metric");
-                    if (snapshot != null)
+                    ResolveServices();
+                }
+
+                if (_healthHubService == null && _healthService == null)
+                {
+                    return;
+                }
+
+                if (summary == null && _healthHubService != null)
+                {
+                    try
                     {
-                        WeatherTempText.Text = $"{Math.Round(snapshot.Temperature):F0}°C";
-                        WeatherLocationText.Text = string.IsNullOrWhiteSpace(snapshot.LocationName) ? "Weather" : snapshot.LocationName;
-                        liveClouds = snapshot.Clouds;
+                        summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
+                    }
+                    catch { }
+                }
+
+                System.Collections.Generic.List<VitalMetric>? todayMetrics = null;
+                if (_healthService != null)
+                {
+                    try
+                    {
+                        todayMetrics = await _healthService.FetchMetricsForDateAsync(DateTime.Today);
+                    }
+                    catch { }
+                }
+
+                double liveBpm = 0;
+
+                // Priority 1: Intraday HR latest point from canonical Daily Summary (1:1 with HealthWidgetControl)
+                var intraday = summary?.Summary?.Cardiovascular?.IntradayHeartRate;
+                if (intraday != null && intraday.Count > 0)
+                {
+                    var lastPt = intraday.LastOrDefault(p => p.Bpm > 0);
+                    if (lastPt != null && lastPt.Bpm > 0)
+                    {
+                        liveBpm = lastPt.Bpm;
                     }
                 }
 
+                // Priority 2: Today's VitalType.HeartRate metric (matching HealthWidgetControl.GetMetric) or latest metric
+                if (liveBpm <= 0)
+                {
+                    var todayHr = todayMetrics?.FirstOrDefault(m => m.Type == VitalType.HeartRate && m.Value > 0);
+                    if (todayHr != null)
+                    {
+                        liveBpm = todayHr.Value;
+                    }
+                    else if (_healthService != null)
+                    {
+                        var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
+                        if (hrMetric != null && hrMetric.Value > 0)
+                        {
+                            liveBpm = hrMetric.Value;
+                        }
+                    }
+                }
+
+                // Priority 3: Resting Heart Rate fallback
+                if (liveBpm <= 0)
+                {
+                    double rhr = summary?.Rhr ?? 0;
+                    if (rhr <= 0)
+                    {
+                        var todayRhr = todayMetrics?.FirstOrDefault(m => m.Type == VitalType.RestingHeartRate && m.Value > 0);
+                        if (todayRhr != null)
+                        {
+                            rhr = todayRhr.Value;
+                        }
+                        else if (_healthService != null)
+                        {
+                            var rhrMetric = await _healthService.GetLatestMetricAsync(VitalType.RestingHeartRate);
+                            if (rhrMetric != null && rhrMetric.Value > 0)
+                            {
+                                rhr = rhrMetric.Value;
+                            }
+                        }
+                    }
+                    if (rhr > 0)
+                    {
+                        liveBpm = rhr;
+                    }
+                }
+
+                VitalsHeartRateText.Text = liveBpm > 0 ? $"{liveBpm:N0}" : "--";
+
+                // Steps
+                double steps = summary?.Steps ?? 0;
+                if (steps <= 0)
+                {
+                    var todaySteps = todayMetrics?.FirstOrDefault(m => m.Type == VitalType.Steps && m.Value > 0);
+                    if (todaySteps != null)
+                    {
+                        steps = todaySteps.Value;
+                    }
+                    else if (_healthService != null)
+                    {
+                        var stepsMetric = await _healthService.GetLatestMetricAsync(VitalType.Steps);
+                        if (stepsMetric != null && stepsMetric.Value > 0)
+                        {
+                            steps = stepsMetric.Value;
+                        }
+                    }
+                }
+                VitalsStepsText.Text = steps > 0 ? $"{steps:N0}" : "--";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TaskbarGlance] ApplyHealthSummaryToUi error: {ex.Message}");
+            }
+        }
+
+        private async Task LoadTelemetryAsync(bool forceRemoteHealth = false)
+        {
+            try
+            {
+                // 1. Health Vitals (Heart Rate + Steps) - Instant <3ms local cache first so UI never waits on Weather HTTP
+                if (_healthHubService == null && _healthService == null)
+                {
+                    ResolveServices();
+                }
+
+                HealthDailySummaryRecord? summary = null;
+                if (_healthHubService != null)
+                {
+                    try
+                    {
+                        summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today, forceRefresh: forceRemoteHealth);
+                        if (forceRemoteHealth)
+                        {
+                            _lastRemoteSyncUtc = DateTime.UtcNow;
+                        }
+                    }
+                    catch { }
+                }
+                await ApplyHealthSummaryToUiAsync(summary);
+
+                // 2. Hydration & Smokes Telemetry (fast local SQLite)
+                if (_habitsService != null)
+                {
+                    try
+                    {
+                        _currentWaterTotal = await _habitsService.GetDailyProgressAsync("water", DateTime.Today);
+                        try
+                        {
+                            var goal = await _habitsService.GetGoalAsync("water");
+                            if (goal != null && goal.TargetValue > 0)
+                            {
+                                _waterGoal = goal.TargetValue;
+                            }
+                        }
+                        catch { }
+
+                        UpdateWaterUi();
+
+                        _currentSmokesTotal = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Today);
+                        try
+                        {
+                            int baseline = _settingsService?.Settings?.SmokesBaselineDaily ?? 0;
+                            if (baseline <= 0)
+                            {
+                                var smokeGoal = await _habitsService.GetGoalAsync("smokes");
+                                if (smokeGoal != null && smokeGoal.TargetValue > 0 && smokeGoal.TargetValue <= 100 && smokeGoal.TargetValue != 12)
+                                {
+                                    baseline = (int)smokeGoal.TargetValue;
+                                }
+                            }
+                            _smokesBaseline = baseline > 0 ? baseline : 20;
+                        }
+                        catch { }
+
+                        UpdateSmokesUi();
+                    }
+                    catch { }
+                }
+
+                // 3. Weather & Cosmos Ephemeris Telemetry (network-bound, isolated try/catch)
                 try
                 {
+                    var coords = await _locationService.GetCurrentCoordinatesAsync();
+                    var savedSettings = Daily_WinUI.Services.SettingsService.Load();
+                    double obsLat = coords?.Latitude ?? savedSettings.LastLatitude ?? 44.4323;
+                    double obsLon = coords?.Longitude ?? savedSettings.LastLongitude ?? 26.1063;
+                    int? liveClouds = null;
+                    if (coords.HasValue)
+                    {
+                        var snapshot = await _weatherClient.GetCurrentWeatherAsync(coords.Value.Latitude, coords.Value.Longitude, "metric");
+                        if (snapshot != null)
+                        {
+                            WeatherTempText.Text = $"{Math.Round(snapshot.Temperature):F0}°C";
+                            WeatherLocationText.Text = string.IsNullOrWhiteSpace(snapshot.LocationName) ? "Weather" : snapshot.LocationName;
+                            liveClouds = snapshot.Clouds;
+                        }
+                    }
+
                     var astro = Daily_WinUI.Services.Cosmos.AstronomyService.Shared;
                     var cat = Daily_WinUI.Services.Cosmos.CosmosCatalogRepository.Shared;
                     await cat.EnsureLoadedAsync();
@@ -106,116 +386,6 @@ namespace Daily_WinUI.Controls
                     CosmosScoreBadgeText.Text = $"{cond.Score}/100";
                 }
                 catch { }
-
-                // 2. Health Vitals (Heart Rate + Steps) - 1:1 Parity with HealthWidgetControl
-                if (_healthHubService != null || _healthService != null)
-                {
-                    double liveBpm = 0;
-                    double steps = 0;
-
-                    HealthDailySummaryRecord? summary = null;
-                    if (_healthHubService != null)
-                    {
-                        try
-                        {
-                            summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
-                        }
-                        catch { }
-                    }
-
-                    // Priority 1: Intraday HR latest point from canonical Daily Summary (matches HealthWidgetControl)
-                    var intraday = summary?.Summary?.Cardiovascular?.IntradayHeartRate;
-                    if (intraday != null && intraday.Count > 0)
-                    {
-                        var lastPt = intraday.LastOrDefault(p => p.Bpm > 0);
-                        if (lastPt != null && lastPt.Bpm > 0)
-                        {
-                            liveBpm = lastPt.Bpm;
-                        }
-                    }
-
-                    // Priority 2: Standard Live Heart Rate Metric from summary or metric service
-                    if (liveBpm <= 0 && _healthService != null)
-                    {
-                        var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
-                        if (hrMetric != null && hrMetric.Value > 0)
-                        {
-                            liveBpm = hrMetric.Value;
-                        }
-                    }
-
-                    // Priority 3: Resting Heart Rate fallback
-                    if (liveBpm <= 0)
-                    {
-                        double rhr = summary?.Rhr ?? 0;
-                        if (rhr <= 0 && _healthService != null)
-                        {
-                            var rhrMetric = await _healthService.GetLatestMetricAsync(VitalType.RestingHeartRate);
-                            if (rhrMetric != null && rhrMetric.Value > 0)
-                            {
-                                rhr = rhrMetric.Value;
-                            }
-                        }
-                        if (rhr > 0)
-                        {
-                            liveBpm = rhr;
-                        }
-                    }
-
-                    VitalsHeartRateText.Text = liveBpm > 0 ? $"{liveBpm:F0}" : "--";
-
-                    // Steps
-                    steps = summary?.Steps ?? 0;
-                    if (steps <= 0 && _healthService != null)
-                    {
-                        var stepsMetric = await _healthService.GetLatestMetricAsync(VitalType.Steps);
-                        if (stepsMetric != null && stepsMetric.Value > 0)
-                        {
-                            steps = stepsMetric.Value;
-                        }
-                    }
-                    VitalsStepsText.Text = steps > 0 ? $"{steps:N0}" : "--";
-                }
-
-                // 3. Hydration Telemetry
-                if (_habitsService != null)
-                {
-                    _currentWaterTotal = await _habitsService.GetDailyProgressAsync("water", DateTime.Today);
-                    try
-                    {
-                        var goal = await _habitsService.GetGoalAsync("water");
-                        if (goal != null && goal.TargetValue > 0)
-                        {
-                            _waterGoal = goal.TargetValue;
-                        }
-                    }
-                    catch { }
-
-                    UpdateWaterUi();
-
-                    // 4. Smokes Telemetry
-                    _currentSmokesTotal = await _habitsService.GetDailyProgressAsync("smokes", DateTime.Today);
-                    try
-                    {
-                        // Priority for smokes max/baseline:
-                        // 1. Explicit user baseline setting (Settings.SmokesBaselineDaily)
-                        // 2. Saved HabitGoal target if configured and reasonable (and not the legacy default of 12)
-                        // 3. Fallback of 20 (standard pack) matching HabitsWidgetControl and HabitsDetailPage
-                        int baseline = _settingsService?.Settings?.SmokesBaselineDaily ?? 0;
-                        if (baseline <= 0)
-                        {
-                            var smokeGoal = await _habitsService.GetGoalAsync("smokes");
-                            if (smokeGoal != null && smokeGoal.TargetValue > 0 && smokeGoal.TargetValue <= 100 && smokeGoal.TargetValue != 12)
-                            {
-                                baseline = (int)smokeGoal.TargetValue;
-                            }
-                        }
-                        _smokesBaseline = baseline > 0 ? baseline : 20;
-                    }
-                    catch { }
-
-                    UpdateSmokesUi();
-                }
             }
             catch (Exception ex)
             {

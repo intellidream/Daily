@@ -7,35 +7,40 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootLayout" 
-          Background="Transparent"
-          Tapped="RootLayout_Tapped">
-        
-        <!-- Widget Content Host -->
-        <ContentControl x:Name="WidgetContentHost"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch" />
-
-        <!-- Top Drag & Management Overlay -->
-        <Grid x:Name="HeaderOverlay"
-              VerticalAlignment="Top"
-              Height="30"
+    <Border x:Name="RootCard"
+            CornerRadius="20"
+            BorderThickness="1"
+            Margin="0">
+        <Grid x:Name="RootLayout" 
               Background="Transparent"
-              PointerPressed="Header_PointerPressed"
-              PointerMoved="Header_PointerMoved"
-              PointerReleased="Header_PointerReleased"
-              ContextRequested="Header_ContextRequested">
+              Tapped="RootLayout_Tapped">
             
-            <!-- Subtle Drag Handle Capsule (visible when hovered or unlocked) -->
-            <Border x:Name="DragHandle"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top"
-                    Margin="0,5,0,0"
-                    Width="36"
-                    Height="4"
-                    CornerRadius="2"
-                    Background="#33FFFFFF"
-                    Opacity="0.4" />
+            <!-- Widget Content Host -->
+            <ContentControl x:Name="WidgetContentHost"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch" />
+
+            <!-- Top Drag & Management Overlay -->
+            <Grid x:Name="HeaderOverlay"
+                  VerticalAlignment="Top"
+                  Height="30"
+                  Background="Transparent"
+                  PointerPressed="Header_PointerPressed"
+                  PointerMoved="Header_PointerMoved"
+                  PointerReleased="Header_PointerReleased"
+                  ContextRequested="Header_ContextRequested">
+                
+                <!-- Subtle Drag Handle Capsule (visible when hovered or unlocked) -->
+                <Border x:Name="DragHandle"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Margin="0,5,0,0"
+                        Width="36"
+                        Height="4"
+                        CornerRadius="2"
+                        Background="#33FFFFFF"
+                        Opacity="0.4" />
+            </Grid>
         </Grid>
-    </Grid>
+    </Border>
 </Window>

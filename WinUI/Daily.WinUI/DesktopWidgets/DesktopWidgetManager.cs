@@ -16,9 +16,22 @@ namespace Daily_WinUI.DesktopWidgets
         private readonly List<DesktopWidgetWindow> _activeWidgets = new();
         public IReadOnlyList<DesktopWidgetWindow> ActiveWidgets => _activeWidgets;
 
+        public event EventHandler? StateChanged;
+
+        public bool AreWidgetsVisible => _activeWidgets.Count > 0 && _activeWidgets.Any(w => !w.IsExplicitlyHidden && w.AppWindow.IsVisible);
+
         private bool _isInitialized = false;
 
         private DesktopWidgetManager() { }
+
+        private void NotifyStateChanged()
+        {
+            try
+            {
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch { }
+        }
 
         public void Initialize()
         {
@@ -80,6 +93,8 @@ namespace Daily_WinUI.DesktopWidgets
             {
                 SaveConfiguration();
             }
+
+            NotifyStateChanged();
         }
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -221,6 +236,7 @@ namespace Daily_WinUI.DesktopWidgets
             window.Closed += (s, e) =>
             {
                 _activeWidgets.Remove(window);
+                NotifyStateChanged();
             };
 
             window.Activate();
@@ -244,13 +260,23 @@ namespace Daily_WinUI.DesktopWidgets
                 SettingsService.Save(settings);
             }
 
+            // Cascade default spawn coordinates so multiple added widgets don't overlap identically
+            if (x <= 200 && y <= 200)
+            {
+                double scale = GetDesktopDpiScale();
+                var workArea = GetDesktopWorkArea();
+                int step = (int)(28 * scale) * (_activeWidgets.Count % 6);
+                x = workArea.X + (int)(120 * scale) + step;
+                y = workArea.Y + (int)(100 * scale) + step;
+            }
+
             var model = new DesktopWidgetModel
             {
                 Type = type,
                 Size = size,
                 X = x,
                 Y = y,
-                IsLocked = false
+                IsLocked = settings.DesktopWidgetsLocked
             };
 
             var window = SpawnWidgetWindow(model);
@@ -259,10 +285,18 @@ namespace Daily_WinUI.DesktopWidgets
             window.SendToBottom();
 
             SaveConfiguration();
+            NotifyStateChanged();
         }
 
         public void RemoveWidget(DesktopWidgetWindow window)
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(() => RemoveWidget(window));
+                return;
+            }
+
             _activeWidgets.Remove(window);
             try
             {
@@ -271,6 +305,7 @@ namespace Daily_WinUI.DesktopWidgets
             catch { }
 
             SaveConfiguration();
+            NotifyStateChanged();
         }
 
         public void SaveConfiguration()
@@ -291,27 +326,64 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void ShowAll()
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(ShowAll);
+                return;
+            }
+
+            var settings = SettingsService.Load();
+            settings.DesktopWidgetsEnabled = true;
+            SettingsService.Save(settings);
+
+            if (_activeWidgets.Count == 0)
+            {
+                LoadWidgets();
+            }
+
             foreach (var w in _activeWidgets)
             {
                 w.IsExplicitlyHidden = false;
                 w.AppWindow.Show();
                 w.SendToBottom();
             }
+
+            NotifyStateChanged();
         }
 
         public void HideAll()
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(HideAll);
+                return;
+            }
+
+            var settings = SettingsService.Load();
+            settings.DesktopWidgetsEnabled = false;
+            SettingsService.Save(settings);
+
             foreach (var w in _activeWidgets)
             {
                 w.IsExplicitlyHidden = true;
                 w.AppWindow.Hide();
             }
+
+            NotifyStateChanged();
         }
 
         public void ToggleVisibility()
         {
-            bool anyVisible = _activeWidgets.Any(w => w.AppWindow.IsVisible);
-            if (anyVisible)
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(ToggleVisibility);
+                return;
+            }
+
+            if (AreWidgetsVisible)
             {
                 HideAll();
             }
@@ -323,15 +395,35 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void SetAllLocked(bool locked)
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(() => SetAllLocked(locked));
+                return;
+            }
+
+            var settings = SettingsService.Load();
+            settings.DesktopWidgetsLocked = locked;
+            SettingsService.Save(settings);
+
             foreach (var w in _activeWidgets)
             {
                 w.Model.IsLocked = locked;
+                w.UpdateLockVisuals();
             }
             SaveConfiguration();
+            NotifyStateChanged();
         }
 
         public void RefreshAllWidgets()
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(RefreshAllWidgets);
+                return;
+            }
+
             foreach (var w in _activeWidgets)
             {
                 w.RefreshViewData();
@@ -340,6 +432,13 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void ResetToDefaults()
         {
+            var dq = App.Current?.MainWindow?.DispatcherQueue;
+            if (dq != null && !dq.HasThreadAccess)
+            {
+                dq.TryEnqueue(ResetToDefaults);
+                return;
+            }
+
             // Close all
             var copy = _activeWidgets.ToList();
             foreach (var w in copy)
@@ -348,14 +447,17 @@ namespace Daily_WinUI.DesktopWidgets
             }
             _activeWidgets.Clear();
 
-            // Clear json
+            // Clear json and ensure enabled
             var settings = SettingsService.Load();
+            settings.DesktopWidgetsEnabled = true;
+            settings.DesktopWidgetsLocked = false;
             settings.DesktopWidgetsConfigJson = string.Empty;
             SettingsService.Save(settings);
 
             // Respawn
             LoadWidgets();
             SaveConfiguration();
+            NotifyStateChanged();
         }
     }
 }

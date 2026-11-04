@@ -90,10 +90,12 @@ namespace Daily_WinUI
             AppWindow.Show();
             this.Activate();
             SetForegroundWindow(hwnd);
+            _glanceControl.OnFlyoutOpened();
         }
 
         public void Hide()
         {
+            _glanceControl.OnFlyoutClosed();
             AppWindow.Hide();
         }
 

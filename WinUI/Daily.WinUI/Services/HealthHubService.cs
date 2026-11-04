@@ -39,6 +39,7 @@ namespace Daily_WinUI.Services
         private RealtimeChannel? _realtimeChannel;
         private RealtimeChannel? _vitalsRealtimeChannel;
         private RealtimeChannel? _sleepRealtimeChannel;
+        private System.Threading.Timer? _periodicRefreshTimer;
         private long _lastRealtimeFetchTicks = 0;
         private bool _isInitialized = false;
 
@@ -185,6 +186,19 @@ namespace Daily_WinUI.Services
                         _logger?.LogWarning(ex, "[HealthHubService] Background realtime setup error: {Message}", ex.Message);
                     }
                 });
+
+                _periodicRefreshTimer?.Dispose();
+                _periodicRefreshTimer = new System.Threading.Timer(async _ =>
+                {
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(_supabaseClient.Auth.CurrentSession?.User?.Id))
+                        {
+                            await PullDeltasAsync().ConfigureAwait(false);
+                        }
+                    }
+                    catch { }
+                }, null, TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(3));
 
                 _isInitialized = true;
             }
@@ -699,6 +713,7 @@ namespace Daily_WinUI.Services
                     _vitalsRealtimeChannel.Subscribe(),
                     _sleepRealtimeChannel.Subscribe()
                 );
+                _ = subscribeTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
                 var completed = await Task.WhenAny(subscribeTask, Task.Delay(3000)).ConfigureAwait(false);
                 if (completed != subscribeTask)
                 {
@@ -728,13 +743,27 @@ namespace Daily_WinUI.Services
                     _hrCache.TryRemove(record.LocalDate, out _);
                     _ = SaveRecordToSqliteAsync(record);
 
-                    if (record.LocalDate == _selectedDate.ToString("yyyy-MM-dd"))
+                    var todayStr = DateTime.Today.ToString("yyyy-MM-dd");
+                    if (record.LocalDate == _selectedDate.ToString("yyyy-MM-dd") || record.LocalDate == todayStr)
                     {
-                        _currentSummary = record;
+                        if (record.LocalDate == _selectedDate.ToString("yyyy-MM-dd"))
+                        {
+                            _currentSummary = record;
+                        }
                         DispatchToUI(() =>
                         {
-                            OnDailySummaryChanged?.Invoke(record);
-                            OnSelectedDateChanged?.Invoke();
+                            if (record.LocalDate == _selectedDate.ToString("yyyy-MM-dd"))
+                            {
+                                OnDailySummaryChanged?.Invoke(record);
+                                OnSelectedDateChanged?.Invoke();
+                            }
+                            else if (record.LocalDate == todayStr && _selectedDate.Date == DateTime.Today.AddDays(-1) && _currentSummary?.LocalDate != _selectedDate.ToString("yyyy-MM-dd"))
+                            {
+                                _selectedDate = DateTime.Today;
+                                _currentSummary = record;
+                                OnDailySummaryChanged?.Invoke(record);
+                                OnSelectedDateChanged?.Invoke();
+                            }
                         });
                     }
                 }
@@ -777,10 +806,18 @@ namespace Daily_WinUI.Services
             try
             {
 #if WINUI_NATIVE
-                var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()
+                    ?? Daily_WinUI.App.Current?.MainWindow?.DispatcherQueue;
                 if (dispatcher != null)
                 {
-                    dispatcher.TryEnqueue(() => action());
+                    if (dispatcher.HasThreadAccess)
+                    {
+                        action();
+                    }
+                    else
+                    {
+                        dispatcher.TryEnqueue(() => action());
+                    }
                     return;
                 }
 #endif
@@ -1220,7 +1257,13 @@ namespace Daily_WinUI.Services
             _sleepCache.Clear();
             _vitalsCache.Clear();
             _hrCache.Clear();
-            await LoadSummaryForSelectedDateAsync();
+
+            var today = DateTime.Today;
+            await RefreshSummaryFromRemoteAsync(today).ConfigureAwait(false);
+            if (_selectedDate.Date != today.Date)
+            {
+                await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+            }
         }
     }
 }

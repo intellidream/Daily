@@ -387,9 +387,9 @@
 
         <!-- System Tray Icon -->
         <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="DayOne" NoLeftClickDelay="True">
-            <tb:TaskbarIcon.ContextFlyout>
-                <MenuFlyout>
-                    <MenuFlyoutItem Text="Show DayOne" Click="TrayShow_Click">
+            <tb:TaskbarIcon.Resources>
+                <MenuFlyout x:Name="TrayContextMenu">
+                    <MenuFlyoutItem x:Name="TrayShowItem" Text="Show DayOne">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE737;" FontFamily="Segoe Fluent Icons" />
                         </MenuFlyoutItem.Icon>
@@ -398,31 +398,31 @@
                         <MenuFlyoutSubItem.Icon>
                             <FontIcon Glyph="&#xE7F4;" FontFamily="Segoe Fluent Icons" />
                         </MenuFlyoutSubItem.Icon>
-                        <MenuFlyoutItem Text="Show / Hide Desktop Widgets" Click="TrayToggleDesktopWidgets_Click" />
-                        <MenuFlyoutItem Text="Lock / Unlock Positions" Click="TrayToggleLockWidgets_Click" />
-                        <MenuFlyoutItem Text="Refresh All Widgets" Click="TrayRefreshWidgets_Click" />
-                        <MenuFlyoutItem Text="Reset to Default Layout" Click="TrayResetWidgets_Click" />
+                        <MenuFlyoutItem x:Name="TrayToggleWidgetsItem" Text="Show / Hide Desktop Widgets" />
+                        <MenuFlyoutItem x:Name="TrayLockWidgetsItem" Text="Lock / Unlock Positions" />
+                        <MenuFlyoutItem x:Name="TrayRefreshWidgetsItem" Text="Refresh All Widgets" />
+                        <MenuFlyoutItem x:Name="TrayResetWidgetsItem" Text="Reset to Default Layout" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutSubItem Text="Add Widget">
-                            <MenuFlyoutItem Text="Combined Brief" Click="TrayAddCombinedWidget_Click" />
-                            <MenuFlyoutItem Text="Bubbles (Hydration)" Click="TrayAddBubblesWidget_Click" />
-                            <MenuFlyoutItem Text="Smokes (Lungs &amp; Tobacco)" Click="TrayAddSmokesWidget_Click" />
-                            <MenuFlyoutItem Text="Money (SmartLedger)" Click="TrayAddMoneyWidget_Click" />
-                            <MenuFlyoutItem Text="Sleep (Recovery &amp; Stages)" Click="TrayAddSleepWidget_Click" />
-                            <MenuFlyoutItem Text="Stress (HRV &amp; Vitals)" Click="TrayAddStressWidget_Click" />
-                            <MenuFlyoutItem Text="Cosmos (Stargazing &amp; Moon)" Click="TrayAddCosmosWidget_Click" />
-                            <MenuFlyoutItem Text="TagDoS (Task Pipeline)" Click="TrayAddTagdosWidget_Click" />
-                            <MenuFlyoutItem Text="Weather (Hourly Timeline)" Click="TrayAddWeatherWidget_Click" />
+                            <MenuFlyoutItem x:Name="TrayAddCombinedItem" Text="Combined Brief" />
+                            <MenuFlyoutItem x:Name="TrayAddBubblesItem" Text="Bubbles (Hydration)" />
+                            <MenuFlyoutItem x:Name="TrayAddSmokesItem" Text="Smokes (Lungs &amp; Tobacco)" />
+                            <MenuFlyoutItem x:Name="TrayAddMoneyItem" Text="Money (SmartLedger)" />
+                            <MenuFlyoutItem x:Name="TrayAddSleepItem" Text="Sleep (Recovery &amp; Stages)" />
+                            <MenuFlyoutItem x:Name="TrayAddStressItem" Text="Stress (HRV &amp; Vitals)" />
+                            <MenuFlyoutItem x:Name="TrayAddCosmosItem" Text="Cosmos (Stargazing &amp; Moon)" />
+                            <MenuFlyoutItem x:Name="TrayAddTagdosItem" Text="TagDoS (Task Pipeline)" />
+                            <MenuFlyoutItem x:Name="TrayAddWeatherItem" Text="Weather (Hourly Timeline)" />
                         </MenuFlyoutSubItem>
                     </MenuFlyoutSubItem>
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Text="Exit" Click="TrayExit_Click">
+                    <MenuFlyoutItem x:Name="TrayExitItem" Text="Exit">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" />
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                 </MenuFlyout>
-            </tb:TaskbarIcon.ContextFlyout>
+            </tb:TaskbarIcon.Resources>
         </tb:TaskbarIcon>
     </Grid>
 </Window>

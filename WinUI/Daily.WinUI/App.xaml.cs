@@ -60,11 +60,19 @@ public partial class App : Application
         const string PipeName    = "DailyWinUI_ProtocolPipe";
 
         bool createdNew;
-        var mutex = new System.Threading.Mutex(true, MutexName, out createdNew);
+        System.Threading.Mutex? mutex = null;
+        try
+        {
+            mutex = new System.Threading.Mutex(true, MutexName, out createdNew);
+        }
+        catch (System.Threading.AbandonedMutexException)
+        {
+            createdNew = true;
+        }
 
         if (!createdNew)
         {
-            LogDebug("Another instance is running. Handling forwarding.");
+            LogDebug("Another instance is running. Checking version/path and handling forwarding.");
             // Another instance is running. If we were launched by a protocol URL,
             // forward it via named pipe so the running instance can handle it.
             var activationArgs = Microsoft.Windows.AppLifecycle.AppInstance
@@ -111,35 +119,125 @@ public partial class App : Application
             {
                 message = uriToForward;
             }
-            try
+
+            // If this is a direct app launch ("show") and the running tray instance is an older build
+            // or from a different output directory (e.g. stale MSIX / x64 vs AnyCPU bin folder),
+            // terminate the stale tray instance so this newly built binary takes over cleanly.
+            bool replacedStaleInstance = false;
+            if (message == "show" && string.IsNullOrEmpty(uriToForward))
             {
-                LogDebug($"Connecting to pipe '{PipeName}'...");
-                using var client = new System.IO.Pipes.NamedPipeClientStream(".", PipeName,
-                    System.IO.Pipes.PipeDirection.Out);
-                client.Connect(2000); // 2 second timeout
-                LogDebug("Connected to pipe. Writing message...");
-                using var writer = new System.IO.StreamWriter(client);
-                writer.WriteLine(message);
-                writer.Flush();
-                LogDebug("Message written successfully.");
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"Pipe write failed: {ex.Message}");
-                // Bring the running window to front
-                var existing = System.Diagnostics.Process.GetProcessesByName(
-                    System.IO.Path.GetFileNameWithoutExtension(System.Environment.ProcessPath ?? "Daily.WinUI"));
-                foreach (var p in existing)
+                try
                 {
-                    if (p.Id != System.Diagnostics.Process.GetCurrentProcess().Id && p.MainWindowHandle != IntPtr.Zero)
+                    var currentExe = System.Environment.ProcessPath;
+                    if (!string.IsNullOrEmpty(currentExe) && File.Exists(currentExe))
                     {
-                        ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
-                        SetForegroundWindow(p.MainWindowHandle);
-                        break;
+                        var currentWriteUtc = File.GetLastWriteTimeUtc(currentExe);
+                        var procName = Path.GetFileNameWithoutExtension(currentExe);
+                        var myPid = System.Environment.ProcessId;
+
+                        foreach (var proc in System.Diagnostics.Process.GetProcessesByName(procName))
+                        {
+                            if (proc.Id == myPid) continue;
+
+                            bool shouldReplace = false;
+                            try
+                            {
+                                var runningExe = proc.MainModule?.FileName;
+                                if (!string.IsNullOrEmpty(runningExe) && File.Exists(runningExe))
+                                {
+                                    var runningWriteUtc = File.GetLastWriteTimeUtc(runningExe);
+                                    if (!string.Equals(currentExe, runningExe, StringComparison.OrdinalIgnoreCase) ||
+                                        currentWriteUtc > runningWriteUtc.AddSeconds(2))
+                                    {
+                                        shouldReplace = true;
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // Packaged vs unpackaged elevation/sandbox boundary — replace stale instance
+                                shouldReplace = true;
+                            }
+
+                            if (shouldReplace)
+                            {
+                                LogDebug($"Replacing older/different running instance PID={proc.Id} with '{currentExe}'.");
+                                try
+                                {
+                                    using var exitClient = new System.IO.Pipes.NamedPipeClientStream(".", PipeName, System.IO.Pipes.PipeDirection.Out);
+                                    exitClient.Connect(500);
+                                    using var exitWriter = new System.IO.StreamWriter(exitClient);
+                                    exitWriter.WriteLine("exit");
+                                    exitWriter.Flush();
+                                }
+                                catch { }
+
+                                try
+                                {
+                                    if (!proc.WaitForExit(1000))
+                                    {
+                                        proc.Kill();
+                                        proc.WaitForExit(1500);
+                                    }
+                                }
+                                catch { }
+
+                                replacedStaleInstance = true;
+                            }
+                        }
                     }
                 }
+                catch (Exception ex)
+                {
+                    LogDebug($"Stale instance check warning: {ex.Message}");
+                }
             }
-            return;
+
+            if (replacedStaleInstance)
+            {
+                try { mutex?.Dispose(); } catch { }
+                try
+                {
+                    mutex = new System.Threading.Mutex(true, MutexName, out createdNew);
+                }
+                catch (System.Threading.AbandonedMutexException)
+                {
+                    createdNew = true;
+                }
+            }
+
+            if (!createdNew)
+            {
+                try
+                {
+                    LogDebug($"Connecting to pipe '{PipeName}'...");
+                    using var client = new System.IO.Pipes.NamedPipeClientStream(".", PipeName,
+                        System.IO.Pipes.PipeDirection.Out);
+                    client.Connect(2000); // 2 second timeout
+                    LogDebug("Connected to pipe. Writing message...");
+                    using var writer = new System.IO.StreamWriter(client);
+                    writer.WriteLine(message);
+                    writer.Flush();
+                    LogDebug("Message written successfully.");
+                }
+                catch (Exception ex)
+                {
+                    LogDebug($"Pipe write failed: {ex.Message}");
+                    // Bring the running window to front
+                    var existing = System.Diagnostics.Process.GetProcessesByName(
+                        System.IO.Path.GetFileNameWithoutExtension(System.Environment.ProcessPath ?? "Daily.WinUI"));
+                    foreach (var p in existing)
+                    {
+                        if (p.Id != System.Diagnostics.Process.GetCurrentProcess().Id && p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
+                            SetForegroundWindow(p.MainWindowHandle);
+                            break;
+                        }
+                    }
+                }
+                return;
+            }
         }
 
         // We are the main instance — keep mutex alive
@@ -296,6 +394,15 @@ public partial class App : Application
                             app?.MainWindow?.DispatcherQueue.TryEnqueue(() =>
                             {
                                 DesktopWidgets.DesktopWidgetManager.Instance.ResetToDefaults();
+                            });
+                        }
+                        else if (line.Equals("exit", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received exit command");
+                            var app = App.Current;
+                            app?.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+                            {
+                                app.MainWindow.ExitApp();
                             });
                         }
                         else if (Uri.TryCreate(line, UriKind.Absolute, out var uri))
@@ -626,6 +733,12 @@ public partial class App : Application
         }
 
         LogDiagnostic("InitializeAsync: COMPLETED");
+
+        // Refresh desktop widgets now that SQLite DB, Habits, Health, and Supabase session are initialized
+        MainWindow?.DispatcherQueue.TryEnqueue(() =>
+        {
+            DesktopWidgets.DesktopWidgetManager.Instance.RefreshAllWidgets();
+        });
 
         if (SupabaseClient.Auth.CurrentSession != null)
         {

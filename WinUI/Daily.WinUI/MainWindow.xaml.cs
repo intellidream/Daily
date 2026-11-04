@@ -902,11 +902,95 @@ public sealed partial class MainWindow : Window
                 TrayIcon.ToolTipText = "DayOne";
                 TrayIcon.NoLeftClickDelay = true;
                 TrayIcon.MenuActivation = H.NotifyIcon.Core.PopupActivationMode.RightClick;
-                if (TrayIcon.ContextFlyout is MenuFlyout menuFlyout)
+
+                // H.NotifyIcon.WinUI PopupMenu mode uses native Win32 HMENU and ONLY executes MenuFlyoutItem.Command
+                // (XAML Click handlers are ignored). Bind all ICommands first, then assign TrayIcon.ContextFlyout
+                // once (never null, as H.NotifyIcon throws ArgumentNullException if ContextFlyout is set to null).
+                TrayShowItem.Command = new RelayCommand(() =>
                 {
-                    menuFlyout.Opened += (s, e) => LogTray("[TrayIcon] ContextFlyout opened successfully.");
-                    menuFlyout.Closed += (s, e) => LogTray("[TrayIcon] ContextFlyout closed.");
-                }
+                    LogTray("[TrayIcon] Command: Show DayOne.");
+                    DispatcherQueue.TryEnqueue(ShowAndActivate);
+                });
+                TrayToggleWidgetsItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Toggle Desktop Widgets.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.ToggleVisibility());
+                });
+                TrayLockWidgetsItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Lock/Unlock Desktop Widgets.");
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        var s = Daily_WinUI.Services.SettingsService.Load();
+                        DesktopWidgets.DesktopWidgetManager.Instance.SetAllLocked(!s.DesktopWidgetsLocked);
+                    });
+                });
+                TrayRefreshWidgetsItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Refresh Desktop Widgets.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.RefreshAllWidgets());
+                });
+                TrayResetWidgetsItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Reset Desktop Widgets.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.ResetToDefaults());
+                });
+
+                TrayAddCombinedItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Combined Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Combined, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100));
+                });
+                TrayAddBubblesItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Bubbles Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Bubbles, DesktopWidgets.DesktopWidgetSize.Small, 100, 100));
+                });
+                TrayAddSmokesItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Smokes Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Smokes, DesktopWidgets.DesktopWidgetSize.Small, 100, 100));
+                });
+                TrayAddMoneyItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Money Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Money, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100));
+                });
+                TrayAddSleepItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Sleep Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Sleep, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100));
+                });
+                TrayAddStressItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Stress Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Stress, DesktopWidgets.DesktopWidgetSize.Small, 100, 100));
+                });
+                TrayAddCosmosItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Cosmos Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Cosmos, DesktopWidgets.DesktopWidgetSize.Small, 100, 100));
+                });
+                TrayAddTagdosItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add TagDoS Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.TagDos, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100));
+                });
+                TrayAddWeatherItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Add Weather Widget.");
+                    DispatcherQueue.TryEnqueue(() => DesktopWidgets.DesktopWidgetManager.Instance.AddWidget(DesktopWidgets.DesktopWidgetType.Weather, DesktopWidgets.DesktopWidgetSize.Medium, 100, 100));
+                });
+
+                TrayExitItem.Command = new RelayCommand(() =>
+                {
+                    LogTray("[TrayIcon] Command: Exit DayOne.");
+                    DispatcherQueue.TryEnqueue(ExitApp);
+                });
+
+                TrayIcon.ContextFlyout = TrayContextMenu;
+                TrayContextMenu.Opened += (s, e) => LogTray("[TrayIcon] ContextFlyout opened successfully.");
+                TrayContextMenu.Closed += (s, e) => LogTray("[TrayIcon] ContextFlyout closed.");
                 TrayIcon.LeftClickCommand = new RelayCommand(() =>
                 {
                     LogTray("[TrayIcon] LeftClickCommand invoked: toggling taskbar companion.");

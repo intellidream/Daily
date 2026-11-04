@@ -30,11 +30,76 @@
                     
                     <StackPanel Spacing="4" VerticalAlignment="Center">
                         <TextBlock Text="Minimize to System Tray" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Text="When closing the main window, keep the app running in the system tray." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        <TextBlock Text="When closing the main window, keep the app and desktop widgets running in the system tray." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
                     </StackPanel>
                     
                     <ToggleSwitch Grid.Column="1" x:Name="CloseToTraySwitch" IsOn="True" Toggled="CloseToTraySwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
                 </Grid>
+            </Border>
+
+            <!-- Desktop Widgets card -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Desktop Widgets" FontWeight="SemiBold" FontSize="15" />
+                        <TextBlock Text="Pin live Liquid Glass widgets onto your Windows 11 desktop. Right-click any widget header to customize size, glass style, or transparency." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Opacity="0.5" />
+
+                    <!-- Show Desktop Widgets -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="Show Desktop Widgets" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock x:Name="ActiveWidgetsCountText" Text="Display floating telemetry widgets on the desktop layer." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="DesktopWidgetsEnabledSwitch" IsOn="True" Toggled="DesktopWidgetsEnabledSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+
+                    <!-- Lock Widget Positions -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="Lock Widget Positions" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="Prevent accidental dragging on the desktop wallpaper." FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="DesktopWidgetsLockedSwitch" IsOn="False" Toggled="DesktopWidgetsLockedSwitch_Toggled" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Opacity="0.5" />
+
+                    <!-- Quick Actions Row -->
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Add Widget">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Text="Combined Brief" Tag="Combined" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Bubbles (Hydration)" Tag="Bubbles" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Smokes (Lungs &amp; Tobacco)" Tag="Smokes" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Money (SmartLedger)" Tag="Money" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Sleep (Recovery &amp; Stages)" Tag="Sleep" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Stress (HRV &amp; Vitals)" Tag="Stress" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Cosmos (Stargazing &amp; Moon)" Tag="Cosmos" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="TagDoS (Task Pipeline)" Tag="TagDos" Click="AddDesktopWidget_Click" />
+                                    <MenuFlyoutItem Text="Weather (Hourly Timeline)" Tag="Weather" Click="AddDesktopWidget_Click" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button Content="Refresh All" Click="RefreshDesktopWidgetsButton_Click" />
+                        <Button Content="Reset Default Layout" Click="ResetDesktopWidgetsButton_Click" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
 
             <!-- Theme Settings card -->
