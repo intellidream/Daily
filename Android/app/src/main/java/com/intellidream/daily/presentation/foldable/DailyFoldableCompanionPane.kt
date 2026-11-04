@@ -92,6 +92,7 @@ import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.health.HealthDataRepository
 import com.intellidream.daily.model.AppSettings
 import com.intellidream.daily.model.BriefingTimeSlot
+import com.intellidream.daily.model.HealthMetricType
 import com.intellidream.daily.model.MonkeyMood
 import com.intellidream.daily.model.NewsArticle
 import com.intellidream.daily.model.ParsedSmartLedger
@@ -264,6 +265,8 @@ fun DailyFoldableCompanionPane(
     val totalCalories by healthRepository.totalActiveCalories.collectAsState()
     val latestBpm by healthRepository.latestBpm.collectAsState()
     val averageBpm by healthRepository.averageBpm.collectAsState()
+    val restingBpm by healthRepository.restingBpm.collectAsState()
+    val currentVitals by healthRepository.currentVitals.collectAsState()
     val primarySleep by healthRepository.primarySleepSession.collectAsState()
     val stressScore by healthRepository.currentStressScore.collectAsState()
     val stressLevel by healthRepository.currentStressLevel.collectAsState()
@@ -294,7 +297,9 @@ fun DailyFoldableCompanionPane(
     var activeTurn by remember { mutableStateOf<CoPilotInlineTurn?>(null) }
     var customQueryText by remember { mutableStateOf("") }
 
-    val displayBpm = latestBpm ?: averageBpm
+    val displayBpm = (latestBpm
+        ?: currentVitals[HealthMetricType.HEART_RATE]?.value?.takeIf { it > 0.0 }
+        ?: if (averageBpm > 0.0) averageBpm else if (restingBpm > 0.0) restingBpm else null) ?: 0.0
     val hydrationProgress = if (waterGoal > 0) (waterTotal.toFloat() / waterGoal.toFloat()).coerceIn(0f, 1f) else 0f
     val stepsProgress = (totalSteps.toFloat() / 10000f).coerceIn(0f, 1f)
     val sleepScore = primarySleep?.sleepScore ?: 0

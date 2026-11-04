@@ -25,6 +25,7 @@ namespace Daily_WinUI.Controls
         private IHabitsService? _habitsService;
         private ITagdosService? _tagdosService;
         private IHealthService? _healthService;
+        private IHealthHubService? _healthHubService;
         private ISettingsService? _settingsService;
         private readonly WeatherClient _weatherClient = new();
         private readonly LocationService _locationService = new();
@@ -59,6 +60,7 @@ namespace Daily_WinUI.Controls
                     _habitsService = sp.GetService<IHabitsService>();
                     _tagdosService = sp.GetService<ITagdosService>();
                     _healthService = sp.GetService<IHealthService>();
+                    _healthHubService = sp.GetService<IHealthHubService>() ?? (_healthService as IHealthHubService);
                     _settingsService = sp.GetService<ISettingsService>();
                 }
             }
@@ -105,33 +107,74 @@ namespace Daily_WinUI.Controls
                 }
                 catch { }
 
-                // 2. Health Vitals (Heart Rate + Steps)
-                if (_healthService != null)
+                // 2. Health Vitals (Heart Rate + Steps) - 1:1 Parity with HealthWidgetControl
+                if (_healthHubService != null || _healthService != null)
                 {
-                    var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
-                    if (hrMetric == null || hrMetric.Value <= 0)
+                    double liveBpm = 0;
+                    double steps = 0;
+
+                    HealthDailySummaryRecord? summary = null;
+                    if (_healthHubService != null)
                     {
-                        hrMetric = await _healthService.GetLatestMetricAsync(VitalType.RestingHeartRate);
+                        try
+                        {
+                            summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
+                        }
+                        catch { }
                     }
 
-                    if (hrMetric != null && hrMetric.Value > 0)
+                    // Priority 1: Intraday HR latest point from canonical Daily Summary (matches HealthWidgetControl)
+                    var intraday = summary?.Summary?.Cardiovascular?.IntradayHeartRate;
+                    if (intraday != null && intraday.Count > 0)
                     {
-                        VitalsHeartRateText.Text = $"{hrMetric.Value:F0}";
-                    }
-                    else
-                    {
-                        VitalsHeartRateText.Text = "--";
+                        var lastPt = intraday.LastOrDefault(p => p.Bpm > 0);
+                        if (lastPt != null && lastPt.Bpm > 0)
+                        {
+                            liveBpm = lastPt.Bpm;
+                        }
                     }
 
-                    var stepsMetric = await _healthService.GetLatestMetricAsync(VitalType.Steps);
-                    if (stepsMetric != null && stepsMetric.Value > 0)
+                    // Priority 2: Standard Live Heart Rate Metric from summary or metric service
+                    if (liveBpm <= 0 && _healthService != null)
                     {
-                        VitalsStepsText.Text = $"{stepsMetric.Value:N0}";
+                        var hrMetric = await _healthService.GetLatestMetricAsync(VitalType.HeartRate);
+                        if (hrMetric != null && hrMetric.Value > 0)
+                        {
+                            liveBpm = hrMetric.Value;
+                        }
                     }
-                    else
+
+                    // Priority 3: Resting Heart Rate fallback
+                    if (liveBpm <= 0)
                     {
-                        VitalsStepsText.Text = "--";
+                        double rhr = summary?.Rhr ?? 0;
+                        if (rhr <= 0 && _healthService != null)
+                        {
+                            var rhrMetric = await _healthService.GetLatestMetricAsync(VitalType.RestingHeartRate);
+                            if (rhrMetric != null && rhrMetric.Value > 0)
+                            {
+                                rhr = rhrMetric.Value;
+                            }
+                        }
+                        if (rhr > 0)
+                        {
+                            liveBpm = rhr;
+                        }
                     }
+
+                    VitalsHeartRateText.Text = liveBpm > 0 ? $"{liveBpm:F0}" : "--";
+
+                    // Steps
+                    steps = summary?.Steps ?? 0;
+                    if (steps <= 0 && _healthService != null)
+                    {
+                        var stepsMetric = await _healthService.GetLatestMetricAsync(VitalType.Steps);
+                        if (stepsMetric != null && stepsMetric.Value > 0)
+                        {
+                            steps = stepsMetric.Value;
+                        }
+                    }
+                    VitalsStepsText.Text = steps > 0 ? $"{steps:N0}" : "--";
                 }
 
                 // 3. Hydration Telemetry

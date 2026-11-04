@@ -153,7 +153,13 @@ public struct DailyFoldableCompanionPane: View {
     }
     
     private var displayBpm: Int {
-        let val = healthService.restingBpm > 0 ? healthService.restingBpm : healthService.averageBpm
+        if let latest = healthService.latestBpm, latest > 0 {
+            return Int(latest.rounded())
+        }
+        if let vitalsBpm = healthService.currentVitals[.heartRate]?.value, vitalsBpm > 0 {
+            return Int(vitalsBpm.rounded())
+        }
+        let val = healthService.averageBpm > 0 ? healthService.averageBpm : (healthService.restingBpm > 0 ? healthService.restingBpm : 0)
         return Int(val.rounded())
     }
     
