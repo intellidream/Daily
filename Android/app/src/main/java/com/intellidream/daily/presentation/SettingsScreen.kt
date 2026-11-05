@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Newspaper
 import androidx.compose.material.icons.rounded.Refresh
@@ -37,6 +39,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
@@ -44,6 +47,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -501,6 +505,12 @@ private fun HealthHabitsSettingsCard(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val healthRepo = remember(context) {
+        (context.applicationContext as? DailyApp)?.healthRepository
+    }
+
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 20.dp,
@@ -545,6 +555,126 @@ private fun HealthHabitsSettingsCard(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+
+            if (healthRepo != null) {
+                val prioritySources by healthRepo.configurableSources.collectAsState()
+                val isSavingPriority by healthRepo.isSavingPriorityOrder.collectAsState()
+                val hasCustomPriority = prioritySources.any { it.isCustomPriority == true }
+
+                if (prioritySources.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Device Priority Order",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Live vitals always prefer the newest reading; priority orders sleep & simultaneous wear.",
+                                color = ThemeColors.textMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        if (isSavingPriority) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = ThemeColors.accentCyan
+                            )
+                        } else if (hasCustomPriority) {
+                            TextButton(
+                                onClick = {
+                                    coroutineScope.launch { healthRepo.resetDevicePriorityOrder() }
+                                }
+                            ) {
+                                Text("Reset", color = ThemeColors.accentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    prioritySources.forEachIndexed { idx, src ->
+                        val dotColor = runCatching {
+                            Color(android.graphics.Color.parseColor(src.color ?: "#3897F0"))
+                        }.getOrDefault(ThemeColors.accentCyan)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "#${idx + 1}",
+                                    color = ThemeColors.accentCyan,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(dotColor)
+                                )
+                                Text(
+                                    text = src.displayName,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch { healthRepo.moveDevicePriority(idx, -1) }
+                                    },
+                                    enabled = idx > 0 && !isSavingPriority,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.KeyboardArrowUp,
+                                        contentDescription = "Move Up",
+                                        tint = if (idx > 0 && !isSavingPriority) Color.White else Color.White.copy(alpha = 0.25f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch { healthRepo.moveDevicePriority(idx, 1) }
+                                    },
+                                    enabled = idx < prioritySources.lastIndex && !isSavingPriority,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                                        contentDescription = "Move Down",
+                                        tint = if (idx < prioritySources.lastIndex && !isSavingPriority) Color.White else Color.White.copy(alpha = 0.25f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

@@ -92,6 +92,8 @@ class HealthDataRepository(
     private var activeLoadJob: kotlinx.coroutines.Job? = null
     private var isSyncingHistory: Boolean = false
     private val lastEngineInvocation = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val lastEnginePayloadFingerprint = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private var lastKnownTodayStart: Long = getStartOfDay(System.currentTimeMillis())
 
     var currentUserId: String = "local_user"
         set(value) {
@@ -125,6 +127,15 @@ class HealthDataRepository(
 
     private val _availableDevices = MutableStateFlow<List<String>>(emptyList())
     val availableDevices: StateFlow<List<String>> = _availableDevices.asStateFlow()
+
+    private val _configurableSources = MutableStateFlow<List<HealthSourceRecord>>(emptyList())
+    val configurableSources: StateFlow<List<HealthSourceRecord>> = _configurableSources.asStateFlow()
+
+    private val _isSavingPriorityOrder = MutableStateFlow(false)
+    val isSavingPriorityOrder: StateFlow<Boolean> = _isSavingPriorityOrder.asStateFlow()
+
+    val hasCustomDevicePriority: Boolean
+        get() = _configurableSources.value.any { it.isCustomPriority }
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -160,6 +171,12 @@ class HealthDataRepository(
 
     private val _latestBpm = MutableStateFlow<Double?>(null)
     val latestBpm: StateFlow<Double?> = _latestBpm.asStateFlow()
+
+    private val _latestBpmAt = MutableStateFlow<Long?>(null)
+    val latestBpmAt: StateFlow<Long?> = _latestBpmAt.asStateFlow()
+
+    private val _latestBpmSource = MutableStateFlow<String?>(null)
+    val latestBpmSource: StateFlow<String?> = _latestBpmSource.asStateFlow()
 
     private val _minBpm = MutableStateFlow(0.0)
     val minBpm: StateFlow<Double> = _minBpm.asStateFlow()
@@ -234,14 +251,31 @@ class HealthDataRepository(
         }
     }
 
+    private fun checkMidnightRolloverIfNeeded(): Boolean {
+        val currentTodayStart = getStartOfDay(System.currentTimeMillis())
+        if (currentTodayStart != lastKnownTodayStart) {
+            val wasViewingPreviousToday = (_selectedDate.value == lastKnownTodayStart)
+            lastKnownTodayStart = currentTodayStart
+            if (wasViewingPreviousToday) {
+                _selectedDate.value = currentTodayStart
+                cachedLeanSleepSessions = emptyList()
+                cachedLeanDailyVitals = emptyList()
+                cachedLeanIntradayHeartRate = emptyList()
+                return true
+            }
+        }
+        return false
+    }
+
     fun startActiveSyncLoop() {
         periodicActiveSyncJob?.cancel()
         periodicActiveSyncJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 kotlinx.coroutines.delay(5 * 60 * 1000L) // 5 minutes periodic cadence
                 if (currentUserId != "local_user") {
+                    val rolledOver = checkMidnightRolloverIfNeeded()
                     val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
-                    if (isToday) {
+                    if (rolledOver || isToday) {
                         loadDataForSelectedDate(forceRefresh = true)
                     }
                 }
@@ -295,8 +329,11 @@ class HealthDataRepository(
                 val sleepFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_sleep_sessions"
                 }
+                val sourcesFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "health_sources"
+                }
 
-                merge(summaryFlow, vitalsFlow, sleepFlow).collect {
+                merge(summaryFlow, vitalsFlow, sleepFlow, sourcesFlow).collect {
                     val now = System.currentTimeMillis()
                     // Throttle realtime bursts to at most once every 3 seconds (1:1 parity with iOS)
                     if (now - lastRealtimeSummaryFetchMs < 3000L) {
@@ -467,10 +504,11 @@ class HealthDataRepository(
 
     fun refreshIfStale() {
         if (currentUserId == "local_user") return
+        val rolledOver = checkMidnightRolloverIfNeeded()
         val now = System.currentTimeMillis()
         val isToday = isSameDay(_selectedDate.value, now)
         val staleThreshold = if (isToday) 5 * 60 * 1000L else 60 * 60 * 1000L
-        if (now - lastRefreshTimestamp > staleThreshold) {
+        if (rolledOver || now - lastRefreshTimestamp > staleThreshold) {
             lastRefreshTimestamp = now
             loadDataForSelectedDate(forceRefresh = true)
         } else {
@@ -734,49 +772,97 @@ class HealthDataRepository(
         remote: List<HealthDailyVitalsRecord>,
         local: List<HealthDailyVitalsRecord>
     ): List<HealthDailyVitalsRecord> {
-        if (local.isEmpty()) return remote
-        if (remote.isEmpty()) return local
+        if (local.isEmpty() && remote.isEmpty()) return emptyList()
         val map = LinkedHashMap<String, HealthDailyVitalsRecord>()
-        for (r in remote) {
-            val canon = DeviceSource.from(r.sourceDeviceKey).displayName
-            val existing = map[canon]
-            if (existing == null || r.steps >= existing.steps) {
+        for (r in (remote + local)) {
+            val src = DeviceSource.from(r.sourceDeviceKey)
+            if (src.isVirtualEngine) continue
+            val canon = src.displayName
+            val prev = map[canon]
+            if (prev != null) {
+                val mergedSteps = maxOf(prev.steps, r.steps)
+                val mergedKcal = maxOf(prev.activeKcal, r.activeKcal)
+                val mergedHourly = if (r.steps >= prev.steps && !r.hourlySteps.isNullOrEmpty()) {
+                    r.hourlySteps
+                } else {
+                    prev.hourlySteps ?: r.hourlySteps
+                }
+
+                val (mergedLatestHr, mergedLatestHrAt) = when {
+                    prev.latestHeartRate != null && r.latestHeartRate != null -> {
+                        val pTs = parseIsoToEpochMs(prev.latestHrAt ?: prev.updatedAt) ?: 0L
+                        val rTs = parseIsoToEpochMs(r.latestHrAt ?: r.updatedAt) ?: 0L
+                        if (rTs >= pTs) Pair(r.latestHeartRate, r.latestHrAt ?: prev.latestHrAt)
+                        else Pair(prev.latestHeartRate, prev.latestHrAt ?: r.latestHrAt)
+                    }
+                    prev.latestHeartRate == null && r.latestHeartRate != null -> Pair(r.latestHeartRate, r.latestHrAt)
+                    prev.latestHeartRate != null && r.latestHeartRate == null -> Pair(prev.latestHeartRate, prev.latestHrAt)
+                    else -> Pair(null, prev.latestHrAt ?: r.latestHrAt)
+                }
+
+                val mergedTsMap = (prev.vitalsTimestamps ?: emptyMap()).toMutableMap()
+                r.vitalsTimestamps?.forEach { (k, v) ->
+                    val oldTs = parseIsoToEpochMs(mergedTsMap[k])
+                    val newTs = parseIsoToEpochMs(v)
+                    if (oldTs == null || (newTs != null && newTs >= oldTs)) {
+                        mergedTsMap[k] = v
+                    }
+                }
+
+                val mergedSpo2 = if (prev.spo2 != null && r.spo2 != null) {
+                    val pD = parseIsoToEpochMs(prev.vitalsTimestamps?.get("spo2") ?: prev.updatedAt) ?: 0L
+                    val rD = parseIsoToEpochMs(r.vitalsTimestamps?.get("spo2") ?: r.updatedAt) ?: 0L
+                    if (rD >= pD) r.spo2 else prev.spo2
+                } else {
+                    r.spo2 ?: prev.spo2
+                }
+
+                val mergedWeight = if (prev.weightKg != null && r.weightKg != null) {
+                    val pD = parseIsoToEpochMs(prev.vitalsTimestamps?.get("weight") ?: prev.updatedAt) ?: 0L
+                    val rD = parseIsoToEpochMs(r.vitalsTimestamps?.get("weight") ?: r.updatedAt) ?: 0L
+                    if (rD >= pD) r.weightKg else prev.weightKg
+                } else {
+                    r.weightKg ?: prev.weightKg
+                }
+
+                val mergedUpdatedAt = run {
+                    val pU = parseIsoToEpochMs(prev.updatedAt)
+                    val rU = parseIsoToEpochMs(r.updatedAt)
+                    if (pU != null && rU != null) {
+                        if (rU >= pU) r.updatedAt else prev.updatedAt
+                    } else {
+                        r.updatedAt ?: prev.updatedAt
+                    }
+                }
+
+                map[canon] = HealthDailyVitalsRecord(
+                    id = prev.id,
+                    userId = r.userId,
+                    localDate = r.localDate,
+                    sourceDeviceKey = canon,
+                    hostDeviceName = r.hostDeviceName ?: prev.hostDeviceName,
+                    steps = mergedSteps,
+                    activeKcal = mergedKcal,
+                    restingHeartRate = r.restingHeartRate ?: prev.restingHeartRate,
+                    spo2 = mergedSpo2,
+                    respiratoryRate = r.respiratoryRate ?: prev.respiratoryRate,
+                    skinTempCelsius = r.skinTempCelsius ?: prev.skinTempCelsius,
+                    weightKg = mergedWeight,
+                    hrvSdnnNightly = r.hrvSdnnNightly ?: prev.hrvSdnnNightly,
+                    hrvRmssdNightly = r.hrvRmssdNightly ?: prev.hrvRmssdNightly,
+                    hourlySteps = mergedHourly,
+                    latestHeartRate = mergedLatestHr,
+                    latestHrAt = mergedLatestHrAt,
+                    vitalsTimestamps = mergedTsMap.takeIf { it.isNotEmpty() },
+                    updatedAt = mergedUpdatedAt
+                )
+            } else {
                 map[canon] = r.copy(sourceDeviceKey = canon)
             }
         }
-        for (l in local) {
-            val canon = DeviceSource.from(l.sourceDeviceKey).displayName
-            val existing = map[canon]
-            if (existing != null) {
-                val mergedSteps = maxOf(existing.steps, l.steps)
-                val mergedKcal = maxOf(existing.activeKcal, l.activeKcal)
-                val mergedHourly = if (l.steps >= existing.steps && !l.hourlySteps.isNullOrEmpty()) {
-                    l.hourlySteps
-                } else {
-                    existing.hourlySteps ?: l.hourlySteps
-                }
-                map[canon] = HealthDailyVitalsRecord(
-                    id = existing.id,
-                    userId = l.userId,
-                    localDate = l.localDate,
-                    sourceDeviceKey = canon,
-                    hostDeviceName = l.hostDeviceName ?: existing.hostDeviceName,
-                    steps = mergedSteps,
-                    activeKcal = mergedKcal,
-                    restingHeartRate = l.restingHeartRate ?: existing.restingHeartRate,
-                    spo2 = l.spo2 ?: existing.spo2,
-                    respiratoryRate = l.respiratoryRate ?: existing.respiratoryRate,
-                    skinTempCelsius = l.skinTempCelsius ?: existing.skinTempCelsius,
-                    weightKg = l.weightKg ?: existing.weightKg,
-                    hrvSdnnNightly = l.hrvSdnnNightly ?: existing.hrvSdnnNightly,
-                    hrvRmssdNightly = l.hrvRmssdNightly ?: existing.hrvRmssdNightly,
-                    hourlySteps = mergedHourly
-                )
-            } else {
-                map[canon] = l.copy(sourceDeviceKey = canon)
-            }
-        }
-        return map.values.toList()
+        return map.values
+            .filter { it.hasSignal }
+            .sortedBy { effectivePriorityRank(it.sourceDeviceKey) }
     }
 
     private fun mergeLeanIntradayHr(
@@ -787,19 +873,167 @@ class HealthDataRepository(
         if (remote.isEmpty()) return local
         val map = LinkedHashMap<String, HealthIntradayHeartRateRecord>()
         for (r in remote) {
-            val canon = DeviceSource.from(r.sourceDeviceKey).displayName
+            val src = DeviceSource.from(r.sourceDeviceKey)
+            if (src.isVirtualEngine) continue
+            val canon = src.displayName
             val key = "${canon}_${r.bucketMinute}"
             map[key] = r.copy(sourceDeviceKey = canon)
         }
         for (l in local) {
-            val canon = DeviceSource.from(l.sourceDeviceKey).displayName
+            val src = DeviceSource.from(l.sourceDeviceKey)
+            if (src.isVirtualEngine) continue
+            val canon = src.displayName
             val key = "${canon}_${l.bucketMinute}"
             val existing = map[key]
             if (existing == null || l.sampleCount >= existing.sampleCount) {
-                map[key] = l.copy(sourceDeviceKey = canon)
+                map[key] = l.copy(
+                    sourceDeviceKey = canon,
+                    bpmMin = if (existing != null) minOf(existing.bpmMin, l.bpmMin) else l.bpmMin,
+                    bpmMax = if (existing != null) maxOf(existing.bpmMax, l.bpmMax) else l.bpmMax,
+                    sampleCount = if (existing != null) maxOf(existing.sampleCount, l.sampleCount) else l.sampleCount
+                )
             }
         }
         return map.values.sortedBy { it.bucketMinute }
+    }
+
+    fun effectivePriorityRank(deviceName: String?): Int =
+        resolveEffectivePriorityRank(deviceName, cachedLeanSources)
+
+    private fun rebuildConfigurableSources() {
+        val uid = cachedLeanSources.firstOrNull()?.userId ?: currentUserId
+        val byCanonical = LinkedHashMap<DeviceSource, HealthSourceRecord>()
+
+        for (s in cachedLeanSources) {
+            val src = DeviceSource.from(s.displayName)
+            if (src.isVirtualEngine || src is DeviceSource.Manual) continue
+            val cleanId = canonicalSourceId(src, src.displayName)
+            val normalizedRank = resolveEffectivePriorityRank(src.displayName, listOf(s))
+            val existing = byCanonical[src]
+            if (existing != null) {
+                if ((s.isCustomPriority && !existing.isCustomPriority) || s.id == cleanId) {
+                    byCanonical[src] = s.copy(
+                        displayName = src.displayName,
+                        hostDeviceName = s.hostDeviceName ?: existing.hostDeviceName,
+                        prioritySleep = normalizedRank,
+                        priorityActivity = normalizedRank,
+                        isCustomPriority = s.isCustomPriority || existing.isCustomPriority,
+                        color = s.color ?: existing.color
+                    )
+                }
+            } else {
+                byCanonical[src] = s.copy(
+                    displayName = src.displayName,
+                    prioritySleep = normalizedRank,
+                    priorityActivity = normalizedRank,
+                    color = s.color ?: DeviceColorPalette.getColorForSource(src.displayName)
+                )
+            }
+        }
+
+        for (src in _availableSources.value) {
+            if (src.isVirtualEngine || src is DeviceSource.Manual) continue
+            if (!byCanonical.containsKey(src)) {
+                val disp = src.displayName
+                val sid = canonicalSourceId(src, disp)
+                byCanonical[src] = HealthSourceRecord(
+                    id = sid,
+                    userId = uid,
+                    platform = if (src is DeviceSource.AppleWatch || src is DeviceSource.HealthKit) "iOS" else "Android",
+                    deviceKind = when {
+                        src is DeviceSource.Oura -> "ring"
+                        src.isWearable -> "watch"
+                        else -> "phone"
+                    },
+                    displayName = disp,
+                    prioritySleep = src.sortPriority,
+                    priorityActivity = src.sortPriority,
+                    isCustomPriority = false,
+                    color = DeviceColorPalette.getColorForSource(disp)
+                )
+            }
+        }
+
+        _configurableSources.value = byCanonical.values.sortedWith(
+            compareBy<HealthSourceRecord> { minOf(it.prioritySleep, it.priorityActivity) }
+                .thenBy { it.displayName }
+        )
+    }
+
+    suspend fun moveDevicePriority(index: Int, direction: Int) {
+        val list = _configurableSources.value.toMutableList()
+        val newIndex = index + direction
+        if (index !in list.indices || newIndex !in list.indices) return
+        val moved = list.removeAt(index)
+        list.add(newIndex, moved)
+
+        val updated = list.mapIndexed { idx, item ->
+            val rank = idx + 1
+            item.copy(
+                prioritySleep = rank,
+                priorityActivity = rank,
+                isCustomPriority = true
+            )
+        }
+        withContext(Dispatchers.Main) {
+            _configurableSources.value = updated
+            cachedLeanSources = updated
+            rebuildAvailableSourcesForCurrentDate()
+            reapplyCurrentDeviceFilter()
+        }
+        saveDevicePriorityOrder(updated.map { it.id })
+    }
+
+    suspend fun saveDevicePriorityOrder(orderedIds: List<String>) {
+        if (orderedIds.isEmpty() || currentUserId == "local_user") return
+        _isSavingPriorityOrder.value = true
+        try {
+            val ok = remoteService.saveHealthSourcePriorities(orderedIds)
+            if (ok) {
+                val fresh = remoteService.fetchHealthSources(currentUserId)
+                if (fresh.isNotEmpty()) {
+                    cachedLeanSources = fresh
+                }
+                withContext(Dispatchers.Main) {
+                    rebuildConfigurableSources()
+                    rebuildAvailableSourcesForCurrentDate()
+                    reapplyCurrentDeviceFilter()
+                }
+                val dateKey = isoDateFormatter.format(Date(_selectedDate.value))
+                triggerCanonicalEngineIfNeeded(
+                    dateKey = dateKey,
+                    fingerprint = "priority_${orderedIds.joinToString(",")}",
+                    force = true
+                )
+            }
+        } finally {
+            _isSavingPriorityOrder.value = false
+        }
+    }
+
+    suspend fun resetDevicePriorityOrder() {
+        if (currentUserId == "local_user") return
+        _isSavingPriorityOrder.value = true
+        try {
+            val ok = remoteService.resetHealthSourcePriorities()
+            if (ok) {
+                val fresh = remoteService.fetchHealthSources(currentUserId)
+                cachedLeanSources = fresh
+                withContext(Dispatchers.Main) {
+                    rebuildConfigurableSources()
+                    rebuildAvailableSourcesForCurrentDate()
+                    reapplyCurrentDeviceFilter()
+                }
+                val dateKey = isoDateFormatter.format(Date(_selectedDate.value))
+                triggerCanonicalEngineIfNeeded(
+                    dateKey = dateKey,
+                    fingerprint = "priority_reset_${System.currentTimeMillis() / 1000}",
+                    force = true
+                )
+            }
+        } finally {
+            _isSavingPriorityOrder.value = false
+        }
     }
 
     private fun rebuildAvailableSourcesForCurrentDate() {
@@ -815,11 +1049,11 @@ class HealthDataRepository(
             if (!src.isVirtualEngine) srcSet.add(src)
         }
         for (h in cachedLeanIntradayHeartRate) {
-            if (h.bpmAvg <= 0 || h.sourceDeviceKey.isEmpty()) continue
+            if (h.bpmAvg <= 30 || h.sourceDeviceKey.isEmpty()) continue
             val src = DeviceSource.from(h.sourceDeviceKey)
             if (!src.isVirtualEngine) srcSet.add(src)
         }
-        if (srcSet.isEmpty()) {
+        if (srcSet.isEmpty() && cachedLeanSleepSessions.isEmpty() && cachedLeanDailyVitals.isEmpty() && cachedLeanIntradayHeartRate.isEmpty()) {
             val summarySources = _canonicalSummary.value?.sources.orEmpty()
             for (raw in summarySources) {
                 val src = DeviceSource.from(raw)
@@ -827,10 +1061,11 @@ class HealthDataRepository(
             }
         }
         val sortedSources = srcSet.toList().sortedWith(
-            compareByDescending<DeviceSource> { it.sortPriority }.thenBy { it.displayName }
+            compareBy<DeviceSource> { effectivePriorityRank(it.displayName) }.thenBy { it.displayName }
         )
         _availableSources.value = sortedSources
         _availableDevices.value = sortedSources.map { it.displayName }
+        rebuildConfigurableSources()
 
         // Auto-reset device filter to All Devices if previously selected device has no data on this date
         val selectedSrc = _selectedDeviceSource.value
@@ -868,17 +1103,16 @@ class HealthDataRepository(
         }
 
         val sortedPrimaryCandidates = candidateRows
-            .filter { it.sessionType == "primary_sleep" }
+            .filter { it.sessionType != "nap" }
             .sortedWith(
                 compareByDescending<HealthSleepSessionRecord> { it.isUserSelected }
                     .thenByDescending { it.stages.isNotEmpty() }
-                    .thenByDescending { DeviceSource.from(it.sourceDeviceKey).sortPriority }
+                    .thenBy { effectivePriorityRank(it.sourceDeviceKey) }
                     .thenByDescending { it.durationSeconds }
             )
 
-        val mapped = candidateRows.map { it.toSleepSession() }
-        val primary = sortedPrimaryCandidates.firstOrNull()?.toSleepSession()
-            ?: mapped.firstOrNull { !it.isNap }
+        val mapped = sortedPrimaryCandidates.map { it.toSleepSession() }
+        val primary = mapped.firstOrNull()
 
         val naps = candidateRows.filter { it.sessionType == "nap" }.map { r ->
             NapSession(
@@ -919,6 +1153,56 @@ class HealthDataRepository(
         val nowMs = System.currentTimeMillis()
         val dateStr = isoDateFormatter.format(Date(_selectedDate.value))
 
+        fun populateVitalsRow(
+            map: MutableMap<HealthMetricType, VitalMetricRecord>,
+            row: HealthDailyVitalsRecord,
+            canon: String,
+            overwrite: Boolean
+        ) {
+            val defaultTs = parseIsoToEpochMs(row.updatedAt) ?: nowMs
+            fun tsForKey(key: String): Long = parseIsoToEpochMs(row.vitalsTimestamps?.get(key)) ?: defaultTs
+            fun setMetric(type: HealthMetricType, value: Double, unit: String, ts: Long) {
+                if (overwrite || !map.containsKey(type)) {
+                    map[type] = VitalMetricRecord(
+                        userId = row.userId,
+                        type = type.rawKey,
+                        value = value,
+                        unit = unit,
+                        date = row.localDate,
+                        sourceDevice = canon,
+                        createdAt = ts
+                    )
+                }
+            }
+            row.latestHeartRate?.takeIf { it in 30..240 }?.let {
+                setMetric(HealthMetricType.HEART_RATE, it.toDouble(), "bpm", parseIsoToEpochMs(row.latestHrAt) ?: defaultTs)
+            }
+            row.restingHeartRate?.takeIf { it > 0 }?.let {
+                setMetric(HealthMetricType.RESTING_HEART_RATE, it.toDouble(), "bpm", tsForKey("rhr"))
+            }
+            row.spo2?.takeIf { it > 0 }?.let {
+                setMetric(HealthMetricType.OXYGEN_SATURATION, it, "%", tsForKey("spo2"))
+            }
+            row.respiratoryRate?.takeIf { it > 0 }?.let {
+                setMetric(HealthMetricType.RESPIRATORY_RATE, it, "br/min", tsForKey("resp"))
+            }
+            row.skinTempCelsius?.let {
+                setMetric(HealthMetricType.BODY_TEMPERATURE, it, "°C", tsForKey("temp"))
+            }
+            row.weightKg?.takeIf { it > 0 }?.let {
+                setMetric(HealthMetricType.WEIGHT, it, "kg", tsForKey("weight"))
+            }
+            row.hrvSdnnNightly?.takeIf { it > 0 }?.let {
+                setMetric(HealthMetricType.HRV_SDNN, it, "ms", tsForKey("hrv_sdnn"))
+            }
+            row.hrvRmssdNightly?.takeIf { it > 0 }?.let {
+                setMetric(HealthMetricType.HRV_RMSSD, it, "ms", tsForKey("hrv_rmssd"))
+            }
+            if (row.activeKcal > 0) {
+                setMetric(HealthMetricType.ACTIVE_ENERGY, row.activeKcal, "kcal", defaultTs)
+            }
+        }
+
         if (!filter.isNullOrEmpty()) {
             val targetCanon = DeviceSource.from(filter).displayName
             val matching = vitals.filter { DeviceSource.from(it.sourceDeviceKey).displayName == targetCanon }
@@ -935,201 +1219,138 @@ class HealthDataRepository(
 
             _hourlySteps.value = exact.hourlySteps ?: emptyList()
             _totalStepsToday.value = exact.steps
-            _totalActiveCalories.value = exact.activeKcal
+            _totalActiveCalories.value = if (exact.activeKcal > 0) exact.activeKcal else if (exact.steps > 0) (exact.steps * 0.042).round(1) else 0.0
             _stepsSourceDevice.value = targetCanon
+            _restingBpm.value = (exact.restingHeartRate ?: 0).toDouble()
 
             val map = mutableMapOf<HealthMetricType, VitalMetricRecord>()
-            val rhr = exact.restingHeartRate
-            if (rhr != null && rhr > 0) {
-                _restingBpm.value = rhr.toDouble()
-                map[HealthMetricType.RESTING_HEART_RATE] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.RESTING_HEART_RATE.rawKey,
-                    value = rhr.toDouble(),
-                    unit = "bpm",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            } else {
-                _restingBpm.value = 0.0
-            }
-
-            exact.spo2?.takeIf { it > 0 }?.let {
-                map[HealthMetricType.OXYGEN_SATURATION] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.OXYGEN_SATURATION.rawKey,
-                    value = it,
-                    unit = "%",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            }
-            exact.respiratoryRate?.takeIf { it > 0 }?.let {
-                map[HealthMetricType.RESPIRATORY_RATE] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.RESPIRATORY_RATE.rawKey,
-                    value = it,
-                    unit = "br/min",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            }
-            exact.skinTempCelsius?.let {
-                map[HealthMetricType.BODY_TEMPERATURE] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.BODY_TEMPERATURE.rawKey,
-                    value = it,
-                    unit = "°C",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            }
-            exact.weightKg?.takeIf { it > 0 }?.let {
-                map[HealthMetricType.WEIGHT] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.WEIGHT.rawKey,
-                    value = it,
-                    unit = "kg",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            }
-            val hrv = exact.hrvSdnnNightly
-            val rmssd = exact.hrvRmssdNightly
-            if (hrv != null && hrv > 0) {
-                map[HealthMetricType.HRV_SDNN] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.HRV_SDNN.rawKey,
-                    value = hrv,
-                    unit = "ms",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            } else if (rmssd != null && rmssd > 0) {
-                map[HealthMetricType.HRV_RMSSD] = VitalMetricRecord(
-                    userId = exact.userId,
-                    type = HealthMetricType.HRV_RMSSD.rawKey,
-                    value = rmssd,
-                    unit = "ms",
-                    date = exact.localDate,
-                    sourceDevice = targetCanon,
-                    createdAt = nowMs
-                )
-            }
+            populateVitalsRow(map, exact, targetCanon, overwrite = true)
             _currentVitals.value = map
             return
         }
 
-        // All Devices mode: highest-step wearable first, else highest-step device
-        val wearableWithSteps = vitals.filter { DeviceSource.from(it.sourceDeviceKey).isWearable && it.steps > 0 }
-        val stepLeader = wearableWithSteps.maxByOrNull { it.steps }
-            ?: vitals.maxByOrNull { it.steps }
-            ?: vitals.firstOrNull()
-
-        if (stepLeader != null) {
-            _hourlySteps.value = stepLeader.hourlySteps ?: emptyList()
-            _totalStepsToday.value = stepLeader.steps
-            _stepsSourceDevice.value = DeviceSource.from(stepLeader.sourceDeviceKey).displayName
-            val bestKcal = vitals.maxOfOrNull { it.activeKcal } ?: stepLeader.activeKcal
-            _totalActiveCalories.value = if (bestKcal > 0) bestKcal else (stepLeader.steps * 0.042).round(0)
+        if (vitals.isEmpty()) {
+            _hourlySteps.value = emptyList()
+            _totalStepsToday.value = 0
+            _totalActiveCalories.value = 0.0
+            _stepsSourceDevice.value = null
+            _restingBpm.value = 0.0
+            _currentVitals.value = emptyMap()
+            return
         }
 
-        // Merge clinical vitals across all devices sorted by canonical priority
-        val map = _currentVitals.value.toMutableMap()
-        val sortedByPriority = vitals.sortedByDescending { DeviceSource.from(it.sourceDeviceKey).sortPriority }
+        // All Devices mode:
+        // - Class B (Steps & Active Kcal): Hourly Active-Wearer Envelope across wearables
+        // - Class C (RHR, HRV, Resp, Skin Temp): Configured Priority Order (1-based ascending)
+        // - Class A (SpO2, Weight): Recency-First with 30m simultaneous priority tie-break
+        val activity = arbitrateHourlyActivity(vitals, cachedLeanSources)
+        _hourlySteps.value = activity.hourlySteps
+        _totalStepsToday.value = activity.totalSteps
+        _totalActiveCalories.value = activity.activeCalories
+        _stepsSourceDevice.value = activity.sourceDevice
 
-        sortedByPriority.firstOrNull { (it.restingHeartRate ?: 0) > 0 }?.let { r ->
-            val v = (r.restingHeartRate ?: 0).toDouble()
-            _restingBpm.value = v
-            map[HealthMetricType.RESTING_HEART_RATE] = VitalMetricRecord(
-                userId = r.userId,
-                type = HealthMetricType.RESTING_HEART_RATE.rawKey,
-                value = v,
-                unit = "bpm",
-                date = dateStr,
-                sourceDevice = DeviceSource.from(r.sourceDeviceKey).displayName,
-                createdAt = nowMs
-            )
+        val prioritySorted = vitals.sortedWith(
+            compareBy<HealthDailyVitalsRecord> { effectivePriorityRank(it.sourceDeviceKey) }
+                .thenByDescending { it.steps }
+        )
+
+        val map = mutableMapOf<HealthMetricType, VitalMetricRecord>()
+        for (row in prioritySorted) {
+            val canon = DeviceSource.from(row.sourceDeviceKey).displayName
+            populateVitalsRow(map, row, canon, overwrite = false)
         }
-        sortedByPriority.firstOrNull { (it.spo2 ?: 0.0) > 0.0 }?.let { r ->
+
+        arbitrateSpotVital(vitals, "spo2", cachedLeanSources, 1_800_000L) { it.spo2 }?.let { winner ->
             map[HealthMetricType.OXYGEN_SATURATION] = VitalMetricRecord(
-                userId = r.userId,
+                userId = "lean",
                 type = HealthMetricType.OXYGEN_SATURATION.rawKey,
-                value = r.spo2 ?: 0.0,
+                value = winner.value,
                 unit = "%",
                 date = dateStr,
-                sourceDevice = DeviceSource.from(r.sourceDeviceKey).displayName,
-                createdAt = nowMs
+                sourceDevice = winner.sourceDevice,
+                createdAt = winner.timestampMs ?: nowMs
             )
         }
-        sortedByPriority.firstOrNull { (it.respiratoryRate ?: 0.0) > 0.0 }?.let { r ->
-            map[HealthMetricType.RESPIRATORY_RATE] = VitalMetricRecord(
-                userId = r.userId,
-                type = HealthMetricType.RESPIRATORY_RATE.rawKey,
-                value = r.respiratoryRate ?: 0.0,
-                unit = "br/min",
-                date = dateStr,
-                sourceDevice = DeviceSource.from(r.sourceDeviceKey).displayName,
-                createdAt = nowMs
-            )
-        }
-        sortedByPriority.firstOrNull { it.skinTempCelsius != null }?.let { r ->
-            map[HealthMetricType.BODY_TEMPERATURE] = VitalMetricRecord(
-                userId = r.userId,
-                type = HealthMetricType.BODY_TEMPERATURE.rawKey,
-                value = r.skinTempCelsius ?: 0.0,
-                unit = "°C",
-                date = dateStr,
-                sourceDevice = DeviceSource.from(r.sourceDeviceKey).displayName,
-                createdAt = nowMs
-            )
-        }
-        sortedByPriority.firstOrNull { (it.weightKg ?: 0.0) > 0.0 }?.let { r ->
+        arbitrateSpotVital(vitals, "weight", cachedLeanSources, 1_800_000L) { it.weightKg }?.let { winner ->
             map[HealthMetricType.WEIGHT] = VitalMetricRecord(
-                userId = r.userId,
+                userId = "lean",
                 type = HealthMetricType.WEIGHT.rawKey,
-                value = r.weightKg ?: 0.0,
+                value = winner.value,
                 unit = "kg",
                 date = dateStr,
-                sourceDevice = DeviceSource.from(r.sourceDeviceKey).displayName,
+                sourceDevice = winner.sourceDevice,
+                createdAt = winner.timestampMs ?: nowMs
+            )
+        }
+        if (activity.activeCalories > 0.0) {
+            map[HealthMetricType.ACTIVE_ENERGY] = VitalMetricRecord(
+                userId = "lean",
+                type = HealthMetricType.ACTIVE_ENERGY.rawKey,
+                value = activity.activeCalories,
+                unit = "kcal",
+                date = dateStr,
+                sourceDevice = activity.sourceDevice,
                 createdAt = nowMs
             )
         }
-        val hrvRow = sortedByPriority.firstOrNull { (it.hrvSdnnNightly ?: 0.0) > 0.0 }
-        val rmssdRow = sortedByPriority.firstOrNull { (it.hrvRmssdNightly ?: 0.0) > 0.0 }
-        if (hrvRow != null) {
-            map[HealthMetricType.HRV_SDNN] = VitalMetricRecord(
-                userId = hrvRow.userId,
-                type = HealthMetricType.HRV_SDNN.rawKey,
-                value = hrvRow.hrvSdnnNightly ?: 0.0,
-                unit = "ms",
-                date = dateStr,
-                sourceDevice = DeviceSource.from(hrvRow.sourceDeviceKey).displayName,
-                createdAt = nowMs
-            )
-        } else if (rmssdRow != null) {
-            map[HealthMetricType.HRV_RMSSD] = VitalMetricRecord(
-                userId = rmssdRow.userId,
-                type = HealthMetricType.HRV_RMSSD.rawKey,
-                value = rmssdRow.hrvRmssdNightly ?: 0.0,
-                unit = "ms",
-                date = dateStr,
-                sourceDevice = DeviceSource.from(rmssdRow.sourceDeviceKey).displayName,
-                createdAt = nowMs
-            )
-        }
+
+        _restingBpm.value = map[HealthMetricType.RESTING_HEART_RATE]?.value ?: 0.0
         _currentVitals.value = map
     }
 
     fun applyLeanIntradayHeartRate(buckets: List<HealthIntradayHeartRateRecord>, targetDateEpochMs: Long) {
         cachedLeanIntradayHeartRate = buckets
         val filter = _selectedDeviceFilter.value
+        val dateStr = isoDateFormatter.format(Date(targetDateEpochMs))
+
+        var finalLatest = arbitrateLatestHeartRate(
+            vitals = cachedLeanDailyVitals,
+            intradayBuckets = buckets,
+            targetDateEpochMs = targetDateEpochMs,
+            sources = cachedLeanSources,
+            deviceFilter = filter
+        )
+
+        if (filter.isNullOrEmpty()) {
+            val canonical = _canonicalSummary.value
+            val cardio = canonical?.cardiovascular
+            val summaryBpm = cardio?.latestBpm
+            val summarySrc = cardio?.latestSourceDevice
+            if (summaryBpm != null && summaryBpm >= 30.0 && !summarySrc.isNullOrEmpty()) {
+                val summaryTs = parseIsoToEpochMs(cardio.latestBpmAt ?: canonical.computedAt) ?: 0L
+                val existing = finalLatest
+                if (existing == null || summaryTs > existing.timestampMs + 60_000L) {
+                    finalLatest = ArbitratedLatestHeartRate(
+                        bpm = summaryBpm,
+                        timestampMs = summaryTs,
+                        sourceDevice = DeviceSource.from(summarySrc).displayName
+                    )
+                }
+            }
+        }
+
+        if (finalLatest != null) {
+            _latestBpm.value = finalLatest.bpm
+            _latestBpmAt.value = finalLatest.timestampMs.takeIf { it > 0L }
+            _latestBpmSource.value = finalLatest.sourceDevice
+            val updated = _currentVitals.value.toMutableMap()
+            updated[HealthMetricType.HEART_RATE] = VitalMetricRecord(
+                userId = "lean-hr",
+                type = HealthMetricType.HEART_RATE.rawKey,
+                value = finalLatest.bpm,
+                unit = "bpm",
+                date = dateStr,
+                sourceDevice = finalLatest.sourceDevice,
+                createdAt = finalLatest.timestampMs.takeIf { it > 0L }
+            )
+            _currentVitals.value = updated
+        } else {
+            _latestBpm.value = null
+            _latestBpmAt.value = null
+            _latestBpmSource.value = null
+        }
+
+        val maxBucketMinute = buckets.maxOfOrNull { it.bucketMinute } ?: 0
         val filtered = if (!filter.isNullOrEmpty()) {
             val targetCanon = DeviceSource.from(filter).displayName
             buckets.filter { DeviceSource.from(it.sourceDeviceKey).displayName == targetCanon }
@@ -1140,19 +1361,27 @@ class HealthDataRepository(
                     if (group.size == 1) {
                         group[0]
                     } else {
-                        val sortedGrp = group.sortedBy { DeviceSource.from(it.sourceDeviceKey).sortPriority }
-                        val primary = sortedGrp[0]
-                        val totalCnt = sortedGrp.sumOf { maxOf(1, it.sampleCount) }
-                        val weightedSum = sortedGrp.sumOf { it.bpmAvg * maxOf(1, it.sampleCount) }
-                        val minV = sortedGrp.minOf { if (it.bpmMin > 30) it.bpmMin else it.bpmAvg }
-                        val maxV = sortedGrp.maxOf { if (it.bpmMax > 30) it.bpmMax else it.bpmAvg }
-                        primary.copy(
-                            bucketMinute = bm,
-                            bpmAvg = (weightedSum.toDouble() / maxOf(1, totalCnt)).toInt(),
-                            bpmMin = minV,
-                            bpmMax = maxV,
-                            sampleCount = totalCnt
-                        )
+                        val activeSrc = finalLatest?.sourceDevice
+                        val activeMatch = if (!activeSrc.isNullOrEmpty() && bm >= maxBucketMinute - 15) {
+                            group.firstOrNull { DeviceSource.from(it.sourceDeviceKey).displayName == activeSrc }
+                        } else null
+                        if (activeMatch != null) {
+                            activeMatch
+                        } else {
+                            val sortedGrp = group.sortedBy { effectivePriorityRank(it.sourceDeviceKey) }
+                            val primary = sortedGrp[0]
+                            val totalCnt = sortedGrp.sumOf { maxOf(1, it.sampleCount) }
+                            val weightedSum = sortedGrp.sumOf { it.bpmAvg * maxOf(1, it.sampleCount) }
+                            val minV = sortedGrp.minOf { if (it.bpmMin > 30) it.bpmMin else it.bpmAvg }
+                            val maxV = sortedGrp.maxOf { if (it.bpmMax > 30) it.bpmMax else it.bpmAvg }
+                            primary.copy(
+                                bucketMinute = bm,
+                                bpmAvg = Math.round(weightedSum.toDouble() / maxOf(1, totalCnt)).toInt(),
+                                bpmMin = minV,
+                                bpmMax = maxV,
+                                sampleCount = totalCnt
+                            )
+                        }
                     }
                 }
         } else {
@@ -1164,10 +1393,16 @@ class HealthDataRepository(
         if (filtered.isNotEmpty()) {
             val totalSamples = filtered.sumOf { maxOf(1, it.sampleCount) }
             val weightedSum = filtered.sumOf { it.bpmAvg.toDouble() * maxOf(1, it.sampleCount) }
-            _averageBpm.value = round(weightedSum / totalSamples)
-            _minBpm.value = (filtered.minOfOrNull { if (it.bpmMin > 30) it.bpmMin else it.bpmAvg } ?: 0).toDouble()
-            _maxBpm.value = (filtered.maxOfOrNull { if (it.bpmMax > 30) it.bpmMax else it.bpmAvg } ?: 0).toDouble()
-            _latestBpm.value = points.lastOrNull()?.bpm
+            _averageBpm.value = round(weightedSum / maxOf(1, totalSamples))
+            var lo = (filtered.minOfOrNull { if (it.bpmMin > 30) it.bpmMin else it.bpmAvg } ?: 0).toDouble()
+            var hi = (filtered.maxOfOrNull { if (it.bpmMax > 30) it.bpmMax else it.bpmAvg } ?: 0).toDouble()
+            val live = _latestBpm.value
+            if (live != null && live > 30.0) {
+                if (lo <= 0.0 || live < lo) lo = live
+                if (live > hi) hi = live
+            }
+            _minBpm.value = lo
+            _maxBpm.value = hi
             if (_restingBpm.value <= 0.0) {
                 val derived = StressAnalysisEngine.deriveNocturnalRhr(points, Date(targetDateEpochMs))
                 if (derived != null) {
@@ -1188,10 +1423,9 @@ class HealthDataRepository(
             }
             _heartRateZones.value = zones
         } else {
-            _averageBpm.value = 0.0
-            _minBpm.value = 0.0
-            _maxBpm.value = 0.0
-            _latestBpm.value = null
+            _averageBpm.value = _latestBpm.value ?: 0.0
+            _minBpm.value = _latestBpm.value ?: 0.0
+            _maxBpm.value = _latestBpm.value ?: 0.0
             _heartRateZones.value = emptyMap()
         }
     }
@@ -1199,52 +1433,25 @@ class HealthDataRepository(
     fun applyLeanHealthSources(sources: List<HealthSourceRecord>) {
         // Store source metadata only; never inject global registry rows into date-scoped _availableSources!
         cachedLeanSources = sources
+        rebuildConfigurableSources()
     }
 
     fun reapplyCurrentDeviceFilter() {
         val filter = _selectedDeviceFilter.value
         val dateKey = isoDateFormatter.format(Date(_selectedDate.value))
-        if (filter.isNullOrEmpty()) {
-            val canonical = _canonicalSummary.value
-            if (canonical != null) {
-                applyCanonicalSummary(canonical, dateKey)
+        if (cachedLeanSleepSessions.isEmpty() && cachedLeanDailyVitals.isEmpty() && cachedLeanIntradayHeartRate.isEmpty()) {
+            if (filter.isNullOrEmpty()) {
+                val canonical = _canonicalSummary.value
+                if (canonical != null) {
+                    applyCanonicalSummary(canonical, dateKey)
+                    return
+                }
             }
-        } else {
-            // Clear cross-device state before populating strictly for the selected canonical device
-            _hourlySteps.value = emptyList()
-            _totalStepsToday.value = 0
-            _totalActiveCalories.value = 0.0
-            _stepsSourceDevice.value = filter
-            _restingBpm.value = 0.0
-            _currentVitals.value = emptyMap()
         }
 
-        if (cachedLeanDailyVitals.isNotEmpty()) {
-            applyLeanDailyVitals(cachedLeanDailyVitals)
-        }
-
-        if (cachedLeanSleepSessions.isNotEmpty()) {
-            applyLeanSleepSessions(cachedLeanSleepSessions)
-        } else if (!filter.isNullOrEmpty()) {
-            _primarySleepSession.value = null
-            _allSleepSessions.value = emptyList()
-            _daytimeNaps.value = emptyList()
-            _sleepRecoveryVerdict.value = null
-            _sleepActionableTips.value = emptyList()
-            _sleepAIContext.value = null
-        }
-
-        if (cachedLeanIntradayHeartRate.isNotEmpty()) {
-            applyLeanIntradayHeartRate(cachedLeanIntradayHeartRate, _selectedDate.value)
-        } else if (!filter.isNullOrEmpty()) {
-            _intradayHeartRate.value = emptyList()
-            _averageBpm.value = 0.0
-            _minBpm.value = 0.0
-            _maxBpm.value = 0.0
-            _latestBpm.value = null
-            _heartRateZones.value = emptyMap()
-        }
-
+        applyLeanDailyVitals(cachedLeanDailyVitals)
+        applyLeanSleepSessions(cachedLeanSleepSessions)
+        applyLeanIntradayHeartRate(cachedLeanIntradayHeartRate, _selectedDate.value)
         recalculateStressForCurrentDevice()
     }
 
@@ -1252,17 +1459,35 @@ class HealthDataRepository(
         val canonical = _canonicalSummary.value
         val filter = _selectedDeviceFilter.value
         val dateKey = isoDateFormatter.format(Date(_selectedDate.value))
+        val vitalsMap = _currentVitals.value.toMutableMap()
 
         val stress = canonical?.stress
-        if (filter.isNullOrEmpty() && stress != null) {
+        val summaryComputedAtMs = parseIsoToEpochMs(canonical?.computedAt)
+        val latestHrAtMs = _latestBpmAt.value
+        if (filter.isNullOrEmpty() && stress != null && summaryComputedAtMs != null &&
+            (latestHrAtMs == null || summaryComputedAtMs + 90_000L >= latestHrAtMs)
+        ) {
             _stressAnalysis.value = stress.toDomainAnalysis()
             _currentStressScore.value = stress.currentScore
             _currentStressLevel.value = stress.toDomainLevel()
             _intradayStress.value = stress.intradayStress
+            val resolvedSrc = stress.sourceDevice?.takeIf { it.isNotEmpty() && !DeviceSource.from(it).isVirtualEngine }
+                ?.let { DeviceSource.from(it).displayName }
+                ?: _latestBpmSource.value
+                ?: _stepsSourceDevice.value
+                ?: _primarySleepSession.value?.sourceDevice
+            vitalsMap[HealthMetricType.STRESS] = VitalMetricRecord(
+                userId = currentUserId,
+                type = HealthMetricType.STRESS.rawKey,
+                value = stress.currentScore.toDouble(),
+                unit = "pts",
+                date = dateKey,
+                sourceDevice = resolvedSrc
+            )
+            _currentVitals.value = vitalsMap
             return
         }
 
-        val vitalsMap = _currentVitals.value.toMutableMap()
         val hasSdnn = (vitalsMap[HealthMetricType.HRV_SDNN]?.value ?: 0.0) > 0.0
         val hasRmssd = !hasSdnn && (vitalsMap[HealthMetricType.HRV_RMSSD]?.value ?: 0.0) > 0.0
         val hrvVal = when {
@@ -1271,8 +1496,21 @@ class HealthDataRepository(
             else -> null
         }
         val canonFilter = filter?.takeIf { it.isNotEmpty() }?.let { DeviceSource.from(it).displayName }
-        val serverDerivedRhr = canonFilter?.let { canonical?.sourcesBreakdown?.get(it)?.get("derived_rhr") }
-        val rhrVal = vitalsMap[HealthMetricType.RESTING_HEART_RATE]?.value ?: serverDerivedRhr
+
+        // Anchor RHR to the active HR sensor's own RHR in All Devices mode to avoid cross-sensor optical bias
+        val activeHrSensorCanon = canonFilter ?: _latestBpmSource.value
+        val sensorMatchedRhr: Double? = run {
+            if (!activeHrSensorCanon.isNullOrEmpty()) {
+                val rowRhr = cachedLeanDailyVitals
+                    .firstOrNull { DeviceSource.from(it.sourceDeviceKey).displayName == activeHrSensorCanon }
+                    ?.restingHeartRate
+                if (rowRhr != null && rowRhr > 0) return@run rowRhr.toDouble()
+                val srvDerived = canonical?.sourcesBreakdown?.get(activeHrSensorCanon)?.get("derived_rhr")
+                if (srvDerived != null && srvDerived > 0.0) return@run srvDerived
+            }
+            vitalsMap[HealthMetricType.RESTING_HEART_RATE]?.value
+        }
+
         val hrPoints = _intradayHeartRate.value
 
         val summaryUsedRmssd = (canonical?.vitals?.get("hrvsdnn") == null) && (canonical?.vitals?.get("hrvrmssd") != null)
@@ -1280,14 +1518,14 @@ class HealthDataRepository(
             base > 0.0 && ((hasRmssd && summaryUsedRmssd && base >= 35.0) || (hasSdnn && !summaryUsedRmssd && base <= 120.0))
         }
 
-        if (hrvVal != null || hrPoints.isNotEmpty() || (rhrVal != null && rhrVal > 0)) {
+        if (hrvVal != null || hrPoints.isNotEmpty() || (sensorMatchedRhr != null && sensorMatchedRhr > 0.0)) {
             val stressCalc = StressAnalysisEngine.calculateStress(
                 targetDate = Date(_selectedDate.value),
                 hrvMs = hrvVal,
                 isRmssd = hasRmssd,
                 hrTelemetry = hrPoints,
                 hourlySteps = _hourlySteps.value,
-                restingBpm = rhrVal?.takeIf { it > 0 },
+                restingBpm = sensorMatchedRhr?.takeIf { it > 0.0 },
                 priorSleepScore = _primarySleepSession.value?.sleepScore,
                 personalBaselineHrv = matchedBaselineHrv
             )
@@ -1316,7 +1554,8 @@ class HealthDataRepository(
                 _currentStressLevel.value = stressResult.currentLevel
                 _stressAnalysis.value = stressResult
                 _intradayStress.value = intradayPoints
-                val attrSource = filter
+                val attrSource = canonFilter
+                    ?: _latestBpmSource.value
                     ?: vitalsMap[HealthMetricType.HRV_SDNN]?.sourceDevice
                     ?: vitalsMap[HealthMetricType.HRV_RMSSD]?.sourceDevice
                     ?: hrPoints.lastOrNull()?.sourceDevice
@@ -1346,6 +1585,7 @@ class HealthDataRepository(
 
         // Sleep
         _primarySleepSession.value = payload.sleep?.primarySession
+        _allSleepSessions.value = payload.sleep?.allSessions ?: listOfNotNull(payload.sleep?.primarySession)
         _daytimeNaps.value = payload.sleep?.naps ?: emptyList()
         _sleepRecoveryVerdict.value = payload.sleep?.guidance?.verdict?.toDomain()
         _sleepActionableTips.value = payload.sleep?.guidance?.tips?.map { it.toDomain() } ?: emptyList()
@@ -1353,16 +1593,16 @@ class HealthDataRepository(
 
         // Activity
         val isAllDevices = _selectedDeviceSource.value == null && _selectedDeviceFilter.value.isNullOrEmpty()
-        if (isAllDevices && payload.allDevicesView?.containsKey("steps") == true) {
+        if (isAllDevices && payload.allDevicesView.containsKey("steps")) {
             _totalStepsToday.value = (payload.allDevicesView["steps"]?.value ?: 0.0).toInt()
-            _stepsSourceDevice.value = payload.allDevicesView["steps"]?.sourceKey?.let { DeviceSource.from(it).displayName }
+            _stepsSourceDevice.value = payload.allDevicesView["steps"]?.sourceKey?.takeIf { it.isNotEmpty() }?.let { DeviceSource.from(it).displayName }
                 ?: payload.activity?.sourceDevice?.let { DeviceSource.from(it).displayName }
         } else {
             _totalStepsToday.value = payload.activity?.totalSteps ?: 0
             _stepsSourceDevice.value = payload.activity?.sourceDevice?.let { DeviceSource.from(it).displayName }
         }
 
-        if (isAllDevices && payload.allDevicesView?.containsKey("active_energy") == true) {
+        if (isAllDevices && payload.allDevicesView.containsKey("active_energy")) {
             _totalActiveCalories.value = payload.allDevicesView["active_energy"]?.value ?: 0.0
         } else {
             _totalActiveCalories.value = payload.activity?.activeCaloriesKcal ?: 0.0
@@ -1370,13 +1610,26 @@ class HealthDataRepository(
         _hourlySteps.value = payload.activity?.hourlySteps ?: emptyList()
 
         // Cardiovascular
-        _intradayHeartRate.value = payload.cardiovascular?.intradayHeartRate ?: emptyList()
-        _restingBpm.value = payload.cardiovascular?.restingHeartRateBpm ?: 0.0
-        _averageBpm.value = payload.cardiovascular?.averageHeartRateBpm ?: 0.0
-        _maxBpm.value = payload.cardiovascular?.maxHeartRateBpm ?: 0.0
-        _minBpm.value = payload.cardiovascular?.minHeartRateBpm ?: 0.0
-        _heartRateZones.value = payload.cardiovascular?.heartRateZones?.toMap() ?: emptyMap()
-        _latestBpm.value = payload.cardiovascular?.intradayHeartRate?.lastOrNull()?.bpm
+        val cardio = payload.cardiovascular
+        val hrPts = cardio?.intradayHeartRate ?: emptyList()
+        _intradayHeartRate.value = hrPts
+        _restingBpm.value = cardio?.restingHeartRateBpm ?: 0.0
+        _averageBpm.value = cardio?.averageHeartRateBpm ?: 0.0
+        _maxBpm.value = cardio?.maxHeartRateBpm ?: 0.0
+        _minBpm.value = cardio?.minHeartRateBpm ?: 0.0
+        _heartRateZones.value = cardio?.heartRateZones?.toMap() ?: emptyMap()
+
+        val srvLatest = cardio?.latestBpm
+        if (srvLatest != null && srvLatest >= 30.0) {
+            _latestBpm.value = srvLatest
+            _latestBpmAt.value = parseIsoToEpochMs(cardio.latestBpmAt ?: payload.computedAt)
+            _latestBpmSource.value = cardio.latestSourceDevice?.let { DeviceSource.from(it).displayName }
+        } else {
+            val lastPt = hrPts.lastOrNull()
+            _latestBpm.value = lastPt?.bpm
+            _latestBpmAt.value = lastPt?.timestamp
+            _latestBpmSource.value = lastPt?.sourceDevice?.let { DeviceSource.from(it).displayName }
+        }
 
         // Stress
         val stress = payload.stress
@@ -1409,23 +1662,52 @@ class HealthDataRepository(
                 }
             )
         }
-        if (isAllDevices && payload.allDevicesView != null) {
+        if (isAllDevices) {
             for ((metricKey, item) in payload.allDevicesView) {
                 val type = HealthMetricType.from(metricKey) ?: continue
-                val valNum = item.value ?: continue
+                if (item.value <= 0.0) continue
                 vitalsMap[type] = VitalMetricRecord(
                     id = UUID.randomUUID().toString(),
                     userId = currentUserId,
                     type = metricKey,
-                    value = valNum,
+                    value = item.value,
                     unit = item.unit,
                     date = dateKey,
-                    sourceDevice = item.sourceKey?.let { src ->
+                    sourceDevice = item.sourceKey.takeIf { it.isNotEmpty() }?.let { src ->
                         val ds = DeviceSource.from(src)
                         if (ds.isVirtualEngine) null else ds.displayName
-                    }
+                    },
+                    createdAt = parseIsoToEpochMs(item.timestamp)
                 )
             }
+        }
+        val lBpm = _latestBpm.value
+        if (lBpm != null && lBpm >= 30.0) {
+            vitalsMap[HealthMetricType.HEART_RATE] = VitalMetricRecord(
+                id = UUID.randomUUID().toString(),
+                userId = currentUserId,
+                type = HealthMetricType.HEART_RATE.rawKey,
+                value = lBpm,
+                unit = "bpm",
+                date = dateKey,
+                sourceDevice = _latestBpmSource.value,
+                createdAt = _latestBpmAt.value
+            )
+        }
+        if (stress != null) {
+            val stressSrc = stress.sourceDevice?.takeIf { it.isNotEmpty() && !DeviceSource.from(it).isVirtualEngine }
+                ?.let { DeviceSource.from(it).displayName }
+                ?: _latestBpmSource.value
+                ?: _stepsSourceDevice.value
+            vitalsMap[HealthMetricType.STRESS] = VitalMetricRecord(
+                id = UUID.randomUUID().toString(),
+                userId = currentUserId,
+                type = HealthMetricType.STRESS.rawKey,
+                value = stress.currentScore.toDouble(),
+                unit = "pts",
+                date = dateKey,
+                sourceDevice = stressSrc
+            )
         }
         _currentVitals.value = vitalsMap
 
@@ -1435,9 +1717,10 @@ class HealthDataRepository(
                 .map { DeviceSource.from(it) }
                 .filter { !it.isVirtualEngine }
                 .distinctBy { it.displayName }
-                .sortedWith(compareByDescending<DeviceSource> { it.sortPriority }.thenBy { it.displayName })
+                .sortedWith(compareBy<DeviceSource> { effectivePriorityRank(it.displayName) }.thenBy { it.displayName })
             _availableSources.value = sourcesList
             _availableDevices.value = sourcesList.map { it.displayName }
+            rebuildConfigurableSources()
         }
     }
 
@@ -1445,7 +1728,7 @@ class HealthDataRepository(
         val canonicalList = _availableSources.value
             .filter { !it.isVirtualEngine }
             .distinctBy { it.displayName }
-            .sortedWith(compareByDescending<DeviceSource> { it.sortPriority }.thenBy { it.displayName })
+            .sortedWith(compareBy<DeviceSource> { effectivePriorityRank(it.displayName) }.thenBy { it.displayName })
         _availableSources.value = canonicalList
         _availableDevices.value = canonicalList.map { it.displayName }
     }
@@ -1467,10 +1750,11 @@ class HealthDataRepository(
             }
         }
         val sorted = srcSet.toList().sortedWith(
-            compareByDescending<DeviceSource> { it.sortPriority }.thenBy { it.displayName }
+            compareBy<DeviceSource> { effectivePriorityRank(it.displayName) }.thenBy { it.displayName }
         )
         _availableSources.value = sorted
         _availableDevices.value = sorted.map { it.displayName }
+        rebuildConfigurableSources()
     }
 
     private suspend fun processDataForCurrentDate() {
@@ -1838,22 +2122,19 @@ class HealthDataRepository(
 
                     for ((dKey, rows) in vitalsByDate) {
                         val map = historicalVitalsByDate.getOrPut(dKey) { mutableMapOf() }
-                        val wearableSteps = rows.filter { DeviceSource.from(it.sourceDeviceKey).isWearable && it.steps > 0 }
-                            .maxOfOrNull { it.steps }
-                        val bestSteps = wearableSteps ?: rows.maxOfOrNull { it.steps } ?: 0
-                        val bestKcal = rows.maxOfOrNull { it.activeKcal } ?: 0.0
-                        if (bestSteps > 0) map[HealthMetricType.STEPS] = bestSteps.toDouble()
-                        if (bestKcal > 0.0) map[HealthMetricType.ACTIVE_ENERGY] = bestKcal
+                        val act = arbitrateHourlyActivity(rows, cachedLeanSources)
+                        if (act.totalSteps > 0) map[HealthMetricType.STEPS] = act.totalSteps.toDouble()
+                        if (act.activeCalories > 0.0) map[HealthMetricType.ACTIVE_ENERGY] = act.activeCalories
 
-                        val sortedByPrio = rows.sortedByDescending { DeviceSource.from(it.sourceDeviceKey).sortPriority }
+                        val sortedByPrio = rows.sortedBy { effectivePriorityRank(it.sourceDeviceKey) }
                         sortedByPrio.mapNotNull { it.restingHeartRate }.firstOrNull { it > 0 }?.let {
                             map[HealthMetricType.HEART_RATE] = it.toDouble()
                         }
-                        sortedByPrio.mapNotNull { it.spo2 }.firstOrNull { it > 0.0 }?.let {
-                            map[HealthMetricType.OXYGEN_SATURATION] = it
+                        arbitrateSpotVital(rows, "spo2", cachedLeanSources, 1_800_000L) { it.spo2 }?.let {
+                            map[HealthMetricType.OXYGEN_SATURATION] = it.value
                         }
-                        sortedByPrio.mapNotNull { it.weightKg }.firstOrNull { it > 0.0 }?.let {
-                            map[HealthMetricType.WEIGHT] = it
+                        arbitrateSpotVital(rows, "weight", cachedLeanSources, 1_800_000L) { it.weightKg }?.let {
+                            map[HealthMetricType.WEIGHT] = it.value
                         }
                         val hrvVal = sortedByPrio.mapNotNull { it.hrvSdnnNightly }.firstOrNull { it > 0.0 }
                             ?: sortedByPrio.mapNotNull { it.hrvRmssdNightly }.firstOrNull { it > 0.0 }
@@ -1892,7 +2173,7 @@ class HealthDataRepository(
                         val sortedRows = rows.sortedWith(
                             compareByDescending<HealthSleepSessionRecord> { it.isUserSelected }
                                 .thenByDescending { it.stages.isNotEmpty() }
-                                .thenByDescending { DeviceSource.from(it.sourceDeviceKey).sortPriority }
+                                .thenBy { effectivePriorityRank(it.sourceDeviceKey) }
                                 .thenByDescending { it.durationSeconds }
                         )
                         val primary = sortedRows.firstOrNull { it.sessionType == "primary_sleep" } ?: sortedRows.firstOrNull()
@@ -2069,14 +2350,22 @@ class HealthDataRepository(
             deviceResults.add(DeviceResult(device, total, hourlyMap, isWearable))
         }
 
+        val isAllDevices = preferredSource == null && preferredDevice.isNullOrEmpty()
         var chosen: DeviceResult? = null
         if (preferredSource != null) {
-            chosen = deviceResults.firstOrNull { DeviceSource.from(it.device) == preferredSource }
+            chosen = deviceResults.firstOrNull {
+                val dSrc = DeviceSource.from(it.device)
+                dSrc == preferredSource || dSrc.displayName.equals(preferredSource.displayName, ignoreCase = true)
+            }
         }
         if (chosen == null && !preferredDevice.isNullOrEmpty()) {
-            chosen = deviceResults.firstOrNull { it.device.contains(preferredDevice, ignoreCase = true) }
+            val pdCanon = DeviceSource.from(preferredDevice).displayName
+            chosen = deviceResults.firstOrNull {
+                it.device.contains(preferredDevice, ignoreCase = true) ||
+                    DeviceSource.from(it.device).displayName.equals(pdCanon, ignoreCase = true)
+            }
         }
-        if (chosen == null) {
+        if (chosen == null && isAllDevices) {
             val wearables = deviceResults.filter { it.isWearable && it.total > 0 }
             chosen = wearables.maxByOrNull { it.total } ?: deviceResults.maxByOrNull { it.total }
         }
@@ -2084,8 +2373,6 @@ class HealthDataRepository(
         var chosenTotal = chosen?.total ?: 0
         val chosenHourly = chosen?.hourly ?: emptyMap()
         var chosenDevice = chosen?.device
-
-        val isAllDevices = preferredSource == null && preferredDevice.isNullOrEmpty()
         val vitalsSteps = vitalsSummary[HealthMetricType.STEPS]
         if (vitalsSteps != null && vitalsSteps > 0) {
             val vitalsInt = vitalsSteps.toInt()
@@ -2170,15 +2457,24 @@ class HealthDataRepository(
 
     // MARK: - Supabase Cloud Synchronization
 
-    fun triggerCanonicalEngineIfNeeded(dateKey: String) {
+    fun triggerCanonicalEngineIfNeeded(
+        dateKey: String,
+        fingerprint: String? = null,
+        force: Boolean = false
+    ) {
         if (currentUserId == "local_user") return
         val now = System.currentTimeMillis()
         val last = lastEngineInvocation[dateKey] ?: 0L
-        if (now - last < 180_000L) {
-            // Throttled: invoked within last 3 minutes for this date
+        val prevFp = lastEnginePayloadFingerprint[dateKey]
+        val changedFp = !fingerprint.isNullOrEmpty() && fingerprint != prevFp
+        val minIntervalMs = if (changedFp) 20_000L else 180_000L
+        if (!force && now - last < minIntervalMs) {
             return
         }
         lastEngineInvocation[dateKey] = now
+        if (!fingerprint.isNullOrEmpty()) {
+            lastEnginePayloadFingerprint[dateKey] = fingerprint
+        }
         scope.launch(Dispatchers.IO) {
             try {
                 remoteService.triggerCanonicalEngine(currentUserId, date = dateKey)
@@ -2188,7 +2484,7 @@ class HealthDataRepository(
         }
     }
 
-    // MARK: - Lean Health Ingestion (v2 Canonical Full-Day Aggregates)
+    // MARK: - Lean Health Ingestion (v2.1 Canonical Full-Day Aggregates)
 
     suspend fun syncTelemetryToSupabase(telemetry: List<HealthTelemetryRecord>): Boolean {
         if (currentUserId == "local_user" || telemetry.isEmpty()) return false
@@ -2202,7 +2498,7 @@ class HealthDataRepository(
         }
 
         var anySyncSucceeded = false
-        val affectedDates = mutableSetOf<String>()
+        val affectedDates = LinkedHashMap<String, String>()
 
         for ((dateKey, dateRecords) in recordsByDate) {
             val dateEpochMs = try {
@@ -2211,22 +2507,22 @@ class HealthDataRepository(
                 System.currentTimeMillis()
             }
 
-            // 1. Sync Clustered Sleep Sessions (all wearables) to `health_sleep_sessions`
+            // Upload Order: 1. Sleep -> 2. Intraday HR -> 3. Daily Vitals (so Realtime vitals notification never sees stale HR!)
             val sleepOk = syncLeanSleepSessions(dateRecords, dateKey, dateEpochMs, hostName)
-
-            // 2. Sync Consolidated Daily Vitals to `health_daily_vitals`
-            val vitalsOk = syncLeanDailyVitals(dateRecords, dateKey, hostName)
-
-            // 3. Sync 5-minute Intraday Heart Rate Buckets to `health_intraday_heart_rate`
             val hrOk = syncLeanIntradayHeartRate(dateRecords, dateKey)
+            val vitalsOk = syncLeanDailyVitals(dateRecords, dateKey, hostName)
 
             if (sleepOk || vitalsOk || hrOk) {
                 anySyncSucceeded = true
-                affectedDates.add(dateKey)
+                val maxTs = dateRecords.maxOfOrNull { it.endTime ?: it.startTime } ?: 0L
+                val totalSteps = dateRecords.filter { it.isSteps }.sumOf { (it.value ?: 0.0).toInt() }
+                val latestHr = dateRecords.filter { it.isLatestHeartRate || it.isHeartRate }
+                    .maxByOrNull { it.endTime ?: it.startTime }?.value?.toInt() ?: 0
+                affectedDates[dateKey] = "${dateRecords.size}_${totalSteps}_${latestHr}_$maxTs"
             }
         }
 
-        // 4. Register canonical local health sources
+        // 4. Register canonical local health sources (respecting user custom priorities)
         registerLocalHealthSources(telemetry, hostName)
 
         if (anySyncSucceeded) {
@@ -2236,8 +2532,8 @@ class HealthDataRepository(
                     telemetryDao.markRecordsSynced(chunk, System.currentTimeMillis())
                 }
             }
-            for (dKey in affectedDates) {
-                triggerCanonicalEngineIfNeeded(dKey)
+            for ((dKey, fp) in affectedDates) {
+                triggerCanonicalEngineIfNeeded(dateKey = dKey, fingerprint = fp)
             }
         }
         return anySyncSucceeded
@@ -2325,16 +2621,16 @@ class HealthDataRepository(
 
         for (src in canonicalSources) {
             val name = src.displayName
-            val sourceId = when (src) {
-                is DeviceSource.Oura -> "oura_ring"
-                is DeviceSource.AppleWatch -> "apple_watch_ultra_2"
-                is DeviceSource.PixelWatch, is DeviceSource.Fitbit -> "pixel_watch_5"
-                is DeviceSource.OnePlus -> "oneplus_watch_3"
-                is DeviceSource.HealthKit -> "schmitz_iphone"
-                is DeviceSource.HealthConnect -> "trapper_pixel9"
-                is DeviceSource.SamsungHealth -> "radar_fold8"
-                else -> canonicalSlug(name)
+            val sourceId = canonicalSourceId(src, name)
+
+            // Never overwrite user-configured custom priority ranks!
+            val existing = cachedLeanSources.firstOrNull {
+                it.id == sourceId || DeviceSource.from(it.displayName) == src
             }
+            if (existing?.isCustomPriority == true) {
+                continue
+            }
+
             val kind = when (src) {
                 is DeviceSource.Oura -> "ring"
                 is DeviceSource.AppleWatch, is DeviceSource.PixelWatch, is DeviceSource.Fitbit,
@@ -2351,19 +2647,14 @@ class HealthDataRepository(
                 is DeviceSource.AppleWatch, is DeviceSource.HealthKit -> "Apple"
                 else -> "Wearable"
             }
-            val dbPrio = when (src) {
-                is DeviceSource.Oura -> 100
-                is DeviceSource.AppleWatch, is DeviceSource.PixelWatch, is DeviceSource.Fitbit -> 90
-                is DeviceSource.OnePlus -> 85
-                is DeviceSource.Amazfit, is DeviceSource.Huawei, is DeviceSource.Garmin, is DeviceSource.Whoop -> 75
-                else -> 40
-            }
+            // Unified 1-based ascending default rank (1 = Oura, 2 = AW, 3 = PW5, 4 = OnePlus, 5 = Wearable, 10 = Phone)
+            val dbPrio = src.sortPriority
             val color = DeviceColorPalette.getColorForSource(name)
 
             val record = HealthSourceRecord(
                 id = sourceId,
                 userId = currentUserId,
-                platform = "Android",
+                platform = if (src is DeviceSource.AppleWatch || src is DeviceSource.HealthKit) "iOS" else "Android",
                 deviceKind = kind,
                 vendor = vendor,
                 model = name,
@@ -2371,6 +2662,7 @@ class HealthDataRepository(
                 hostDeviceName = hostName,
                 prioritySleep = dbPrio,
                 priorityActivity = dbPrio,
+                isCustomPriority = false,
                 color = color
             )
             remoteService.registerHealthSource(record)
@@ -2560,10 +2852,286 @@ class HealthDataRepository(
     companion object {
         const val CURRENT_SUMMARY_CACHE_VERSION = 2
 
+        data class ArbitratedActivityResult(
+            val totalSteps: Int,
+            val activeCalories: Double,
+            val hourlySteps: List<HourlyStepBucket>,
+            val sourceDevice: String?
+        )
+
+        data class ArbitratedLatestHeartRate(
+            val bpm: Double,
+            val timestampMs: Long,
+            val sourceDevice: String
+        )
+
+        data class ArbitratedSpotVital(
+            val value: Double,
+            val sourceDevice: String,
+            val timestampMs: Long?
+        )
+
         private fun canonicalSlug(name: String): String =
             name.lowercase(Locale.US)
                 .replace(Regex("[^a-z0-9]+"), "_")
                 .trim('_')
+
+        fun canonicalSourceId(src: DeviceSource, displayName: String = src.displayName): String = when (src) {
+            is DeviceSource.Oura -> "oura_ring"
+            is DeviceSource.AppleWatch -> "apple_watch_ultra_2"
+            is DeviceSource.PixelWatch, is DeviceSource.Fitbit -> "pixel_watch_5"
+            is DeviceSource.OnePlus -> "oneplus_watch_3"
+            is DeviceSource.HealthKit -> "schmitz_iphone"
+            is DeviceSource.HealthConnect -> "trapper_pixel9"
+            is DeviceSource.SamsungHealth -> "radar_fold8"
+            else -> canonicalSlug(displayName)
+        }
+
+        fun resolveEffectivePriorityRank(deviceName: String?, sources: List<HealthSourceRecord>): Int {
+            val src = DeviceSource.from(deviceName)
+            val sid = canonicalSourceId(src, src.displayName)
+            val matched = sources.firstOrNull {
+                it.id == sid ||
+                    DeviceSource.from(it.displayName) == src ||
+                    (!deviceName.isNullOrEmpty() && it.displayName.equals(deviceName, ignoreCase = true))
+            }
+            if (matched != null) {
+                val dbRank = minOf(matched.prioritySleep, matched.priorityActivity)
+                if (dbRank in 1..30) {
+                    return dbRank
+                }
+            }
+            return src.sortPriority
+        }
+
+        fun parseIsoToEpochMs(raw: String?): Long? {
+            if (raw.isNullOrBlank()) return null
+            val trimmed = raw.trim()
+            trimmed.toLongOrNull()?.let { return it }
+            return try {
+                java.time.Instant.parse(trimmed).toEpochMilli()
+            } catch (_: Exception) {
+                try {
+                    java.time.OffsetDateTime.parse(trimmed).toInstant().toEpochMilli()
+                } catch (_: Exception) {
+                    try {
+                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).parse(trimmed)?.time
+                    } catch (_: Exception) {
+                        try {
+                            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(trimmed)?.time
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Class B — Hourly Active-Wearer Envelope (`0..23`):
+         * Sums disjoint active wearable hours (e.g. morning Oura/Pixel Watch + afternoon OnePlus Watch 3)
+         * while preventing double-counting during simultaneous wear using `resolveEffectivePriorityRank` as tie-breaker.
+         */
+        fun arbitrateHourlyActivity(
+            vitals: List<HealthDailyVitalsRecord>,
+            sources: List<HealthSourceRecord>
+        ): ArbitratedActivityResult {
+            val validRows = vitals.filter { !DeviceSource.from(it.sourceDeviceKey).isVirtualEngine }
+            if (validRows.isEmpty()) {
+                return ArbitratedActivityResult(0, 0.0, emptyList(), null)
+            }
+
+            val wearables = validRows.filter { r ->
+                DeviceSource.from(r.sourceDeviceKey).isWearable &&
+                    (r.steps > 0 || r.hourlySteps?.any { it.steps > 0 } == true)
+            }
+            val candidates = wearables.ifEmpty {
+                validRows.filter { r -> r.steps > 0 || r.hourlySteps?.any { it.steps > 0 } == true }
+            }
+
+            if (candidates.isEmpty()) {
+                val fallback = validRows.minBy { resolveEffectivePriorityRank(it.sourceDeviceKey, sources) }
+                val canon = DeviceSource.from(fallback.sourceDeviceKey).displayName
+                return ArbitratedActivityResult(0, fallback.activeKcal, emptyList(), canon)
+            }
+
+            val anyHasHourly = candidates.any { r -> r.hourlySteps?.any { it.steps > 0 } == true }
+            if (anyHasHourly) {
+                val mergedBuckets = mutableListOf<HourlyStepBucket>()
+                val contributedStepsByCanon = mutableMapOf<String, Int>()
+                val latestActiveHourByCanon = mutableMapOf<String, Int>()
+
+                data class HourEntry(val canon: String, val steps: Int, val rank: Int)
+                for (h in 0..23) {
+                    val entries = mutableListOf<HourEntry>()
+                    for (row in candidates) {
+                        val canon = DeviceSource.from(row.sourceDeviceKey).displayName
+                        val hSteps = row.hourlySteps?.firstOrNull { it.hour == h }?.steps ?: 0
+                        if (hSteps > 0) {
+                            entries.add(HourEntry(canon, hSteps, resolveEffectivePriorityRank(canon, sources)))
+                        }
+                    }
+                    val winner = entries.sortedWith(
+                        compareBy<HourEntry> { it.rank }.thenByDescending { it.steps }
+                    ).firstOrNull()
+                    if (winner != null) {
+                        mergedBuckets.add(HourlyStepBucket(id = h, hour = h, steps = winner.steps))
+                        contributedStepsByCanon[winner.canon] = (contributedStepsByCanon[winner.canon] ?: 0) + winner.steps
+                        latestActiveHourByCanon[winner.canon] = h
+                    } else {
+                        mergedBuckets.add(HourlyStepBucket(id = h, hour = h, steps = 0))
+                    }
+                }
+
+                val envelopeSum = mergedBuckets.sumOf { it.steps }
+                val maxSingleRow = candidates.maxBy { it.steps }
+                val totalSteps = maxOf(envelopeSum, maxSingleRow.steps)
+
+                var mergedKcal = 0.0
+                for (row in candidates) {
+                    val canon = DeviceSource.from(row.sourceDeviceKey).displayName
+                    val contributed = contributedStepsByCanon[canon] ?: 0
+                    if (contributed > 0 && row.activeKcal > 0.0) {
+                        val ratio = minOf(1.0, contributed.toDouble() / maxOf(1, row.steps).toDouble())
+                        mergedKcal += row.activeKcal * ratio
+                    }
+                }
+                val maxSingleKcal = candidates.maxOfOrNull { it.activeKcal } ?: 0.0
+                var finalKcal = round(maxOf(mergedKcal, maxSingleKcal) * 10.0) / 10.0
+                if (finalKcal <= 0.0 && totalSteps > 0) {
+                    finalKcal = round(totalSteps * 0.042 * 10.0) / 10.0
+                }
+
+                val winnerCanon = contributedStepsByCanon.entries.maxWithOrNull(
+                    compareBy<Map.Entry<String, Int>> { it.value }
+                        .thenBy { latestActiveHourByCanon[it.key] ?: -1 }
+                )?.key ?: DeviceSource.from(maxSingleRow.sourceDeviceKey).displayName
+
+                return ArbitratedActivityResult(
+                    totalSteps = totalSteps,
+                    activeCalories = finalKcal,
+                    hourlySteps = mergedBuckets,
+                    sourceDevice = winnerCanon
+                )
+            }
+
+            val best = candidates.sortedWith(
+                compareByDescending<HealthDailyVitalsRecord> { it.steps }
+                    .thenBy { resolveEffectivePriorityRank(it.sourceDeviceKey, sources) }
+            ).first()
+            val canon = DeviceSource.from(best.sourceDeviceKey).displayName
+            var kcal = best.activeKcal
+            if (kcal <= 0.0) kcal = candidates.maxOfOrNull { it.activeKcal } ?: 0.0
+            if (kcal <= 0.0 && best.steps > 0) kcal = round(best.steps * 0.042 * 10.0) / 10.0
+            return ArbitratedActivityResult(
+                totalSteps = best.steps,
+                activeCalories = kcal,
+                hourlySteps = best.hourlySteps ?: emptyList(),
+                sourceDevice = canon
+            )
+        }
+
+        /**
+         * Class A — Recency-First Latest Heart Rate:
+         * Always selects the newest real reading from the currently worn sensor.
+         * Configured device priority ONLY breaks ties when >=2 sensors reported within `simultaneousWindowMs` (default 15m).
+         */
+        fun arbitrateLatestHeartRate(
+            vitals: List<HealthDailyVitalsRecord>,
+            intradayBuckets: List<HealthIntradayHeartRateRecord>,
+            targetDateEpochMs: Long,
+            sources: List<HealthSourceRecord>,
+            deviceFilter: String? = null,
+            simultaneousWindowMs: Long = 900_000L
+        ): ArbitratedLatestHeartRate? {
+            val cal = Calendar.getInstance().apply {
+                timeInMillis = targetDateEpochMs
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val startOfDayMs = cal.timeInMillis
+            val byDevice = LinkedHashMap<String, ArbitratedLatestHeartRate>()
+
+            for (b in intradayBuckets) {
+                if (b.bpmAvg !in 30..240) continue
+                val src = DeviceSource.from(b.sourceDeviceKey)
+                if (src.isVirtualEngine) continue
+                val canon = src.displayName
+                val bucketTs = startOfDayMs + b.bucketMinute * 60_000L
+                val existing = byDevice[canon]
+                if (existing == null || bucketTs >= existing.timestampMs) {
+                    byDevice[canon] = ArbitratedLatestHeartRate(b.bpmAvg.toDouble(), bucketTs, canon)
+                }
+            }
+
+            for (v in vitals) {
+                val lhr = v.latestHeartRate ?: continue
+                if (lhr !in 30..240) continue
+                val src = DeviceSource.from(v.sourceDeviceKey)
+                if (src.isVirtualEngine) continue
+                val canon = src.displayName
+                val spotTs = parseIsoToEpochMs(v.latestHrAt) ?: parseIsoToEpochMs(v.updatedAt) ?: startOfDayMs
+                val existing = byDevice[canon]
+                if (existing == null || spotTs >= existing.timestampMs) {
+                    byDevice[canon] = ArbitratedLatestHeartRate(lhr.toDouble(), spotTs, canon)
+                }
+            }
+
+            if (!deviceFilter.isNullOrEmpty()) {
+                val targetCanon = DeviceSource.from(deviceFilter).displayName
+                return byDevice[targetCanon]
+            }
+
+            val allCandidates = byDevice.values.toList()
+            val newestTs = allCandidates.maxOfOrNull { it.timestampMs } ?: return null
+            val activeWindow = allCandidates.filter { newestTs - it.timestampMs <= simultaneousWindowMs }
+
+            return activeWindow.sortedWith(
+                compareBy<ArbitratedLatestHeartRate> { resolveEffectivePriorityRank(it.sourceDevice, sources) }
+                    .thenByDescending { it.timestampMs }
+            ).firstOrNull()
+        }
+
+        /**
+         * Class A — Recency-First Spot Vital (`spo2`, `weight`) with 30-minute tie-break window.
+         */
+        fun arbitrateSpotVital(
+            vitals: List<HealthDailyVitalsRecord>,
+            timestampKey: String,
+            sources: List<HealthSourceRecord>,
+            windowMs: Long = 1_800_000L,
+            extract: (HealthDailyVitalsRecord) -> Double?
+        ): ArbitratedSpotVital? {
+            data class SpotCandidate(val value: Double, val sourceDevice: String, val tsMs: Long?, val rank: Int)
+            val candidates = mutableListOf<SpotCandidate>()
+            for (row in vitals) {
+                val src = DeviceSource.from(row.sourceDeviceKey)
+                if (src.isVirtualEngine) continue
+                val v = extract(row) ?: continue
+                if (v <= 0.0) continue
+                val canon = src.displayName
+                val ts = parseIsoToEpochMs(row.vitalsTimestamps?.get(timestampKey)) ?: parseIsoToEpochMs(row.updatedAt)
+                val rank = resolveEffectivePriorityRank(canon, sources)
+                candidates.add(SpotCandidate(v, canon, ts, rank))
+            }
+            if (candidates.isEmpty()) return null
+
+            val newestTs = candidates.mapNotNull { it.tsMs }.maxOrNull()
+            if (newestTs != null) {
+                val active = candidates.filter { it.tsMs != null && newestTs - it.tsMs <= windowMs }
+                val winner = active.sortedWith(
+                    compareBy<SpotCandidate> { it.rank }.thenByDescending { it.tsMs ?: 0L }
+                ).firstOrNull()
+                if (winner != null) {
+                    return ArbitratedSpotVital(winner.value, winner.sourceDevice, winner.tsMs)
+                }
+            }
+
+            val fallback = candidates.minBy { it.rank }
+            return ArbitratedSpotVital(fallback.value, fallback.sourceDevice, fallback.tsMs)
+        }
 
         fun groupIntradayHeartRateIntoBuckets(
             records: List<HealthTelemetryRecord>,
@@ -2574,7 +3142,13 @@ class HealthDataRepository(
             if (hrRecords.isEmpty()) return emptyList()
 
             data class BucketKey(val sourceKey: String, val bucketMinute: Int)
-            val buckets = mutableMapOf<BucketKey, MutableList<Double>>()
+            class BucketAgg {
+                var weightedSum: Double = 0.0
+                var totalCount: Int = 0
+                var minBpm: Double = Double.MAX_VALUE
+                var maxBpm: Double = 0.0
+            }
+            val buckets = LinkedHashMap<BucketKey, BucketAgg>()
 
             val cal = Calendar.getInstance()
             for (r in hrRecords) {
@@ -2600,13 +3174,20 @@ class HealthDataRepository(
                 val bucketMinute = hour * 60 + (minute / 5) * 5
 
                 val bKey = BucketKey(sourceKey = canonKey, bucketMinute = bucketMinute)
-                buckets.getOrPut(bKey) { mutableListOf() }.add(bpm)
+                val cnt = maxOf(1, r.sampleCount ?: 1)
+                val rMin = (r.minValue ?: bpm).takeIf { it >= 30.0 } ?: bpm
+                val rMax = (r.maxValue ?: bpm).takeIf { it <= 240.0 } ?: bpm
+                val agg = buckets.getOrPut(bKey) { BucketAgg() }
+                agg.weightedSum += bpm * cnt
+                agg.totalCount += cnt
+                agg.minBpm = minOf(agg.minBpm, rMin)
+                agg.maxBpm = maxOf(agg.maxBpm, rMax)
             }
 
-            return buckets.map { (bKey, bpms) ->
-                val avg = bpms.sum() / bpms.size
-                val minBpm = bpms.minOrNull() ?: avg
-                val maxBpm = bpms.maxOrNull() ?: avg
+            return buckets.filter { it.value.totalCount > 0 }.map { (bKey, agg) ->
+                val avg = agg.weightedSum / agg.totalCount
+                val minBpm = if (agg.minBpm < Double.MAX_VALUE) agg.minBpm else avg
+                val maxBpm = if (agg.maxBpm > 0.0) agg.maxBpm else avg
                 val sourceSlug = canonicalSlug(bKey.sourceKey)
                 val recordId = "hr_${userId}_${dateKey}_${sourceSlug}_${bKey.bucketMinute}"
 
@@ -2619,7 +3200,7 @@ class HealthDataRepository(
                     bpmAvg = Math.round(avg).toInt(),
                     bpmMin = Math.round(minBpm).toInt(),
                     bpmMax = Math.round(maxBpm).toInt(),
-                    sampleCount = bpms.size
+                    sampleCount = agg.totalCount
                 )
             }.sortedBy { it.bucketMinute }
         }
@@ -2772,31 +3353,47 @@ class HealthDataRepository(
                     }
                 } else null
 
+                val tsMap = LinkedHashMap<String, String>()
+                fun newestRecord(predicate: (HealthTelemetryRecord) -> Boolean): HealthTelemetryRecord? =
+                    sourceRecords.filter { predicate(it) && it.value != null }
+                        .maxByOrNull { it.endTime ?: it.startTime }
+
+                fun extractLatest(key: String, predicate: (HealthTelemetryRecord) -> Boolean): Double? {
+                    val rec = newestRecord(predicate) ?: return null
+                    val v = rec.value ?: return null
+                    tsMap[key] = java.time.Instant.ofEpochMilli(rec.endTime ?: rec.startTime).toString()
+                    return v
+                }
+
                 val activeKcal = sourceRecords.filter { it.type == "active_energy" || it.type == "active_calories" }
                     .mapNotNull { it.value }.sum()
-                val rhr = sourceRecords.filter { it.type == "resting_heart_rate" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()?.let { Math.round(it).toInt() }
-                val spo2 = sourceRecords.filter { it.type == "oxygen_saturation" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()
-                val resp = sourceRecords.filter { it.type == "respiratory_rate" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()
-                val temp = sourceRecords.filter { it.type == "wrist_temperature" || it.type == "body_temperature" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()
-                val weight = sourceRecords.filter { it.type == "weight" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()
-                val hrvSdnn = sourceRecords.filter { it.type == "hrv_sdnn" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()
-                val hrvRmssd = sourceRecords.filter { it.type == "hrv_rmssd" }
-                    .sortedBy { it.startTime }
-                    .mapNotNull { it.value }.lastOrNull()
+                val rhr = extractLatest("rhr") { it.type == "resting_heart_rate" }?.let { Math.round(it).toInt() }
+                val spo2 = extractLatest("spo2") { it.type == "oxygen_saturation" }
+                val resp = extractLatest("resp") { it.type == "respiratory_rate" }
+                val temp = extractLatest("temp") { it.type == "wrist_temperature" || it.type == "body_temperature" }
+                val weight = extractLatest("weight") { it.type == "weight" }
+                val hrvSdnn = extractLatest("hrv_sdnn") { it.type == "hrv_sdnn" }
+                val hrvRmssd = extractLatest("hrv_rmssd") { it.type == "hrv_rmssd" }
 
-                if (totalSteps <= 0 && activeKcal <= 0.0 && rhr == null && spo2 == null &&
+                val spotHrRec = newestRecord { it.isLatestHeartRate && (it.value ?: 0.0) in 30.0..240.0 }
+                val bucketHrRec = newestRecord { it.isHeartRate && (it.value ?: 0.0) in 30.0..240.0 }
+                val chosenHrRec: HealthTelemetryRecord? = when {
+                    spotHrRec != null && bucketHrRec != null -> {
+                        val sTs = spotHrRec.endTime ?: spotHrRec.startTime
+                        val bTs = bucketHrRec.endTime ?: bucketHrRec.startTime
+                        if (sTs >= bTs) spotHrRec else bucketHrRec
+                    }
+                    else -> spotHrRec ?: bucketHrRec
+                }
+                val latestHr = chosenHrRec?.value?.let { Math.round(it).toInt() }
+                val latestHrAt = chosenHrRec?.let {
+                    java.time.Instant.ofEpochMilli(it.endTime ?: it.startTime).toString()
+                }
+                if (latestHrAt != null) {
+                    tsMap["latest_hr"] = latestHrAt
+                }
+
+                if (totalSteps <= 0 && activeKcal <= 0.0 && rhr == null && latestHr == null && spo2 == null &&
                     resp == null && temp == null && weight == null && hrvSdnn == null && hrvRmssd == null
                 ) {
                     continue
@@ -2821,7 +3418,11 @@ class HealthDataRepository(
                         weightKg = weight,
                         hrvSdnnNightly = hrvSdnn,
                         hrvRmssdNightly = hrvRmssd,
-                        hourlySteps = hourlyBuckets
+                        hourlySteps = hourlyBuckets,
+                        latestHeartRate = latestHr,
+                        latestHrAt = latestHrAt,
+                        vitalsTimestamps = tsMap.takeIf { it.isNotEmpty() },
+                        updatedAt = java.time.Instant.now().toString()
                     )
                 )
             }

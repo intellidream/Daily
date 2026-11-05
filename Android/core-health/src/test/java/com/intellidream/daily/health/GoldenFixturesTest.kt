@@ -96,7 +96,8 @@ class GoldenFixturesTest {
 
             assertEquals("[${fixture.name}] sleep_asleep_s mismatch", fixture.expected.sleepAsleepS, actualSleepS)
             assertEquals("[${fixture.name}] sleep_score mismatch", fixture.expected.sleepScore, actualScore)
-            assertEquals("[${fixture.name}] primary_sleep_device mismatch", fixture.expected.primarySleepDevice, actualDevice)
+            val expectedDevice = fixture.expected.primarySleepDevice?.let { com.intellidream.daily.model.DeviceSource.from(it).displayName }
+            assertEquals("[${fixture.name}] primary_sleep_device mismatch", expectedDevice, actualDevice)
             assertEquals("[${fixture.name}] nap_count mismatch", fixture.expected.napCount, actualNaps)
         }
     }

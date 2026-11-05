@@ -57,6 +57,7 @@ namespace Daily.Models.Health
             return Palette[(int)(positiveHash % Palette.Count)];
         }
 
+#if WINUI_NATIVE
         public static Windows.UI.Color ParseColor(string hex)
         {
             if (string.IsNullOrEmpty(hex)) return Windows.UI.Color.FromArgb(255, 56, 151, 240);
@@ -78,5 +79,6 @@ namespace Daily.Models.Health
             }
             return Windows.UI.Color.FromArgb(255, 56, 151, 240);
         }
+#endif
     }
 }

@@ -32,6 +32,8 @@ namespace Daily_WinUI.Services
         private readonly ConcurrentDictionary<string, List<HealthIntradayHeartRateRecord>> _hrCache = new();
         private readonly ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches = new();
         private readonly System.Threading.SemaphoreSlim _realtimeSemaphore = new(1, 1);
+        private volatile List<HealthSourceRecord> _sourcesCache = new();
+        private bool _hasLoadedSources = false;
 
         private DateTime _selectedDate = DateTime.Today;
         private string _currentViewType = "Overview";
@@ -39,6 +41,7 @@ namespace Daily_WinUI.Services
         private RealtimeChannel? _realtimeChannel;
         private RealtimeChannel? _vitalsRealtimeChannel;
         private RealtimeChannel? _sleepRealtimeChannel;
+        private RealtimeChannel? _sourcesRealtimeChannel;
         private System.Threading.Timer? _periodicRefreshTimer;
         private long _lastRealtimeFetchTicks = 0;
         private bool _isInitialized = false;
@@ -138,6 +141,10 @@ namespace Daily_WinUI.Services
         public event Action? OnSelectedDateChanged;
         public event Action? OnViewTypeChanged;
         public event Action<HealthDailySummaryRecord?>? OnDailySummaryChanged;
+        public event Action? OnHealthSourcesChanged;
+
+        private static bool IsSupportedEngineVersion(string? version) =>
+            version == "2.0" || version == "2.1";
 
         public async Task InitializeAsync(bool forceRecreateRealtime = false)
         {
@@ -147,11 +154,11 @@ namespace Daily_WinUI.Services
             {
                 await _dbService.InitializeAsync().ConfigureAwait(false);
 
-                // Purge pre-v2 cached summaries so canonical v2 unified data loads cleanly
+                // Purge pre-v2 cached summaries so canonical v2/v2.1 unified data loads cleanly
                 try
                 {
                     await _dbService.Connection.ExecuteAsync(
-                        "DELETE FROM health_daily_summary_cache WHERE EngineVersion IS NULL OR EngineVersion <> '2.0'"
+                        "DELETE FROM health_daily_summary_cache WHERE EngineVersion IS NULL OR EngineVersion NOT IN ('2.0', '2.1')"
                     ).ConfigureAwait(false);
                 }
                 catch { }
@@ -162,6 +169,7 @@ namespace Daily_WinUI.Services
                 {
                     try
                     {
+                        await GetHealthSourcesAsync(forceRefresh: true).ConfigureAwait(false);
                         await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
                         await Task.WhenAll(
                             GetLeanSleepSessionsAsync(_selectedDate, forceRefresh: true),
@@ -221,7 +229,7 @@ namespace Daily_WinUI.Services
             try
             {
                 var entity = await _dbService.Connection.FindAsync<HealthDailySummaryEntity>(dateStr).ConfigureAwait(false);
-                if (entity != null && entity.EngineVersion == "2.0")
+                if (entity != null && IsSupportedEngineVersion(entity.EngineVersion))
                 {
                     var record = MapEntityToRecord(entity);
                     _memoryCache[dateStr] = record;
@@ -339,7 +347,7 @@ namespace Daily_WinUI.Services
                 try
                 {
                     var entity = await _dbService.Connection.FindAsync<HealthDailySummaryEntity>(dateStr).ConfigureAwait(false);
-                    if (entity != null && entity.EngineVersion == "2.0")
+                    if (entity != null && IsSupportedEngineVersion(entity.EngineVersion))
                     {
                         var record = MapEntityToRecord(entity);
                         _memoryCache[dateStr] = record;
@@ -601,6 +609,444 @@ namespace Daily_WinUI.Services
             return new List<HealthDailyVitalsRecord>();
         }
 
+        public async Task<List<HealthSourceRecord>> GetHealthSourcesAsync(bool forceRefresh = false)
+        {
+            if (!forceRefresh && _hasLoadedSources && _sourcesCache.Count > 0)
+            {
+                return _sourcesCache;
+            }
+
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return _sourcesCache;
+            }
+
+            try
+            {
+                var fetchTask = _sessionGuardian != null
+                    ? _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.From<HealthSourceRecord>()
+                            .Where(x => x.UserId == currentUserId)
+                            .Get(),
+                        "HealthHubService.GetHealthSources")
+                    : _supabaseClient.From<HealthSourceRecord>()
+                        .Where(x => x.UserId == currentUserId)
+                        .Get();
+
+                var completed = await Task.WhenAny(fetchTask, Task.Delay(5000)).ConfigureAwait(false);
+                if (completed == fetchTask)
+                {
+                    var resp = await fetchTask.ConfigureAwait(false);
+                    var deduped = new Dictionary<string, HealthSourceRecord>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var s in resp.Models)
+                    {
+                        var canon = DeviceSource.From(string.IsNullOrWhiteSpace(s.DisplayName) ? s.Id : s.DisplayName);
+                        if (canon.IsVirtualEngine) continue;
+                        s.DisplayName = canon.DisplayName;
+                        if (!deduped.TryGetValue(canon.DisplayName, out var existing))
+                        {
+                            deduped[canon.DisplayName] = s;
+                        }
+                        else if (s.IsCustomPriority && !existing.IsCustomPriority)
+                        {
+                            deduped[canon.DisplayName] = s;
+                        }
+                        else if (s.IsCustomPriority == existing.IsCustomPriority && Math.Min(s.PrioritySleep, s.PriorityActivity) < Math.Min(existing.PrioritySleep, existing.PriorityActivity))
+                        {
+                            deduped[canon.DisplayName] = s;
+                        }
+                    }
+
+                    var ordered = deduped.Values
+                        .OrderBy(s => s.IsCustomPriority ? Math.Min(s.PrioritySleep, s.PriorityActivity) : DefaultAscendingPriorityRank(s.DisplayName))
+                        .ThenBy(s => DefaultAscendingPriorityRank(s.DisplayName))
+                        .ThenBy(s => s.DisplayName)
+                        .ToList();
+
+                    _sourcesCache = ordered;
+                    _hasLoadedSources = true;
+                    return ordered;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] GetHealthSourcesAsync failed: {Message}", ex.Message);
+            }
+
+            return _sourcesCache;
+        }
+
+        public async Task<bool> SaveDevicePriorityOrderAsync(IReadOnlyList<string> orderedSourceIds)
+        {
+            if (orderedSourceIds == null || orderedSourceIds.Count == 0) return false;
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId)) return false;
+
+            try
+            {
+                var rpcParams = new Dictionary<string, object>
+                {
+                    ["ordered_source_ids"] = orderedSourceIds.ToArray()
+                };
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.Rpc("save_health_source_priorities", rpcParams),
+                        "HealthHubService.SaveDevicePriorityOrder").ConfigureAwait(false);
+                }
+                else
+                {
+                    await _supabaseClient.Rpc("save_health_source_priorities", rpcParams).ConfigureAwait(false);
+                }
+
+                await GetHealthSourcesAsync(forceRefresh: true).ConfigureAwait(false);
+                await RecomputeServerSummaryForDateAsync(_selectedDate).ConfigureAwait(false);
+                await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                DispatchToUI(() =>
+                {
+                    OnHealthSourcesChanged?.Invoke();
+                    OnDailySummaryChanged?.Invoke(_currentSummary);
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] SaveDevicePriorityOrderAsync failed: {Message}", ex.Message);
+                return false;
+            }
+        }
+
+        public async Task<bool> ResetDevicePriorityOrderAsync()
+        {
+            var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(currentUserId)) return false;
+
+            try
+            {
+                var emptyParams = new Dictionary<string, object>();
+                if (_sessionGuardian != null)
+                {
+                    await _sessionGuardian.ExecuteWithAuthRetryAsync(
+                        () => _supabaseClient.Rpc("reset_health_source_priorities", emptyParams),
+                        "HealthHubService.ResetDevicePriorityOrder").ConfigureAwait(false);
+                }
+                else
+                {
+                    await _supabaseClient.Rpc("reset_health_source_priorities", emptyParams).ConfigureAwait(false);
+                }
+
+                await GetHealthSourcesAsync(forceRefresh: true).ConfigureAwait(false);
+                await RecomputeServerSummaryForDateAsync(_selectedDate).ConfigureAwait(false);
+                await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                DispatchToUI(() =>
+                {
+                    OnHealthSourcesChanged?.Invoke();
+                    OnDailySummaryChanged?.Invoke(_currentSummary);
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "[HealthHubService] ResetDevicePriorityOrderAsync failed: {Message}", ex.Message);
+                return false;
+            }
+        }
+
+        private async Task RecomputeServerSummaryForDateAsync(DateTime date)
+        {
+            try
+            {
+                var body = new Dictionary<string, object>
+                {
+                    ["local_date"] = date.ToString("yyyy-MM-dd"),
+                    ["tz_offset_min"] = (int)TimeZoneInfo.Local.GetUtcOffset(date).TotalMinutes
+                };
+                await _supabaseClient.Functions.Invoke("health-engine", options: new Supabase.Functions.Client.InvokeFunctionOptions
+                {
+                    Body = body
+                }).ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        public int GetEffectivePriorityRank(string? deviceName) =>
+            ResolveEffectivePriorityRank(deviceName, _sourcesCache);
+
+        public static int DefaultAscendingPriorityRank(string? deviceName)
+        {
+            var lower = DeviceSource.From(deviceName).DisplayName.ToLowerInvariant();
+            if (lower.Contains("oura")) return 1;
+            if (lower.Contains("apple watch") || lower.Contains("ultra 2")) return 2;
+            if (lower.Contains("pixel watch") || lower.Contains("fitbit")) return 3;
+            if (lower.Contains("garmin") || lower.Contains("whoop") || lower.Contains("polar") || lower.Contains("withings")) return 3;
+            if (lower.Contains("oneplus")) return 4;
+            if (lower.Contains("amazfit") || lower.Contains("zepp") || lower.Contains("balance")) return 5;
+            if (lower.Contains("huawei") || lower.Contains("gt 5")) return 6;
+            if (lower.Contains("samsung") || lower.Contains("radar") || lower.Contains("fold")) return 9;
+            if (lower.Contains("health connect") || lower.Contains("trapper") || lower.Contains("healthkit") || lower.Contains("apple health") || lower.Contains("schmitz") || lower.Contains("iphone")) return 10;
+            if (lower.Contains("manual")) return 11;
+            return 12;
+        }
+
+        public static int ResolveEffectivePriorityRank(string? deviceName, IReadOnlyList<HealthSourceRecord>? sources)
+        {
+            var canon = DeviceSource.From(deviceName).DisplayName;
+            if (sources != null && sources.Count > 0)
+            {
+                var matched = sources.FirstOrDefault(s =>
+                    string.Equals(DeviceSource.From(string.IsNullOrWhiteSpace(s.DisplayName) ? s.Id : s.DisplayName).DisplayName, canon, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.Id, deviceName, StringComparison.OrdinalIgnoreCase));
+
+                if (matched != null)
+                {
+                    if (matched.IsCustomPriority)
+                    {
+                        int rank = Math.Min(matched.PrioritySleep, matched.PriorityActivity);
+                        if (rank > 0) return rank;
+                    }
+                    int dbRank = Math.Min(matched.PrioritySleep, matched.PriorityActivity);
+                    if (dbRank > 0 && dbRank <= 20) return dbRank;
+                }
+            }
+            return DefaultAscendingPriorityRank(canon);
+        }
+
+        // ==========================================
+        // LEAN HEALTH v2.1 3-CLASS ARBITRATION
+        // ==========================================
+
+        public record ArbitratedLatestHeartRateResult(double Bpm, DateTimeOffset Timestamp, string SourceDevice);
+        public record ArbitratedActivityResult(int TotalSteps, double ActiveCalories, List<HourlyStepBucket> HourlySteps, string? SourceDevice);
+        public record ArbitratedSpotVitalResult(double Value, DateTimeOffset Timestamp, string SourceDevice);
+
+        public static ArbitratedLatestHeartRateResult? ArbitrateLatestHeartRate(
+            IReadOnlyList<HealthDailyVitalsRecord>? vitals,
+            IReadOnlyList<HealthIntradayHeartRateRecord>? intradayBuckets,
+            DateTime targetDate,
+            IReadOnlyList<HealthSourceRecord>? sources = null,
+            string? deviceFilter = null)
+        {
+            string? targetCanon = !string.IsNullOrWhiteSpace(deviceFilter)
+                ? DeviceSource.From(deviceFilter).DisplayName
+                : null;
+
+            bool MatchesFilter(string? raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return false;
+                var c = DeviceSource.From(raw);
+                if (c.IsVirtualEngine) return false;
+                return targetCanon == null || string.Equals(c.DisplayName, targetCanon, StringComparison.OrdinalIgnoreCase);
+            }
+
+            var perDevice = new Dictionary<string, (double Bpm, DateTimeOffset Ts)>(StringComparer.OrdinalIgnoreCase);
+
+            if (vitals != null)
+            {
+                foreach (var v in vitals)
+                {
+                    if (!MatchesFilter(v.SourceDeviceKey)) continue;
+                    int bpm = v.LatestHeartRate ?? 0;
+                    if (bpm < 30 || bpm >= 240) continue;
+
+                    DateTimeOffset ts = default;
+                    if (!string.IsNullOrWhiteSpace(v.LatestHrAt) && DateTimeOffset.TryParse(v.LatestHrAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var hrDto))
+                    {
+                        ts = hrDto;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(v.UpdatedAt) && DateTimeOffset.TryParse(v.UpdatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var upDto))
+                    {
+                        ts = upDto;
+                    }
+                    else
+                    {
+                        ts = new DateTimeOffset(DateTime.SpecifyKind(targetDate.Date, DateTimeKind.Local));
+                    }
+
+                    var canon = DeviceSource.From(v.SourceDeviceKey).DisplayName;
+                    if (!perDevice.TryGetValue(canon, out var prev) || ts > prev.Ts)
+                    {
+                        perDevice[canon] = (bpm, ts);
+                    }
+                }
+            }
+
+            if (intradayBuckets != null)
+            {
+                var localMidnight = DateTime.SpecifyKind(targetDate.Date, DateTimeKind.Local);
+                foreach (var b in intradayBuckets)
+                {
+                    if (!MatchesFilter(b.SourceDeviceKey) || b.BpmAvg < 30 || b.BpmAvg >= 240) continue;
+                    int clampedMin = Math.Clamp(b.BucketMinute, 0, 1439);
+                    // End of 5-minute bucket
+                    var bucketTs = new DateTimeOffset(localMidnight.AddMinutes(Math.Min(1439, clampedMin + 4)));
+                    var canon = DeviceSource.From(b.SourceDeviceKey).DisplayName;
+                    if (!perDevice.TryGetValue(canon, out var prev) || bucketTs > prev.Ts.AddMinutes(5))
+                    {
+                        perDevice[canon] = (b.BpmAvg, bucketTs);
+                    }
+                }
+            }
+
+            if (perDevice.Count == 0) return null;
+
+            var newestTs = perDevice.Values.Max(x => x.Ts);
+            var simultaneousCutoff = newestTs.AddMinutes(-15);
+
+            var winner = perDevice
+                .Where(kv => kv.Value.Ts >= simultaneousCutoff)
+                .OrderBy(kv => ResolveEffectivePriorityRank(kv.Key, sources))
+                .ThenByDescending(kv => kv.Value.Ts)
+                .First();
+
+            return new ArbitratedLatestHeartRateResult(winner.Value.Bpm, winner.Value.Ts, winner.Key);
+        }
+
+        public static ArbitratedActivityResult ArbitrateHourlyActivity(
+            IReadOnlyList<HealthDailyVitalsRecord>? vitals,
+            IReadOnlyList<HealthSourceRecord>? sources = null,
+            string? deviceFilter = null)
+        {
+            string? targetCanon = !string.IsNullOrWhiteSpace(deviceFilter)
+                ? DeviceSource.From(deviceFilter).DisplayName
+                : null;
+
+            var eligible = (vitals ?? Array.Empty<HealthDailyVitalsRecord>())
+                .Where(v =>
+                {
+                    var c = DeviceSource.From(v.SourceDeviceKey);
+                    if (c.IsVirtualEngine) return false;
+                    return targetCanon == null || string.Equals(c.DisplayName, targetCanon, StringComparison.OrdinalIgnoreCase);
+                })
+                .ToList();
+
+            if (eligible.Count == 0)
+            {
+                return new ArbitratedActivityResult(0, 0, new List<HourlyStepBucket>(), null);
+            }
+
+            var mergedBuckets = new List<HourlyStepBucket>(24);
+            var contributorSteps = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            for (int h = 0; h < 24; h++)
+            {
+                int hour = h;
+                var hourCandidates = eligible
+                    .Select(v =>
+                    {
+                        var hb = v.HourlySteps?.FirstOrDefault(b => b.Hour == hour);
+                        var canon = DeviceSource.From(v.SourceDeviceKey).DisplayName;
+                        return (Canon: canon, Steps: hb?.Steps ?? 0, Kcal: hb?.ActiveCalories ?? 0.0, Rank: ResolveEffectivePriorityRank(canon, sources));
+                    })
+                    .Where(c => c.Steps > 0 || c.Kcal > 0)
+                    .OrderBy(c => c.Rank)
+                    .ThenByDescending(c => c.Steps)
+                    .ToList();
+
+                if (hourCandidates.Count > 0)
+                {
+                    var best = hourCandidates[0];
+                    mergedBuckets.Add(new HourlyStepBucket
+                    {
+                        Hour = hour,
+                        Steps = best.Steps,
+                        ActiveCalories = best.Kcal
+                    });
+                    contributorSteps[best.Canon] = (contributorSteps.TryGetValue(best.Canon, out var prevS) ? prevS : 0) + best.Steps;
+                }
+                else
+                {
+                    mergedBuckets.Add(new HourlyStepBucket { Hour = hour, Steps = 0, ActiveCalories = 0 });
+                }
+            }
+
+            int envelopeSteps = mergedBuckets.Sum(b => b.Steps);
+            int maxSingleSteps = eligible.Max(v => v.Steps);
+            int finalSteps = Math.Max(envelopeSteps, maxSingleSteps);
+
+            double envelopeKcal = mergedBuckets.Sum(b => b.ActiveCalories);
+            double maxSingleKcal = eligible.Max(v => v.ActiveKcal);
+            double finalKcal = Math.Max(envelopeKcal, maxSingleKcal);
+
+            string? dominantDevice = null;
+            if (contributorSteps.Count > 1)
+            {
+                dominantDevice = contributorSteps
+                    .OrderByDescending(kv => kv.Value)
+                    .ThenBy(kv => ResolveEffectivePriorityRank(kv.Key, sources))
+                    .First().Key;
+            }
+            else if (contributorSteps.Count == 1)
+            {
+                dominantDevice = contributorSteps.Keys.First();
+            }
+            else
+            {
+                var topSingle = eligible
+                    .Where(v => v.Steps > 0 || v.ActiveKcal > 0)
+                    .OrderBy(v => ResolveEffectivePriorityRank(v.SourceDeviceKey, sources))
+                    .ThenByDescending(v => v.Steps)
+                    .FirstOrDefault();
+                if (topSingle != null)
+                {
+                    dominantDevice = DeviceSource.From(topSingle.SourceDeviceKey).DisplayName;
+                }
+            }
+
+            return new ArbitratedActivityResult(finalSteps, finalKcal, mergedBuckets, dominantDevice);
+        }
+
+        public static ArbitratedSpotVitalResult? ArbitrateSpotVital(
+            IReadOnlyList<HealthDailyVitalsRecord>? vitals,
+            string metricKey,
+            Func<HealthDailyVitalsRecord, double?> selector,
+            IReadOnlyList<HealthSourceRecord>? sources = null,
+            int simultaneousWindowMinutes = 30)
+        {
+            if (vitals == null || vitals.Count == 0) return null;
+
+            var candidates = new List<(string Canon, double Val, DateTimeOffset Ts)>();
+            foreach (var v in vitals)
+            {
+                var c = DeviceSource.From(v.SourceDeviceKey);
+                if (c.IsVirtualEngine) continue;
+                var val = selector(v);
+                if (!val.HasValue || val.Value <= 0) continue;
+
+                DateTimeOffset ts = default;
+                if (v.VitalsTimestamps != null && v.VitalsTimestamps.TryGetValue(metricKey, out var mIso) &&
+                    DateTimeOffset.TryParse(mIso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var mDto))
+                {
+                    ts = mDto;
+                }
+                else if (!string.IsNullOrWhiteSpace(v.UpdatedAt) &&
+                         DateTimeOffset.TryParse(v.UpdatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var uDto))
+                {
+                    ts = uDto;
+                }
+
+                candidates.Add((c.DisplayName, val.Value, ts));
+            }
+
+            if (candidates.Count == 0) return null;
+
+            var newestTs = candidates.Max(x => x.Ts);
+            if (newestTs == default)
+            {
+                var byPrio = candidates.OrderBy(x => ResolveEffectivePriorityRank(x.Canon, sources)).First();
+                return new ArbitratedSpotVitalResult(byPrio.Val, byPrio.Ts, byPrio.Canon);
+            }
+
+            var cutoff = newestTs.AddMinutes(-simultaneousWindowMinutes);
+            var winner = candidates
+                .Where(x => x.Ts >= cutoff)
+                .OrderBy(x => ResolveEffectivePriorityRank(x.Canon, sources))
+                .ThenByDescending(x => x.Ts)
+                .First();
+
+            return new ArbitratedSpotVitalResult(winner.Val, winner.Ts, winner.Canon);
+        }
+
         public async Task<List<HealthDailySummaryRecord>> GetDailySummariesRangeAsync(DateTime startDate, DateTime endDate)
         {
             var startStr = startDate.ToString("yyyy-MM-dd");
@@ -610,7 +1056,7 @@ namespace Daily_WinUI.Services
             try
             {
                 var cached = await _dbService.Connection.QueryAsync<HealthDailySummaryEntity>(
-                    "SELECT * FROM health_daily_summary_cache WHERE LocalDate >= ? AND LocalDate <= ? AND EngineVersion = '2.0' ORDER BY LocalDate",
+                    "SELECT * FROM health_daily_summary_cache WHERE LocalDate >= ? AND LocalDate <= ? AND EngineVersion IN ('2.0', '2.1') ORDER BY LocalDate",
                     startStr, endStr).ConfigureAwait(false);
 
                 foreach (var entity in cached)
@@ -698,6 +1144,7 @@ namespace Daily_WinUI.Services
                 Cleanup(ref _realtimeChannel);
                 Cleanup(ref _vitalsRealtimeChannel);
                 Cleanup(ref _sleepRealtimeChannel);
+                Cleanup(ref _sourcesRealtimeChannel);
 
                 _realtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_daily_summary", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                 _realtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeSummaryReceived);
@@ -708,10 +1155,14 @@ namespace Daily_WinUI.Services
                 _sleepRealtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_sleep_sessions", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
                 _sleepRealtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeLeanTableReceived);
 
+                _sourcesRealtimeChannel = _supabaseClient.Realtime.Channel("realtime", "public", "health_sources", $"user_id=eq.{userId}", null, new Dictionary<string, string>());
+                _sourcesRealtimeChannel.AddPostgresChangeHandler(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, OnRealtimeHealthSourcesReceived);
+
                 var subscribeTask = Task.WhenAll(
                     _realtimeChannel.Subscribe(),
                     _vitalsRealtimeChannel.Subscribe(),
-                    _sleepRealtimeChannel.Subscribe()
+                    _sleepRealtimeChannel.Subscribe(),
+                    _sourcesRealtimeChannel.Subscribe()
                 );
                 _ = subscribeTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
                 var completed = await Task.WhenAny(subscribeTask, Task.Delay(3000)).ConfigureAwait(false);
@@ -772,6 +1223,24 @@ namespace Daily_WinUI.Services
             {
                 _logger?.LogError(ex, "[HealthHubService] Realtime change processing error: {Message}", ex.Message);
             }
+        }
+
+        private void OnRealtimeHealthSourcesReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await GetHealthSourcesAsync(forceRefresh: true).ConfigureAwait(false);
+                    await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                    DispatchToUI(() =>
+                    {
+                        OnHealthSourcesChanged?.Invoke();
+                        OnDailySummaryChanged?.Invoke(_currentSummary);
+                    });
+                }
+                catch { }
+            });
         }
 
         private void OnRealtimeLeanTableReceived(object sender, Supabase.Realtime.PostgresChanges.PostgresChangesResponse e)
@@ -913,16 +1382,18 @@ namespace Daily_WinUI.Services
             var summaryTask = GetDailySummaryAsync(date);
             var leanVitalsTask = GetLeanDailyVitalsAsync(date);
             var leanSleepTask = GetLeanSleepSessionsAsync(date);
-            await Task.WhenAll(summaryTask, leanVitalsTask, leanSleepTask).ConfigureAwait(false);
+            var sourcesTask = GetHealthSourcesAsync();
+            await Task.WhenAll(summaryTask, leanVitalsTask, leanSleepTask, sourcesTask).ConfigureAwait(false);
 
             var summary = summaryTask.Result;
             var leanVitals = leanVitalsTask.Result;
             var leanSleep = leanSleepTask.Result;
+            var sources = sourcesTask.Result;
             var list = new List<VitalMetric>();
             var dateOnly = date.Date;
 
-            // Emit per-device metrics from lean vitals first (ordered by canonical priority)
-            foreach (var v in leanVitals.OrderByDescending(r => DeviceSource.From(r.SourceDeviceKey).SortPriority))
+            // Emit per-device metrics from lean vitals first (ordered by user/canonical ascending priority rank)
+            foreach (var v in leanVitals.OrderBy(r => ResolveEffectivePriorityRank(r.SourceDeviceKey, sources)))
             {
                 var canon = DeviceSource.From(v.SourceDeviceKey).DisplayName;
                 if (DeviceSource.IsVirtual(canon)) continue;
@@ -931,6 +1402,8 @@ namespace Daily_WinUI.Services
                     list.Add(new VitalMetric { Type = VitalType.Steps, Value = v.Steps, Unit = "steps", Date = dateOnly, SourceDevice = canon });
                 if (v.ActiveKcal > 0)
                     list.Add(new VitalMetric { Type = VitalType.ActiveEnergy, Value = v.ActiveKcal, Unit = "kcal", Date = dateOnly, SourceDevice = canon });
+                if ((v.LatestHeartRate ?? 0) > 0)
+                    list.Add(new VitalMetric { Type = VitalType.HeartRate, Value = v.LatestHeartRate!.Value, Unit = "bpm", Date = dateOnly, SourceDevice = canon });
                 if ((v.RestingHeartRate ?? 0) > 0)
                     list.Add(new VitalMetric { Type = VitalType.RestingHeartRate, Value = v.RestingHeartRate!.Value, Unit = "bpm", Date = dateOnly, SourceDevice = canon });
                 if ((v.HrvSdnnNightly ?? 0) > 0)
@@ -948,7 +1421,7 @@ namespace Daily_WinUI.Services
             }
 
             foreach (var s in leanSleep.Where(s => s.SessionType == "primary_sleep" && s.DurationSeconds > 0)
-                                       .OrderByDescending(s => DeviceSource.From(s.SourceDeviceKey).SortPriority))
+                                       .OrderBy(s => ResolveEffectivePriorityRank(s.SourceDeviceKey, sources)))
             {
                 var canon = DeviceSource.From(s.SourceDeviceKey).DisplayName;
                 if (!DeviceSource.IsVirtual(canon))
@@ -978,6 +1451,37 @@ namespace Daily_WinUI.Services
                                 SourceDevice = canonSrc
                             });
                         }
+                    }
+                }
+            }
+
+            // Top-level summary column fallbacks when offline SQLite summary has no Vitals dictionary entries
+            if (summary != null)
+            {
+                var fallbackSrc = summary.Summary?.Sources?.Select(DeviceSource.From).FirstOrDefault(x => !x.IsVirtualEngine)?.DisplayName ?? "";
+                void EnsureTopLevel(VitalType vt, double? val, string unit)
+                {
+                    if (val.HasValue && val.Value > 0 && !list.Any(x => x.Type == vt))
+                    {
+                        list.Add(new VitalMetric { Type = vt, Value = val.Value, Unit = unit, Date = dateOnly, SourceDevice = fallbackSrc });
+                    }
+                }
+                EnsureTopLevel(VitalType.Steps, summary.Steps, "steps");
+                EnsureTopLevel(VitalType.ActiveEnergy, summary.ActiveKcal, "kcal");
+                EnsureTopLevel(VitalType.RestingHeartRate, summary.Rhr, "bpm");
+                EnsureTopLevel(VitalType.HeartRateVariabilitySDNN, summary.HrvSdnn, "ms");
+                EnsureTopLevel(VitalType.HeartRateVariabilityRMSSD, summary.HrvRmssd, "ms");
+                EnsureTopLevel(VitalType.OxygenSaturation, summary.Spo2, "%");
+                EnsureTopLevel(VitalType.Weight, summary.Weight, "kg");
+                EnsureTopLevel(VitalType.Stress, summary.StressAvg, "pts");
+                if (summary.Summary?.Cardiovascular?.LatestBpm is double lbpm && lbpm >= 30)
+                {
+                    var hrSrc = !string.IsNullOrEmpty(summary.Summary.Cardiovascular.LatestSourceDevice)
+                        ? DeviceSource.From(summary.Summary.Cardiovascular.LatestSourceDevice).DisplayName
+                        : fallbackSrc;
+                    if (!list.Any(x => x.Type == VitalType.HeartRate))
+                    {
+                        list.Add(new VitalMetric { Type = VitalType.HeartRate, Value = lbpm, Unit = "bpm", Date = dateOnly, SourceDevice = hrSrc });
                     }
                 }
             }
@@ -1028,13 +1532,18 @@ namespace Daily_WinUI.Services
 
         public async Task<(SleepSession? PrimarySession, List<SleepSession> AllSessions)> GetSleepSessionsAsync(DateTime date)
         {
-            var leanRows = await GetLeanSleepSessionsAsync(date).ConfigureAwait(false);
+            var leanRowsTask = GetLeanSleepSessionsAsync(date);
+            var sourcesTask = GetHealthSourcesAsync();
+            await Task.WhenAll(leanRowsTask, sourcesTask).ConfigureAwait(false);
+            var leanRows = leanRowsTask.Result;
+            var sources = sourcesTask.Result;
+
             if (leanRows.Any())
             {
                 var ordered = leanRows
                     .OrderByDescending(r => r.IsUserSelected)
                     .ThenByDescending(r => r.Stages != null && r.Stages.Count > 0)
-                    .ThenByDescending(r => DeviceSource.From(r.SourceDeviceKey).SortPriority)
+                    .ThenBy(r => ResolveEffectivePriorityRank(r.SourceDeviceKey, sources))
                     .ThenByDescending(r => r.DurationSeconds)
                     .ToList();
 
@@ -1259,6 +1768,7 @@ namespace Daily_WinUI.Services
             _hrCache.Clear();
 
             var today = DateTime.Today;
+            await GetHealthSourcesAsync(forceRefresh: true).ConfigureAwait(false);
             await RefreshSummaryFromRemoteAsync(today).ConfigureAwait(false);
             if (_selectedDate.Date != today.Date)
             {

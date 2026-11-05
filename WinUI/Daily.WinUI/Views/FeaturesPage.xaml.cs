@@ -237,8 +237,9 @@ public sealed partial class FeaturesPage : Page
             UpdateMediumUi();
             UpdateSubstackUi();
             
-            // Load Paired Watches
+            // Load Paired Watches & Health Device Priority Order
             _ = LoadPairedWatchesAsync();
+            _ = LoadHealthDevicePrioritiesAsync();
         }
         catch (Exception ex)
         {
@@ -781,6 +782,177 @@ public sealed partial class FeaturesPage : Page
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Failed to load paired watches: {ex}");
+        }
+    }
+
+    private System.Collections.Generic.List<Daily.Models.Health.HealthSourceRecord> _healthPrioritySources = new();
+    private bool _isSavingHealthPriority = false;
+
+    private async Task LoadHealthDevicePrioritiesAsync()
+    {
+        try
+        {
+            var hubService = App.Current.Services.GetService<IHealthHubService>();
+            if (hubService == null) return;
+
+            var sources = await hubService.GetHealthSourcesAsync(forceRefresh: true);
+            _healthPrioritySources = new System.Collections.Generic.List<Daily.Models.Health.HealthSourceRecord>(sources);
+
+            DispatcherQueue.TryEnqueue(RenderHealthDevicePriorityRows);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FeaturesPage] Failed to load health device priorities: {ex}");
+        }
+    }
+
+    private void RenderHealthDevicePriorityRows()
+    {
+        if (HealthDevicePriorityPanel == null || HealthDevicePriorityRowsPanel == null) return;
+
+        HealthDevicePriorityRowsPanel.Children.Clear();
+        if (_healthPrioritySources.Count == 0)
+        {
+            HealthDevicePriorityPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        HealthDevicePriorityPanel.Visibility = Visibility.Visible;
+        if (ResetHealthDevicePriorityButton != null)
+        {
+            bool hasCustom = false;
+            foreach (var s in _healthPrioritySources)
+            {
+                if (s.IsCustomPriority) { hasCustom = true; break; }
+            }
+            ResetHealthDevicePriorityButton.Visibility = hasCustom ? Visibility.Visible : Visibility.Collapsed;
+            ResetHealthDevicePriorityButton.IsEnabled = !_isSavingHealthPriority;
+        }
+
+        for (int i = 0; i < _healthPrioritySources.Count; i++)
+        {
+            int idx = i;
+            var src = _healthPrioritySources[idx];
+
+            var rowGrid = new Grid { Padding = new Thickness(10, 6, 10, 6) };
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var leftStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            leftStack.Children.Add(new TextBlock
+            {
+                Text = $"#{idx + 1}",
+                FontSize = 12,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 56, 151, 240)),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var dotHex = Daily.Models.Health.DeviceColorPalette.GetColor(src.DisplayName);
+            leftStack.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                Fill = new SolidColorBrush(Daily.Models.Health.DeviceColorPalette.ParseColor(dotHex)),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            leftStack.Children.Add(new TextBlock
+            {
+                Text = src.DisplayName,
+                FontSize = 13,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var btnStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            var upBtn = new Button
+            {
+                Content = "▲",
+                FontSize = 10,
+                Padding = new Thickness(8, 3, 8, 3),
+                IsEnabled = idx > 0 && !_isSavingHealthPriority
+            };
+            upBtn.Click += async (s, e) => await MoveHealthDevicePriorityAsync(idx, -1);
+
+            var downBtn = new Button
+            {
+                Content = "▼",
+                FontSize = 10,
+                Padding = new Thickness(8, 3, 8, 3),
+                IsEnabled = idx < _healthPrioritySources.Count - 1 && !_isSavingHealthPriority
+            };
+            downBtn.Click += async (s, e) => await MoveHealthDevicePriorityAsync(idx, 1);
+
+            btnStack.Children.Add(upBtn);
+            btnStack.Children.Add(downBtn);
+
+            Grid.SetColumn(leftStack, 0);
+            Grid.SetColumn(btnStack, 1);
+            rowGrid.Children.Add(leftStack);
+            rowGrid.Children.Add(btnStack);
+
+            HealthDevicePriorityRowsPanel.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(16, 255, 255, 255)),
+                Child = rowGrid
+            });
+        }
+    }
+
+    private async Task MoveHealthDevicePriorityAsync(int index, int delta)
+    {
+        if (_isSavingHealthPriority) return;
+        int target = index + delta;
+        if (target < 0 || target >= _healthPrioritySources.Count) return;
+
+        var hubService = App.Current.Services.GetService<IHealthHubService>();
+        if (hubService == null) return;
+
+        (_healthPrioritySources[index], _healthPrioritySources[target]) = (_healthPrioritySources[target], _healthPrioritySources[index]);
+        foreach (var item in _healthPrioritySources) item.IsCustomPriority = true;
+
+        _isSavingHealthPriority = true;
+        RenderHealthDevicePriorityRows();
+        try
+        {
+            var orderedIds = new System.Collections.Generic.List<string>(_healthPrioritySources.Count);
+            foreach (var item in _healthPrioritySources) orderedIds.Add(item.Id);
+            await hubService.SaveDevicePriorityOrderAsync(orderedIds);
+            var refreshed = await hubService.GetHealthSourcesAsync(forceRefresh: true);
+            _healthPrioritySources = new System.Collections.Generic.List<Daily.Models.Health.HealthSourceRecord>(refreshed);
+        }
+        finally
+        {
+            _isSavingHealthPriority = false;
+            RenderHealthDevicePriorityRows();
+        }
+    }
+
+    private async void ResetHealthDevicePriorityButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isSavingHealthPriority) return;
+        var hubService = App.Current.Services.GetService<IHealthHubService>();
+        if (hubService == null) return;
+
+        _isSavingHealthPriority = true;
+        RenderHealthDevicePriorityRows();
+        try
+        {
+            await hubService.ResetDevicePriorityOrderAsync();
+            var refreshed = await hubService.GetHealthSourcesAsync(forceRefresh: true);
+            _healthPrioritySources = new System.Collections.Generic.List<Daily.Models.Health.HealthSourceRecord>(refreshed);
+        }
+        finally
+        {
+            _isSavingHealthPriority = false;
+            RenderHealthDevicePriorityRows();
         }
     }
 

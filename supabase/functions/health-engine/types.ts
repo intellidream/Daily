@@ -119,6 +119,9 @@ export interface IntradayHeartRatePoint {
 }
 
 export interface CardiovascularSummary {
+  latest_bpm?: number | null;
+  latest_bpm_at?: string | null;
+  latest_source_device?: string | null;
   average_bpm: number | null;
   resting_bpm: number | null;
   min_bpm: number | null;
@@ -164,6 +167,7 @@ export interface StressSummary {
   monkey_mood: MonkeyMoodName;
   advice_quote: string;
   recommended_breathing: string;
+  source_device?: string | null;
   intraday_points: IntradayStressPoint[];
 }
 
@@ -237,8 +241,22 @@ export interface LeanDailyVitalsRow {
   weight_kg?: number | null;
   hrv_sdnn_nightly?: number | null;
   hrv_rmssd_nightly?: number | null;
+  latest_heart_rate?: number | null;
+  latest_hr_at?: string | null;
+  vitals_timestamps?: Record<string, string> | null;
   hourly_steps?: HourlyStepBucket[] | null;
   updated_at?: string | null;
+}
+
+export interface LeanHealthSourceRow {
+  id: string;
+  user_id: string;
+  display_name: string;
+  device_kind?: string | null;
+  priority_sleep?: number | null;
+  priority_activity?: number | null;
+  is_custom_priority?: boolean | null;
+  color?: string | null;
 }
 
 export interface LeanSleepSessionRow {

@@ -235,6 +235,9 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
     public let semantics: String?
     public let tzOffsetMin: Int?
     public let localDate: String?
+    public let minValue: Double?
+    public let maxValue: Double?
+    public let sampleCount: Int?
     public var hostDeviceName: String? {
         guard let dev = sourceDevice, dev.contains(" - ") else { return sourceDevice }
         return String(dev.components(separatedBy: " - ").first ?? dev)
@@ -270,6 +273,9 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         case semantics
         case tzOffsetMin = "tz_offset_min"
         case localDate = "local_date"
+        case minValue = "min_value"
+        case maxValue = "max_value"
+        case sampleCount = "sample_count"
     }
     
     public init(
@@ -290,7 +296,10 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         hostDeviceName: String? = nil,
         sensorSourceName: String? = nil,
         sourceDeviceKey: String? = nil,
-        sourceColor: String? = nil
+        sourceColor: String? = nil,
+        minValue: Double? = nil,
+        maxValue: Double? = nil,
+        sampleCount: Int? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -306,6 +315,9 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
         self.semantics = semantics
         self.tzOffsetMin = tzOffsetMin
         self.localDate = localDate
+        self.minValue = minValue
+        self.maxValue = maxValue
+        self.sampleCount = sampleCount
     }
     
     public var effectiveSourceKey: String {
@@ -327,6 +339,10 @@ public struct HealthTelemetryRecord: Codable, Identifiable, Hashable, Sendable {
     
     public var isHeartRate: Bool {
         normalizedType == "heartrate" || normalizedType == "hr"
+    }
+    
+    public var isLatestHeartRate: Bool {
+        normalizedType == "latestheartrate"
     }
     
     public var isSteps: Bool {

@@ -14,37 +14,63 @@ public struct HeartRateCurveView: View {
             // 1. Hero Heart Rate Card
             GlassCard(cornerRadius: 20, padding: 18) {
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("HEART RATE TODAY")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundColor(ThemeColors.accentCyan)
+                    HStack(alignment: .top) {
+                        let heroBpm = healthService.latestBpm ?? (healthService.averageBpm > 0 ? healthService.averageBpm : 0)
+                        let showingLatest = healthService.latestBpm != nil
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text(showingLatest ? "LATEST HEART RATE" : "HEART RATE TODAY")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(ThemeColors.accentCyan)
+                                if showingLatest, let ts = healthService.latestBpmAt {
+                                    Text("• \(formatTime(ts))")
+                                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                }
+                            }
                             
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text("\(Int(healthService.averageBpm))")
+                                Text(heroBpm > 0 ? "\(Int(round(heroBpm)))" : "--")
                                     .font(.system(size: 34, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
-                                Text("BPM AVG")
+                                Text(showingLatest ? "BPM" : "BPM AVG")
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundColor(ThemeColors.fgMutedDark)
+                            }
+                            
+                            if let src = healthService.latestBpmSource, !src.isEmpty {
+                                DeviceOriginBadge(device: src, compact: true)
                             }
                         }
                         
                         Spacer()
                         
-                        // Resting HR Pill
-                        VStack(alignment: .trailing, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "heart.circle.fill")
-                                    .foregroundColor(ThemeColors.accentPink)
-                                    .font(.system(size: 12))
-                                Text("Resting HR")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
+                        // Daily Avg & Resting HR Pills
+                        VStack(alignment: .trailing, spacing: 6) {
+                            if showingLatest && healthService.averageBpm > 0 {
+                                VStack(alignment: .trailing, spacing: 1) {
+                                    Text("Daily Avg")
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                    Text("\(Int(round(healthService.averageBpm))) bpm")
+                                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
                             }
-                            Text("\(Int(healthService.restingBpm)) bpm")
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
+                            
+                            VStack(alignment: .trailing, spacing: 1) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "heart.circle.fill")
+                                        .foregroundColor(ThemeColors.accentPink)
+                                        .font(.system(size: 11))
+                                    Text("Resting HR")
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                }
+                                Text(healthService.restingBpm > 0 ? "\(Int(round(healthService.restingBpm))) bpm" : "--")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
                         }
                     }
                     

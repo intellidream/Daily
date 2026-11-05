@@ -27,6 +27,7 @@ data class HealthSourceRecord(
     @SerialName("host_device_name") @JsonNames("hostDeviceName") val hostDeviceName: String? = null,
     @SerialName("priority_sleep") @JsonNames("prioritySleep") val prioritySleep: Int = 10,
     @SerialName("priority_activity") @JsonNames("priorityActivity") val priorityActivity: Int = 10,
+    @SerialName("is_custom_priority") @JsonNames("isCustomPriority") val isCustomPriority: Boolean = false,
     val color: String? = "#3897F0",
     @SerialName("created_at") @JsonNames("createdAt") val createdAt: String? = null
 )
@@ -123,12 +124,16 @@ data class HealthDailyVitalsRecord(
     @SerialName("hrv_sdnn_nightly") @JsonNames("hrvSdnnNightly") val hrvSdnnNightly: Double? = null,
     @SerialName("hrv_rmssd_nightly") @JsonNames("hrvRmssdNightly") val hrvRmssdNightly: Double? = null,
     @SerialName("hourly_steps") @JsonNames("hourlySteps") val hourlySteps: List<HourlyStepBucket>? = null,
+    @SerialName("latest_heart_rate") @JsonNames("latestHeartRate") val latestHeartRate: Int? = null,
+    @SerialName("latest_hr_at") @JsonNames("latestHrAt") val latestHrAt: String? = null,
+    @SerialName("vitals_timestamps") @JsonNames("vitalsTimestamps") val vitalsTimestamps: Map<String, String>? = null,
     @SerialName("updated_at") @JsonNames("updatedAt") val updatedAt: String? = null
 ) {
     val hasSignal: Boolean
         get() = steps > 0 ||
                 activeKcal > 0.0 ||
                 (restingHeartRate ?: 0) > 0 ||
+                (latestHeartRate ?: 0) > 0 ||
                 (spo2 ?: 0.0) > 0.0 ||
                 (respiratoryRate ?: 0.0) > 0.0 ||
                 skinTempCelsius != null ||

@@ -44,10 +44,21 @@ public final class HealthDataService: ObservableObject {
     @Published public var minBpm: Double = 0
     @Published public var maxBpm: Double = 0
     @Published public var restingBpm: Double = 0
+    @Published public private(set) var resolvedLatestBpm: Double? = nil
+    @Published public private(set) var latestBpmAt: Date? = nil
+    @Published public private(set) var latestBpmSource: String? = nil
     
-    /// Most recent intraday heart rate reading from the currently active wearable
+    /// Most recent intraday or spot heart rate reading from the currently active wearable
     public var latestBpm: Double? {
-        intradayHeartRate.last?.bpm
+        resolvedLatestBpm ?? intradayHeartRate.last?.bpm
+    }
+    
+    // Unified Device Priority Configuration (`public.health_sources`)
+    @Published public private(set) var configurableSources: [HealthSourceRecord] = []
+    @Published public private(set) var isSavingPriorityOrder: Bool = false
+    
+    public var hasCustomDevicePriority: Bool {
+        configurableSources.contains(where: \.isCustomPriority)
     }
     
     // Activity
@@ -82,6 +93,9 @@ public final class HealthDataService: ObservableObject {
     private var realtimeChannel: RealtimeChannelV2?
     private var realtimeTask: Task<Void, Never>?
     private var lastEngineInvocation: [String: Date] = [:]
+    private var lastEnginePayloadFingerprint: [String: String] = [:]
+    private var pendingEngineDebounceTask: [String: Task<Void, Never>] = [:]
+    private var lastKnownTodayStart: Date = Calendar.current.startOfDay(for: Date())
     private var isSyncingHistory: Bool = false
     private var lastPushedTelemetryEpochMs: TimeInterval = 0
     private var lastSyncedSignatureByDate: [String: (timestamp: Date, signature: String)] = [:]
@@ -171,7 +185,31 @@ public final class HealthDataService: ObservableObject {
         startActiveSyncLoop()
     }
     
-    // MARK: - Active Periodic Cadence
+    // MARK: - Midnight Rollover & Active Periodic Cadence
+    
+    /// Automatically advances `selectedDate` to the new day across midnight if the user was viewing "Today",
+    /// while flushing yesterday's final local telemetry once in the background.
+    private func checkMidnightRolloverIfNeeded() {
+        let cal = Calendar.current
+        let currentTodayStart = cal.startOfDay(for: Date())
+        guard currentTodayStart > lastKnownTodayStart else { return }
+        let previousDay = lastKnownTodayStart
+        lastKnownTodayStart = currentTodayStart
+        
+        if cal.isDate(selectedDate, inSameDayAs: previousDay) {
+            selectedDate = Date()
+            if let provider = localDataProvider, AuthService.shared.isAuthenticated {
+                Task { [weak self] in
+                    let finalTelem = await provider.fetchLocalTelemetry(for: previousDay)
+                    let finalSleep = await provider.fetchLocalSleepStages(for: previousDay)
+                    let combined = finalTelem + finalSleep
+                    if !combined.isEmpty {
+                        await self?.syncTelemetryToSupabase(telemetry: combined)
+                    }
+                }
+            }
+        }
+    }
     
     public func startActiveSyncLoop() {
         periodicActiveSyncTask?.cancel()
@@ -179,6 +217,7 @@ public final class HealthDataService: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 minutes periodic cadence
                 guard let self = self, !Task.isCancelled else { break }
+                self.checkMidnightRolloverIfNeeded()
                 if AuthService.shared.isAuthenticated && self.isToday {
                     await self.loadDataForSelectedDate(forceRefresh: true)
                 }
@@ -227,6 +266,12 @@ public final class HealthDataService: ObservableObject {
                     table: "health_daily_vitals",
                     filter: .eq("user_id", value: userId)
                 )
+                let sourcesChanges = channel.postgresChange(
+                    AnyAction.self,
+                    schema: "public",
+                    table: "health_sources",
+                    filter: .eq("user_id", value: userId)
+                )
                 
                 try? await channel.subscribeWithError()
                 
@@ -258,6 +303,17 @@ public final class HealthDataService: ObservableObject {
                         guard !Task.isCancelled else { break }
                         let now = Date()
                         guard now.timeIntervalSince(lastHandledTime) > 3.0 else { continue }
+                        lastHandledTime = now
+                        await self?.fetchRemoteSummarySilentlyForSelectedDate()
+                    }
+                }
+                
+                Task { [weak self] in
+                    var lastHandledTime: Date = .distantPast
+                    for await _ in sourcesChanges {
+                        guard !Task.isCancelled else { break }
+                        let now = Date()
+                        guard now.timeIntervalSince(lastHandledTime) > 1.5 else { continue }
                         lastHandledTime = now
                         await self?.fetchRemoteSummarySilentlyForSelectedDate()
                     }
@@ -336,8 +392,26 @@ public final class HealthDataService: ObservableObject {
                 }
             }()
             
-            let (summaryRows, sleepRows, vitalsRows, hrRows) = await (summaryFetch, sleepFetch, vitalsFetch, hrFetch)
+            async let sourcesFetch: [HealthSourceRecord] = {
+                do {
+                    return try await supabase
+                        .from("health_sources")
+                        .select()
+                        .eq("user_id", value: userId)
+                        .order("priority_sleep", ascending: true)
+                        .execute()
+                        .value
+                } catch {
+                    return []
+                }
+            }()
+            
+            let (summaryRows, sleepRows, vitalsRows, hrRows, sourcesRows) = await (summaryFetch, sleepFetch, vitalsFetch, hrFetch, sourcesFetch)
             guard Calendar.current.isDate(targetDate, inSameDayAs: self.selectedDate) else { return }
+            
+            if !sourcesRows.isEmpty {
+                self.currentLeanSources = sourcesRows
+            }
             
             if let row = summaryRows.first, !row.summary.isEmpty {
                 let payload = row.summary
@@ -350,11 +424,12 @@ public final class HealthDataService: ObservableObject {
                 }
             }
             
-            self.currentLeanSleepSessions = Self.mergeLeanSleepSessions(remote: sleepRows, local: self.currentLeanSleepSessions.filter { $0.localDate == dateKey })
-            self.currentLeanDailyVitals = Self.mergeLeanDailyVitals(remote: vitalsRows, local: self.currentLeanDailyVitals.filter { $0.localDate == dateKey })
+            self.currentLeanSleepSessions = Self.mergeLeanSleepSessions(remote: sleepRows, local: self.currentLeanSleepSessions.filter { $0.localDate == dateKey }, sources: self.currentLeanSources)
+            self.currentLeanDailyVitals = Self.mergeLeanDailyVitals(remote: vitalsRows, local: self.currentLeanDailyVitals.filter { $0.localDate == dateKey }, sources: self.currentLeanSources)
             self.currentLeanIntradayHeartRate = Self.mergeLeanIntradayHr(remote: hrRows, local: self.currentLeanIntradayHeartRate.filter { $0.localDate == dateKey })
             
             rebuildAvailableSourcesForCurrentDate()
+            rebuildConfigurableSources()
             reapplyCurrentDeviceFilter()
             await loadHistoricalTrends()
         }
@@ -450,6 +525,7 @@ public final class HealthDataService: ObservableObject {
     public var lastRefreshTimestamp: Date = .distantPast
     
     public func refreshIfStale() async {
+        checkMidnightRolloverIfNeeded()
         let isToday = Calendar.current.isDateInToday(selectedDate)
         let staleThreshold: TimeInterval = isToday ? 300 : 3600 // 5 min for today, 1 hour for past
         
@@ -465,6 +541,7 @@ public final class HealthDataService: ObservableObject {
     // MARK: - Data Fetching & Processing
     
     public func loadDataForSelectedDate(forceRefresh: Bool = false) async {
+        checkMidnightRolloverIfNeeded()
         if !forceRefresh, let existing = activeLoadTask {
             await existing.value
             return
@@ -511,6 +588,9 @@ public final class HealthDataService: ObservableObject {
             currentLeanDailyVitals = []
             currentLeanIntradayHeartRate = []
             canonicalSummary = nil
+            resolvedLatestBpm = nil
+            latestBpmAt = nil
+            latestBpmSource = nil
         }
 
         // 1. Check in-memory canonical summary cache (only when lean arrays for this date are already in memory)
@@ -521,6 +601,7 @@ public final class HealthDataService: ObservableObject {
            (!currentLeanDailyVitals.isEmpty || !currentLeanSleepSessions.isEmpty) {
             self.canonicalSummary = cached.summary
             rebuildAvailableSourcesForCurrentDate()
+            rebuildConfigurableSources()
             reapplyCurrentDeviceFilter()
             lastSuccessfulLoadTime[dateKey] = Date()
             return
@@ -690,8 +771,8 @@ public final class HealthDataService: ObservableObject {
             )
         }
         
-        let mergedSleep = Self.mergeLeanSleepSessions(remote: leanSleep, local: localSleepRecs)
-        let mergedVitals = Self.mergeLeanDailyVitals(remote: leanVitals, local: localVitalsRecs)
+        let mergedSleep = Self.mergeLeanSleepSessions(remote: leanSleep, local: localSleepRecs, sources: self.currentLeanSources)
+        let mergedVitals = Self.mergeLeanDailyVitals(remote: leanVitals, local: localVitalsRecs, sources: self.currentLeanSources)
         let mergedHr = Self.mergeLeanIntradayHr(remote: leanHr, local: localHrRecs)
         
         self.currentLeanSleepSessions = mergedSleep
@@ -709,6 +790,7 @@ public final class HealthDataService: ObservableObject {
         }
         
         rebuildAvailableSourcesForCurrentDate()
+        rebuildConfigurableSources()
         
         // 4. Apply unified lean data + canonical summary cleanly with zero cross-device leakage
         if !mergedSleep.isEmpty || !mergedVitals.isEmpty || !mergedHr.isEmpty {
@@ -716,6 +798,7 @@ public final class HealthDataService: ObservableObject {
                 applyCanonicalSummary(payload, dateKey: dateKey)
             }
             rebuildAvailableSourcesForCurrentDate()
+            rebuildConfigurableSources()
             reapplyCurrentDeviceFilter()
             lastSuccessfulLoadTime[dateKey] = Date()
             await loadHistoricalTrends()
@@ -726,6 +809,7 @@ public final class HealthDataService: ObservableObject {
         if let payload = remotePayload {
             applyCanonicalSummary(payload, dateKey: dateKey)
             rebuildAvailableSourcesForCurrentDate()
+            rebuildConfigurableSources()
             lastSuccessfulLoadTime[dateKey] = Date()
             await loadHistoricalTrends()
             return
@@ -753,6 +837,9 @@ public final class HealthDataService: ObservableObject {
         self.restingBpm = 0
         self.minBpm = 0
         self.maxBpm = 0
+        self.resolvedLatestBpm = nil
+        self.latestBpmAt = nil
+        self.latestBpmSource = nil
         self.currentVitals = [:]
         self.stressAnalysis = nil
         self.intradayStress = []
@@ -762,11 +849,480 @@ public final class HealthDataService: ObservableObject {
         await loadHistoricalTrends()
     }
     
+    // MARK: - Unified Device Priority & Pure Arbitration Helpers (v2.1)
+    
+    nonisolated public static func canonicalSourceId(for src: DeviceSource, displayName: String) -> String {
+        let dLower = displayName.lowercased()
+        switch src {
+        case .oura: return "oura_ring"
+        case .appleWatch: return "apple_watch_ultra_2"
+        case .pixelWatch, .fitbit: return "pixel_watch_5"
+        case .oneplus: return "oneplus_watch_3"
+        default:
+            if dLower.contains("schmitz") || dLower.contains("iphone") { return "schmitz_iphone" }
+            if dLower.contains("trapper") || dLower.contains("pixel 9") { return "trapper_pixel9" }
+            if dLower.contains("radar") || dLower.contains("fold") { return "radar_fold8" }
+            return canonicalSlug(displayName)
+        }
+    }
+    
+    /// Resolves unified 1-based ascending priority rank (`1` = highest priority).
+    /// Respects user-configured order in `public.health_sources`, falling back to `DeviceSource.sortPriority`.
+    nonisolated public static func resolveEffectivePriorityRank(
+        deviceName: String?,
+        sources: [HealthSourceRecord]
+    ) -> Int {
+        let src = DeviceSource.from(name: deviceName)
+        guard !sources.isEmpty else { return src.sortPriority }
+        let expectedId = canonicalSourceId(for: src, displayName: src.displayName)
+        if let matched = sources.first(where: {
+            $0.id == expectedId ||
+            DeviceSource.from(name: $0.displayName) == src ||
+            (deviceName != nil && $0.displayName.caseInsensitiveCompare(deviceName!) == .orderedSame)
+        }) {
+            let dbRank = min(matched.prioritySleep, matched.priorityActivity)
+            // Guard against legacy pre-v2.1 inverted priorities (e.g. 100/90/85/40)
+            if dbRank > 0 && dbRank <= 30 {
+                return dbRank
+            }
+        }
+        return src.sortPriority
+    }
+    
+    public func effectivePriorityRank(for deviceName: String?) -> Int {
+        Self.resolveEffectivePriorityRank(deviceName: deviceName, sources: currentLeanSources)
+    }
+    
+    private func rebuildConfigurableSources() {
+        let uid = currentLeanSources.first?.userId ?? "local"
+        var byCanonical: [DeviceSource: HealthSourceRecord] = [:]
+        
+        for s in currentLeanSources {
+            let src = DeviceSource.from(name: s.displayName)
+            if src.isVirtualEngine || src == .manual { continue }
+            let cleanId = Self.canonicalSourceId(for: src, displayName: src.displayName)
+            let normalizedRank = Self.resolveEffectivePriorityRank(deviceName: src.displayName, sources: [s])
+            if let existing = byCanonical[src] {
+                if (s.isCustomPriority && !existing.isCustomPriority) || s.id == cleanId {
+                    byCanonical[src] = HealthSourceRecord(
+                        id: s.id,
+                        userId: s.userId,
+                        platform: s.platform,
+                        deviceKind: s.deviceKind,
+                        vendor: s.vendor,
+                        model: s.model,
+                        displayName: src.displayName,
+                        hostDeviceName: s.hostDeviceName ?? existing.hostDeviceName,
+                        prioritySleep: normalizedRank,
+                        priorityActivity: normalizedRank,
+                        isCustomPriority: s.isCustomPriority || existing.isCustomPriority,
+                        color: s.color ?? existing.color,
+                        createdAt: s.createdAt ?? existing.createdAt
+                    )
+                }
+            } else {
+                byCanonical[src] = HealthSourceRecord(
+                    id: s.id,
+                    userId: s.userId,
+                    platform: s.platform,
+                    deviceKind: s.deviceKind,
+                    vendor: s.vendor,
+                    model: s.model,
+                    displayName: src.displayName,
+                    hostDeviceName: s.hostDeviceName,
+                    prioritySleep: normalizedRank,
+                    priorityActivity: normalizedRank,
+                    isCustomPriority: s.isCustomPriority,
+                    color: s.color ?? DeviceColorPalette.getColor(for: src.displayName),
+                    createdAt: s.createdAt
+                )
+            }
+        }
+        
+        // Include any active hardware on the selected date even if not yet persisted
+        for src in availableSources where !src.isVirtualEngine && src != .manual {
+            if byCanonical[src] == nil {
+                let disp = src.displayName
+                let sid = Self.canonicalSourceId(for: src, displayName: disp)
+                byCanonical[src] = HealthSourceRecord(
+                    id: sid,
+                    userId: uid,
+                    platform: (src == .appleWatch || src == .healthKit) ? "iOS" : "Android",
+                    deviceKind: src == .oura ? "ring" : (src.isWearable ? "watch" : "phone"),
+                    vendor: nil,
+                    model: nil,
+                    displayName: disp,
+                    hostDeviceName: nil,
+                    prioritySleep: src.sortPriority,
+                    priorityActivity: src.sortPriority,
+                    isCustomPriority: false,
+                    color: DeviceColorPalette.getColor(for: disp),
+                    createdAt: nil
+                )
+            }
+        }
+        
+        self.configurableSources = Array(byCanonical.values).sorted {
+            let p0 = min($0.prioritySleep, $0.priorityActivity)
+            let p1 = min($1.prioritySleep, $1.priorityActivity)
+            if p0 != p1 { return p0 < p1 }
+            return $0.displayName < $1.displayName
+        }
+    }
+    
+    public func moveDevicePriority(from index: Int, direction: Int) async {
+        let newIndex = index + direction
+        guard configurableSources.indices.contains(index),
+              configurableSources.indices.contains(newIndex) else { return }
+        
+        var reordered = configurableSources
+        let moved = reordered.remove(at: index)
+        reordered.insert(moved, at: newIndex)
+        
+        let updated: [HealthSourceRecord] = reordered.enumerated().map { idx, item in
+            let rank = idx + 1
+            return HealthSourceRecord(
+                id: item.id,
+                userId: item.userId,
+                platform: item.platform,
+                deviceKind: item.deviceKind,
+                vendor: item.vendor,
+                model: item.model,
+                displayName: item.displayName,
+                hostDeviceName: item.hostDeviceName,
+                prioritySleep: rank,
+                priorityActivity: rank,
+                isCustomPriority: true,
+                color: item.color,
+                createdAt: item.createdAt
+            )
+        }
+        self.configurableSources = updated
+        self.currentLeanSources = updated
+        reapplyCurrentDeviceFilter()
+        
+        await saveDevicePriorityOrder(updated.map(\.id))
+    }
+    
+    public func saveDevicePriorityOrder(_ orderedIds: [String]) async {
+        guard !orderedIds.isEmpty, AuthService.shared.isAuthenticated else { return }
+        isSavingPriorityOrder = true
+        defer { isSavingPriorityOrder = false }
+        
+        do {
+            try await supabase
+                .rpc("save_health_source_priorities", params: ["ordered_source_ids": orderedIds])
+                .execute()
+            
+            if let session = try? await supabase.auth.session {
+                let userId = session.user.id.uuidString.lowercased()
+                let freshSources: [HealthSourceRecord] = (try? await supabase
+                    .from("health_sources")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .order("priority_sleep", ascending: true)
+                    .execute()
+                    .value) ?? []
+                if !freshSources.isEmpty {
+                    self.currentLeanSources = freshSources
+                    rebuildConfigurableSources()
+                    reapplyCurrentDeviceFilter()
+                }
+                let dateKey = isoDateFormatter.string(from: selectedDate)
+                triggerCanonicalEngineIfNeeded(for: dateKey, userId: userId, fingerprint: "priority_\(orderedIds.joined(separator: ","))", force: true)
+            }
+        } catch {
+            print("[HealthDataService] Failed to save device priority order: \(error.localizedDescription)")
+        }
+    }
+    
+    public func resetDevicePriorityOrder() async {
+        guard AuthService.shared.isAuthenticated else { return }
+        isSavingPriorityOrder = true
+        defer { isSavingPriorityOrder = false }
+        
+        do {
+            try await supabase
+                .rpc("reset_health_source_priorities")
+                .execute()
+            
+            if let session = try? await supabase.auth.session {
+                let userId = session.user.id.uuidString.lowercased()
+                let freshSources: [HealthSourceRecord] = (try? await supabase
+                    .from("health_sources")
+                    .select()
+                    .eq("user_id", value: userId)
+                    .order("priority_sleep", ascending: true)
+                    .execute()
+                    .value) ?? []
+                self.currentLeanSources = freshSources
+                rebuildConfigurableSources()
+                reapplyCurrentDeviceFilter()
+                let dateKey = isoDateFormatter.string(from: selectedDate)
+                triggerCanonicalEngineIfNeeded(for: dateKey, userId: userId, fingerprint: "priority_reset_\(Int(Date().timeIntervalSince1970))", force: true)
+            }
+        } catch {
+            print("[HealthDataService] Failed to reset device priority order: \(error.localizedDescription)")
+        }
+    }
+    
+    public struct ArbitratedActivityResult: Sendable {
+        public let totalSteps: Int
+        public let activeCalories: Double
+        public let hourlySteps: [HourlyStepBucket]
+        public let sourceDevice: String?
+    }
+    
+    /// Class B — Hourly Active-Wearer Envelope (`0..23`):
+    /// Sums disjoint active wearable hours (e.g. morning Oura/Pixel Watch + afternoon OnePlus Watch 3)
+    /// while preventing double-counting during simultaneous wear using `resolveEffectivePriorityRank` as tie-breaker.
+    nonisolated public static func arbitrateHourlyActivity(
+        vitals: [HealthDailyVitalsRecord],
+        sources: [HealthSourceRecord]
+    ) -> ArbitratedActivityResult {
+        let validRows = vitals.filter { !DeviceSource.from(name: $0.sourceDeviceKey).isVirtualEngine }
+        guard !validRows.isEmpty else {
+            return ArbitratedActivityResult(totalSteps: 0, activeCalories: 0, hourlySteps: [], sourceDevice: nil)
+        }
+        
+        let wearables = validRows.filter { DeviceSource.from(name: $0.sourceDeviceKey).isWearable && ($0.steps > 0 || ($0.hourlySteps?.contains(where: { $0.steps > 0 }) == true)) }
+        let candidates = !wearables.isEmpty ? wearables : validRows.filter { $0.steps > 0 || ($0.hourlySteps?.contains(where: { $0.steps > 0 }) == true) }
+        
+        guard !candidates.isEmpty else {
+            let fallback = validRows.sorted {
+                resolveEffectivePriorityRank(deviceName: $0.sourceDeviceKey, sources: sources) <
+                resolveEffectivePriorityRank(deviceName: $1.sourceDeviceKey, sources: sources)
+            }.first!
+            let canon = DeviceSource.from(name: fallback.sourceDeviceKey).displayName
+            return ArbitratedActivityResult(
+                totalSteps: 0,
+                activeCalories: fallback.activeKcal,
+                hourlySteps: [],
+                sourceDevice: canon
+            )
+        }
+        
+        let anyHasHourly = candidates.contains { ($0.hourlySteps?.contains(where: { $0.steps > 0 }) == true) }
+        if anyHasHourly {
+            var mergedBuckets: [HourlyStepBucket] = []
+            var contributedStepsByCanon: [String: Int] = [:]
+            var latestActiveHourByCanon: [String: Int] = [:]
+            
+            for h in 0..<24 {
+                var hourEntries: [(canon: String, steps: Int, rank: Int)] = []
+                for row in candidates {
+                    let canon = DeviceSource.from(name: row.sourceDeviceKey).displayName
+                    let hSteps = row.hourlySteps?.first(where: { $0.hour == h })?.steps ?? 0
+                    if hSteps > 0 {
+                        let rank = resolveEffectivePriorityRank(deviceName: canon, sources: sources)
+                        hourEntries.append((canon: canon, steps: hSteps, rank: rank))
+                    }
+                }
+                if let winner = hourEntries.sorted(by: {
+                    if $0.rank != $1.rank { return $0.rank < $1.rank }
+                    return $0.steps > $1.steps
+                }).first {
+                    mergedBuckets.append(HourlyStepBucket(hour: h, steps: winner.steps))
+                    contributedStepsByCanon[winner.canon, default: 0] += winner.steps
+                    latestActiveHourByCanon[winner.canon] = h
+                } else {
+                    mergedBuckets.append(HourlyStepBucket(hour: h, steps: 0))
+                }
+            }
+            
+            let envelopeSum = mergedBuckets.reduce(0) { $0 + $1.steps }
+            let maxSingleRow = candidates.max(by: { $0.steps < $1.steps })!
+            let totalSteps = max(envelopeSum, maxSingleRow.steps)
+            
+            // Proportional active kcal across contributing wearables
+            var mergedKcal: Double = 0
+            for row in candidates {
+                let canon = DeviceSource.from(name: row.sourceDeviceKey).displayName
+                let contributed = contributedStepsByCanon[canon] ?? 0
+                if contributed > 0 && row.activeKcal > 0 {
+                    let ratio = min(1.0, Double(contributed) / Double(max(1, row.steps)))
+                    mergedKcal += row.activeKcal * ratio
+                }
+            }
+            let maxSingleKcal = candidates.map(\.activeKcal).max() ?? 0
+            var finalKcal = round(max(mergedKcal, maxSingleKcal) * 10) / 10
+            if finalKcal <= 0 && totalSteps > 0 {
+                finalKcal = round(Double(totalSteps) * 0.042 * 10) / 10
+            }
+            
+            let winnerCanon: String = {
+                if let bestContributor = contributedStepsByCanon.max(by: {
+                    if $0.value != $1.value { return $0.value < $1.value }
+                    return (latestActiveHourByCanon[$0.key] ?? -1) < (latestActiveHourByCanon[$1.key] ?? -1)
+                })?.key {
+                    return bestContributor
+                }
+                return DeviceSource.from(name: maxSingleRow.sourceDeviceKey).displayName
+            }()
+            
+            return ArbitratedActivityResult(
+                totalSteps: totalSteps,
+                activeCalories: finalKcal,
+                hourlySteps: mergedBuckets,
+                sourceDevice: winnerCanon
+            )
+        }
+        
+        // Fallback when no hourly buckets exist: max single wearable / device
+        let best = candidates.sorted {
+            if $0.steps != $1.steps { return $0.steps > $1.steps }
+            return resolveEffectivePriorityRank(deviceName: $0.sourceDeviceKey, sources: sources) <
+                   resolveEffectivePriorityRank(deviceName: $1.sourceDeviceKey, sources: sources)
+        }.first!
+        let canon = DeviceSource.from(name: best.sourceDeviceKey).displayName
+        var kcal = best.activeKcal
+        if kcal <= 0 {
+            kcal = candidates.map(\.activeKcal).max() ?? 0
+        }
+        if kcal <= 0 && best.steps > 0 {
+            kcal = round(Double(best.steps) * 0.042 * 10) / 10
+        }
+        return ArbitratedActivityResult(
+            totalSteps: best.steps,
+            activeCalories: kcal,
+            hourlySteps: best.hourlySteps ?? [],
+            sourceDevice: canon
+        )
+    }
+    
+    public struct ArbitratedLatestHeartRate: Sendable, Equatable {
+        public let bpm: Double
+        public let timestamp: Date
+        public let sourceDevice: String
+    }
+    
+    /// Class A — Recency-First Latest Heart Rate:
+    /// Always selects the newest real reading from the currently worn sensor.
+    /// Configured device priority ONLY breaks ties when >=2 sensors reported within `simultaneousWindowSeconds` (default 15m).
+    nonisolated public static func arbitrateLatestHeartRate(
+        vitals: [HealthDailyVitalsRecord],
+        intradayBuckets: [HealthIntradayHeartRateRecord],
+        targetDate: Date,
+        sources: [HealthSourceRecord],
+        deviceFilter: String? = nil,
+        simultaneousWindowSeconds: TimeInterval = 900,
+        calendar: Calendar = .current
+    ) -> ArbitratedLatestHeartRate? {
+        let startOfDay = calendar.startOfDay(for: targetDate)
+        var byDevice: [String: ArbitratedLatestHeartRate] = [:]
+        
+        // 1. Intraday 5-minute buckets (baseline per-device recency if spot timestamp wasn't synced yet)
+        for b in intradayBuckets where b.bpmAvg >= 30 && b.bpmAvg <= 240 {
+            let src = DeviceSource.from(name: b.sourceDeviceKey)
+            if src.isVirtualEngine { continue }
+            let canon = src.displayName
+            let bucketTs = calendar.date(byAdding: .minute, value: b.bucketMinute, to: startOfDay) ?? startOfDay
+            if let existing = byDevice[canon] {
+                if bucketTs >= existing.timestamp {
+                    byDevice[canon] = ArbitratedLatestHeartRate(bpm: Double(b.bpmAvg), timestamp: bucketTs, sourceDevice: canon)
+                }
+            } else {
+                byDevice[canon] = ArbitratedLatestHeartRate(bpm: Double(b.bpmAvg), timestamp: bucketTs, sourceDevice: canon)
+            }
+        }
+        
+        // 2. Exact spot `latestHeartRate` + `latestHrAt` from `health_daily_vitals` overrides older/same bucket avg
+        for v in vitals {
+            guard let lhr = v.latestHeartRate, lhr >= 30, lhr <= 240 else { continue }
+            let src = DeviceSource.from(name: v.sourceDeviceKey)
+            if src.isVirtualEngine { continue }
+            let canon = src.displayName
+            let spotTs = v.latestHrAt ?? v.updatedAt ?? startOfDay
+            if let existing = byDevice[canon] {
+                if spotTs >= existing.timestamp {
+                    byDevice[canon] = ArbitratedLatestHeartRate(bpm: Double(lhr), timestamp: spotTs, sourceDevice: canon)
+                }
+            } else {
+                byDevice[canon] = ArbitratedLatestHeartRate(bpm: Double(lhr), timestamp: spotTs, sourceDevice: canon)
+            }
+        }
+        
+        if let filter = deviceFilter, !filter.isEmpty {
+            let targetCanon = DeviceSource.from(name: filter).displayName
+            return byDevice[targetCanon]
+        }
+        
+        let allCandidates = Array(byDevice.values)
+        guard let newestTs = allCandidates.map(\.timestamp).max() else { return nil }
+        
+        let activeWindow = allCandidates.filter {
+            newestTs.timeIntervalSince($0.timestamp) <= simultaneousWindowSeconds
+        }
+        
+        return activeWindow.sorted {
+            let r0 = resolveEffectivePriorityRank(deviceName: $0.sourceDevice, sources: sources)
+            let r1 = resolveEffectivePriorityRank(deviceName: $1.sourceDevice, sources: sources)
+            if r0 != r1 { return r0 < r1 }
+            return $0.timestamp > $1.timestamp
+        }.first
+    }
+    
+    nonisolated private static func parseIsoTimestamp(_ raw: String?) -> Date? {
+        guard let raw = raw, !raw.isEmpty else { return nil }
+        let isoFrac = ISO8601DateFormatter()
+        isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = isoFrac.date(from: raw) { return d }
+        let isoPlain = ISO8601DateFormatter()
+        return isoPlain.date(from: raw)
+    }
+    
+    /// Class A — Recency-First Spot Vital (`spo2`, `weight`) with 30-minute tie-break window.
+    nonisolated public static func arbitrateSpotVital(
+        vitals: [HealthDailyVitalsRecord],
+        timestampKey: String,
+        sources: [HealthSourceRecord],
+        windowSeconds: TimeInterval = 1800,
+        extract: (HealthDailyVitalsRecord) -> Double?
+    ) -> (value: Double, sourceDevice: String, timestamp: Date?)? {
+        struct SpotCandidate {
+            let value: Double
+            let sourceDevice: String
+            let timestamp: Date?
+            let rank: Int
+        }
+        
+        var candidates: [SpotCandidate] = []
+        for row in vitals {
+            let src = DeviceSource.from(name: row.sourceDeviceKey)
+            if src.isVirtualEngine { continue }
+            guard let val = extract(row), val > 0 else { continue }
+            let canon = src.displayName
+            let explicitTs = parseIsoTimestamp(row.vitalsTimestamps?[timestampKey])
+            let ts = explicitTs ?? row.updatedAt
+            let rank = resolveEffectivePriorityRank(deviceName: canon, sources: sources)
+            candidates.append(SpotCandidate(value: val, sourceDevice: canon, timestamp: ts, rank: rank))
+        }
+        
+        guard !candidates.isEmpty else { return nil }
+        
+        if let newestTs = candidates.compactMap(\.timestamp).max() {
+            let active = candidates.filter {
+                guard let ts = $0.timestamp else { return false }
+                return newestTs.timeIntervalSince(ts) <= windowSeconds
+            }
+            if let winner = active.sorted(by: {
+                if $0.rank != $1.rank { return $0.rank < $1.rank }
+                return ($0.timestamp ?? .distantPast) > ($1.timestamp ?? .distantPast)
+            }).first {
+                return (winner.value, winner.sourceDevice, winner.timestamp)
+            }
+        }
+        
+        let fallback = candidates.sorted { $0.rank < $1.rank }.first!
+        return (fallback.value, fallback.sourceDevice, fallback.timestamp)
+    }
+    
     // MARK: - Lean Merge & Source Helpers
     
     nonisolated private static func mergeLeanSleepSessions(
         remote: [HealthSleepSessionRecord],
-        local: [HealthSleepSessionRecord]
+        local: [HealthSleepSessionRecord],
+        sources: [HealthSourceRecord] = []
     ) -> [HealthSleepSessionRecord] {
         var map: [String: HealthSleepSessionRecord] = [:]
         for r in remote {
@@ -817,8 +1373,8 @@ public final class HealthDataService: ObservableObject {
         }
         return Array(map.values).sorted {
             if $0.isUserSelected != $1.isUserSelected { return $0.isUserSelected && !$1.isUserSelected }
-            let p0 = DeviceSource.from(name: $0.sourceDeviceKey).sortPriority
-            let p1 = DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+            let p0 = resolveEffectivePriorityRank(deviceName: $0.sourceDeviceKey, sources: sources)
+            let p1 = resolveEffectivePriorityRank(deviceName: $1.sourceDeviceKey, sources: sources)
             if p0 != p1 { return p0 < p1 }
             return $0.durationSeconds > $1.durationSeconds
         }
@@ -826,7 +1382,8 @@ public final class HealthDataService: ObservableObject {
     
     nonisolated private static func mergeLeanDailyVitals(
         remote: [HealthDailyVitalsRecord],
-        local: [HealthDailyVitalsRecord]
+        local: [HealthDailyVitalsRecord],
+        sources: [HealthSourceRecord] = []
     ) -> [HealthDailyVitalsRecord] {
         var map: [String: HealthDailyVitalsRecord] = [:]
         for r in (remote + local) {
@@ -840,6 +1397,59 @@ public final class HealthDataService: ObservableObject {
                     if let ph = prev.hourlySteps, !ph.isEmpty { return ph }
                     return r.hourlySteps
                 }()
+                
+                // Recency-aware merge of latestHeartRate & latestHrAt
+                let (mergedLatestHr, mergedLatestHrAt): (Int?, Date?) = {
+                    switch (prev.latestHeartRate, r.latestHeartRate) {
+                    case let (.some(pHr), .some(rHr)):
+                        let pTs = prev.latestHrAt ?? prev.updatedAt ?? .distantPast
+                        let rTs = r.latestHrAt ?? r.updatedAt ?? .distantPast
+                        return rTs >= pTs ? (rHr, r.latestHrAt ?? prev.latestHrAt) : (pHr, prev.latestHrAt ?? r.latestHrAt)
+                    case (.none, let .some(rHr)):
+                        return (rHr, r.latestHrAt)
+                    case (let .some(pHr), .none):
+                        return (pHr, prev.latestHrAt)
+                    case (.none, .none):
+                        return (nil, prev.latestHrAt ?? r.latestHrAt)
+                    }
+                }()
+                
+                var mergedTsMap = prev.vitalsTimestamps ?? [:]
+                if let newTsMap = r.vitalsTimestamps {
+                    for (k, v) in newTsMap {
+                        if let existingIso = mergedTsMap[k],
+                           let oldD = parseIsoTimestamp(existingIso),
+                           let newD = parseIsoTimestamp(v) {
+                            if newD >= oldD { mergedTsMap[k] = v }
+                        } else {
+                            mergedTsMap[k] = v
+                        }
+                    }
+                }
+                
+                let mergedSpo2: Double? = {
+                    if let pVal = prev.spo2, let rVal = r.spo2 {
+                        let pD = parseIsoTimestamp(prev.vitalsTimestamps?["spo2"]) ?? prev.updatedAt ?? .distantPast
+                        let rD = parseIsoTimestamp(r.vitalsTimestamps?["spo2"]) ?? r.updatedAt ?? .distantPast
+                        return rD >= pD ? rVal : pVal
+                    }
+                    return r.spo2 ?? prev.spo2
+                }()
+                
+                let mergedWeight: Double? = {
+                    if let pVal = prev.weightKg, let rVal = r.weightKg {
+                        let pD = parseIsoTimestamp(prev.vitalsTimestamps?["weight"]) ?? prev.updatedAt ?? .distantPast
+                        let rD = parseIsoTimestamp(r.vitalsTimestamps?["weight"]) ?? r.updatedAt ?? .distantPast
+                        return rD >= pD ? rVal : pVal
+                    }
+                    return r.weightKg ?? prev.weightKg
+                }()
+                
+                let mergedUpdatedAt: Date? = {
+                    if let pU = prev.updatedAt, let rU = r.updatedAt { return max(pU, rU) }
+                    return r.updatedAt ?? prev.updatedAt
+                }()
+                
                 map[canon] = HealthDailyVitalsRecord(
                     id: prev.id,
                     userId: prev.userId,
@@ -849,14 +1459,17 @@ public final class HealthDataService: ObservableObject {
                     steps: max(prev.steps, r.steps),
                     activeKcal: max(prev.activeKcal, r.activeKcal),
                     restingHeartRate: r.restingHeartRate ?? prev.restingHeartRate,
-                    spo2: r.spo2 ?? prev.spo2,
+                    spo2: mergedSpo2,
                     respiratoryRate: r.respiratoryRate ?? prev.respiratoryRate,
                     skinTempCelsius: r.skinTempCelsius ?? prev.skinTempCelsius,
-                    weightKg: r.weightKg ?? prev.weightKg,
+                    weightKg: mergedWeight,
                     hrvSdnnNightly: r.hrvSdnnNightly ?? prev.hrvSdnnNightly,
                     hrvRmssdNightly: r.hrvRmssdNightly ?? prev.hrvRmssdNightly,
                     hourlySteps: mergedHourly,
-                    updatedAt: r.updatedAt ?? prev.updatedAt
+                    latestHeartRate: mergedLatestHr,
+                    latestHrAt: mergedLatestHrAt,
+                    vitalsTimestamps: mergedTsMap.isEmpty ? nil : mergedTsMap,
+                    updatedAt: mergedUpdatedAt
                 )
             } else {
                 map[canon] = HealthDailyVitalsRecord(
@@ -875,13 +1488,19 @@ public final class HealthDataService: ObservableObject {
                     hrvSdnnNightly: r.hrvSdnnNightly,
                     hrvRmssdNightly: r.hrvRmssdNightly,
                     hourlySteps: r.hourlySteps,
+                    latestHeartRate: r.latestHeartRate,
+                    latestHrAt: r.latestHrAt,
+                    vitalsTimestamps: r.vitalsTimestamps,
                     updatedAt: r.updatedAt
                 )
             }
         }
         return Array(map.values)
             .filter { $0.hasSignal }
-            .sorted { DeviceSource.from(name: $0.sourceDeviceKey).sortPriority < DeviceSource.from(name: $1.sourceDeviceKey).sortPriority }
+            .sorted {
+                resolveEffectivePriorityRank(deviceName: $0.sourceDeviceKey, sources: sources) <
+                resolveEffectivePriorityRank(deviceName: $1.sourceDeviceKey, sources: sources)
+            }
     }
     
     nonisolated private static func mergeLeanIntradayHr(
@@ -955,7 +1574,12 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        let sortedSources = Array(sourcesSet).sorted()
+        let sortedSources = Array(sourcesSet).sorted {
+            let r0 = effectivePriorityRank(for: $0.displayName)
+            let r1 = effectivePriorityRank(for: $1.displayName)
+            if r0 != r1 { return r0 < r1 }
+            return $0.displayName < $1.displayName
+        }
         self.availableSources = sortedSources
         self.availableDevices = sortedSources.map(\.displayName)
         
@@ -989,8 +1613,8 @@ public final class HealthDataService: ObservableObject {
         let nocturnalRows = candidateRows.filter { $0.sessionType != "nap" }.sorted {
             if $0.isUserSelected != $1.isUserSelected { return $0.isUserSelected && !$1.isUserSelected }
             if (!$0.stages.isEmpty) != (!$1.stages.isEmpty) { return !$0.stages.isEmpty }
-            let p0 = DeviceSource.from(name: $0.sourceDeviceKey).sortPriority
-            let p1 = DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+            let p0 = effectivePriorityRank(for: $0.sourceDeviceKey)
+            let p1 = effectivePriorityRank(for: $1.sourceDeviceKey)
             if p0 != p1 { return p0 < p1 }
             return $0.durationSeconds > $1.durationSeconds
         }
@@ -1021,7 +1645,7 @@ public final class HealthDataService: ObservableObject {
         }
     }
     
-    /// Unpacks consolidated daily vitals into published properties.
+    /// Unpacks consolidated daily vitals into published properties using 3-class physiological arbitration.
     public func applyLeanDailyVitals(_ vitals: [HealthDailyVitalsRecord]) {
         self.currentLeanDailyVitals = vitals
         let dateKey = isoDateFormatter.string(from: selectedDate)
@@ -1049,7 +1673,10 @@ public final class HealthDataService: ObservableObject {
             return
         }
         
-        // All Devices mode: choose highest-step wearable > 0, else highest-step device > 0, and merge vitals by wearable priority
+        // All Devices mode:
+        // - Class B (Steps & Active Kcal): Hourly Active-Wearer Envelope across wearables
+        // - Class C (RHR, HRV, Resp, Skin Temp): Configured Priority Order
+        // - Class A (SpO2, Weight): Recency-First with 30m priority tie-break
         guard !vitals.isEmpty else {
             self.hourlySteps = []
             self.totalStepsToday = 0
@@ -1060,33 +1687,15 @@ public final class HealthDataService: ObservableObject {
             return
         }
         
-        let wearableWithSteps = vitals
-            .filter { DeviceSource.from(name: $0.sourceDeviceKey).isWearable && $0.steps > 0 }
-            .sorted { $0.steps > $1.steps }
-        let anyWithSteps = vitals
-            .filter { $0.steps > 0 }
-            .sorted { $0.steps > $1.steps }
-        let actRow = wearableWithSteps.first ?? anyWithSteps.first ?? vitals.first!
-        let actCanon = DeviceSource.from(name: actRow.sourceDeviceKey).displayName
-        
-        self.hourlySteps = actRow.hourlySteps ?? []
-        self.totalStepsToday = actRow.steps
-        var kcal = actRow.activeKcal
-        if kcal <= 0 {
-            kcal = vitals
-                .filter { DeviceSource.from(name: $0.sourceDeviceKey).isWearable && $0.activeKcal > 0 }
-                .map(\.activeKcal)
-                .max() ?? 0
-        }
-        if kcal <= 0 && actRow.steps > 0 {
-            kcal = round(Double(actRow.steps) * 0.042 * 10) / 10
-        }
-        self.totalActiveCalories = kcal
-        self.stepsSourceDevice = actCanon
+        let activity = Self.arbitrateHourlyActivity(vitals: vitals, sources: currentLeanSources)
+        self.hourlySteps = activity.hourlySteps
+        self.totalStepsToday = activity.totalSteps
+        self.totalActiveCalories = activity.activeCalories
+        self.stepsSourceDevice = activity.sourceDevice
         
         let prioritySorted = vitals.sorted {
-            let p0 = DeviceSource.from(name: $0.sourceDeviceKey).sortPriority
-            let p1 = DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+            let p0 = effectivePriorityRank(for: $0.sourceDeviceKey)
+            let p1 = effectivePriorityRank(for: $1.sourceDeviceKey)
             if p0 != p1 { return p0 < p1 }
             return $0.steps > $1.steps
         }
@@ -1096,6 +1705,41 @@ public final class HealthDataService: ObservableObject {
             let canon = DeviceSource.from(name: row.sourceDeviceKey).displayName
             populateVitalsMap(&mergedVitals, from: row, canonicalDevice: canon, overwrite: false)
         }
+        
+        // Override Class A spot vitals (SpO2, Weight) with Recency-First arbitration (30m simultaneous window)
+        if let spo2Winner = Self.arbitrateSpotVital(vitals: vitals, timestampKey: "spo2", sources: currentLeanSources, windowSeconds: 1800, extract: \.spo2) {
+            mergedVitals[.oxygenSaturation] = VitalMetricRecord(
+                userId: "lean",
+                type: HealthMetricType.oxygenSaturation.rawValue,
+                value: spo2Winner.value,
+                unit: "%",
+                date: dateKey,
+                sourceDevice: spo2Winner.sourceDevice,
+                createdAt: spo2Winner.timestamp
+            )
+        }
+        if let weightWinner = Self.arbitrateSpotVital(vitals: vitals, timestampKey: "weight", sources: currentLeanSources, windowSeconds: 1800, extract: \.weightKg) {
+            mergedVitals[.weight] = VitalMetricRecord(
+                userId: "lean",
+                type: HealthMetricType.weight.rawValue,
+                value: weightWinner.value,
+                unit: "kg",
+                date: dateKey,
+                sourceDevice: weightWinner.sourceDevice,
+                createdAt: weightWinner.timestamp
+            )
+        }
+        if activity.activeCalories > 0 {
+            mergedVitals[.activeEnergy] = VitalMetricRecord(
+                userId: "lean",
+                type: HealthMetricType.activeEnergy.rawValue,
+                value: activity.activeCalories,
+                unit: "kcal",
+                date: dateKey,
+                sourceDevice: activity.sourceDevice
+            )
+        }
+        
         if Calendar.current.isDateInToday(selectedDate) {
             let waterMl = HabitsService.shared.totalWaterMlToday
             if waterMl > 0 {
@@ -1120,8 +1764,11 @@ public final class HealthDataService: ObservableObject {
         overwrite: Bool
     ) {
         let dateKey = row.localDate
-        let ts = row.updatedAt ?? Date()
-        func setMetric(_ type: HealthMetricType, _ value: Double, _ unit: String) {
+        let defaultTs = row.updatedAt ?? Date()
+        func tsForKey(_ key: String) -> Date {
+            Self.parseIsoTimestamp(row.vitalsTimestamps?[key]) ?? defaultTs
+        }
+        func setMetric(_ type: HealthMetricType, _ value: Double, _ unit: String, timestamp: Date) {
             if overwrite || map[type] == nil {
                 map[type] = VitalMetricRecord(
                     userId: row.userId,
@@ -1130,24 +1777,82 @@ public final class HealthDataService: ObservableObject {
                     unit: unit,
                     date: dateKey,
                     sourceDevice: canonicalDevice,
-                    createdAt: ts
+                    createdAt: timestamp
                 )
             }
         }
-        if let rhr = row.restingHeartRate, rhr > 0 { setMetric(.restingHeartRate, Double(rhr), "bpm") }
-        if let spo2 = row.spo2, spo2 > 0 { setMetric(.oxygenSaturation, spo2, "%") }
-        if let resp = row.respiratoryRate, resp > 0 { setMetric(.respiratoryRate, resp, "br/min") }
-        if let temp = row.skinTempCelsius { setMetric(.bodyTemperature, temp, "°C") }
-        if let weight = row.weightKg, weight > 0 { setMetric(.weight, weight, "kg") }
-        if let sdnn = row.hrvSdnnNightly, sdnn > 0 { setMetric(.hrvSdnn, sdnn, "ms") }
-        if let rmssd = row.hrvRmssdNightly, rmssd > 0 { setMetric(.hrvRmssd, rmssd, "ms") }
-        if row.activeKcal > 0 { setMetric(.activeEnergy, row.activeKcal, "kcal") }
+        if let lhr = row.latestHeartRate, lhr >= 30, lhr <= 240 {
+            setMetric(.heartRate, Double(lhr), "bpm", timestamp: row.latestHrAt ?? defaultTs)
+        }
+        if let rhr = row.restingHeartRate, rhr > 0 { setMetric(.restingHeartRate, Double(rhr), "bpm", timestamp: tsForKey("rhr")) }
+        if let spo2 = row.spo2, spo2 > 0 { setMetric(.oxygenSaturation, spo2, "%", timestamp: tsForKey("spo2")) }
+        if let resp = row.respiratoryRate, resp > 0 { setMetric(.respiratoryRate, resp, "br/min", timestamp: tsForKey("resp")) }
+        if let temp = row.skinTempCelsius { setMetric(.bodyTemperature, temp, "°C", timestamp: tsForKey("temp")) }
+        if let weight = row.weightKg, weight > 0 { setMetric(.weight, weight, "kg", timestamp: tsForKey("weight")) }
+        if let sdnn = row.hrvSdnnNightly, sdnn > 0 { setMetric(.hrvSdnn, sdnn, "ms", timestamp: tsForKey("hrv_sdnn")) }
+        if let rmssd = row.hrvRmssdNightly, rmssd > 0 { setMetric(.hrvRmssd, rmssd, "ms", timestamp: tsForKey("hrv_rmssd")) }
+        if row.activeKcal > 0 { setMetric(.activeEnergy, row.activeKcal, "kcal", timestamp: defaultTs) }
     }
     
-    /// Unpacks 5-minute bucketed heart rate into published curve and zone distribution.
+    /// Unpacks 5-minute bucketed heart rate AND resolves Class A Recency-First `latestBpm`.
     public func applyLeanIntradayHeartRate(_ buckets: [HealthIntradayHeartRateRecord], targetDate: Date) {
         self.currentLeanIntradayHeartRate = buckets
+        let dateKey = isoDateFormatter.string(from: targetDate)
         
+        // Resolve Latest BPM (Recency-First with 15-min simultaneous priority tie-break)
+        let leanLatest = Self.arbitrateLatestHeartRate(
+            vitals: currentLeanDailyVitals,
+            intradayBuckets: buckets,
+            targetDate: targetDate,
+            sources: currentLeanSources,
+            deviceFilter: selectedDeviceFilter
+        )
+        
+        var finalLatest = leanLatest
+        if selectedDeviceFilter == nil,
+           let summaryBpm = canonicalSummary?.cardiovascular.latestBpm,
+           summaryBpm >= 30,
+           let summarySrc = canonicalSummary?.cardiovascular.latestSourceDevice {
+            let summaryTs = canonicalSummary?.cardiovascular.latestBpmAt ?? canonicalSummary?.computedAt ?? .distantPast
+            if let existing = finalLatest {
+                if summaryTs > existing.timestamp.addingTimeInterval(60) {
+                    finalLatest = ArbitratedLatestHeartRate(
+                        bpm: summaryBpm,
+                        timestamp: summaryTs,
+                        sourceDevice: DeviceSource.from(name: summarySrc).displayName
+                    )
+                }
+            } else {
+                finalLatest = ArbitratedLatestHeartRate(
+                    bpm: summaryBpm,
+                    timestamp: summaryTs,
+                    sourceDevice: DeviceSource.from(name: summarySrc).displayName
+                )
+            }
+        }
+        
+        if let winner = finalLatest {
+            self.resolvedLatestBpm = winner.bpm
+            self.latestBpmAt = winner.timestamp
+            self.latestBpmSource = winner.sourceDevice
+            var updated = self.currentVitals
+            updated[.heartRate] = VitalMetricRecord(
+                userId: "lean-hr",
+                type: HealthMetricType.heartRate.rawValue,
+                value: winner.bpm,
+                unit: "bpm",
+                date: dateKey,
+                sourceDevice: winner.sourceDevice,
+                createdAt: winner.timestamp
+            )
+            self.currentVitals = updated
+        } else {
+            self.resolvedLatestBpm = nil
+            self.latestBpmAt = nil
+            self.latestBpmSource = nil
+        }
+        
+        let maxBucketMinute = buckets.map(\.bucketMinute).max() ?? 0
         let filteredBuckets: [HealthIntradayHeartRateRecord] = {
             if let filter = selectedDeviceFilter, !filter.isEmpty {
                 let targetCanon = DeviceSource.from(name: filter).displayName
@@ -1163,8 +1868,14 @@ public final class HealthDataService: ObservableObject {
             return byBucket.keys.sorted().compactMap { bm -> HealthIntradayHeartRateRecord? in
                 guard var group = byBucket[bm], !group.isEmpty else { return nil }
                 if group.count == 1 { return group[0] }
+                // For recent tail buckets (last 15 min) where the active Latest HR sensor is present, prefer that active sensor cleanly
+                if let activeSrc = finalLatest?.sourceDevice,
+                   bm >= maxBucketMinute - 15,
+                   let exactActive = group.first(where: { DeviceSource.from(name: $0.sourceDeviceKey).displayName == activeSrc }) {
+                    return exactActive
+                }
                 group.sort {
-                    DeviceSource.from(name: $0.sourceDeviceKey).sortPriority < DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+                    effectivePriorityRank(for: $0.sourceDeviceKey) < effectivePriorityRank(for: $1.sourceDeviceKey)
                 }
                 let primary = group[0]
                 let totalCnt = group.reduce(0) { $0 + max(1, $1.sampleCount) }
@@ -1192,8 +1903,14 @@ public final class HealthDataService: ObservableObject {
             let weightedSum = filteredBuckets.reduce(0.0) { $0 + Double($1.bpmAvg) * Double(max(1, $1.sampleCount)) }
             let totalSamples = filteredBuckets.reduce(0) { $0 + max(1, $1.sampleCount) }
             self.averageBpm = round((weightedSum / Double(max(1, totalSamples))) * 10) / 10
-            self.minBpm = Double(filteredBuckets.map { $0.bpmMin > 30 ? $0.bpmMin : $0.bpmAvg }.min() ?? 0)
-            self.maxBpm = Double(filteredBuckets.map { $0.bpmMax > 30 ? $0.bpmMax : $0.bpmAvg }.max() ?? 0)
+            var lo = Double(filteredBuckets.map { $0.bpmMin > 30 ? $0.bpmMin : $0.bpmAvg }.min() ?? 0)
+            var hi = Double(filteredBuckets.map { $0.bpmMax > 30 ? $0.bpmMax : $0.bpmAvg }.max() ?? 0)
+            if let live = self.resolvedLatestBpm, live > 30 {
+                if lo <= 0 || live < lo { lo = live }
+                if live > hi { hi = live }
+            }
+            self.minBpm = lo
+            self.maxBpm = hi
             if self.restingBpm <= 0 {
                 if let derived = StressAnalysisEngine.deriveNocturnalRhr(from: points, targetDate: targetDate, calendar: Calendar.current) {
                     self.restingBpm = derived
@@ -1207,9 +1924,9 @@ public final class HealthDataService: ObservableObject {
             }
             self.heartRateZones = zones
         } else {
-            self.averageBpm = 0
-            self.minBpm = 0
-            self.maxBpm = 0
+            self.averageBpm = self.resolvedLatestBpm ?? 0
+            self.minBpm = self.resolvedLatestBpm ?? 0
+            self.maxBpm = self.resolvedLatestBpm ?? 0
             self.heartRateZones = [:]
         }
     }
@@ -1217,6 +1934,7 @@ public final class HealthDataService: ObservableObject {
     /// Stores canonical device catalog metadata without polluting the date-scoped `availableSources` selector.
     public func applyLeanHealthSources(_ sources: [HealthSourceRecord]) {
         self.currentLeanSources = sources
+        rebuildConfigurableSources()
     }
 
     /// Re-evaluates current cached lean telemetry for the active device filter without network roundtrips.
@@ -1236,13 +1954,23 @@ public final class HealthDataService: ObservableObject {
         if let stressVal = stressAnalysis?.currentScore, stressVal > 0 {
             let dateKey = isoDateFormatter.string(from: selectedDate)
             var updated = self.currentVitals
+            let resolvedStressSource: String = {
+                if let f = selectedDeviceFilter, !f.isEmpty { return DeviceSource.from(name: f).displayName }
+                if let srvSrc = canonicalSummary?.stress?.sourceDevice, !srvSrc.isEmpty, !DeviceSource.from(name: srvSrc).isVirtualEngine {
+                    return DeviceSource.from(name: srvSrc).displayName
+                }
+                if let liveHrSrc = latestBpmSource, !liveHrSrc.isEmpty {
+                    return liveHrSrc
+                }
+                return stepsSourceDevice ?? primarySleepSession?.sourceDevice ?? "Biometric Engine"
+            }()
             updated[.stress] = VitalMetricRecord(
                 userId: "stress-engine",
                 type: HealthMetricType.stress.rawValue,
                 value: Double(stressVal),
                 unit: "score",
                 date: dateKey,
-                sourceDevice: selectedDeviceFilter ?? stepsSourceDevice ?? primarySleepSession?.sourceDevice ?? "Biometric Engine"
+                sourceDevice: resolvedStressSource
             )
             self.currentVitals = updated
         }
@@ -1252,8 +1980,11 @@ public final class HealthDataService: ObservableObject {
     private func recalculateStressForCurrentDevice() {
         let cal = Calendar.current
         
-        // If All Devices and canonicalSummary has stress, use it
-        if selectedDeviceFilter == nil, let stress = canonicalSummary?.stress {
+        // If All Devices and canonicalSummary has up-to-date server stress (newer than or within 90s of latest HR), use it directly
+        if selectedDeviceFilter == nil,
+           let stress = canonicalSummary?.stress,
+           let summaryComputedAt = canonicalSummary?.computedAt,
+           (latestBpmAt == nil || summaryComputedAt.addingTimeInterval(90) >= latestBpmAt!) {
             self.currentStressScore = stress.currentScore
             self.currentStressLevel = stress.currentLevel
             self.intradayStress = stress.intradayPoints
@@ -1277,7 +2008,7 @@ public final class HealthDataService: ObservableObject {
                 monkeyMood: stress.monkeyMood,
                 adviceQuote: stress.adviceQuote,
                 recommendedBreathing: breathing,
-                lastUpdated: canonicalSummary?.computedAt ?? Date()
+                lastUpdated: summaryComputedAt
             )
             return
         }
@@ -1286,8 +2017,20 @@ public final class HealthDataService: ObservableObject {
         let hasRmssd = !hasSdnn && (currentVitals[.hrvRmssd]?.value ?? 0) > 0
         let hrvVal = hasSdnn ? currentVitals[.hrvSdnn]?.value : (hasRmssd ? currentVitals[.hrvRmssd]?.value : nil)
         let canonFilter = selectedDeviceFilter.map { DeviceSource.from(name: $0).displayName }
-        let serverDerivedRhr = canonFilter.flatMap { canonicalSummary?.sourcesBreakdown?[$0]?["derived_rhr"] }
-        let rhrVal = currentVitals[.restingHeartRate]?.value ?? serverDerivedRhr
+        
+        // Anchor RHR to the active HR sensor's own RHR in All Devices mode to avoid cross-sensor optical bias
+        let activeHrSensorCanon = canonFilter ?? latestBpmSource
+        let sensorMatchedRhr: Double? = {
+            if let sensor = activeHrSensorCanon {
+                if let rowRhr = currentLeanDailyVitals.first(where: { DeviceSource.from(name: $0.sourceDeviceKey).displayName == sensor })?.restingHeartRate, rowRhr > 0 {
+                    return Double(rowRhr)
+                }
+                if let srvDerived = canonicalSummary?.sourcesBreakdown?[sensor]?["derived_rhr"], srvDerived > 0 {
+                    return srvDerived
+                }
+            }
+            return currentVitals[.restingHeartRate]?.value
+        }()
         
         let summaryUsedRmssd = (canonicalSummary?.vitals["hrvsdnn"] == nil) && (canonicalSummary?.vitals["hrvrmssd"] != nil)
         let matchedBaselineHrv: Double? = {
@@ -1297,14 +2040,14 @@ public final class HealthDataService: ObservableObject {
             return nil
         }()
         
-        if hrvVal != nil || !intradayHeartRate.isEmpty || (rhrVal != nil && rhrVal! > 0) {
+        if hrvVal != nil || !intradayHeartRate.isEmpty || (sensorMatchedRhr != nil && sensorMatchedRhr! > 0) {
             let stressCalc = StressAnalysisEngine.calculateStress(
                 targetDate: selectedDate,
                 hrvMs: hrvVal,
                 isRmssd: hasRmssd,
                 hrTelemetry: intradayHeartRate,
                 hourlySteps: hourlySteps,
-                restingBpm: rhrVal,
+                restingBpm: sensorMatchedRhr,
                 priorSleepScore: primarySleepSession?.sleepScore,
                 personalBaselineHrv: matchedBaselineHrv,
                 personalBaselineRhr: nil,
@@ -1383,7 +2126,9 @@ public final class HealthDataService: ObservableObject {
             }
         }
         if currentLeanSleepSessions.isEmpty && currentLeanDailyVitals.isEmpty && currentLeanIntradayHeartRate.isEmpty {
-            let sorted = Array(sourcesSet).sorted()
+            let sorted = Array(sourcesSet).sorted {
+                effectivePriorityRank(for: $0.displayName) < effectivePriorityRank(for: $1.displayName)
+            }
             self.availableSources = sorted
             self.availableDevices = sorted.map(\.displayName)
         }
@@ -1419,6 +2164,15 @@ public final class HealthDataService: ObservableObject {
         self.restingBpm = summary.cardiovascular.restingBpm ?? 0
         self.minBpm = summary.cardiovascular.minBpm ?? 0
         self.maxBpm = summary.cardiovascular.maxBpm ?? 0
+        if let lBpm = summary.cardiovascular.latestBpm, lBpm >= 30 {
+            self.resolvedLatestBpm = lBpm
+            self.latestBpmAt = summary.cardiovascular.latestBpmAt ?? summary.computedAt
+            self.latestBpmSource = summary.cardiovascular.latestSourceDevice.map { DeviceSource.from(name: $0).displayName }
+        } else if let lastPt = hrPoints.last {
+            self.resolvedLatestBpm = lastPt.bpm
+            self.latestBpmAt = lastPt.timestamp
+            self.latestBpmSource = lastPt.sourceDevice.map { DeviceSource.from(name: $0).displayName }
+        }
         self.heartRateZones = [
             .resting: summary.cardiovascular.zones.resting,
             .fatBurn: summary.cardiovascular.zones.fatBurn,
@@ -1497,7 +2251,7 @@ public final class HealthDataService: ObservableObject {
         if selectedDeviceSource == nil && selectedDeviceFilter == nil, let allView = summary.allDevicesView {
             for (metricKey, item) in allView {
                 if let type = HealthMetricType.from(rawString: metricKey), let v = item.value {
-                    let updatedDate: Date? = item.updatedAt.flatMap { isoTimestampFormatter.date(from: $0) }
+                    let updatedDate: Date? = Self.parseIsoTimestamp(item.updatedAt)
                     vitalsMap[type] = VitalMetricRecord(
                         userId: "canonical",
                         type: type.rawValue,
@@ -1511,14 +2265,27 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
+        if let lBpm = self.resolvedLatestBpm, lBpm >= 30 {
+            vitalsMap[.heartRate] = VitalMetricRecord(
+                userId: "canonical",
+                type: HealthMetricType.heartRate.rawValue,
+                value: lBpm,
+                unit: "bpm",
+                date: dateKey,
+                sourceDevice: self.latestBpmSource ?? summary.cardiovascular.latestSourceDevice,
+                createdAt: self.latestBpmAt
+            )
+        }
+        
         if let stress = summary.stress {
+            let stressSrc = stress.sourceDevice ?? self.latestBpmSource ?? summary.activity.sourceDevice ?? "Canonical Engine"
             vitalsMap[.stress] = VitalMetricRecord(
                 userId: "canonical",
                 type: HealthMetricType.stress.rawValue,
                 value: Double(stress.currentScore),
                 unit: "score",
                 date: dateKey,
-                sourceDevice: summary.activity.sourceDevice ?? "Canonical Engine"
+                sourceDevice: DeviceSource.from(name: stressSrc).isVirtualEngine ? stressSrc : DeviceSource.from(name: stressSrc).displayName
             )
         }
         
@@ -2041,21 +2808,21 @@ public final class HealthDataService: ObservableObject {
                 hostName: hostName
             )
             
-            // 2. Sync Consolidated Daily Vitals to `health_daily_vitals`
+            // 2. Sync 5-minute Intraday Heart Rate Buckets to `health_intraday_heart_rate` BEFORE daily_vitals
+            let hrOk = await syncLeanIntradayHeartRate(
+                records: dateRecords,
+                targetDate: targetDate,
+                dateKey: dateKey,
+                userId: userId
+            )
+            
+            // 3. Sync Consolidated Daily Vitals (including spot `latest_heart_rate` & `vitals_timestamps`) to `health_daily_vitals`
             let vitalsOk = await syncLeanDailyVitals(
                 records: dateRecords,
                 targetDate: targetDate,
                 dateKey: dateKey,
                 userId: userId,
                 hostName: hostName
-            )
-            
-            // 3. Sync 5-minute Intraday Heart Rate Buckets to `health_intraday_heart_rate`
-            let hrOk = await syncLeanIntradayHeartRate(
-                records: dateRecords,
-                targetDate: targetDate,
-                dateKey: dateKey,
-                userId: userId
             )
             
             if sleepOk || vitalsOk || hrOk {
@@ -2065,7 +2832,7 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
-        // 4. Ensure local physical devices are registered in `health_sources`
+        // 4. Ensure local physical devices are registered in `health_sources` without clobbering custom priority order
         await registerLocalHealthSources(userId: userId, hostName: hostName, telemetry: telemetry)
         
         if anySyncSucceeded {
@@ -2074,7 +2841,8 @@ public final class HealthDataService: ObservableObject {
                 self.lastPushedTelemetryEpochMs = maxEpoch
             }
             for dKey in affectedDates {
-                triggerCanonicalEngineIfNeeded(for: dKey, userId: userId)
+                let fp = lastSyncedSignatureByDate[dKey]?.signature
+                triggerCanonicalEngineIfNeeded(for: dKey, userId: userId, fingerprint: fp)
             }
         }
     }
@@ -2195,19 +2963,15 @@ public final class HealthDataService: ObservableObject {
         for src in canonicalSources {
             let displayName = src.displayName
             let dLower = displayName.lowercased()
-            let sourceId: String = {
-                switch src {
-                case .oura: return "oura_ring"
-                case .appleWatch: return "apple_watch_ultra_2"
-                case .pixelWatch, .fitbit: return "pixel_watch_5"
-                case .oneplus: return "oneplus_watch_3"
-                default:
-                    if dLower.contains("schmitz") || dLower.contains("iphone") { return "schmitz_iphone" }
-                    if dLower.contains("trapper") || dLower.contains("pixel 9") { return "trapper_pixel9" }
-                    if dLower.contains("radar") || dLower.contains("fold") { return "radar_fold8" }
-                    return Self.canonicalSlug(displayName)
+            let sourceId = Self.canonicalSourceId(for: src, displayName: displayName)
+            
+            // Skip redundant upsert if already registered with custom user priority
+            if let existing = currentLeanSources.first(where: { $0.id == sourceId || DeviceSource.from(name: $0.displayName) == src }) {
+                if existing.isCustomPriority {
+                    continue
                 }
-            }()
+            }
+            
             let kind: String = {
                 switch src {
                 case .oura: return "ring"
@@ -2232,15 +2996,8 @@ public final class HealthDataService: ObservableObject {
                 }
             }()
             let color = DeviceColorPalette.getColor(for: displayName)
-            let dbPriority: Int = {
-                switch src {
-                case .oura: return 100
-                case .appleWatch, .pixelWatch, .fitbit: return 90
-                case .oneplus: return 85
-                case .amazfit, .huawei, .garmin, .whoop, .withings, .polar: return 75
-                default: return 40
-                }
-            }()
+            // Unified 1-based ascending default rank (1 = Oura, 2 = AW, 3 = PW5, 4 = OnePlus, 5 = Other Wearable, 10..12 = Phones)
+            let dbPriority = src.sortPriority
             
             let record = HealthSourceRecord(
                 id: sourceId,
@@ -2253,6 +3010,7 @@ public final class HealthDataService: ObservableObject {
                 hostDeviceName: hostName,
                 prioritySleep: dbPriority,
                 priorityActivity: dbPriority,
+                isCustomPriority: false,
                 color: color,
                 createdAt: Date()
             )
@@ -2280,8 +3038,14 @@ public final class HealthDataService: ObservableObject {
             let sourceKey: String
             let bucketMinute: Int
         }
+        struct BucketAgg {
+            var weightedSum: Double = 0
+            var totalCount: Int = 0
+            var minBpm: Double = .greatestFiniteMagnitude
+            var maxBpm: Double = 0
+        }
         
-        var buckets: [BucketKey: [Double]] = [:]
+        var buckets: [BucketKey: BucketAgg] = [:]
         for r in hrRecords {
             guard let bpm = r.value, bpm >= 30 && bpm <= 240 else { continue }
             let yr = calendar.component(.year, from: r.startTime)
@@ -2298,14 +3062,22 @@ public final class HealthDataService: ObservableObject {
             let bucketMinute = hour * 60 + (minute / 5) * 5
             
             let bKey = BucketKey(sourceKey: canonKey, bucketMinute: bucketMinute)
-            buckets[bKey, default: []].append(bpm)
+            let cnt = max(1, r.sampleCount ?? 1)
+            let rMin = (r.minValue ?? bpm) >= 30 ? (r.minValue ?? bpm) : bpm
+            let rMax = (r.maxValue ?? bpm) <= 240 ? (r.maxValue ?? bpm) : bpm
+            var agg = buckets[bKey] ?? BucketAgg()
+            agg.weightedSum += bpm * Double(cnt)
+            agg.totalCount += cnt
+            agg.minBpm = min(agg.minBpm, rMin)
+            agg.maxBpm = max(agg.maxBpm, rMax)
+            buckets[bKey] = agg
         }
         
         var results: [HealthIntradayHeartRateRecord] = []
-        for (bKey, bpms) in buckets {
-            let avg = bpms.reduce(0, +) / Double(bpms.count)
-            let minBpm = bpms.min() ?? avg
-            let maxBpm = bpms.max() ?? avg
+        for (bKey, agg) in buckets where agg.totalCount > 0 {
+            let avg = agg.weightedSum / Double(agg.totalCount)
+            let minBpm = agg.minBpm.isFinite ? agg.minBpm : avg
+            let maxBpm = agg.maxBpm > 0 ? agg.maxBpm : avg
             let sourceSlug = canonicalSlug(bKey.sourceKey)
             let recordId = "hr_\(userId)_\(dateKey)_\(sourceSlug)_\(bKey.bucketMinute)"
             
@@ -2318,7 +3090,7 @@ public final class HealthDataService: ObservableObject {
                 bpmAvg: Int(round(avg)),
                 bpmMin: Int(round(minBpm)),
                 bpmMax: Int(round(maxBpm)),
-                sampleCount: bpms.count,
+                sampleCount: agg.totalCount,
                 updatedAt: Date()
             ))
         }
@@ -2421,6 +3193,9 @@ public final class HealthDataService: ObservableObject {
         hostName: String = "Schmitz",
         calendar: Calendar = Calendar.current
     ) -> [HealthDailyVitalsRecord] {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
         let bySource = Dictionary(grouping: records) { r -> String in
             let raw = r.effectiveSourceKey.isEmpty ? (r.sourceDevice ?? "\(hostName) (iPhone)") : r.effectiveSourceKey
             return DeviceSource.from(name: raw).displayName
@@ -2449,16 +3224,35 @@ public final class HealthDataService: ObservableObject {
                 hourlyBuckets = nil
             }
             
-            let activeKcal = sourceRecords.filter { $0.type == "active_energy" }.compactMap { $0.value }.reduce(0, +)
-            let rhr = sourceRecords.filter { $0.type == "resting_heart_rate" }.compactMap { $0.value }.last.map { Int(round($0)) }
-            let spo2 = sourceRecords.filter { $0.type == "oxygen_saturation" }.compactMap { $0.value }.last
-            let resp = sourceRecords.filter { $0.type == "respiratory_rate" }.compactMap { $0.value }.last
-            let temp = sourceRecords.filter { $0.type == "wrist_temperature" || $0.type == "body_temperature" }.compactMap { $0.value }.last
-            let weight = sourceRecords.filter { $0.type == "weight" }.compactMap { $0.value }.last
-            let hrvSdnn = sourceRecords.filter { $0.type == "hrv_sdnn" }.compactMap { $0.value }.last
-            let hrvRmssd = sourceRecords.filter { $0.type == "hrv_rmssd" }.compactMap { $0.value }.last
+            func newestRecord(where predicate: (HealthTelemetryRecord) -> Bool) -> HealthTelemetryRecord? {
+                sourceRecords
+                    .filter { predicate($0) && $0.value != nil }
+                    .max(by: { ($0.endTime ?? $0.startTime) < ($1.endTime ?? $1.startTime) })
+            }
             
-            guard totalSteps > 0 || activeKcal > 0 || rhr != nil || spo2 != nil || resp != nil || temp != nil || weight != nil || hrvSdnn != nil || hrvRmssd != nil else {
+            var tsMap: [String: String] = [:]
+            func extractLatest(_ key: String, where predicate: (HealthTelemetryRecord) -> Bool) -> Double? {
+                guard let rec = newestRecord(where: predicate), let val = rec.value else { return nil }
+                tsMap[key] = isoFormatter.string(from: rec.endTime ?? rec.startTime)
+                return val
+            }
+            
+            let activeKcal = sourceRecords.filter { $0.type == "active_energy" }.compactMap { $0.value }.reduce(0, +)
+            let rhr = extractLatest("rhr") { $0.type == "resting_heart_rate" }.map { Int(round($0)) }
+            let spo2 = extractLatest("spo2") { $0.type == "oxygen_saturation" }
+            let resp = extractLatest("resp") { $0.type == "respiratory_rate" }
+            let temp = extractLatest("temp") { $0.type == "wrist_temperature" || $0.type == "body_temperature" }
+            let weight = extractLatest("weight") { $0.type == "weight" }
+            let hrvSdnn = extractLatest("hrv_sdnn") { $0.type == "hrv_sdnn" }
+            let hrvRmssd = extractLatest("hrv_rmssd") { $0.type == "hrv_rmssd" }
+            
+            let spotHrRec = newestRecord { $0.isLatestHeartRate && ($0.value ?? 0) >= 30 && ($0.value ?? 0) <= 240 }
+            let bucketHrRec = newestRecord { $0.isHeartRate && ($0.value ?? 0) >= 30 && ($0.value ?? 0) <= 240 }
+            let bestHrRec = spotHrRec ?? bucketHrRec
+            let latestHr = bestHrRec?.value.map { Int(round($0)) }
+            let latestHrAt = bestHrRec.map { $0.endTime ?? $0.startTime }
+            
+            guard totalSteps > 0 || activeKcal > 0 || rhr != nil || spo2 != nil || resp != nil || temp != nil || weight != nil || hrvSdnn != nil || hrvRmssd != nil || latestHr != nil else {
                 continue
             }
             
@@ -2481,6 +3275,9 @@ public final class HealthDataService: ObservableObject {
                 hrvSdnnNightly: hrvSdnn,
                 hrvRmssdNightly: hrvRmssd,
                 hourlySteps: hourlyBuckets,
+                latestHeartRate: latestHr,
+                latestHrAt: latestHrAt,
+                vitalsTimestamps: tsMap.isEmpty ? nil : tsMap,
                 updatedAt: Date()
             ))
         }
@@ -2497,14 +3294,58 @@ public final class HealthDataService: ObservableObject {
         let process_dirty: Bool
     }
     
-    /// Triggers the canonical Edge Function `health-engine` with strict throttling to prevent burning function quotas.
-    public func triggerCanonicalEngineIfNeeded(for dateKey: String, userId: String) {
-        if let last = lastEngineInvocation[dateKey], Date().timeIntervalSince(last) < 180 {
-            // Throttled: invoked within last 3 minutes for this date
-            return
+    /// Triggers the canonical Edge Function `health-engine` with payload-fingerprint deduplication and short coalescing,
+    /// ensuring newly uploaded wearable readings immediately recompute `health_daily_summary` without quota burn.
+    public func triggerCanonicalEngineIfNeeded(
+        for dateKey: String,
+        userId: String,
+        fingerprint: String? = nil,
+        force: Bool = false
+    ) {
+        let now = Date()
+        if !force {
+            if let fp = fingerprint,
+               let prevFp = lastEnginePayloadFingerprint[dateKey],
+               fp == prevFp,
+               let last = lastEngineInvocation[dateKey],
+               now.timeIntervalSince(last) < 180 {
+                return
+            }
+            if fingerprint == nil,
+               let last = lastEngineInvocation[dateKey],
+               now.timeIntervalSince(last) < 180 {
+                return
+            }
+            // Enforce a minimum 15s floor between non-forced invocations on the same date
+            if let last = lastEngineInvocation[dateKey], now.timeIntervalSince(last) < 15 {
+                pendingEngineDebounceTask[dateKey]?.cancel()
+                pendingEngineDebounceTask[dateKey] = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 12_000_000_000)
+                    guard let self = self, !Task.isCancelled else { return }
+                    self.invokeCanonicalEngineNow(for: dateKey, userId: userId, fingerprint: fingerprint)
+                }
+                return
+            }
         }
-        lastEngineInvocation[dateKey] = Date()
         
+        pendingEngineDebounceTask[dateKey]?.cancel()
+        if force {
+            invokeCanonicalEngineNow(for: dateKey, userId: userId, fingerprint: fingerprint)
+        } else {
+            // Short 4-second coalesce so simultaneous multi-table uploads trigger a single computation
+            pendingEngineDebounceTask[dateKey] = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard let self = self, !Task.isCancelled else { return }
+                self.invokeCanonicalEngineNow(for: dateKey, userId: userId, fingerprint: fingerprint)
+            }
+        }
+    }
+    
+    private func invokeCanonicalEngineNow(for dateKey: String, userId: String, fingerprint: String?) {
+        lastEngineInvocation[dateKey] = Date()
+        if let fp = fingerprint {
+            lastEnginePayloadFingerprint[dateKey] = fp
+        }
         Task { [weak self] in
             guard let self = self else { return }
             do {
@@ -2750,8 +3591,8 @@ public final class HealthDataService: ObservableObject {
                 let sortedRows = rows.sorted {
                     if $0.isUserSelected != $1.isUserSelected { return $0.isUserSelected && !$1.isUserSelected }
                     if (!$0.stages.isEmpty) != (!$1.stages.isEmpty) { return !$0.stages.isEmpty }
-                    let p0 = DeviceSource.from(name: $0.sourceDeviceKey).sortPriority
-                    let p1 = DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+                    let p0 = effectivePriorityRank(for: $0.sourceDeviceKey)
+                    let p1 = effectivePriorityRank(for: $1.sourceDeviceKey)
                     if p0 != p1 { return p0 < p1 }
                     return $0.durationSeconds > $1.durationSeconds
                 }
@@ -2766,22 +3607,20 @@ public final class HealthDataService: ObservableObject {
             
             for (dStr, rows) in vitalsByDate {
                 let sortedRows = rows.sorted {
-                    let p0 = DeviceSource.from(name: $0.sourceDeviceKey).sortPriority
-                    let p1 = DeviceSource.from(name: $1.sourceDeviceKey).sortPriority
+                    let p0 = effectivePriorityRank(for: $0.sourceDeviceKey)
+                    let p1 = effectivePriorityRank(for: $1.sourceDeviceKey)
                     if p0 != p1 { return p0 < p1 }
                     return $0.steps > $1.steps
                 }
-                let wearableSteps = sortedRows.filter { DeviceSource.from(name: $0.sourceDeviceKey).isWearable && $0.steps > 0 }.map(\.steps).max()
-                let bestSteps = wearableSteps ?? sortedRows.map(\.steps).max() ?? 0
-                let bestKcal = sortedRows.map(\.activeKcal).max() ?? 0
-                if bestSteps > 0 { historicalVitalsByDate[dStr, default: [:]][.steps] = Double(bestSteps) }
-                if bestKcal > 0 { historicalVitalsByDate[dStr, default: [:]][.activeEnergy] = bestKcal }
+                let activityRes = Self.arbitrateHourlyActivity(vitals: rows, sources: currentLeanSources)
+                if activityRes.totalSteps > 0 { historicalVitalsByDate[dStr, default: [:]][.steps] = Double(activityRes.totalSteps) }
+                if activityRes.activeCalories > 0 { historicalVitalsByDate[dStr, default: [:]][.activeEnergy] = activityRes.activeCalories }
                 
                 let rhrVal = sortedRows.compactMap(\.restingHeartRate).first(where: { $0 > 0 })
                 if let rhr = rhrVal {
                     historicalVitalsByDate[dStr, default: [:]][.heartRate] = Double(rhr)
                 }
-                if let spo2 = sortedRows.compactMap(\.spo2).first(where: { $0 > 0 }) {
+                if let spo2 = Self.arbitrateSpotVital(vitals: rows, timestampKey: "spo2", sources: currentLeanSources, extract: \.spo2)?.value {
                     historicalVitalsByDate[dStr, default: [:]][.oxygenSaturation] = spo2
                 }
                 if let resp = sortedRows.compactMap(\.respiratoryRate).first(where: { $0 > 0 }) {
@@ -2790,7 +3629,7 @@ public final class HealthDataService: ObservableObject {
                 if let temp = sortedRows.compactMap(\.skinTempCelsius).first {
                     historicalVitalsByDate[dStr, default: [:]][.bodyTemperature] = temp
                 }
-                if let weight = sortedRows.compactMap(\.weightKg).first(where: { $0 > 0 }) {
+                if let weight = Self.arbitrateSpotVital(vitals: rows, timestampKey: "weight", sources: currentLeanSources, extract: \.weightKg)?.value {
                     historicalVitalsByDate[dStr, default: [:]][.weight] = weight
                 }
                 let hrvVal = sortedRows.compactMap { $0.hrvSdnnNightly ?? $0.hrvRmssdNightly }.first(where: { $0 > 0 })
@@ -3161,16 +4000,24 @@ public final class HealthDataService: ObservableObject {
         
         // Multi-device selection:
         // 1. If preferredSource is set
+        let isAllDevices = preferredSource == nil && (preferredDevice == nil || preferredDevice?.isEmpty == true)
         var chosen: (device: String, total: Int, hourly: [Int: Int], isWearable: Bool)?
         if let ps = preferredSource {
-            chosen = deviceResults.first { DeviceSource.from(name: $0.device) == ps }
+            chosen = deviceResults.first {
+                let dSrc = DeviceSource.from(name: $0.device)
+                return dSrc == ps || dSrc.displayName.caseInsensitiveCompare(ps.displayName) == .orderedSame
+            }
         }
         // 2. If preferredDevice is set
         if chosen == nil, let pd = preferredDevice, !pd.isEmpty {
-            chosen = deviceResults.first { $0.device.localizedCaseInsensitiveContains(pd) }
+            let pdCanon = DeviceSource.from(name: pd).displayName
+            chosen = deviceResults.first {
+                $0.device.localizedCaseInsensitiveContains(pd) ||
+                DeviceSource.from(name: $0.device).displayName.caseInsensitiveCompare(pdCanon) == .orderedSame
+            }
         }
-        // 3. Fallback: Prioritize wearables with max steps, then any device with max steps
-        if chosen == nil {
+        // 3. Fallback (ONLY in "All Devices" mode): Prioritize wearables with max steps, then any device with max steps
+        if chosen == nil && isAllDevices {
             let wearables = deviceResults.filter { $0.isWearable && $0.total > 0 }
             if let bestWearable = wearables.max(by: { $0.total < $1.total }) {
                 chosen = bestWearable
@@ -3184,7 +4031,6 @@ public final class HealthDataService: ObservableObject {
         var chosenDevice = chosen?.device
         
         // Incorporate backend vitals summary (e.g. smartwatch daily sync row)
-        let isAllDevices = preferredSource == nil && (preferredDevice == nil || preferredDevice?.isEmpty == true)
         if let vitalsSteps = vitalsSummary[.steps], vitalsSteps > 0 {
             let vitalsInt = Int(vitalsSteps)
             if isAllDevices {

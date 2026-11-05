@@ -29,8 +29,18 @@ namespace Daily_WinUI.Services
 
         Task<List<HealthDailyVitalsRecord>> GetLeanDailyVitalsRangeAsync(DateTime startDate, DateTime endDate);
 
+        Task<List<HealthSourceRecord>> GetHealthSourcesAsync(bool forceRefresh = false);
+
+        Task<bool> SaveDevicePriorityOrderAsync(IReadOnlyList<string> orderedSourceIds);
+
+        Task<bool> ResetDevicePriorityOrderAsync();
+
+        int GetEffectivePriorityRank(string? deviceName);
+
         HealthDailySummaryRecord? CurrentSummary { get; }
 
         event Action<HealthDailySummaryRecord?>? OnDailySummaryChanged;
+
+        event Action? OnHealthSourcesChanged;
     }
 }

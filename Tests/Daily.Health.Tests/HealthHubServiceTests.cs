@@ -120,7 +120,7 @@ namespace Daily.Health.Tests
                     LocalDate = testDateStr,
                     UserId = "test-user-id",
                     ComputedAt = "2026-10-05T07:00:00Z",
-                    EngineVersion = "1.0",
+                    EngineVersion = "2.1",
                     Steps = 10500,
                     ActiveKcal = 441.0,
                     SleepAsleepS = 26400,
@@ -171,7 +171,7 @@ namespace Daily.Health.Tests
                 Assert.NotNull(primarySession);
                 Assert.Equal(26400, primarySession.AsleepSeconds);
                 Assert.Equal(91, primarySession.SleepScore);
-                Assert.Equal("Oura Ring Gen3", primarySession.Stages.First().SourceDevice);
+                Assert.Equal("Oura Ring", primarySession.Stages.First().SourceDevice);
                 Assert.Equal(2, primarySession.Stages.Count);
 
                 // Test 4: GetHealthTelemetryAsync returns intraday heart rate and steps
@@ -346,7 +346,7 @@ namespace Daily.Health.Tests
                 var mockDb = new MockDatabaseService(dbPath);
                 await mockDb.InitializeAsync();
 
-                var baseDate = new DateTime(2026, 10, 1);
+                var baseDate = DateTime.Today.AddDays(-4);
                 for (int i = 0; i < 5; i++)
                 {
                     var dt = baseDate.AddDays(i);
@@ -466,6 +466,156 @@ namespace Daily.Health.Tests
                     File.Delete(dbPath);
                 }
             }
+        }
+
+        [Fact]
+        public void TestRecencyFirstLatestHeartRateArbitration()
+        {
+            var targetDate = new DateTime(2026, 11, 5);
+            var sources = new System.Collections.Generic.List<HealthSourceRecord>
+            {
+                new HealthSourceRecord { Id = "oura", DisplayName = "Oura Ring", PrioritySleep = 1, PriorityActivity = 1, IsCustomPriority = true },
+                new HealthSourceRecord { Id = "opw3", DisplayName = "OnePlus Watch 3", PrioritySleep = 4, PriorityActivity = 4, IsCustomPriority = true }
+            };
+
+            // Oura Ring taken off at 10:00 AM (64 bpm), OnePlus Watch 3 worn at 14:30 PM (82 bpm)
+            var vitals = new System.Collections.Generic.List<HealthDailyVitalsRecord>
+            {
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "Oura Ring",
+                    LatestHeartRate = 64,
+                    LatestHrAt = "2026-11-05T10:00:00Z"
+                },
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "OnePlus Watch 3",
+                    LatestHeartRate = 82,
+                    LatestHrAt = "2026-11-05T14:30:00Z"
+                }
+            };
+
+            var winner = HealthHubService.ArbitrateLatestHeartRate(vitals, null, targetDate, sources);
+            Assert.NotNull(winner);
+            Assert.Equal(82.0, winner!.Bpm);
+            Assert.Equal("OnePlus Watch 3", winner.SourceDevice);
+        }
+
+        [Fact]
+        public void TestSimultaneousWearHeartRateUsesUserPriority()
+        {
+            var targetDate = new DateTime(2026, 11, 5);
+            // User custom-prioritizes OnePlus Watch 3 (#1) above Oura Ring (#2)
+            var sources = new System.Collections.Generic.List<HealthSourceRecord>
+            {
+                new HealthSourceRecord { Id = "opw3", DisplayName = "OnePlus Watch 3", PrioritySleep = 1, PriorityActivity = 1, IsCustomPriority = true },
+                new HealthSourceRecord { Id = "oura", DisplayName = "Oura Ring", PrioritySleep = 2, PriorityActivity = 2, IsCustomPriority = true }
+            };
+
+            // Both sensors reported within the 15-minute simultaneous window (14:25 vs 14:30)
+            var vitals = new System.Collections.Generic.List<HealthDailyVitalsRecord>
+            {
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "Oura Ring",
+                    LatestHeartRate = 71,
+                    LatestHrAt = "2026-11-05T14:30:00Z"
+                },
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "OnePlus Watch 3",
+                    LatestHeartRate = 74,
+                    LatestHrAt = "2026-11-05T14:25:00Z"
+                }
+            };
+
+            var winner = HealthHubService.ArbitrateLatestHeartRate(vitals, null, targetDate, sources);
+            Assert.NotNull(winner);
+            Assert.Equal(74.0, winner!.Bpm);
+            Assert.Equal("OnePlus Watch 3", winner.SourceDevice);
+        }
+
+        [Fact]
+        public void TestHourlyStepsActiveWearerEnvelope()
+        {
+            var sources = new System.Collections.Generic.List<HealthSourceRecord>
+            {
+                new HealthSourceRecord { Id = "oura", DisplayName = "Oura Ring", PrioritySleep = 1, PriorityActivity = 1 },
+                new HealthSourceRecord { Id = "opw3", DisplayName = "OnePlus Watch 3", PrioritySleep = 4, PriorityActivity = 4 }
+            };
+
+            // Morning on Oura (hours 9, 10) + simultaneous hour 12 + afternoon on OnePlus Watch 3 (hours 14, 15)
+            var vitals = new System.Collections.Generic.List<HealthDailyVitalsRecord>
+            {
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "Oura Ring",
+                    Steps = 2300,
+                    ActiveKcal = 95,
+                    HourlySteps = new System.Collections.Generic.List<HourlyStepBucket>
+                    {
+                        new HourlyStepBucket { Hour = 9, Steps = 800, ActiveCalories = 32 },
+                        new HourlyStepBucket { Hour = 10, Steps = 900, ActiveCalories = 38 },
+                        new HourlyStepBucket { Hour = 12, Steps = 600, ActiveCalories = 25 }
+                    }
+                },
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "OnePlus Watch 3",
+                    Steps = 3650,
+                    ActiveKcal = 155,
+                    HourlySteps = new System.Collections.Generic.List<HourlyStepBucket>
+                    {
+                        new HourlyStepBucket { Hour = 12, Steps = 650, ActiveCalories = 28 },
+                        new HourlyStepBucket { Hour = 14, Steps = 1400, ActiveCalories = 60 },
+                        new HourlyStepBucket { Hour = 15, Steps = 1600, ActiveCalories = 67 }
+                    }
+                }
+            };
+
+            var activity = HealthHubService.ArbitrateHourlyActivity(vitals, sources);
+            // Hour 9 (800) + Hour 10 (900) + Hour 12 (Oura wins tie: 600) + Hour 14 (1400) + Hour 15 (1600) = 5300 steps
+            Assert.Equal(5300, activity.TotalSteps);
+            Assert.Equal(222.0, activity.ActiveCalories);
+        }
+
+        [Fact]
+        public void TestSpotVitalRecencyArbitration()
+        {
+            var vitals = new System.Collections.Generic.List<HealthDailyVitalsRecord>
+            {
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "Oura Ring",
+                    Spo2 = 97.0,
+                    VitalsTimestamps = new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        ["spo2"] = "2026-11-05T06:30:00Z"
+                    }
+                },
+                new HealthDailyVitalsRecord
+                {
+                    LocalDate = "2026-11-05",
+                    SourceDeviceKey = "OnePlus Watch 3",
+                    Spo2 = 99.0,
+                    VitalsTimestamps = new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        ["spo2"] = "2026-11-05T15:10:00Z"
+                    }
+                }
+            };
+
+            var spo2 = HealthHubService.ArbitrateSpotVital(vitals, "spo2", v => v.Spo2);
+            Assert.NotNull(spo2);
+            Assert.Equal(99.0, spo2!.Value);
+            Assert.Equal("OnePlus Watch 3", spo2.SourceDevice);
         }
     }
 }

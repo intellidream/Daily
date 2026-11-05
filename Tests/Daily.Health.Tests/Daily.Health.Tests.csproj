@@ -26,6 +26,7 @@
     <Compile Include="..\..\Services\Health\IHealthService.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\Services\IDatabaseService.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\Services\ISettingsService.cs" Link="Services\%(Filename)%(Extension)" />
+    <Compile Include="..\..\Services\Auth\ISupabaseSessionGuardian.cs" Link="Services\Auth\%(Filename)%(Extension)" />
     <Compile Include="..\..\WinUI\Daily.WinUI\Services\IHealthHubService.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\WinUI\Daily.WinUI\Services\HealthHubService.cs" Link="Services\%(Filename)%(Extension)" />
   </ItemGroup>

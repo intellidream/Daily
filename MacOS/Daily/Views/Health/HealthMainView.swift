@@ -8,6 +8,7 @@ public struct HealthMainView: View {
     @State private var hasSwitchedSubTabInDrag: Bool = false
     @State private var showingDatePicker = false
     @State private var showDeviceMenu = false
+    @State private var showDevicePrioritySheet = false
     public var onNavigateBack: (() -> Void)? = nil
     
     private func triggerHaptic() {
@@ -138,6 +139,13 @@ public struct HealthMainView: View {
                         }
                     }
                     .presentationDetents([.medium])
+                }
+                .sheet(isPresented: $showDevicePrioritySheet) {
+                    DevicePriorityModalView(
+                        healthService: healthService,
+                        onDismiss: { showDevicePrioritySheet = false }
+                    )
+                    .frame(minWidth: 440, minHeight: 380)
                 }
             }
             
@@ -285,6 +293,41 @@ public struct HealthMainView: View {
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundColor(sColor)
                                 }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if !healthService.configurableSources.isEmpty {
+                        Divider()
+                            .background(Color.white.opacity(0.12))
+                            .padding(.horizontal, 8)
+                        
+                        Button {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                showDeviceMenu = false
+                            }
+                            showDevicePrioritySheet = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(ThemeColors.accentCyan)
+                                    .frame(width: 20)
+                                
+                                Text("Device Priority...")
+                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.9))
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(ThemeColors.fgMutedDark)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
@@ -670,8 +713,9 @@ public struct HealthMainView: View {
     
     private var vitalsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            VitalMetricTile(metricType: .heartRate, record: healthService.currentVitals[.heartRate], tint: ThemeColors.accentPink)
             VitalMetricTile(metricType: .restingHeartRate, record: healthService.currentVitals[.restingHeartRate], tint: ThemeColors.accentPink)
-            VitalMetricTile(metricType: .hrvSdnn, record: healthService.currentVitals[.hrvSdnn], tint: ThemeColors.accentCyan)
+            VitalMetricTile(metricType: .hrvSdnn, record: healthService.currentVitals[.hrvSdnn] ?? healthService.currentVitals[.hrvRmssd], tint: ThemeColors.accentCyan)
             VitalMetricTile(metricType: .oxygenSaturation, record: healthService.currentVitals[.oxygenSaturation], tint: ThemeColors.accentBlue)
             VitalMetricTile(metricType: .respiratoryRate, record: healthService.currentVitals[.respiratoryRate], tint: ThemeColors.accentCyan)
             VitalMetricTile(metricType: .bloodPressureSystolic, record: healthService.currentVitals[.bloodPressureSystolic], tint: Color(red: 1.0, green: 0.4, blue: 0.4))
@@ -694,6 +738,135 @@ public struct HealthMainView: View {
                 .padding(.leading, 4)
             
             vitalsGrid
+        }
+    }
+}
+
+private struct DevicePriorityModalView: View {
+    @ObservedObject var healthService: HealthDataService
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        LiquidGlassBackground {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Device Priority")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("Used for Sleep, Resting HR & simultaneous wear. Live Vitals always prefer the newest active sensor.")
+                            .font(.system(size: 11.5, weight: .regular))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    
+                    Spacer()
+                    
+                    Button("Done") {
+                        onDismiss()
+                    }
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(ThemeColors.accentCyan.opacity(0.16))
+                    .clipShape(Capsule())
+                    .buttonStyle(.plain)
+                }
+                
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 8) {
+                        ForEach(Array(healthService.configurableSources.enumerated()), id: \.element.id) { index, record in
+                            let src = DeviceSource.from(name: record.displayName)
+                            let sColor = Color(hex: record.color ?? src.colorHex)
+                            HStack(spacing: 10) {
+                                Text("#\(index + 1)")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(index == 0 ? ThemeColors.accentCyan : ThemeColors.fgMutedDark)
+                                    .frame(width: 24, alignment: .leading)
+                                
+                                Image(systemName: src.systemImage)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(sColor)
+                                    .frame(width: 20)
+                                
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(record.displayName)
+                                        .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white)
+                                    Text(src.isWearable ? "Wearable Sensor" : "Companion Phone")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                }
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 6) {
+                                    Button {
+                                        Task { await healthService.moveDevicePriority(from: index, direction: -1) }
+                                    } label: {
+                                        Image(systemName: "chevron.up")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(index > 0 ? .white : .white.opacity(0.22))
+                                            .frame(width: 28, height: 28)
+                                            .background(Color.white.opacity(index > 0 ? 0.1 : 0.04))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(index == 0 || healthService.isSavingPriorityOrder)
+                                    
+                                    Button {
+                                        Task { await healthService.moveDevicePriority(from: index, direction: 1) }
+                                    } label: {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(index < healthService.configurableSources.count - 1 ? .white : .white.opacity(0.22))
+                                            .frame(width: 28, height: 28)
+                                            .background(Color.white.opacity(index < healthService.configurableSources.count - 1 ? 0.1 : 0.04))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(index >= healthService.configurableSources.count - 1 || healthService.isSavingPriorityOrder)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.06))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .strokeBorder(sColor.opacity(0.28), lineWidth: 1)
+                                    )
+                            )
+                        }
+                    }
+                }
+                
+                if healthService.hasCustomDevicePriority {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task { await healthService.resetDevicePriorityOrder() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text("Reset to Default Order")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            }
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(healthService.isSavingPriorityOrder)
+                        Spacer()
+                    }
+                }
+            }
+            .padding(20)
         }
     }
 }

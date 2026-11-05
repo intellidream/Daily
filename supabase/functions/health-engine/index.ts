@@ -8,7 +8,8 @@ import { synthesizeDailyHealthSummaryFromLean } from './engine.ts';
 import type {
   LeanDailyVitalsRow,
   LeanSleepSessionRow,
-  LeanIntradayHrRow
+  LeanIntradayHrRow,
+  LeanHealthSourceRow
 } from './types.ts';
 
 const corsHeaders = {
@@ -138,8 +139,8 @@ async function processDayForUser(
     .toISOString()
     .slice(0, 10);
 
-  // Fetch all 3 lean tables + 28-day rolling vitals baseline in parallel
-  const [vitalsRes, sleepRes, hrRes, historyVitalsRes] = await Promise.all([
+  // Fetch all 4 lean tables + 28-day rolling vitals baseline in parallel
+  const [vitalsRes, sleepRes, hrRes, historyVitalsRes, sourcesRes] = await Promise.all([
     supabase
       .from('health_daily_vitals')
       .select('*')
@@ -164,7 +165,12 @@ async function processDayForUser(
       .eq('user_id', userId)
       .gte('local_date', histStart)
       .lt('local_date', targetDate)
-      .limit(250)
+      .limit(250),
+    supabase
+      .from('health_sources')
+      .select('id, user_id, display_name, device_kind, priority_sleep, priority_activity, is_custom_priority, color')
+      .eq('user_id', userId)
+      .order('priority_sleep', { ascending: true })
   ]);
 
   if (vitalsRes.error) {
@@ -176,11 +182,15 @@ async function processDayForUser(
   if (hrRes.error) {
     console.error(`[health-engine] health_intraday_heart_rate query error:`, hrRes.error);
   }
+  if (sourcesRes.error) {
+    console.error(`[health-engine] health_sources query error:`, sourcesRes.error);
+  }
 
   const vitalsRows = (vitalsRes.data || []) as LeanDailyVitalsRow[];
   const sleepRows = (sleepRes.data || []) as LeanSleepSessionRow[];
   const hrRows = (hrRes.data || []) as LeanIntradayHrRow[];
   const historyVitalsRows = (historyVitalsRes.data || []) as LeanDailyVitalsRow[];
+  const sourceRows = (sourcesRes.data || []) as LeanHealthSourceRow[];
 
   if (vitalsRows.length === 0 && sleepRows.length === 0 && hrRows.length === 0) {
     // Preserve any pre-existing historical summary when lean tables have 0 rows for an older date
@@ -204,6 +214,7 @@ async function processDayForUser(
     sleepRows,
     hrRows,
     historyVitalsRows,
+    sourceRows,
     tzOffsetMin,
     preferredDevice
   });

@@ -579,6 +579,18 @@ namespace Daily.Models.Health
             get => ZonesV2 ?? HeartRateZonesRaw;
             set { ZonesV2 = value; HeartRateZonesRaw = value; }
         }
+
+        [JsonPropertyName("latest_bpm")]
+        [JsonProperty("latest_bpm")]
+        public double? LatestBpm { get; set; }
+
+        [JsonPropertyName("latest_bpm_at")]
+        [JsonProperty("latest_bpm_at")]
+        public string? LatestBpmAt { get; set; }
+
+        [JsonPropertyName("latest_source_device")]
+        [JsonProperty("latest_source_device")]
+        public string? LatestSourceDevice { get; set; }
     }
 
     public class IntradayHeartRatePoint
@@ -695,12 +707,15 @@ namespace Daily.Models.Health
 
         [Newtonsoft.Json.JsonIgnore]
         [System.Text.Json.Serialization.JsonIgnore]
-        public CanonicalAutonomicBalance AutonomicBalance =>
-            AutonomicBalanceRaw ?? new CanonicalAutonomicBalance
+        public CanonicalAutonomicBalance AutonomicBalance
+        {
+            get => AutonomicBalanceRaw ?? new CanonicalAutonomicBalance
             {
                 ParasympatheticPercent = ParasympatheticPercentV2 ?? Math.Clamp(100 - (CurrentScore > 0 ? CurrentScore : 50), 10, 90),
                 SympatheticPercent = SympatheticPercentV2 ?? (100 - Math.Clamp(100 - (CurrentScore > 0 ? CurrentScore : 50), 10, 90))
             };
+            set => AutonomicBalanceRaw = value;
+        }
 
         [JsonPropertyName("biometric_drivers")]
         [JsonProperty("biometric_drivers")]
@@ -708,18 +723,25 @@ namespace Daily.Models.Health
 
         [Newtonsoft.Json.JsonIgnore]
         [System.Text.Json.Serialization.JsonIgnore]
-        public CanonicalStressDrivers BiometricDrivers =>
-            BiometricDriversRaw ?? new CanonicalStressDrivers
+        public CanonicalStressDrivers BiometricDrivers
+        {
+            get => BiometricDriversRaw ?? new CanonicalStressDrivers
             {
                 BaselineHrvMs = BaselineHrvMsV2 ?? 45.0,
                 CurrentHrvMs = CurrentHrvMsV2,
                 RestingHeartRateBpm = RestingHeartRateBpmV2,
                 CurrentSedentaryBpm = CurrentSedentaryBpmV2
             };
+            set => BiometricDriversRaw = value;
+        }
 
         [JsonPropertyName("monkey_mood")]
         [JsonProperty("monkey_mood")]
         public string? MonkeyMood { get; set; }
+
+        [JsonPropertyName("source_device")]
+        [JsonProperty("source_device")]
+        public string? SourceDevice { get; set; }
 
         [JsonPropertyName("intraday_stress")]
         [JsonProperty("intraday_stress")]
@@ -792,8 +814,77 @@ namespace Daily.Models.Health
     }
 
     // ==========================================
-    // LEAN HEALTH TABLES (SUPABASE v2)
+    // LEAN HEALTH TABLES (SUPABASE v2.1)
     // ==========================================
+
+    [Table("health_sources")]
+    public class HealthSourceRecord : BaseModel
+    {
+        [PrimaryKey("id")]
+        [JsonPropertyName("id")]
+        [JsonProperty("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [Column("user_id")]
+        [JsonPropertyName("user_id")]
+        [JsonProperty("user_id")]
+        public string UserId { get; set; } = string.Empty;
+
+        [Column("platform")]
+        [JsonPropertyName("platform")]
+        [JsonProperty("platform")]
+        public string Platform { get; set; } = "unknown";
+
+        [Column("device_kind")]
+        [JsonPropertyName("device_kind")]
+        [JsonProperty("device_kind")]
+        public string DeviceKind { get; set; } = "wearable";
+
+        [Column("vendor")]
+        [JsonPropertyName("vendor")]
+        [JsonProperty("vendor")]
+        public string? Vendor { get; set; }
+
+        [Column("model")]
+        [JsonPropertyName("model")]
+        [JsonProperty("model")]
+        public string? Model { get; set; }
+
+        [Column("display_name")]
+        [JsonPropertyName("display_name")]
+        [JsonProperty("display_name")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Column("host_device_name")]
+        [JsonPropertyName("host_device_name")]
+        [JsonProperty("host_device_name")]
+        public string? HostDeviceName { get; set; }
+
+        [Column("priority_sleep")]
+        [JsonPropertyName("priority_sleep")]
+        [JsonProperty("priority_sleep")]
+        public int PrioritySleep { get; set; } = 10;
+
+        [Column("priority_activity")]
+        [JsonPropertyName("priority_activity")]
+        [JsonProperty("priority_activity")]
+        public int PriorityActivity { get; set; } = 10;
+
+        [Column("is_custom_priority")]
+        [JsonPropertyName("is_custom_priority")]
+        [JsonProperty("is_custom_priority")]
+        public bool IsCustomPriority { get; set; }
+
+        [Column("color")]
+        [JsonPropertyName("color")]
+        [JsonProperty("color")]
+        public string? Color { get; set; } = "#3897F0";
+
+        [Column("created_at")]
+        [JsonPropertyName("created_at")]
+        [JsonProperty("created_at")]
+        public string? CreatedAt { get; set; }
+    }
 
     [Table("health_sleep_sessions")]
     public class HealthSleepSessionRecord : BaseModel
@@ -1035,11 +1126,32 @@ namespace Daily.Models.Health
         [JsonProperty("hourly_steps")]
         public List<HourlyStepBucket>? HourlySteps { get; set; }
 
+        [Column("latest_heart_rate")]
+        [JsonPropertyName("latest_heart_rate")]
+        [JsonProperty("latest_heart_rate")]
+        public int? LatestHeartRate { get; set; }
+
+        [Column("latest_hr_at")]
+        [JsonPropertyName("latest_hr_at")]
+        [JsonProperty("latest_hr_at")]
+        public string? LatestHrAt { get; set; }
+
+        [Column("vitals_timestamps")]
+        [JsonPropertyName("vitals_timestamps")]
+        [JsonProperty("vitals_timestamps")]
+        public Dictionary<string, string>? VitalsTimestamps { get; set; }
+
+        [Column("updated_at")]
+        [JsonPropertyName("updated_at")]
+        [JsonProperty("updated_at")]
+        public string? UpdatedAt { get; set; }
+
         [Newtonsoft.Json.JsonIgnore]
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasSignal =>
             Steps > 0 ||
             ActiveKcal > 0 ||
+            (LatestHeartRate ?? 0) > 0 ||
             (RestingHeartRate ?? 0) > 0 ||
             (Spo2 ?? 0) > 0 ||
             (RespiratoryRate ?? 0) > 0 ||
@@ -1148,7 +1260,7 @@ namespace Daily.Models.Health
         public string LocalDate { get; set; } = string.Empty;
         public string UserId { get; set; } = string.Empty;
         public string? ComputedAt { get; set; }
-        public string EngineVersion { get; set; } = "1.0";
+        public string EngineVersion { get; set; } = "2.1";
         public int? Steps { get; set; }
         public double? ActiveKcal { get; set; }
         public int? SleepAsleepS { get; set; }

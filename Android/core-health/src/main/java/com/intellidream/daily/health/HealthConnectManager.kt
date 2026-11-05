@@ -219,7 +219,10 @@ class HealthConnectManager(private val context: Context) {
             rawPackage: String,
             extId: String?,
             semantics: String?,
-            overrideLocalDate: String? = null
+            overrideLocalDate: String? = null,
+            minValue: Double? = null,
+            maxValue: Double? = null,
+            sampleCount: Int? = null
         ): HealthTelemetryRecord? {
             val sourceKey = resolveCanonicalSourceKey(rawPackage, hostName) ?: return null
             val sourceColor = com.intellidream.daily.model.DeviceColorPalette.getColorForSource(sourceKey)
@@ -240,6 +243,9 @@ class HealthConnectManager(private val context: Context) {
                 sensorSourceName = sourceKey,
                 sourceDeviceKey = sourceKey,
                 sourceColor = sourceColor,
+                minValue = minValue,
+                maxValue = maxValue,
+                sampleCount = sampleCount,
                 tzOffsetMin = tzOffsetMin,
                 localDate = recordLocalDate
             )
@@ -297,6 +303,8 @@ class HealthConnectManager(private val context: Context) {
                 val (bucketEpoch, canonKey) = bucketKey
                 val primaryRawDevice = samplesInBucket.first().rawPkg
                 val avgBpm = Math.round((samplesInBucket.map { it.bpm }.average()) * 10.0) / 10.0
+                val minBpm = samplesInBucket.minOf { it.bpm }
+                val maxBpm = samplesInBucket.maxOf { it.bpm }
                 val extId = "hr_${userId}_${canonKey}_$bucketEpoch"
                 buildRecord(
                     type = "heart_rate",
@@ -307,6 +315,26 @@ class HealthConnectManager(private val context: Context) {
                     rawPackage = primaryRawDevice,
                     extId = extId,
                     semantics = "interval_avg",
+                    overrideLocalDate = targetDateStr,
+                    minValue = minBpm,
+                    maxValue = maxBpm,
+                    sampleCount = samplesInBucket.size
+                )?.let { telemetry.add(it) }
+            }
+
+            // Emit one exact "latest_heart_rate" spot record per canonical wearable/device with exact sample.time
+            val latestByCanon = rawHrSamples.groupBy { it.canonKey }
+            for ((canonKey, deviceSamples) in latestByCanon) {
+                val newest = deviceSamples.maxByOrNull { it.epochMs } ?: continue
+                buildRecord(
+                    type = "latest_heart_rate",
+                    value = newest.bpm,
+                    unit = "bpm",
+                    startTime = newest.epochMs,
+                    endTime = newest.epochMs,
+                    rawPackage = newest.rawPkg,
+                    extId = "latest_hr_${userId}_${canonKey}_$targetDateStr",
+                    semantics = "spot",
                     overrideLocalDate = targetDateStr
                 )?.let { telemetry.add(it) }
             }

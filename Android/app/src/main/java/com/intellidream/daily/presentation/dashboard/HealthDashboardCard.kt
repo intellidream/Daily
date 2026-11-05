@@ -879,10 +879,10 @@ private fun LargeHealthContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                val hrvVal = currentVitals[HealthMetricType.HRV_SDNN]?.value
+                val hrvVal = (currentVitals[HealthMetricType.HRV_SDNN] ?: currentVitals[HealthMetricType.HRV_RMSSD])?.value
                 CompactVitalsTile(
                     modifier = Modifier.weight(1f),
-                    title = "HRV (SDNN)",
+                    title = "HRV",
                     value = if (hrvVal != null) "${hrvVal.roundToInt()} ms" else "--",
                     color = ThemeColors.accentPurple,
                     icon = Icons.Rounded.ShowChart

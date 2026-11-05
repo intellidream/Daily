@@ -26,7 +26,8 @@ import type {
   HealthDailySummaryRow,
   LeanDailyVitalsRow,
   LeanSleepSessionRow,
-  LeanIntradayHrRow
+  LeanIntradayHrRow,
+  LeanHealthSourceRow
 } from './types.ts';
 
 export interface EngineInput {
@@ -1172,6 +1173,8 @@ export function computeStress(params: {
   priorSleepScore: number | null;
   personalBaselineHrv?: number;
   personalBaselineRhr?: number;
+  perDeviceRhrMap?: Record<string, number>;
+  sourceDevice?: string | null;
 }): StressSummary | null {
   const {
     targetDateStr,
@@ -1183,7 +1186,9 @@ export function computeStress(params: {
     restingBpm,
     priorSleepScore,
     personalBaselineHrv,
-    personalBaselineRhr
+    personalBaselineRhr,
+    perDeviceRhrMap,
+    sourceDevice
   } = params;
 
   const hasHrv = hrvMs !== null && hrvMs !== undefined && hrvMs > 0;
@@ -1216,22 +1221,33 @@ export function computeStress(params: {
     stepsByHour.set(b.hour, b.steps);
   }
 
-  // Group HR telemetry by local hour
-  const hrByHour = new Map<number, number[]>();
+  // Group HR telemetry by local hour (preserving source_device for sensor-matched RHR anchoring)
+  const hrByHour = new Map<number, Array<{ bpm: number; source: string | null }>>();
   for (const pt of hrPoints) {
     const s = parseUtcDate(pt.timestamp);
     if (isSameLocalDate(s, targetDateStr, tzOffsetMin)) {
       const h = getLocalHour(s, tzOffsetMin);
       if (!hrByHour.has(h)) hrByHour.set(h, []);
-      hrByHour.get(h)!.push(pt.bpm);
+      hrByHour.get(h)!.push({ bpm: pt.bpm, source: pt.source_device ?? null });
     }
   }
+
+  const resolveSensorBaselineRhr = (sensorName: string | null | undefined): number => {
+    if (sensorName && perDeviceRhrMap) {
+      const candidate = perDeviceRhrMap[sensorName];
+      if (candidate !== undefined && candidate >= 40 && candidate <= 98) {
+        return candidate;
+      }
+    }
+    return baselineRhr;
+  };
 
   const intradayPoints: IntradayStressPoint[] = [];
   const sleepPenalty = Math.max(0.0, Math.min(100.0, 100.0 - sleepScore));
   const dayHrvScore = hasHrv ? scoreFromHrv(hrvMs!, baselineHrv) : null;
   let lastSedentaryHrScore: number | null = null;
   let latestSedentaryHrBpm: number | null = null;
+  let latestSedentarySensor: string | null = null;
 
   for (let hour = 0; hour < 24; hour++) {
     const steps = stepsByHour.get(hour) ?? 0;
@@ -1242,14 +1258,38 @@ export function computeStress(params: {
       continue;
     }
 
-    const avgHr = hrSamples.length > 0 ? hrSamples.reduce((a, b) => a + b, 0) / hrSamples.length : null;
+    const avgHr =
+      hrSamples.length > 0
+        ? hrSamples.reduce((a, b) => a + b.bpm, 0) / hrSamples.length
+        : null;
+
+    // Dominant sensor in this hour (last sample's sensor wins ties so mid-hour watch swap tracks new watch)
+    let hourSensor: string | null = null;
+    if (hrSamples.length > 0) {
+      const counts = new Map<string, number>();
+      for (const s of hrSamples) {
+        if (s.source) counts.set(s.source, (counts.get(s.source) ?? 0) + 1);
+      }
+      let bestCnt = 0;
+      for (const s of hrSamples) {
+        if (s.source) {
+          const cnt = counts.get(s.source) ?? 0;
+          if (cnt >= bestCnt) {
+            bestCnt = cnt;
+            hourSensor = s.source;
+          }
+        }
+      }
+    }
+    const hourRhrAnchor = resolveSensorBaselineRhr(hourSensor);
 
     // B. Calibrated Sedentary HR Arousal Component (with inertia carry-forward during movement hours)
     let hrScore: number;
     if (avgHr !== null && isSedentary) {
-      hrScore = scoreFromSedentaryHr(avgHr, baselineRhr);
+      hrScore = scoreFromSedentaryHr(avgHr, hourRhrAnchor);
       lastSedentaryHrScore = hrScore;
       latestSedentaryHrBpm = avgHr;
+      latestSedentarySensor = hourSensor;
     } else if (lastSedentaryHrScore !== null) {
       hrScore = 0.85 * lastSedentaryHrScore + 0.15 * 32.0;
     } else if (dayHrvScore !== null) {
@@ -1282,10 +1322,15 @@ export function computeStress(params: {
   }
 
   // Resolve current / master stress score from genuine sedentary tone (immune to active-hour step collapse)
-  const lastHr = hrPoints.length > 0 ? hrPoints[hrPoints.length - 1].bpm : null;
+  const lastHrPt = hrPoints.length > 0 ? hrPoints[hrPoints.length - 1] : null;
+  const lastHr = lastHrPt ? lastHrPt.bpm : null;
+  const activeStressSensor =
+    sourceDevice ??
+    (latestSedentaryHrBpm !== null ? latestSedentarySensor : (lastHrPt?.source_device ?? null));
+  const activeSensorRhr = resolveSensorBaselineRhr(activeStressSensor);
   const effectiveSedentaryBpm = latestSedentaryHrBpm ?? lastHr;
   const currentElevation =
-    effectiveSedentaryBpm !== null ? Math.max(0.0, effectiveSedentaryBpm - baselineRhr) : null;
+    effectiveSedentaryBpm !== null ? Math.max(0.0, effectiveSedentaryBpm - activeSensorRhr) : null;
 
   let currentScore: number;
   const sedentaryPoints = intradayPoints.filter(p => p.is_sedentary && p.heart_rate_bpm !== null);
@@ -1391,12 +1436,13 @@ export function computeStress(params: {
     baseline_hrv_ms: baselineHrv,
     current_hrv_ms: hrvMs,
     hrv_delta_percent: hrvDelta,
-    resting_heart_rate_bpm: Math.round(baselineRhr),
+    resting_heart_rate_bpm: Math.round(activeSensorRhr),
     current_sedentary_bpm: effectiveSedentaryBpm !== null ? Math.round(effectiveSedentaryBpm) : null,
     heart_rate_elevation_bpm: currentElevation !== null ? Math.round(currentElevation * 10) / 10 : null,
     monkey_mood: monkeyMood,
     advice_quote: adviceQuote,
     recommended_breathing: recommendedBreathing,
+    source_device: activeStressSensor,
     intraday_points: intradayPoints
   };
 }
@@ -1706,6 +1752,7 @@ export interface LeanEngineInput {
   sleepRows: LeanSleepSessionRow[];
   hrRows: LeanIntradayHrRow[];
   historyVitalsRows?: LeanDailyVitalsRow[];
+  sourceRows?: LeanHealthSourceRow[];
   tzOffsetMin?: number;
   preferredDevice?: string;
   baselineHrvMs?: number;
@@ -1726,6 +1773,7 @@ function vitalsRowHasSignal(v: LeanDailyVitalsRow): boolean {
   return (
     (v.steps ?? 0) > 0 ||
     (v.active_kcal ?? 0) > 0 ||
+    (v.latest_heart_rate ?? 0) > 0 ||
     (v.resting_heart_rate ?? 0) > 0 ||
     (v.spo2 ?? 0) > 0 ||
     (v.respiratory_rate ?? 0) > 0 ||
@@ -1744,11 +1792,27 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     sleepRows,
     hrRows,
     historyVitalsRows = [],
+    sourceRows = [],
     tzOffsetMin = 120,
     preferredDevice,
     baselineHrvMs,
     baselineRhrBpm
   } = input;
+
+  // Build unified single-list priority map from public.health_sources (1 = highest priority)
+  const userPriorityMap = new Map<string, number>();
+  for (const sr of sourceRows) {
+    const canon = canonicalizeDeviceName(sr.display_name, null);
+    const p = sr.priority_sleep ?? sr.priority_activity;
+    if (canon && canon !== 'Unknown' && typeof p === 'number' && p > 0) {
+      userPriorityMap.set(canon, p);
+    }
+  }
+  const getEffectivePriority = (device: string, isNap = false): number => {
+    if (isNap) return 99;
+    const canon = canonicalizeDeviceName(device);
+    return userPriorityMap.get(canon) ?? getCanonicalVitalsPriority(canon);
+  };
 
   const prefCanon = preferredDevice && preferredDevice.trim().length > 0
     ? canonicalizeDeviceName(preferredDevice)
@@ -1776,8 +1840,8 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
   }
 
   const orderedSources = Array.from(activeSourceSet).sort((a, b) => {
-    const pa = getCanonicalSleepPriority(a, false);
-    const pb = getCanonicalSleepPriority(b, false);
+    const pa = getEffectivePriority(a, false);
+    const pb = getEffectivePriority(b, false);
     if (pa !== pb) return pa - pb;
     return a.localeCompare(b);
   });
@@ -1896,8 +1960,8 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     if (a.has_granular_hypnogram !== b.has_granular_hypnogram) {
       return a.has_granular_hypnogram ? -1 : 1;
     }
-    const pa = getCanonicalSleepPriority(a.source_device, false);
-    const pb = getCanonicalSleepPriority(b.source_device, false);
+    const pa = getEffectivePriority(a.source_device, false);
+    const pb = getEffectivePriority(b.source_device, false);
     if (pa !== pb) return pa - pb;
     return b.asleep_seconds - a.asleep_seconds;
   });
@@ -1907,7 +1971,7 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     : (allSessions[0] ?? null);
   const sleepGuidance = generateSleepGuidance(primarySession, targetDate);
 
-  // 2. Build Activity Summary from health_daily_vitals
+  // 2. Build Activity Summary (Class B: Hourly Active-Wearer Envelope 0..23 across wearables)
   const normalizedVitals = vitalsRows.map(v => ({
     ...v,
     canonDevice: canonicalizeDeviceName(v.source_device_key, v.host_device_name)
@@ -1917,63 +1981,142 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     ? normalizedVitals.filter(v => v.canonDevice === prefCanon)
     : normalizedVitals;
 
-  let chosenActivityRow: (typeof normalizedVitals)[number] | null = null;
-  const wearableStepRows = candidateActivityRows.filter(v => isWearableDevice(v.canonDevice) && (v.steps ?? 0) > 0);
-  if (wearableStepRows.length > 0) {
-    wearableStepRows.sort((a, b) => (b.steps ?? 0) - (a.steps ?? 0));
-    chosenActivityRow = wearableStepRows[0];
-  } else {
-    const anyStepRows = candidateActivityRows.filter(v => (v.steps ?? 0) > 0);
-    if (anyStepRows.length > 0) {
-      anyStepRows.sort((a, b) => (b.steps ?? 0) - (a.steps ?? 0));
-      chosenActivityRow = anyStepRows[0];
-    } else if (candidateActivityRows.length > 0) {
-      chosenActivityRow = candidateActivityRows[0];
+  const extractHourlyMap = (row: (typeof normalizedVitals)[number]): Map<number, number> => {
+    const m = new Map<number, number>();
+    const rawH = Array.isArray(row.hourly_steps) ? row.hourly_steps : [];
+    for (const hb of rawH) {
+      const hr = Number((hb as any).hour);
+      const st = Math.round(Number((hb as any).steps ?? 0));
+      if (hr >= 0 && hr < 24 && st > 0) {
+        m.set(hr, Math.max(m.get(hr) ?? 0, st));
+      }
     }
-  }
+    return m;
+  };
 
-  const totalSteps = Math.max(0, Math.round(chosenActivityRow?.steps ?? 0));
-  const hourlyMap = new Map<number, number>();
-  const rawHourly = Array.isArray(chosenActivityRow?.hourly_steps) ? chosenActivityRow!.hourly_steps! : [];
-  for (const hb of rawHourly) {
-    const hr = Number((hb as any).hour);
-    const st = Number((hb as any).steps ?? 0);
-    if (hr >= 0 && hr < 24 && st > 0) {
-      hourlyMap.set(hr, Math.round(st));
-    }
-  }
+  const wearableStepRows = candidateActivityRows.filter(
+    v => isWearableDevice(v.canonDevice) && (v.steps ?? 0) > 0
+  );
+  const activeStepPool =
+    wearableStepRows.length > 0
+      ? wearableStepRows
+      : candidateActivityRows.filter(v => (v.steps ?? 0) > 0);
+
+  let totalSteps = 0;
+  let activeCal = 0;
+  let activitySourceDevice: string | null = null;
   const hourlyBuckets: HourlyStepBucket[] = [];
-  for (let h = 0; h < 24; h++) {
-    hourlyBuckets.push({ hour: h, steps: hourlyMap.get(h) ?? 0 });
-  }
 
-  let activeCal = Number(chosenActivityRow?.active_kcal ?? 0);
-  if (activeCal <= 0 && !prefCanon) {
-    const bestWearableCal = normalizedVitals
-      .filter(v => isWearableDevice(v.canonDevice) && (v.active_kcal ?? 0) > 0)
-      .sort((a, b) => (b.active_kcal ?? 0) - (a.active_kcal ?? 0))[0];
-    if (bestWearableCal) {
-      activeCal = Number(bestWearableCal.active_kcal ?? 0);
+  if (prefCanon || activeStepPool.length <= 1) {
+    const chosenActivityRow =
+      activeStepPool[0] ?? candidateActivityRows[0] ?? null;
+    totalSteps = Math.max(0, Math.round(chosenActivityRow?.steps ?? 0));
+    const hMap = chosenActivityRow ? extractHourlyMap(chosenActivityRow) : new Map<number, number>();
+    for (let h = 0; h < 24; h++) {
+      hourlyBuckets.push({ hour: h, steps: hMap.get(h) ?? 0 });
     }
-  }
-  if (activeCal <= 0 && totalSteps > 0) {
-    activeCal = Math.round(totalSteps * 0.042 * 10) / 10;
+    activeCal = Number(chosenActivityRow?.active_kcal ?? 0);
+    if (activeCal <= 0 && totalSteps > 0) {
+      activeCal = Math.round(totalSteps * 0.042 * 10) / 10;
+    }
+    activitySourceDevice = chosenActivityRow?.canonDevice ?? null;
+  } else {
+    // Multi-device Hourly Active-Wearer Envelope (0..23):
+    // When switching watches mid-day (e.g. PW5/Oura morning -> OnePlus Watch 3 afternoon),
+    // each hour picks the active wearable (breaking simultaneous-wear ties by user priority),
+    // summing disjoint wear periods without double-counting simultaneous wear!
+    const rowHourlyMaps = activeStepPool.map(row => ({
+      row,
+      hMap: extractHourlyMap(row),
+      prio: getEffectivePriority(row.canonDevice)
+    }));
+
+    const winningStepsByDevice = new Map<string, number>();
+    let latestActiveHourDevice: string | null = null;
+    let mergedHourlySum = 0;
+
+    for (let h = 0; h < 24; h++) {
+      const activeInHour = rowHourlyMaps
+        .map(item => ({ ...item, hSteps: item.hMap.get(h) ?? 0 }))
+        .filter(item => item.hSteps > 0);
+
+      if (activeInHour.length === 0) {
+        hourlyBuckets.push({ hour: h, steps: 0 });
+      } else {
+        activeInHour.sort((a, b) => {
+          if (a.prio !== b.prio) return a.prio - b.prio;
+          return b.hSteps - a.hSteps;
+        });
+        const winner = activeInHour[0];
+        hourlyBuckets.push({ hour: h, steps: winner.hSteps });
+        mergedHourlySum += winner.hSteps;
+        winningStepsByDevice.set(
+          winner.row.canonDevice,
+          (winningStepsByDevice.get(winner.row.canonDevice) ?? 0) + winner.hSteps
+        );
+        latestActiveHourDevice = winner.row.canonDevice;
+      }
+    }
+
+    const maxSingleSteps = Math.max(...activeStepPool.map(r => Math.round(r.steps ?? 0)), 0);
+    totalSteps = Math.max(mergedHourlySum, maxSingleSteps);
+
+    let mergedKcal = 0;
+    let maxSingleKcal = 0;
+    for (const item of rowHourlyMaps) {
+      const rk = Number(item.row.active_kcal ?? 0);
+      if (rk > maxSingleKcal) maxSingleKcal = rk;
+      const wonSteps = winningStepsByDevice.get(item.row.canonDevice) ?? 0;
+      let rawSum = 0;
+      for (const st of item.hMap.values()) rawSum += st;
+      const denom = Math.max(rawSum, Math.round(item.row.steps ?? 0), 1);
+      if (rk > 0 && wonSteps > 0) {
+        mergedKcal += rk * Math.min(1.0, wonSteps / denom);
+      }
+    }
+    activeCal = Math.max(mergedKcal, maxSingleKcal);
+    if (activeCal <= 0 && totalSteps > 0) {
+      activeCal = Math.round(totalSteps * 0.042 * 10) / 10;
+    }
+
+    const topSingleRow = [...activeStepPool].sort((a, b) => (b.steps ?? 0) - (a.steps ?? 0))[0];
+    if (
+      latestActiveHourDevice &&
+      (winningStepsByDevice.get(latestActiveHourDevice) ?? 0) >= 50
+    ) {
+      activitySourceDevice = latestActiveHourDevice;
+    } else {
+      activitySourceDevice = topSingleRow?.canonDevice ?? null;
+    }
   }
 
   const activitySummary: ActivitySummary = {
     total_steps: totalSteps,
     active_calories: Math.round(activeCal * 10) / 10,
-    source_device: chosenActivityRow?.canonDevice ?? null,
+    source_device: activitySourceDevice,
     hourly_steps: hourlyBuckets
   };
 
-  // 3. Merge Scalar Vitals Across Devices by Wearable Priority
-  const sortedForVitals = [...candidateActivityRows].sort((a, b) => {
-    const pa = getCanonicalVitalsPriority(a.canonDevice);
-    const pb = getCanonicalVitalsPriority(b.canonDevice);
+  // 3. Merge Scalar Vitals Across Devices:
+  //    - Class C (Baseline/Nocturnal: RHR, HRV, Resp Rate, Skin Temp) -> User Priority first
+  //    - Class A (Spot/Live: SpO2, Weight) -> Recency-First (30m simultaneous tie-break window)
+  const sortedForBaselineVitals = [...candidateActivityRows].sort((a, b) => {
+    const pa = getEffectivePriority(a.canonDevice);
+    const pb = getEffectivePriority(b.canonDevice);
     if (pa !== pb) return pa - pb;
     return (b.steps ?? 0) - (a.steps ?? 0);
   });
+
+  const getVitalTsStr = (
+    v: (typeof normalizedVitals)[number],
+    tsKey: string
+  ): string | null => {
+    const rawMap = v.vitals_timestamps;
+    if (rawMap && typeof rawMap === 'object' && typeof rawMap[tsKey] === 'string' && rawMap[tsKey].length > 0) {
+      return rawMap[tsKey];
+    }
+    return v.updated_at ?? null;
+  };
 
   const vitalsMap: Record<string, VitalSummaryItem> = {};
   const defaultTs = new Date().toISOString();
@@ -1998,18 +2141,51 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     };
   };
 
-  for (const v of sortedForVitals) {
-    putVitalIfMissing('restingheartrate', 'resting_heart_rate', v.resting_heart_rate, 'bpm', v.canonDevice, v.updated_at);
-    putVitalIfMissing('hrvsdnn', 'hrv_sdnn', v.hrv_sdnn_nightly, 'ms', v.canonDevice, v.updated_at);
-    putVitalIfMissing('hrvrmssd', 'hrv_rmssd', v.hrv_rmssd_nightly, 'ms', v.canonDevice, v.updated_at);
-    putVitalIfMissing('oxygensaturation', 'oxygen_saturation', v.spo2, '%', v.canonDevice, v.updated_at);
-    putVitalIfMissing('respiratoryrate', 'respiratory_rate', v.respiratory_rate, 'brpm', v.canonDevice, v.updated_at);
-    putVitalIfMissing('bodytemperature', 'body_temperature', v.skin_temp_celsius, '°C', v.canonDevice, v.updated_at, true);
-    putVitalIfMissing('weight', 'weight', v.weight_kg, 'kg', v.canonDevice, v.updated_at);
+  for (const v of sortedForBaselineVitals) {
+    putVitalIfMissing('restingheartrate', 'resting_heart_rate', v.resting_heart_rate, 'bpm', v.canonDevice, getVitalTsStr(v, 'rhr'));
+    putVitalIfMissing('hrvsdnn', 'hrv_sdnn', v.hrv_sdnn_nightly, 'ms', v.canonDevice, getVitalTsStr(v, 'hrv'));
+    putVitalIfMissing('hrvrmssd', 'hrv_rmssd', v.hrv_rmssd_nightly, 'ms', v.canonDevice, getVitalTsStr(v, 'hrv'));
+    putVitalIfMissing('respiratoryrate', 'respiratory_rate', v.respiratory_rate, 'brpm', v.canonDevice, getVitalTsStr(v, 'resp'));
+    putVitalIfMissing('bodytemperature', 'body_temperature', v.skin_temp_celsius, '°C', v.canonDevice, getVitalTsStr(v, 'temp'), true);
     putVitalIfMissing('activeenergy', 'active_energy', v.active_kcal, 'kcal', v.canonDevice, v.updated_at);
   }
 
-  // 4. Build Cardiovascular Summary from health_intraday_heart_rate
+  const SPOT_TIE_WINDOW_MS = 30 * 60 * 1000;
+  const pickSpotVital = (
+    mapKey: string,
+    type: string,
+    unit: string,
+    tsKey: string,
+    extractor: (v: (typeof normalizedVitals)[number]) => number | null | undefined
+  ) => {
+    const valid = candidateActivityRows
+      .map(v => {
+        const val = extractor(v);
+        const tsStr = getVitalTsStr(v, tsKey);
+        const tsMs = tsStr ? toEpochMs(tsStr) : 0;
+        return { v, val, tsStr, tsMs };
+      })
+      .filter(x => x.val !== null && x.val !== undefined && (x.val as number) > 0);
+    if (valid.length === 0) return;
+    const newestMs = Math.max(...valid.map(x => x.tsMs));
+    const freshPool =
+      newestMs > 0
+        ? valid.filter(x => newestMs - x.tsMs <= SPOT_TIE_WINDOW_MS)
+        : valid;
+    freshPool.sort((a, b) => {
+      const pa = getEffectivePriority(a.v.canonDevice);
+      const pb = getEffectivePriority(b.v.canonDevice);
+      if (pa !== pb) return pa - pb;
+      return b.tsMs - a.tsMs;
+    });
+    const win = freshPool[0];
+    putVitalIfMissing(mapKey, type, win.val, unit, win.v.canonDevice, win.tsStr);
+  };
+
+  pickSpotVital('oxygensaturation', 'oxygen_saturation', '%', 'spo2', v => v.spo2);
+  pickSpotVital('weight', 'weight', 'kg', 'weight', v => v.weight_kg);
+
+  // 4. Build Cardiovascular Summary (Class A Recency-First Latest BPM + Active-Wearer Curve)
   const localMidnightMs = getLocalMidnightUtc(targetDate, tzOffsetMin).getTime();
   const rawFilteredHrRows = hrRows
     .map(r => ({
@@ -2019,10 +2195,86 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     .filter(r => r.bpm_avg > 30 && r.bpm_avg < 240 && (!prefCanon || r.canonDevice === prefCanon))
     .sort((a, b) => a.bucket_minute - b.bucket_minute);
 
-  // Deduplicate same 5-minute bucket across simultaneous wearables in All Devices mode
-  // so cardiovascular zone minutes and Stress intraday averages never double-count or sawtooth.
+  interface DeviceLatestHrCandidate {
+    device: string;
+    bpm: number;
+    tsMs: number;
+    tsIso: string;
+    maxBucket: number;
+  }
+  const latestHrByDevice = new Map<string, DeviceLatestHrCandidate>();
+
+  for (const r of rawFilteredHrRows) {
+    const bucketWallMs = localMidnightMs + r.bucket_minute * 60 * 1000;
+    const prev = latestHrByDevice.get(r.canonDevice);
+    if (!prev || r.bucket_minute >= prev.maxBucket) {
+      latestHrByDevice.set(r.canonDevice, {
+        device: r.canonDevice,
+        bpm: r.bpm_avg,
+        tsMs: bucketWallMs,
+        tsIso: new Date(bucketWallMs).toISOString(),
+        maxBucket: r.bucket_minute
+      });
+    }
+  }
+
+  for (const v of candidateActivityRows) {
+    const lhr = v.latest_heart_rate ?? 0;
+    if (lhr > 30 && lhr < 240 && v.latest_hr_at) {
+      const exactMs = toEpochMs(v.latest_hr_at);
+      if (exactMs > 0) {
+        const prev = latestHrByDevice.get(v.canonDevice);
+        if (!prev || exactMs >= prev.tsMs - 5 * 60 * 1000) {
+          const approxBucket = Math.max(
+            0,
+            Math.min(1435, Math.floor((exactMs - localMidnightMs) / (60 * 1000) / 5) * 5)
+          );
+          latestHrByDevice.set(v.canonDevice, {
+            device: v.canonDevice,
+            bpm: Math.round(lhr),
+            tsMs: exactMs,
+            tsIso: new Date(exactMs).toISOString(),
+            maxBucket: Math.max(prev?.maxBucket ?? 0, approxBucket)
+          });
+        }
+      }
+    }
+  }
+
+  const HR_SIMULTANEOUS_WINDOW_MS = 15 * 60 * 1000;
+  let winningLatestHr: DeviceLatestHrCandidate | null = null;
+  const hrCandidates = Array.from(latestHrByDevice.values());
+  if (hrCandidates.length > 0) {
+    const newestHrMs = Math.max(...hrCandidates.map(c => c.tsMs));
+    const recentHrPool = hrCandidates.filter(c => newestHrMs - c.tsMs <= HR_SIMULTANEOUS_WINDOW_MS);
+    recentHrPool.sort((a, b) => {
+      const pa = getEffectivePriority(a.device);
+      const pb = getEffectivePriority(b.device);
+      if (pa !== pb) return pa - pb;
+      return b.tsMs - a.tsMs;
+    });
+    winningLatestHr = recentHrPool[0];
+  }
+
+  if (winningLatestHr) {
+    putVitalIfMissing(
+      'heartrate',
+      'heart_rate',
+      winningLatestHr.bpm,
+      'bpm',
+      winningLatestHr.device,
+      winningLatestHr.tsIso
+    );
+  }
+
   const filteredHrRows: Array<LeanIntradayHrRow & { canonDevice: string }> = (() => {
     if (prefCanon || rawFilteredHrRows.length <= 1) return rawFilteredHrRows;
+    const maxBucketPerDevice = new Map<string, number>();
+    for (const r of rawFilteredHrRows) {
+      const prevMax = maxBucketPerDevice.get(r.canonDevice) ?? -1;
+      if (r.bucket_minute > prevMax) maxBucketPerDevice.set(r.canonDevice, r.bucket_minute);
+    }
+
     const byBucket = new Map<number, Array<LeanIntradayHrRow & { canonDevice: string }>>();
     for (const r of rawFilteredHrRows) {
       if (!byBucket.has(r.bucket_minute)) byBucket.set(r.bucket_minute, []);
@@ -2031,11 +2283,23 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     const merged: Array<LeanIntradayHrRow & { canonDevice: string }> = [];
     const sortedMinutes = Array.from(byBucket.keys()).sort((a, b) => a - b);
     for (const bm of sortedMinutes) {
-      const group = byBucket.get(bm)!;
+      let group = byBucket.get(bm)!;
+      if (group.length > 1) {
+        const continuing = group.filter(g => (maxBucketPerDevice.get(g.canonDevice) ?? bm) > bm);
+        if (continuing.length > 0 && continuing.length < group.length) {
+          group = continuing;
+        } else if (winningLatestHr && bm === sortedMinutes[sortedMinutes.length - 1]) {
+          const winnerInTail = group.filter(g => g.canonDevice === winningLatestHr!.device);
+          if (winnerInTail.length > 0) {
+            group = winnerInTail;
+          }
+        }
+      }
+
       if (group.length === 1) {
         merged.push(group[0]);
       } else {
-        group.sort((a, b) => getCanonicalVitalsPriority(a.canonDevice) - getCanonicalVitalsPriority(b.canonDevice));
+        group.sort((a, b) => getEffectivePriority(a.canonDevice) - getEffectivePriority(b.canonDevice));
         const primary = group[0];
         let wSum = 0;
         let wCnt = 0;
@@ -2073,15 +2337,36 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     };
   });
 
+  if (winningLatestHr) {
+    const lastPt = intradayHrPoints.length > 0 ? intradayHrPoints[intradayHrPoints.length - 1] : null;
+    const lastPtMs = lastPt ? toEpochMs(lastPt.timestamp) : 0;
+    if (!lastPt || winningLatestHr.tsMs > lastPtMs + 60 * 1000) {
+      intradayHrPoints.push({
+        id: `hr_live_${userId}_${targetDate}`,
+        timestamp: winningLatestHr.tsIso,
+        bpm: winningLatestHr.bpm,
+        zone: mapHeartRateZone(winningLatestHr.bpm),
+        source_device: winningLatestHr.device
+      });
+    } else if (lastPt && lastPt.source_device === winningLatestHr.device) {
+      lastPt.bpm = winningLatestHr.bpm;
+      lastPt.zone = mapHeartRateZone(winningLatestHr.bpm);
+      lastPt.timestamp = winningLatestHr.tsIso;
+    }
+  }
+
   const measuredRhr = vitalsMap['restingheartrate']?.value ?? null;
   const derivedAllRhr = deriveNocturnalRhrFromHrPoints(intradayHrPoints, targetDate, tzOffsetMin);
   let cardioSummary: CardiovascularSummary;
-  if (filteredHrRows.length === 0) {
+  if (filteredHrRows.length === 0 && intradayHrPoints.length === 0) {
     cardioSummary = {
-      average_bpm: null,
+      latest_bpm: winningLatestHr?.bpm ?? null,
+      latest_bpm_at: winningLatestHr?.tsIso ?? null,
+      latest_source_device: winningLatestHr?.device ?? null,
+      average_bpm: winningLatestHr?.bpm ?? null,
       resting_bpm: measuredRhr !== null ? Math.round(measuredRhr) : null,
-      min_bpm: null,
-      max_bpm: null,
+      min_bpm: winningLatestHr?.bpm ?? null,
+      max_bpm: winningLatestHr?.bpm ?? null,
       zones: { resting: 0, fat_burn: 0, cardio: 0, peak: 0 },
       intraday_points: []
     };
@@ -2092,7 +2377,17 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     let maxBpm = 0;
     const zones = { resting: 0, fat_burn: 0, cardio: 0, peak: 0 };
 
-    for (const r of filteredHrRows) {
+    const rowsForStats =
+      filteredHrRows.length > 0
+        ? filteredHrRows
+        : intradayHrPoints.map(p => ({
+            bpm_avg: p.bpm,
+            bpm_min: p.bpm,
+            bpm_max: p.bpm,
+            sample_count: 1
+          }));
+
+    for (const r of rowsForStats) {
       const cnt = Math.max(1, r.sample_count ?? 1);
       weightedSum += r.bpm_avg * cnt;
       totalSamples += cnt;
@@ -2108,6 +2403,11 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
       else if (z === 'Peak') zones.peak++;
     }
 
+    if (winningLatestHr) {
+      if (winningLatestHr.bpm < minBpm) minBpm = winningLatestHr.bpm;
+      if (winningLatestHr.bpm > maxBpm) maxBpm = winningLatestHr.bpm;
+    }
+
     const avgBpm = Math.round((weightedSum / Math.max(1, totalSamples)) * 10) / 10;
     const effectiveRhr = measuredRhr !== null && measuredRhr > 0
       ? Math.round(measuredRhr)
@@ -2115,7 +2415,12 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
         ? Math.round(derivedAllRhr)
         : (minBpm < 999 ? minBpm + 4 : null);
 
+    const fallbackTail = intradayHrPoints.length > 0 ? intradayHrPoints[intradayHrPoints.length - 1] : null;
+
     cardioSummary = {
+      latest_bpm: winningLatestHr?.bpm ?? fallbackTail?.bpm ?? null,
+      latest_bpm_at: winningLatestHr?.tsIso ?? fallbackTail?.timestamp ?? null,
+      latest_source_device: winningLatestHr?.device ?? fallbackTail?.source_device ?? null,
       average_bpm: avgBpm,
       resting_bpm: effectiveRhr,
       min_bpm: minBpm < 999 ? Math.round(minBpm) : null,
@@ -2125,12 +2430,10 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     };
   }
 
-  // 5. Compute Rolling Personal Baselines (SDNN vs RMSSD separated & cleaned of legacy cross-unit outliers!)
+  // 5. Compute Rolling Personal Baselines & Per-Sensor RHR Map for Autonomic Stress
   const rollingSdnn = computeRollingMedianOrMean(
     historyVitalsRows.map(h => h.hrv_sdnn_nightly ?? 0).filter(v => v > 0 && v <= 120)
   );
-  // Nocturnal RMSSD on wearables (Pixel Watch / Oura / Garmin) physiologically sits >= 35ms for healthy adults;
-  // filtering >= 35ms prevents legacy SDNN (~20-28ms) backfill rows from skewing RMSSD personal baselines.
   const rmssdSourceDevice = vitalsMap['hrvrmssd']?.source_device;
   const sameDeviceRmssdHistory = rmssdSourceDevice
     ? historyVitalsRows
@@ -2146,6 +2449,24 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
   const rollingRhr = computeRollingMedianOrMean(
     historyVitalsRows.map(h => h.resting_heart_rate ?? 0).filter(v => v >= 40 && v <= 95)
   );
+
+  const perDeviceRhrMap: Record<string, number> = {};
+  for (const src of orderedSources) {
+    const dv = normalizedVitals.find(v => v.canonDevice === src && (v.resting_heart_rate ?? 0) >= 40 && (v.resting_heart_rate ?? 0) <= 98);
+    if (dv && dv.resting_heart_rate) {
+      perDeviceRhrMap[src] = dv.resting_heart_rate;
+    } else {
+      const devHistRhr = computeRollingMedianOrMean(
+        historyVitalsRows
+          .filter(h => canonicalizeDeviceName(h.source_device_key, h.host_device_name) === src)
+          .map(h => h.resting_heart_rate ?? 0)
+          .filter(v => v >= 40 && v <= 95)
+      );
+      if (devHistRhr) {
+        perDeviceRhrMap[src] = devHistRhr;
+      }
+    }
+  }
 
   const hasSdnnToday = (vitalsMap['hrvsdnn']?.value ?? 0) > 0;
   const hasRmssdToday = !hasSdnnToday && (vitalsMap['hrvrmssd']?.value ?? 0) > 0;
@@ -2168,7 +2489,9 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     restingBpm: cardioSummary.resting_bpm,
     priorSleepScore: primarySession ? primarySession.sleep_score : null,
     personalBaselineHrv: effectiveBaselineHrv,
-    personalBaselineRhr: effectiveBaselineRhr
+    personalBaselineRhr: effectiveBaselineRhr,
+    perDeviceRhrMap,
+    sourceDevice: cardioSummary.latest_source_device ?? vitalsMap['hrvsdnn']?.source_device ?? vitalsMap['hrvrmssd']?.source_device ?? primarySession?.source_device ?? null
   });
 
   // 6. Build Rich Per-Device Breakdown (including coherent per-device Stress v2.0!) & All-Devices View
@@ -2182,6 +2505,7 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     const b = sourcesBreakdown[v.canonDevice];
     if ((v.steps ?? 0) > 0) b['steps'] = v.steps!;
     if ((v.active_kcal ?? 0) > 0) b['active_calories'] = Math.round(v.active_kcal! * 10) / 10;
+    if ((v.latest_heart_rate ?? 0) > 0) b['latest_heart_rate'] = v.latest_heart_rate!;
     if ((v.resting_heart_rate ?? 0) > 0) b['resting_heart_rate'] = v.resting_heart_rate!;
     if ((v.hrv_sdnn_nightly ?? 0) > 0) b['hrv_sdnn'] = v.hrv_sdnn_nightly!;
     if ((v.hrv_rmssd_nightly ?? 0) > 0) b['hrv_rmssd'] = v.hrv_rmssd_nightly!;
@@ -2190,13 +2514,18 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     if (v.skin_temp_celsius !== null && v.skin_temp_celsius !== undefined) b['skin_temp_celsius'] = v.skin_temp_celsius;
     if ((v.weight_kg ?? 0) > 0) b['weight_kg'] = v.weight_kg!;
   }
+  for (const c of hrCandidates) {
+    if (!sourcesBreakdown[c.device]) sourcesBreakdown[c.device] = {};
+    if (!sourcesBreakdown[c.device]['latest_heart_rate']) {
+      sourcesBreakdown[c.device]['latest_heart_rate'] = c.bpm;
+    }
+  }
   for (const s of allSessions) {
     if (!sourcesBreakdown[s.source_device]) sourcesBreakdown[s.source_device] = {};
     sourcesBreakdown[s.source_device]['sleep_asleep_seconds'] = s.asleep_seconds;
     sourcesBreakdown[s.source_device]['sleep_score'] = s.sleep_score;
   }
 
-  // Compute per-device stress_score & derived resting_heart_rate for every active canonical device
   for (const src of orderedSources) {
     const devVitals = normalizedVitals.find(v => v.canonDevice === src);
     const devSleep = allSessions.find(s => s.source_device === src);
@@ -2242,7 +2571,8 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
       restingBpm: (devVitals?.resting_heart_rate ?? 0) > 0 ? devVitals!.resting_heart_rate! : null,
       priorSleepScore: devSleep ? devSleep.sleep_score : null,
       personalBaselineHrv: devHasRmssd ? devBaseRmssd : devBaseSdnn,
-      personalBaselineRhr: devBaseRhr
+      personalBaselineRhr: devBaseRhr,
+      sourceDevice: src
     });
 
     if (devStress) {
@@ -2271,6 +2601,14 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
       score: primarySession.sleep_score
     };
   }
+  if (cardioSummary.latest_bpm && cardioSummary.latest_bpm > 0 && cardioSummary.latest_source_device) {
+    allDevicesView['heart_rate'] = {
+      value: cardioSummary.latest_bpm,
+      source_key: cardioSummary.latest_source_device,
+      source_color: getCanonicalDeviceColor(cardioSummary.latest_source_device),
+      timestamp: cardioSummary.latest_bpm_at ?? undefined
+    };
+  }
   if (cardioSummary.resting_bpm && cardioSummary.resting_bpm > 0) {
     const rhrSrc = vitalsMap['restingheartrate']?.source_device || primarySession?.source_device || orderedSources[0] || 'Wearable';
     allDevicesView['resting_heart_rate'] = {
@@ -2287,10 +2625,17 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     };
   }
   if (stressSummary) {
+    const stressSrc =
+      stressSummary.source_device ||
+      cardioSummary.latest_source_device ||
+      vitalsMap['hrvsdnn']?.source_device ||
+      vitalsMap['hrvrmssd']?.source_device ||
+      primarySession?.source_device ||
+      'Biometric Engine';
     allDevicesView['stress'] = {
       value: stressSummary.current_score,
-      source_key: vitalsMap['hrvsdnn']?.source_device || vitalsMap['hrvrmssd']?.source_device || primarySession?.source_device || 'Biometric Engine',
-      source_color: '#AF52DE',
+      source_key: stressSrc,
+      source_color: getCanonicalDeviceColor(stressSrc),
       score: stressSummary.current_score
     };
   }

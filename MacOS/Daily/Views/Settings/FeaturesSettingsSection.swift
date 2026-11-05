@@ -5,6 +5,7 @@ import DailyCore
 public struct FeaturesSettingsSection: View {
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var habitsService = HabitsService.shared
+    @ObservedObject private var healthService = HealthDataService.shared
     
     @State private var showMediumLoginSheet = false
     @State private var clearMediumSessionBeforeLogin = false
@@ -46,6 +47,9 @@ public struct FeaturesSettingsSection: View {
         }
         .task {
             await refreshSessions()
+            if healthService.configurableSources.isEmpty {
+                await healthService.loadDataForSelectedDate()
+            }
         }
         .onChange(of: showMediumLoginSheet) { _, isPresented in
             if !isPresented {
@@ -200,6 +204,101 @@ public struct FeaturesSettingsSection: View {
                     step: 0.5
                 )
                 .tint(ThemeColors.accentBlue)
+            }
+            
+            if !healthService.configurableSources.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Device Priority Order")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white)
+                            Text("Used for Sleep, Resting HR & simultaneous wear. Live Vitals prefer the newest active sensor.")
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
+                        Spacer()
+                        if healthService.hasCustomDevicePriority {
+                            Button {
+                                Task { await healthService.resetDevicePriorityOrder() }
+                            } label: {
+                                Text("Reset")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(ThemeColors.accentCyan)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(ThemeColors.accentCyan.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(healthService.isSavingPriorityOrder)
+                        }
+                    }
+                    
+                    VStack(spacing: 6) {
+                        ForEach(Array(healthService.configurableSources.enumerated()), id: \.element.id) { index, record in
+                            let src = DeviceSource.from(name: record.displayName)
+                            let sColor = Color(hex: record.color ?? src.colorHex)
+                            HStack(spacing: 8) {
+                                Text("#\(index + 1)")
+                                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                                    .foregroundColor(index == 0 ? ThemeColors.accentCyan : ThemeColors.fgMutedDark)
+                                    .frame(width: 22, alignment: .leading)
+                                
+                                Image(systemName: src.systemImage)
+                                    .font(.system(size: 12.5, weight: .semibold))
+                                    .foregroundColor(sColor)
+                                    .frame(width: 18)
+                                
+                                Text(record.displayName)
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 4) {
+                                    Button {
+                                        Task { await healthService.moveDevicePriority(from: index, direction: -1) }
+                                    } label: {
+                                        Image(systemName: "chevron.up")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(index > 0 ? .white : .white.opacity(0.22))
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.white.opacity(index > 0 ? 0.1 : 0.04))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(index == 0 || healthService.isSavingPriorityOrder)
+                                    
+                                    Button {
+                                        Task { await healthService.moveDevicePriority(from: index, direction: 1) }
+                                    } label: {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(index < healthService.configurableSources.count - 1 ? .white : .white.opacity(0.22))
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.white.opacity(index < healthService.configurableSources.count - 1 ? 0.1 : 0.04))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(index >= healthService.configurableSources.count - 1 || healthService.isSavingPriorityOrder)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.white.opacity(0.05))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .strokeBorder(sColor.opacity(0.24), lineWidth: 1)
+                                    )
+                            )
+                        }
+                    }
+                }
+                .padding(.top, 4)
             }
         }
     }

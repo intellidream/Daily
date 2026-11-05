@@ -62,6 +62,8 @@ namespace Daily.Health.Tests
                 Path.Combine(Directory.GetCurrentDirectory(), "HealthSpec", "fixtures"),
                 Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "HealthSpec", "fixtures"),
                 Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "HealthSpec", "fixtures"),
+                Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "HealthSpec", "fixtures"),
+                Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "..", "HealthSpec", "fixtures"),
                 "/Users/mihai/Source/Daily/HealthSpec/fixtures"
             };
 

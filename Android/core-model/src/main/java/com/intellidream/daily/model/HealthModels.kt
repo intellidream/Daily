@@ -148,7 +148,7 @@ enum class HealthMetricType(val rawKey: String, val displayName: String, val def
                 "cyclingpower" -> CYCLING_POWER
                 "cyclingcadence" -> CYCLING_CADENCE
                 "workoutduration" -> WORKOUT_DURATION
-                "heartrate", "hr" -> HEART_RATE
+                "heartrate", "hr", "latestheartrate", "latesthr" -> HEART_RATE
                 "restingheartrate", "rhr" -> RESTING_HEART_RATE
                 "hrv", "hrvsdnn", "heartratevariabilitysdnn", "heartratevariability" -> HRV_SDNN
                 "hrvrmssd", "heartratevariabilityrmssd" -> HRV_RMSSD
@@ -261,6 +261,12 @@ data class HealthTelemetryRecord(
     val sourceDeviceKey: String? = null,
     @kotlinx.serialization.Transient
     val sourceColor: String? = null,
+    @kotlinx.serialization.Transient
+    val minValue: Double? = null,
+    @kotlinx.serialization.Transient
+    val maxValue: Double? = null,
+    @kotlinx.serialization.Transient
+    val sampleCount: Int? = null,
     @SerialName("tz_offset_min") val tzOffsetMin: Int? = null,
     @SerialName("local_date") val localDate: String? = null
 ) {
@@ -275,6 +281,9 @@ data class HealthTelemetryRecord(
 
     val isHeartRate: Boolean
         get() = normalizedType == "heartrate" || normalizedType == "hr"
+
+    val isLatestHeartRate: Boolean
+        get() = normalizedType == "latestheartrate" || normalizedType == "latesthr"
 
     val isSteps: Boolean
         get() = normalizedType == "steps" || normalizedType == "stepcount"

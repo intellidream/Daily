@@ -563,7 +563,7 @@ struct HealthServiceTests {
         let appleWatch = DeviceSource.from(name: "Apple Watch Ultra 2")
         #expect(appleWatch == .appleWatch)
         #expect(appleWatch.isVirtualEngine == false)
-        #expect(appleWatch.displayName == "Apple Watch")
+        #expect(appleWatch.displayName == "Apple Watch Ultra 2")
         
         let ouraRing = DeviceSource.from(name: "Oura Ring Gen 3")
         #expect(ouraRing == .oura)
@@ -852,7 +852,11 @@ struct HealthServiceTests {
     @Test func testLeanStaticBuilders() async throws {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        let dateKey = "2026-11-02"
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = cal.timeZone
+        df.dateFormat = "yyyy-MM-dd"
+        let dateKey = df.string(from: today)
         let userId = "user-test-123"
         let host = "Schmitz"
         
@@ -942,6 +946,225 @@ struct HealthServiceTests {
         #expect(sRec.sourceDeviceKey == "Apple Watch Ultra 2")
         #expect(sRec.deepSeconds == 3600)
         #expect(sRec.sleepScore != nil && sRec.sleepScore! > 0)
+    }
+    
+    @Test func testRecencyFirstLatestHeartRateMidDayDeviceSwitch() throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let dateKey = "2026-11-05"
+        let userId = "user-test-123"
+        
+        let t10_00 = cal.date(byAdding: .minute, value: 600, to: today)! // 10:00 AM
+        let t10_05 = cal.date(byAdding: .minute, value: 605, to: today)! // 10:05 AM
+        let t14_35 = cal.date(byAdding: .minute, value: 875, to: today)! // 14:35 PM (4.5 hours later!)
+        
+        // Oura Ring (#1 priority) & Pixel Watch 5 (#3 priority) stopped reporting at ~10:05 AM.
+        // OnePlus Watch 3 (#4 priority) is worn in the afternoon and reports 78 BPM at 14:35 PM.
+        let vitals = [
+            HealthDailyVitalsRecord(
+                id: "v_oura",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "Oura Ring",
+                steps: 1200,
+                latestHeartRate: 64,
+                latestHrAt: t10_00
+            ),
+            HealthDailyVitalsRecord(
+                id: "v_pw5",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "Pixel Watch 5",
+                steps: 1150,
+                latestHeartRate: 66,
+                latestHrAt: t10_05
+            ),
+            HealthDailyVitalsRecord(
+                id: "v_opw3",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "OnePlus Watch 3",
+                steps: 2400,
+                latestHeartRate: 78,
+                latestHrAt: t14_35
+            )
+        ]
+        
+        let winner = HealthDataService.arbitrateLatestHeartRate(
+            vitals: vitals,
+            intradayBuckets: [],
+            targetDate: today,
+            sources: [],
+            calendar: cal
+        )
+        
+        #expect(winner != nil)
+        #expect(winner?.sourceDevice == "OnePlus Watch 3")
+        #expect(winner?.bpm == 78)
+        #expect(winner?.timestamp == t14_35)
+    }
+    
+    @Test func testSimultaneousWearHeartRateTieBreakAndCustomPriority() throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let dateKey = "2026-11-05"
+        let userId = "user-test-123"
+        
+        let t14_30 = cal.date(byAdding: .minute, value: 870, to: today)! // 14:30
+        let t14_36 = cal.date(byAdding: .minute, value: 876, to: today)! // 14:36 (within 15m simultaneous window)
+        
+        let vitals = [
+            HealthDailyVitalsRecord(
+                id: "v_oura",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "Oura Ring",
+                latestHeartRate: 68,
+                latestHrAt: t14_30
+            ),
+            HealthDailyVitalsRecord(
+                id: "v_opw3",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "OnePlus Watch 3",
+                latestHeartRate: 72,
+                latestHrAt: t14_36
+            )
+        ]
+        
+        // 1. Default priority order: Oura Ring (#1) wins tie-break within 15-minute simultaneous window
+        let defaultWinner = HealthDataService.arbitrateLatestHeartRate(
+            vitals: vitals,
+            intradayBuckets: [],
+            targetDate: today,
+            sources: [],
+            calendar: cal
+        )
+        #expect(defaultWinner?.sourceDevice == "Oura Ring")
+        #expect(defaultWinner?.bpm == 68)
+        
+        // 2. Custom user priority order: OnePlus Watch 3 promoted to #1, Oura Ring #2
+        let customSources = [
+            HealthSourceRecord(
+                id: "oneplus_watch_3",
+                userId: userId,
+                platform: "Android",
+                deviceKind: "watch",
+                displayName: "OnePlus Watch 3",
+                prioritySleep: 1,
+                priorityActivity: 1,
+                isCustomPriority: true
+            ),
+            HealthSourceRecord(
+                id: "oura_ring",
+                userId: userId,
+                platform: "iOS",
+                deviceKind: "ring",
+                displayName: "Oura Ring",
+                prioritySleep: 2,
+                priorityActivity: 2,
+                isCustomPriority: true
+            )
+        ]
+        
+        let customWinner = HealthDataService.arbitrateLatestHeartRate(
+            vitals: vitals,
+            intradayBuckets: [],
+            targetDate: today,
+            sources: customSources,
+            calendar: cal
+        )
+        #expect(customWinner?.sourceDevice == "OnePlus Watch 3")
+        #expect(customWinner?.bpm == 72)
+    }
+    
+    @Test func testHourlyActivityEnvelopeMidDaySwitchVsSimultaneousWear() throws {
+        let userId = "user-test-123"
+        let dateKey = "2026-11-05"
+        
+        // Hours 8, 9, 10: Oura Ring (1000/h = 3000) AND Pixel Watch 5 (950/h = 2850) worn simultaneously
+        // Hours 14, 15, 16: Both removed; OnePlus Watch 3 worn exclusively (1200/h = 3600)
+        // Expected envelope: (1000 * 3) + (1200 * 3) = 6600 steps (zero double-counting at 8..10, full summation at 14..16!)
+        let vitals = [
+            HealthDailyVitalsRecord(
+                id: "v_oura",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "Oura Ring",
+                steps: 3000,
+                activeKcal: 120,
+                hourlySteps: [
+                    HourlyStepBucket(hour: 8, steps: 1000),
+                    HourlyStepBucket(hour: 9, steps: 1000),
+                    HourlyStepBucket(hour: 10, steps: 1000)
+                ]
+            ),
+            HealthDailyVitalsRecord(
+                id: "v_pw5",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "Pixel Watch 5",
+                steps: 2850,
+                activeKcal: 115,
+                hourlySteps: [
+                    HourlyStepBucket(hour: 8, steps: 950),
+                    HourlyStepBucket(hour: 9, steps: 950),
+                    HourlyStepBucket(hour: 10, steps: 950)
+                ]
+            ),
+            HealthDailyVitalsRecord(
+                id: "v_opw3",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "OnePlus Watch 3",
+                steps: 3600,
+                activeKcal: 160,
+                hourlySteps: [
+                    HourlyStepBucket(hour: 14, steps: 1200),
+                    HourlyStepBucket(hour: 15, steps: 1200),
+                    HourlyStepBucket(hour: 16, steps: 1200)
+                ]
+            )
+        ]
+        
+        let result = HealthDataService.arbitrateHourlyActivity(vitals: vitals, sources: [])
+        #expect(result.totalSteps == 6600)
+        #expect(result.activeCalories == 280) // 120 (Oura 100% contributed) + 160 (OPW3 100% contributed), PW5 0%
+        #expect(result.sourceDevice == "OnePlus Watch 3") // Largest contributor (3600 > 3000)
+    }
+    
+    @Test func testRecencyFirstSpotVitalsSpo2() throws {
+        let userId = "user-test-123"
+        let dateKey = "2026-11-05"
+        
+        let vitals = [
+            HealthDailyVitalsRecord(
+                id: "v_oura",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "Oura Ring",
+                spo2: 97.5,
+                vitalsTimestamps: ["spo2": "2026-11-05T07:00:00Z"]
+            ),
+            HealthDailyVitalsRecord(
+                id: "v_opw3",
+                userId: userId,
+                localDate: dateKey,
+                sourceDeviceKey: "OnePlus Watch 3",
+                spo2: 99.0,
+                vitalsTimestamps: ["spo2": "2026-11-05T15:30:00Z"]
+            )
+        ]
+        
+        let spot = HealthDataService.arbitrateSpotVital(
+            vitals: vitals,
+            timestampKey: "spo2",
+            sources: [],
+            extract: { $0.spo2 }
+        )
+        #expect(spot != nil)
+        #expect(spot?.sourceDevice == "OnePlus Watch 3")
+        #expect(spot?.value == 99.0)
     }
 }
 

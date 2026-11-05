@@ -46,17 +46,23 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.ui.text.style.TextOverflow
 import com.intellidream.daily.designsystem.MonkeyMascotView
 import com.intellidream.daily.designsystem.MonkeySize
+import com.intellidream.daily.model.HealthSourceRecord
 import com.intellidream.daily.model.MonkeyMood
 import com.intellidream.daily.model.StressAnalysisResult
 import com.intellidream.daily.model.StressLevel
 import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -115,6 +121,8 @@ fun HealthMainView(
     val totalActiveCalories by repository.totalActiveCalories.collectAsState()
     val averageBpm by repository.averageBpm.collectAsState()
     val latestBpm by repository.latestBpm.collectAsState()
+    val latestBpmAt by repository.latestBpmAt.collectAsState()
+    val latestBpmSource by repository.latestBpmSource.collectAsState()
     val minBpm by repository.minBpm.collectAsState()
     val maxBpm by repository.maxBpm.collectAsState()
     val restingBpm by repository.restingBpm.collectAsState()
@@ -133,10 +141,13 @@ fun HealthMainView(
     val stressAnalysis by repository.stressAnalysis.collectAsState()
     val intradayStress by repository.intradayStress.collectAsState()
     val stepsSourceDevice by repository.stepsSourceDevice.collectAsState()
+    val configurableSources by repository.configurableSources.collectAsState()
+    val isSavingPriorityOrder by repository.isSavingPriorityOrder.collectAsState()
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var hasHealthPermissions by remember { mutableStateOf(true) }
+    var showPriorityDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (repository.healthConnectManager.isAvailable) {
@@ -178,12 +189,14 @@ fun HealthMainView(
                 selectedDateMillis = selectedDateMillis,
                 selectedDeviceSource = selectedDeviceSource,
                 availableSources = availableSources,
+                hasConfigurableSources = configurableSources.isNotEmpty(),
                 onNavigateBack = onNavigateBack,
                 onPrevDay = { repository.prevDay() },
                 onNextDay = { repository.nextDay() },
                 onJumpToday = { repository.jumpToToday() },
                 onSelectDate = { repository.changeDate(it) },
                 onSelectSource = { repository.setDeviceFilter(it) },
+                onOpenPrioritySettings = { showPriorityDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = horizontalPadding, vertical = 12.dp)
@@ -329,6 +342,9 @@ fun HealthMainView(
                                 restingBpm = restingBpm,
                                 minBpm = minBpm,
                                 maxBpm = maxBpm,
+                                latestBpm = latestBpm,
+                                latestBpmAt = latestBpmAt,
+                                latestBpmSource = latestBpmSource,
                                 intradayHeartRate = intradayHeartRate,
                                 heartRateZones = heartRateZones,
                                 currentVitals = currentVitals
@@ -346,6 +362,20 @@ fun HealthMainView(
                     Spacer(modifier = Modifier.height(110.dp))
                 }
             }
+        }
+
+        if (showPriorityDialog) {
+            DevicePriorityDialog(
+                sources = configurableSources,
+                isSaving = isSavingPriorityOrder,
+                onMove = { idx, dir ->
+                    coroutineScope.launch { repository.moveDevicePriority(idx, dir) }
+                },
+                onReset = {
+                    coroutineScope.launch { repository.resetDevicePriorityOrder() }
+                },
+                onDismiss = { showPriorityDialog = false }
+            )
         }
 
         if (isLoading && currentVitals.isEmpty()) {
@@ -373,12 +403,14 @@ private fun HeaderBar(
     selectedDateMillis: Long,
     selectedDeviceSource: DeviceSource?,
     availableSources: List<DeviceSource>,
+    hasConfigurableSources: Boolean,
     onNavigateBack: () -> Unit,
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
     onJumpToday: () -> Unit,
     onSelectDate: (Long) -> Unit,
     onSelectSource: (DeviceSource?) -> Unit,
+    onOpenPrioritySettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -417,7 +449,9 @@ private fun HeaderBar(
         DeviceSelectorMenu(
             selectedSource = selectedDeviceSource,
             availableSources = availableSources,
-            onSelectSource = onSelectSource
+            hasConfigurableSources = hasConfigurableSources,
+            onSelectSource = onSelectSource,
+            onOpenPrioritySettings = onOpenPrioritySettings
         )
     }
 }
@@ -556,7 +590,9 @@ private fun DayNavigatorBar(
 private fun DeviceSelectorMenu(
     selectedSource: DeviceSource?,
     availableSources: List<DeviceSource>,
-    onSelectSource: (DeviceSource?) -> Unit
+    hasConfigurableSources: Boolean,
+    onSelectSource: (DeviceSource?) -> Unit,
+    onOpenPrioritySettings: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isFiltered = selectedSource != null
@@ -650,8 +686,161 @@ private fun DeviceSelectorMenu(
                     }
                 )
             }
+
+            if (hasConfigurableSources) {
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "Device Priority...",
+                            color = ThemeColors.accentCyan,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Tune,
+                            contentDescription = null,
+                            tint = ThemeColors.accentCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onOpenPrioritySettings()
+                    }
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun DevicePriorityDialog(
+    sources: List<HealthSourceRecord>,
+    isSaving: Boolean,
+    onMove: (Int, Int) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val hasCustom = sources.any { it.isCustomPriority }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF0F1B30),
+        titleContentColor = Color.White,
+        textContentColor = Color.White,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Device Priority",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = ThemeColors.accentCyan
+                    )
+                } else if (hasCustom) {
+                    TextButton(onClick = onReset) {
+                        Text("Reset", color = ThemeColors.accentCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Live heart rate and stress always use the newest reading from the device you are currently wearing. Priority order governs primary sleep, resting baselines, and simultaneous wear.",
+                    fontSize = 12.sp,
+                    color = ThemeColors.fgMutedDark
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                sources.forEachIndexed { idx, src ->
+                    val dotColor = runCatching {
+                        Color(android.graphics.Color.parseColor(src.color ?: "#3897F0"))
+                    }.getOrDefault(ThemeColors.accentCyan)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.06f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "#${idx + 1}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ThemeColors.accentCyan
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                            Text(
+                                text = src.displayName,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { onMove(idx, -1) },
+                                enabled = idx > 0 && !isSaving,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.KeyboardArrowUp,
+                                    contentDescription = "Move Up",
+                                    tint = if (idx > 0 && !isSaving) Color.White else Color.White.copy(alpha = 0.25f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { onMove(idx, 1) },
+                                enabled = idx < sources.lastIndex && !isSaving,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = "Move Down",
+                                    tint = if (idx < sources.lastIndex && !isSaving) Color.White else Color.White.copy(alpha = 0.25f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done", color = ThemeColors.accentCyan, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }
 
 // MARK: - Sub-Tab Switcher
@@ -1091,6 +1280,7 @@ private fun VitalsGrid(
     currentVitals: Map<HealthMetricType, com.intellidream.daily.model.VitalMetricRecord>
 ) {
     val displayedTiles = listOf(
+        Pair(HealthMetricType.HEART_RATE, ThemeColors.accentPink),
         Pair(HealthMetricType.RESTING_HEART_RATE, ThemeColors.accentPink),
         Pair(HealthMetricType.HRV_SDNN, ThemeColors.accentCyan),
         Pair(HealthMetricType.OXYGEN_SATURATION, ThemeColors.accentBlue),
@@ -1100,6 +1290,14 @@ private fun VitalsGrid(
         Pair(HealthMetricType.HYDRATION, ThemeColors.accentCyan),
         Pair(HealthMetricType.WEIGHT, ThemeColors.accentPurple)
     )
+
+    fun resolveRecord(metric: HealthMetricType): com.intellidream.daily.model.VitalMetricRecord? {
+        return if (metric == HealthMetricType.HRV_SDNN) {
+            currentVitals[HealthMetricType.HRV_SDNN] ?: currentVitals[HealthMetricType.HRV_RMSSD]
+        } else {
+            currentVitals[metric]
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         for (i in displayedTiles.indices step 2) {
@@ -1111,7 +1309,7 @@ private fun VitalsGrid(
                 VitalMetricTile(
                     modifier = Modifier.weight(1f),
                     metricType = metric1,
-                    record = currentVitals[metric1],
+                    record = resolveRecord(metric1),
                     tint = tint1
                 )
 
@@ -1120,7 +1318,7 @@ private fun VitalsGrid(
                     VitalMetricTile(
                         modifier = Modifier.weight(1f),
                         metricType = metric2,
-                        record = currentVitals[metric2],
+                        record = resolveRecord(metric2),
                         tint = tint2
                     )
                 } else {
@@ -1139,6 +1337,9 @@ private fun VitalsSection(
     restingBpm: Double,
     minBpm: Double,
     maxBpm: Double,
+    latestBpm: Double?,
+    latestBpmAt: Long?,
+    latestBpmSource: String?,
     intradayHeartRate: List<com.intellidream.daily.model.IntradayHeartRatePoint>,
     heartRateZones: Map<com.intellidream.daily.model.HeartRateZone, Int>,
     currentVitals: Map<HealthMetricType, com.intellidream.daily.model.VitalMetricRecord>
@@ -1149,6 +1350,9 @@ private fun VitalsSection(
             restingBpm = restingBpm,
             minBpm = minBpm,
             maxBpm = maxBpm,
+            latestBpm = latestBpm,
+            latestBpmAt = latestBpmAt,
+            latestBpmSource = latestBpmSource,
             intradayHeartRate = intradayHeartRate,
             heartRateZones = heartRateZones
         )

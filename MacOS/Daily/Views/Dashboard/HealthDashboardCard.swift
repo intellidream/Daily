@@ -500,15 +500,17 @@ public struct HealthDashboardCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
                 VStack(alignment: .leading, spacing: 4) {
+                    let liveBpm = healthService.latestBpm
+                    let displayBpm = liveBpm ?? (healthService.averageBpm > 0 ? healthService.averageBpm : nil)
                     HStack(spacing: 4) {
                         Image(systemName: "waveform.path.ecg")
                             .font(.system(size: 9.5, weight: .bold))
                             .foregroundColor(ThemeColors.accentPink)
-                        Text("AVG BPM")
+                        Text(liveBpm != nil ? "BPM" : "AVG BPM")
                             .font(.system(size: 9.5, weight: .bold))
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
-                    Text(healthService.averageBpm > 0 ? "\(Int(healthService.averageBpm))" : "--")
+                    Text(displayBpm != nil ? "\(Int(round(displayBpm!)))" : "--")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentPink)
                     if healthService.restingBpm > 0 {
@@ -586,10 +588,10 @@ public struct HealthDashboardCard: View {
             // Secondary Biometrics Grid (HRV, SpO2, Resting HR, Sleep Score)
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
-                    let hrvVal = healthService.currentVitals[.hrvSdnn]?.value
+                    let hrvVal = healthService.currentVitals[.hrvSdnn]?.value ?? healthService.currentVitals[.hrvRmssd]?.value
                     vitalsTile(
                         icon: "waveform.path.ecg",
-                        title: "HRV (SDNN)",
+                        title: "HRV",
                         value: hrvVal != nil ? "\(Int(round(hrvVal!))) ms" : "--",
                         color: ThemeColors.accentPurple
                     )
@@ -655,6 +657,8 @@ extension HealthDashboardCard: Equatable {
         lhs.size == rhs.size &&
         lhs.healthService.totalStepsToday == rhs.healthService.totalStepsToday &&
         lhs.healthService.totalActiveCalories == rhs.healthService.totalActiveCalories &&
+        lhs.healthService.latestBpm == rhs.healthService.latestBpm &&
+        lhs.healthService.latestBpmSource == rhs.healthService.latestBpmSource &&
         lhs.healthService.averageBpm == rhs.healthService.averageBpm &&
         lhs.healthService.restingBpm == rhs.healthService.restingBpm &&
         lhs.healthService.primarySleepSession?.id == rhs.healthService.primarySleepSession?.id &&

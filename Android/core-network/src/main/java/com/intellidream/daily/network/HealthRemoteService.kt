@@ -324,5 +324,50 @@ class HealthRemoteService(
             false
         }
     }
+
+    suspend fun saveHealthSourcePriorities(orderedSourceIds: List<String>): Boolean = withContext(Dispatchers.IO) {
+        if (orderedSourceIds.isEmpty()) return@withContext false
+        if (!clientManager.ensureSessionReady()) return@withContext false
+        try {
+            val url = "${SupabaseClientManager.SUPABASE_URL}/rest/v1/rpc/save_health_source_priorities"
+            val jsonIds = orderedSourceIds.joinToString(",") { "\"${it.replace("\"", "")}\"" }
+            val body = """{"ordered_source_ids":[$jsonIds]}"""
+            val token = clientManager.currentAccessTokenOrAnonKey()
+            val req = Request.Builder()
+                .url(url)
+                .header("Content-Type", "application/json")
+                .header("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
+                .header("Authorization", "Bearer $token")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            SupabaseClientManager.okHttpClient.newCall(req).execute().use { resp ->
+                resp.code in 200..299
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to save health source priorities: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun resetHealthSourcePriorities(): Boolean = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext false
+        try {
+            val url = "${SupabaseClientManager.SUPABASE_URL}/rest/v1/rpc/reset_health_source_priorities"
+            val token = clientManager.currentAccessTokenOrAnonKey()
+            val req = Request.Builder()
+                .url(url)
+                .header("Content-Type", "application/json")
+                .header("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
+                .header("Authorization", "Bearer $token")
+                .post("{}".toRequestBody("application/json".toMediaType()))
+                .build()
+            SupabaseClientManager.okHttpClient.newCall(req).execute().use { resp ->
+                resp.code in 200..299
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("HealthRemoteService", "Failed to reset health source priorities: ${e.message}")
+            false
+        }
+    }
 }
 

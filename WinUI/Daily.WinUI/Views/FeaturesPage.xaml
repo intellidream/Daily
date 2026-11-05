@@ -808,6 +808,21 @@
                             <TextBlock x:Name="HealthSleepTargetLabel" Text="8.0h" FontSize="12" FontWeight="SemiBold" Width="35" VerticalAlignment="Center" HorizontalAlignment="Right" />
                         </StackPanel>
                     </Grid>
+
+                    <StackPanel x:Name="HealthDevicePriorityPanel" Spacing="8" Visibility="Collapsed" Margin="0,4,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="Health: Device Priority Order" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock Text="Live heart rate and stress always use the newest reading; priority orders primary sleep, resting baselines, and simultaneous wear." FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1" x:Name="ResetHealthDevicePriorityButton" Content="Reset Default" Click="ResetHealthDevicePriorityButton_Click" Visibility="Collapsed" VerticalAlignment="Center" Margin="12,0,0,0" Padding="10,4" FontSize="11" />
+                        </Grid>
+                        <StackPanel x:Name="HealthDevicePriorityRowsPanel" Spacing="6" />
+                    </StackPanel>
                     
                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 

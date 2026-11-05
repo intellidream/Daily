@@ -847,38 +847,58 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     private func downsampleHeartRateRecords(_ samples: [HealthTelemetryRecord], bucketIntervalSeconds: TimeInterval = 300) -> [HealthTelemetryRecord] {
         guard !samples.isEmpty else { return [] }
         
-        var buckets: [String: (sum: Double, count: Int, timestamp: Date, device: String, host: String?, sensor: String?, key: String?, color: String?)] = [:]
+        var buckets: [String: (sum: Double, minBpm: Double, maxBpm: Double, count: Int, timestamp: Date, device: String, host: String?, sensor: String?, key: String?, color: String?)] = [:]
+        var latestByDevice: [String: (bpm: Double, endTime: Date, host: String?, sensor: String?, color: String?)] = [:]
         
         for sample in samples {
             guard let bpm = sample.value, bpm >= 30, bpm <= 240 else { continue }
+            let rawDevice = sample.sourceDeviceKey ?? sample.sourceDevice ?? "Apple Health"
+            let src = DeviceSource.from(name: rawDevice)
+            if src.isVirtualEngine { continue }
+            let canonDevice = src.displayName
+            
             let epoch = sample.startTime.timeIntervalSince1970
             let bucketTime = floor(epoch / bucketIntervalSeconds) * bucketIntervalSeconds
-            let device = sample.sourceDeviceKey ?? sample.sourceDevice ?? "Apple Health"
-            let bucketKey = "\(Int64(bucketTime))_\(device)"
+            let bucketKey = "\(Int64(bucketTime))_\(canonDevice)"
             
             if var existing = buckets[bucketKey] {
                 existing.sum += bpm
+                existing.minBpm = min(existing.minBpm, bpm)
+                existing.maxBpm = max(existing.maxBpm, bpm)
                 existing.count += 1
                 buckets[bucketKey] = existing
             } else {
                 buckets[bucketKey] = (
                     sum: bpm,
+                    minBpm: bpm,
+                    maxBpm: bpm,
                     count: 1,
                     timestamp: Date(timeIntervalSince1970: bucketTime),
-                    device: device,
+                    device: canonDevice,
                     host: sample.hostDeviceName,
                     sensor: sample.sensorSourceName,
-                    key: sample.sourceDeviceKey,
+                    key: canonDevice,
                     color: sample.sourceColor
                 )
+            }
+            
+            let sampleEnd = sample.endTime ?? sample.startTime
+            if let prevLatest = latestByDevice[canonDevice] {
+                if sampleEnd >= prevLatest.endTime {
+                    latestByDevice[canonDevice] = (bpm: bpm, endTime: sampleEnd, host: sample.hostDeviceName, sensor: sample.sensorSourceName, color: sample.sourceColor)
+                }
+            } else {
+                latestByDevice[canonDevice] = (bpm: bpm, endTime: sampleEnd, host: sample.hostDeviceName, sensor: sample.sensorSourceName, color: sample.sourceColor)
             }
         }
         
         let tzOffsetMin = Calendar.current.timeZone.secondsFromGMT() / 60
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = Calendar.current.timeZone
         f.dateFormat = "yyyy-MM-dd"
         
-        return buckets.values.map { b in
+        var records: [HealthTelemetryRecord] = buckets.values.map { b in
             let avgBpm = (round((b.sum / Double(b.count)) * 10.0)) / 10.0
             let bucketEpoch = Int64(b.timestamp.timeIntervalSince1970)
             let finalDevice = b.key ?? b.device
@@ -898,9 +918,37 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 hostDeviceName: b.host,
                 sensorSourceName: b.sensor,
                 sourceDeviceKey: finalDevice,
-                sourceColor: b.color
+                sourceColor: b.color,
+                minValue: (round(b.minBpm * 10.0)) / 10.0,
+                maxValue: (round(b.maxBpm * 10.0)) / 10.0,
+                sampleCount: b.count
             )
-        }.sorted { $0.startTime < $1.startTime }
+        }
+        
+        for (canonDevice, latest) in latestByDevice {
+            let roundedLatest = (round(latest.bpm * 10.0)) / 10.0
+            let exactEpoch = Int64(latest.endTime.timeIntervalSince1970)
+            records.append(HealthTelemetryRecord(
+                id: UUID().uuidString,
+                userId: "healthkit",
+                type: "latest_heart_rate",
+                value: roundedLatest,
+                unit: "bpm",
+                startTime: latest.endTime,
+                endTime: latest.endTime,
+                sourceDevice: canonDevice,
+                externalId: "latest_hr_\(canonDevice)_\(exactEpoch)",
+                semantics: "spot",
+                tzOffsetMin: tzOffsetMin,
+                localDate: f.string(from: latest.endTime),
+                hostDeviceName: latest.host,
+                sensorSourceName: latest.sensor,
+                sourceDeviceKey: canonDevice,
+                sourceColor: latest.color
+            ))
+        }
+        
+        return records.sorted { $0.startTime < $1.startTime }
     }
 }
 

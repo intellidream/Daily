@@ -98,6 +98,7 @@ public struct DeviceMetricItem: Codable, Sendable, Equatable {
         case unit
         case score
         case updatedAt = "updated_at"
+        case timestamp
     }
 
     public init(
@@ -114,6 +115,27 @@ public struct DeviceMetricItem: Codable, Sendable, Equatable {
         self.unit = unit
         self.score = score
         self.updatedAt = updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.value = try container.decodeIfPresent(Double.self, forKey: .value)
+        self.sourceKey = try container.decodeIfPresent(String.self, forKey: .sourceKey)
+        self.color = try container.decodeIfPresent(String.self, forKey: .color)
+        self.unit = try container.decodeIfPresent(String.self, forKey: .unit)
+        self.score = try container.decodeIfPresent(Int.self, forKey: .score)
+        self.updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+            ?? container.decodeIfPresent(String.self, forKey: .timestamp)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(value, forKey: .value)
+        try container.encodeIfPresent(sourceKey, forKey: .sourceKey)
+        try container.encodeIfPresent(color, forKey: .color)
+        try container.encodeIfPresent(unit, forKey: .unit)
+        try container.encodeIfPresent(score, forKey: .score)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
 }
 
@@ -192,6 +214,7 @@ public struct DailyHealthSummaryPayload: Codable, Sendable, Equatable {
         sleep.primarySession == nil &&
         vitals.isEmpty &&
         stress == nil &&
+        (cardiovascular.latestBpm == nil || cardiovascular.latestBpm == 0) &&
         (cardiovascular.restingBpm == nil || cardiovascular.restingBpm == 0) &&
         cardiovascular.intradayPoints.isEmpty
     }
@@ -274,6 +297,9 @@ public struct CanonicalActivitySummary: Codable, Sendable, Equatable {
 }
 
 public struct CanonicalCardiovascularSummary: Codable, Sendable, Equatable {
+    public let latestBpm: Double?
+    public let latestBpmAt: Date?
+    public let latestSourceDevice: String?
     public let averageBpm: Double?
     public let restingBpm: Double?
     public let minBpm: Double?
@@ -282,6 +308,9 @@ public struct CanonicalCardiovascularSummary: Codable, Sendable, Equatable {
     public let intradayPoints: [IntradayHeartRatePoint]
     
     enum CodingKeys: String, CodingKey {
+        case latestBpm = "latest_bpm"
+        case latestBpmAt = "latest_bpm_at"
+        case latestSourceDevice = "latest_source_device"
         case averageBpm = "average_bpm"
         case restingBpm = "resting_bpm"
         case minBpm = "min_bpm"
@@ -291,6 +320,9 @@ public struct CanonicalCardiovascularSummary: Codable, Sendable, Equatable {
     }
     
     public init(
+        latestBpm: Double? = nil,
+        latestBpmAt: Date? = nil,
+        latestSourceDevice: String? = nil,
         averageBpm: Double? = nil,
         restingBpm: Double? = nil,
         minBpm: Double? = nil,
@@ -298,12 +330,28 @@ public struct CanonicalCardiovascularSummary: Codable, Sendable, Equatable {
         zones: CanonicalHeartRateZones = CanonicalHeartRateZones(),
         intradayPoints: [IntradayHeartRatePoint] = []
     ) {
+        self.latestBpm = latestBpm
+        self.latestBpmAt = latestBpmAt
+        self.latestSourceDevice = latestSourceDevice
         self.averageBpm = averageBpm
         self.restingBpm = restingBpm
         self.minBpm = minBpm
         self.maxBpm = maxBpm
         self.zones = zones
         self.intradayPoints = intradayPoints
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.latestBpm = try container.decodeIfPresent(Double.self, forKey: .latestBpm)
+        self.latestBpmAt = try container.decodeIfPresent(Date.self, forKey: .latestBpmAt)
+        self.latestSourceDevice = try container.decodeIfPresent(String.self, forKey: .latestSourceDevice)
+        self.averageBpm = try container.decodeIfPresent(Double.self, forKey: .averageBpm)
+        self.restingBpm = try container.decodeIfPresent(Double.self, forKey: .restingBpm)
+        self.minBpm = try container.decodeIfPresent(Double.self, forKey: .minBpm)
+        self.maxBpm = try container.decodeIfPresent(Double.self, forKey: .maxBpm)
+        self.zones = try container.decodeIfPresent(CanonicalHeartRateZones.self, forKey: .zones) ?? CanonicalHeartRateZones()
+        self.intradayPoints = try container.decodeIfPresent([IntradayHeartRatePoint].self, forKey: .intradayPoints) ?? []
     }
 }
 
@@ -347,6 +395,7 @@ public struct CanonicalStressSummary: Codable, Sendable, Equatable {
     public let monkeyMood: MonkeyMood
     public let adviceQuote: String
     public let recommendedBreathing: String
+    public let sourceDevice: String?
     public let intradayPoints: [IntradayStressPoint]
     
     enum CodingKeys: String, CodingKey {
@@ -368,6 +417,7 @@ public struct CanonicalStressSummary: Codable, Sendable, Equatable {
         case monkeyMood = "monkey_mood"
         case adviceQuote = "advice_quote"
         case recommendedBreathing = "recommended_breathing"
+        case sourceDevice = "source_device"
         case intradayPoints = "intraday_points"
     }
     
@@ -390,6 +440,7 @@ public struct CanonicalStressSummary: Codable, Sendable, Equatable {
         monkeyMood: MonkeyMood,
         adviceQuote: String,
         recommendedBreathing: String,
+        sourceDevice: String? = nil,
         intradayPoints: [IntradayStressPoint] = []
     ) {
         self.currentScore = currentScore
@@ -410,6 +461,7 @@ public struct CanonicalStressSummary: Codable, Sendable, Equatable {
         self.monkeyMood = monkeyMood
         self.adviceQuote = adviceQuote
         self.recommendedBreathing = recommendedBreathing
+        self.sourceDevice = sourceDevice
         self.intradayPoints = intradayPoints
     }
 }

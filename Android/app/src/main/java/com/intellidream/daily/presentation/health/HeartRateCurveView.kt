@@ -58,10 +58,14 @@ fun HeartRateCurveView(
     maxBpm: Double,
     intradayHeartRate: List<IntradayHeartRatePoint>,
     heartRateZones: Map<HeartRateZone, Int>,
+    latestBpm: Double? = null,
+    latestBpmAt: Long? = null,
+    latestBpmSource: String? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedPoint by remember { mutableStateOf<IntradayHeartRatePoint?>(null) }
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val hasLiveLatest = latestBpm != null && latestBpm > 0.0
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -81,11 +85,11 @@ fun HeartRateCurveView(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "HEART RATE TODAY",
+                            text = if (hasLiveLatest) "LATEST HEART RATE" else "HEART RATE TODAY",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = ThemeColors.accentCyan
@@ -96,49 +100,97 @@ fun HeartRateCurveView(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = if (averageBpm > 0) "${averageBpm.roundToInt()}" else "--",
+                                text = when {
+                                    hasLiveLatest -> "${latestBpm!!.roundToInt()}"
+                                    averageBpm > 0 -> "${averageBpm.roundToInt()}"
+                                    else -> "--"
+                                },
                                 fontSize = 34.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Text(
-                                text = "BPM AVG",
+                                text = if (hasLiveLatest) "BPM" else "BPM AVG",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ThemeColors.fgMutedDark,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
+
+                        if (hasLiveLatest && ((latestBpmAt != null && latestBpmAt > 0L) || !latestBpmSource.isNullOrEmpty())) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (latestBpmAt != null && latestBpmAt > 0L) {
+                                    Text(
+                                        text = "at ${timeFormatter.format(Date(latestBpmAt))}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = ThemeColors.fgMutedDark
+                                    )
+                                }
+                                if (!latestBpmSource.isNullOrEmpty()) {
+                                    DeviceOriginBadge(device = latestBpmSource, compact = true)
+                                }
+                            }
+                        }
                     }
 
-                    // Resting HR Pill
+                    // Daily Avg + Resting HR Callouts
                     Column(
                         horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        if (hasLiveLatest && averageBpm > 0) {
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(1.dp)
+                            ) {
+                                Text(
+                                    text = "Daily Avg",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ThemeColors.fgMutedDark
+                                )
+                                Text(
+                                    text = "${averageBpm.roundToInt()} bpm",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Favorite,
-                                contentDescription = null,
-                                tint = ThemeColors.accentPink,
-                                modifier = Modifier.size(12.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Favorite,
+                                    contentDescription = null,
+                                    tint = ThemeColors.accentPink,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "Resting HR",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ThemeColors.fgMutedDark
+                                )
+                            }
                             Text(
-                                text = "Resting HR",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ThemeColors.fgMutedDark
+                                text = if (restingBpm > 0) "${restingBpm.roundToInt()} bpm" else "--",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
                         }
-                        Text(
-                            text = if (restingBpm > 0) "${restingBpm.roundToInt()} bpm" else "--",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
                     }
                 }
 

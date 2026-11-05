@@ -62,7 +62,11 @@ data class DailyHealthSummaryPayload(
         val noSleep = sleep == null || sleep.primarySession == null
         val noVitals = vitals.isEmpty()
         val noStress = stress == null
-        val noCardio = cardiovascular == null || ((cardiovascular.restingHeartRateBpm == null || cardiovascular.restingHeartRateBpm == 0.0) && cardiovascular.intradayHeartRate.isEmpty())
+        val noCardio = cardiovascular == null || (
+            (cardiovascular.restingHeartRateBpm == null || cardiovascular.restingHeartRateBpm == 0.0) &&
+            (cardiovascular.latestBpm == null || cardiovascular.latestBpm == 0.0) &&
+            cardiovascular.intradayHeartRate.isEmpty()
+        )
         return noSteps && noSleep && noVitals && noStress && noCardio
     }
 }
@@ -170,6 +174,12 @@ data class CanonicalCardiovascularSummary(
     @SerialName("max_bpm") val maxHeartRateBpm: Double? = null,
     @JsonNames("min_bpm", "min_heart_rate_bpm")
     @SerialName("min_bpm") val minHeartRateBpm: Double? = null,
+    @JsonNames("latest_bpm", "latestBpm")
+    @SerialName("latest_bpm") val latestBpm: Double? = null,
+    @JsonNames("latest_bpm_at", "latestBpmAt")
+    @SerialName("latest_bpm_at") val latestBpmAt: String? = null,
+    @JsonNames("latest_source_device", "latestSourceDevice")
+    @SerialName("latest_source_device") val latestSourceDevice: String? = null,
     @JsonNames("zones", "heart_rate_zones")
     @SerialName("zones") val heartRateZones: CanonicalHeartRateZones? = null
 )
@@ -216,6 +226,7 @@ data class CanonicalStressSummary(
     @SerialName("monkey_mood") val monkeyMood: String? = null,
     @SerialName("advice_quote") val adviceQuote: String? = null,
     @SerialName("recommended_breathing") val recommendedBreathing: String? = null,
+    @SerialName("source_device") val sourceDevice: String? = null,
     @JsonNames("intraday_points", "intraday_stress")
     @SerialName("intraday_points") val intradayStress: List<IntradayStressPoint> = emptyList()
 ) {

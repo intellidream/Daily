@@ -19,6 +19,7 @@ public struct HealthSourceRecord: Identifiable, Codable, Hashable, Sendable {
     public let hostDeviceName: String?
     public let prioritySleep: Int
     public let priorityActivity: Int
+    public let isCustomPriority: Bool
     public let color: String?
     public let createdAt: Date?
     
@@ -33,6 +34,7 @@ public struct HealthSourceRecord: Identifiable, Codable, Hashable, Sendable {
         case hostDeviceName = "host_device_name"
         case prioritySleep = "priority_sleep"
         case priorityActivity = "priority_activity"
+        case isCustomPriority = "is_custom_priority"
         case color
         case createdAt = "created_at"
     }
@@ -48,6 +50,7 @@ public struct HealthSourceRecord: Identifiable, Codable, Hashable, Sendable {
         hostDeviceName: String? = nil,
         prioritySleep: Int = 10,
         priorityActivity: Int = 10,
+        isCustomPriority: Bool = false,
         color: String? = "#3897F0",
         createdAt: Date? = nil
     ) {
@@ -61,8 +64,26 @@ public struct HealthSourceRecord: Identifiable, Codable, Hashable, Sendable {
         self.hostDeviceName = hostDeviceName
         self.prioritySleep = prioritySleep
         self.priorityActivity = priorityActivity
+        self.isCustomPriority = isCustomPriority
         self.color = color
         self.createdAt = createdAt
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.userId = try container.decode(String.self, forKey: .userId)
+        self.platform = try container.decodeIfPresent(String.self, forKey: .platform) ?? "iOS"
+        self.deviceKind = try container.decodeIfPresent(String.self, forKey: .deviceKind) ?? "watch"
+        self.vendor = try container.decodeIfPresent(String.self, forKey: .vendor)
+        self.model = try container.decodeIfPresent(String.self, forKey: .model)
+        self.displayName = try container.decode(String.self, forKey: .displayName)
+        self.hostDeviceName = try container.decodeIfPresent(String.self, forKey: .hostDeviceName)
+        self.prioritySleep = try container.decodeIfPresent(Int.self, forKey: .prioritySleep) ?? 10
+        self.priorityActivity = try container.decodeIfPresent(Int.self, forKey: .priorityActivity) ?? self.prioritySleep
+        self.isCustomPriority = try container.decodeIfPresent(Bool.self, forKey: .isCustomPriority) ?? false
+        self.color = try container.decodeIfPresent(String.self, forKey: .color)
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     }
 }
 
@@ -219,6 +240,9 @@ public struct HealthDailyVitalsRecord: Identifiable, Codable, Hashable, Sendable
     public let hrvSdnnNightly: Double?
     public let hrvRmssdNightly: Double?
     public let hourlySteps: [HourlyStepBucket]?
+    public let latestHeartRate: Int?
+    public let latestHrAt: Date?
+    public let vitalsTimestamps: [String: String]?
     public let updatedAt: Date?
     
     enum CodingKeys: String, CodingKey {
@@ -237,6 +261,9 @@ public struct HealthDailyVitalsRecord: Identifiable, Codable, Hashable, Sendable
         case hrvSdnnNightly = "hrv_sdnn_nightly"
         case hrvRmssdNightly = "hrv_rmssd_nightly"
         case hourlySteps = "hourly_steps"
+        case latestHeartRate = "latest_heart_rate"
+        case latestHrAt = "latest_hr_at"
+        case vitalsTimestamps = "vitals_timestamps"
         case updatedAt = "updated_at"
     }
     
@@ -256,6 +283,9 @@ public struct HealthDailyVitalsRecord: Identifiable, Codable, Hashable, Sendable
         hrvSdnnNightly: Double? = nil,
         hrvRmssdNightly: Double? = nil,
         hourlySteps: [HourlyStepBucket]? = nil,
+        latestHeartRate: Int? = nil,
+        latestHrAt: Date? = nil,
+        vitalsTimestamps: [String: String]? = nil,
         updatedAt: Date? = nil
     ) {
         self.id = id
@@ -273,12 +303,39 @@ public struct HealthDailyVitalsRecord: Identifiable, Codable, Hashable, Sendable
         self.hrvSdnnNightly = hrvSdnnNightly
         self.hrvRmssdNightly = hrvRmssdNightly
         self.hourlySteps = hourlySteps
+        self.latestHeartRate = latestHeartRate
+        self.latestHrAt = latestHrAt
+        self.vitalsTimestamps = vitalsTimestamps
         self.updatedAt = updatedAt
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.userId = try container.decode(String.self, forKey: .userId)
+        self.localDate = try container.decode(String.self, forKey: .localDate)
+        self.sourceDeviceKey = try container.decode(String.self, forKey: .sourceDeviceKey)
+        self.hostDeviceName = try container.decodeIfPresent(String.self, forKey: .hostDeviceName)
+        self.steps = try container.decodeIfPresent(Int.self, forKey: .steps) ?? 0
+        self.activeKcal = try container.decodeIfPresent(Double.self, forKey: .activeKcal) ?? 0.0
+        self.restingHeartRate = try container.decodeIfPresent(Int.self, forKey: .restingHeartRate)
+        self.spo2 = try container.decodeIfPresent(Double.self, forKey: .spo2)
+        self.respiratoryRate = try container.decodeIfPresent(Double.self, forKey: .respiratoryRate)
+        self.skinTempCelsius = try container.decodeIfPresent(Double.self, forKey: .skinTempCelsius)
+        self.weightKg = try container.decodeIfPresent(Double.self, forKey: .weightKg)
+        self.hrvSdnnNightly = try container.decodeIfPresent(Double.self, forKey: .hrvSdnnNightly)
+        self.hrvRmssdNightly = try container.decodeIfPresent(Double.self, forKey: .hrvRmssdNightly)
+        self.hourlySteps = try container.decodeIfPresent([HourlyStepBucket].self, forKey: .hourlySteps)
+        self.latestHeartRate = try container.decodeIfPresent(Int.self, forKey: .latestHeartRate)
+        self.latestHrAt = try container.decodeIfPresent(Date.self, forKey: .latestHrAt)
+        self.vitalsTimestamps = try container.decodeIfPresent([String: String].self, forKey: .vitalsTimestamps)
+        self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
     
     public var hasSignal: Bool {
         steps > 0 ||
         activeKcal > 0 ||
+        (latestHeartRate ?? 0) > 0 ||
         (restingHeartRate ?? 0) > 0 ||
         (spo2 ?? 0) > 0 ||
         (respiratoryRate ?? 0) > 0 ||

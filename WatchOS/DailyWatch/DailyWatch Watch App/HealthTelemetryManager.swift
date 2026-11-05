@@ -20,6 +20,8 @@ private struct WatchDailyVitalsPayload: Codable {
     let spo2: Double?
     let hrv_sdnn_nightly: Double?
     let hourly_steps: [WatchHourlyStepPayload]?
+    let latest_heart_rate: Int?
+    let latest_hr_at: String?
     let updated_at: String
 }
 
@@ -165,8 +167,8 @@ class HealthTelemetryManager {
         let rawSpo2 = await fetchLatestWatchQuantity(.oxygenSaturation, unit: HKUnit.percent(), since: startOfDay)
         let spo2 = rawSpo2.map { $0 <= 1.0 ? ($0 * 100.0) : $0 }
         
-        // 3. Fetch Watch-only 5-Minute Heart Rate Buckets for Today
-        let hrBuckets = await fetchTodayWatchHeartRateBuckets(
+        // 3. Fetch Watch-only 5-Minute Heart Rate Buckets + Exact Latest HR Sample for Today
+        let (hrBuckets, latestBpm, latestHrIso) = await fetchTodayWatchHeartRateBuckets(
             userId: userId,
             dateKey: dateKey,
             startOfDay: startOfDay,
@@ -177,7 +179,18 @@ class HealthTelemetryManager {
         
         var didPushAny = false
         
-        if totalSteps > 0 || activeKcal > 0 || rhr != nil || hrv != nil || spo2 != nil {
+        if !hrBuckets.isEmpty {
+            do {
+                try await pClient.from("health_intraday_heart_rate")
+                    .upsert(hrBuckets, onConflict: "user_id,local_date,source_device_key,bucket_minute")
+                    .execute()
+                didPushAny = true
+            } catch {
+                os_log("Watch lean intraday HR upsert warning: %@", type: .error, error.localizedDescription)
+            }
+        }
+        
+        if totalSteps > 0 || activeKcal > 0 || rhr != nil || hrv != nil || spo2 != nil || latestBpm != nil {
             let vitalsPayload = WatchDailyVitalsPayload(
                 id: "vitals_\(userId)_\(dateKey)_\(canonicalWatchSlug)",
                 user_id: userId,
@@ -190,6 +203,8 @@ class HealthTelemetryManager {
                 spo2: spo2.map { round($0 * 10) / 10 },
                 hrv_sdnn_nightly: hrv.map { round($0 * 10) / 10 },
                 hourly_steps: hourlySteps.isEmpty ? nil : hourlySteps,
+                latest_heart_rate: latestBpm,
+                latest_hr_at: latestHrIso,
                 updated_at: nowIso
             )
             do {
@@ -199,17 +214,6 @@ class HealthTelemetryManager {
                 didPushAny = true
             } catch {
                 os_log("Watch lean vitals upsert warning: %@", type: .error, error.localizedDescription)
-            }
-        }
-        
-        if !hrBuckets.isEmpty {
-            do {
-                try await pClient.from("health_intraday_heart_rate")
-                    .upsert(hrBuckets, onConflict: "user_id,local_date,source_device_key,bucket_minute")
-                    .execute()
-                didPushAny = true
-            } catch {
-                os_log("Watch lean intraday HR upsert warning: %@", type: .error, error.localizedDescription)
             }
         }
         
@@ -358,19 +362,24 @@ class HealthTelemetryManager {
         now: Date,
         nowIso: String,
         calendar: Calendar
-    ) async -> [WatchIntradayHrPayload] {
-        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return [] }
+    ) async -> (buckets: [WatchIntradayHrPayload], latestBpm: Int?, latestHrIso: String?) {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+            return ([], nil, nil)
+        }
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
         let bpmUnit = HKUnit(from: "count/min")
         
         return await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(sampleType: hrType, predicate: predicate, limit: 600, sortDescriptors: [sort]) { [weak self] _, samples, _ in
+            let query = HKSampleQuery(sampleType: hrType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { [weak self] _, samples, _ in
                 guard let self = self, let qSamples = samples as? [HKQuantitySample] else {
-                    continuation.resume(returning: [])
+                    continuation.resume(returning: ([], nil, nil))
                     return
                 }
                 var buckets: [Int: [Double]] = [:]
+                var latestBpm: Int? = nil
+                var latestDate: Date? = nil
+                
                 for s in qSamples where self.isWatchSource(s.sourceRevision.source, device: s.device) {
                     let bpm = s.quantity.doubleValue(for: bpmUnit)
                     guard bpm >= 30 && bpm <= 240 else { continue }
@@ -378,6 +387,12 @@ class HealthTelemetryManager {
                     let min = calendar.component(.minute, from: s.startDate)
                     let bucketMin = hour * 60 + (min / 5) * 5
                     buckets[bucketMin, default: []].append(bpm)
+                    
+                    let sampleEnd = s.endDate
+                    if latestDate == nil || sampleEnd >= latestDate! {
+                        latestDate = sampleEnd
+                        latestBpm = Int(round(bpm))
+                    }
                 }
                 let payloads = buckets.keys.sorted().compactMap { bMin -> WatchIntradayHrPayload? in
                     guard let vals = buckets[bMin], !vals.isEmpty else { return nil }
@@ -395,7 +410,8 @@ class HealthTelemetryManager {
                         updated_at: nowIso
                     )
                 }
-                continuation.resume(returning: payloads)
+                let latestIso = latestDate.map { self.isoFormatter.string(from: $0) }
+                continuation.resume(returning: (payloads, latestBpm, latestIso))
             }
             healthStore.execute(query)
         }

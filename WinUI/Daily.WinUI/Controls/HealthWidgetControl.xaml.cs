@@ -256,7 +256,18 @@ namespace Daily_WinUI.Controls
         {
             get
             {
-                // Priority 1: Intraday HR last point
+                // Priority 1: Canonical v2.1 Recency-First LatestBpm
+                var latest = _currentSummary?.Summary?.Cardiovascular?.LatestBpm;
+                if (latest.HasValue && latest.Value >= 30)
+                {
+                    return $"{latest.Value:N0} bpm";
+                }
+
+                // Priority 2: Vital metric (HeartRate)
+                var m = GetMetric(VitalType.HeartRate);
+                if (m?.Value >= 30) return $"{m.Value:N0} bpm";
+
+                // Priority 3: Intraday HR last point
                 var intraday = _currentSummary?.Summary?.Cardiovascular?.IntradayHeartRate;
                 if (intraday != null && intraday.Any())
                 {
@@ -267,11 +278,7 @@ namespace Daily_WinUI.Controls
                     }
                 }
 
-                // Priority 2: Vital metric
-                var m = GetMetric(VitalType.HeartRate);
-                if (m?.Value > 0) return $"{m.Value:N0} bpm";
-
-                // Priority 3: Resting Heart Rate fallback
+                // Priority 4: Resting Heart Rate fallback
                 double rhr = _currentSummary?.Rhr ?? GetMetric(VitalType.RestingHeartRate)?.Value ?? 0;
                 return rhr > 0 ? $"{rhr:N0} bpm" : "--";
             }
@@ -402,7 +409,11 @@ namespace Daily_WinUI.Controls
         {
             get
             {
-                double hrv = _currentSummary?.HrvSdnn ?? _currentSummary?.HrvRmssd ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value ?? 0;
+                double hrv = _currentSummary?.HrvSdnn
+                    ?? _currentSummary?.HrvRmssd
+                    ?? GetMetric(VitalType.HeartRateVariabilitySDNN)?.Value
+                    ?? GetMetric(VitalType.HeartRateVariabilityRMSSD)?.Value
+                    ?? 0;
                 return hrv > 0 ? $"{hrv:F0} ms" : "--";
             }
         }
