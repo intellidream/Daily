@@ -939,7 +939,7 @@ namespace Daily.Services.Finances
                             CreatedAt = Mappers.SafeUtc(latestLocal.CreatedAt),
                             UpdatedAt = Mappers.SafeUtc(latestLocal.UpdatedAt)
                         };
-                        var minReturnOpts = new QueryOptions { Return = QueryOptions.ReturnType.Minimal };
+                        var minReturnOpts = new QueryOptions { Returning = QueryOptions.ReturnType.Minimal };
                         Interlocked.Exchange(ref _lastLocalLedgerPushTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                         await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>().Upsert(remote, minReturnOpts), "Finances.SaveSmartLedger");
                         Interlocked.Exchange(ref _lastLocalLedgerPushTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());

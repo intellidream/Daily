@@ -550,7 +550,7 @@ namespace Daily.Services
                             {
                                 await _supabaseClient.From<RemoteTagdoQuickNote>()
                                     .Where(x => x.Id == noteId && x.UserId == userId)
-                                    .Delete(new Supabase.Postgrest.QueryOptions { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal })
+                                    .Delete(new Supabase.Postgrest.QueryOptions { Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal })
                                     .ConfigureAwait(false);
                                 return true;
                             }, "Tagdos.DeleteQuickNote").ConfigureAwait(false);
@@ -711,7 +711,7 @@ namespace Daily.Services
                             new Supabase.Postgrest.QueryOptions
                             {
                                 OnConflict = "user_id,stream_number",
-                                Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
+                                Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
                             }),
                         $"Tagdos.PushStream({ls.OrderIndex + 1})").ConfigureAwait(false);
                     Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -825,7 +825,7 @@ namespace Daily.Services
                     await ExecuteWithAuthAsync(
                         () => _supabaseClient.From<RemoteTagdoQuickNote>().Upsert(
                             remoteNote,
-                            new Supabase.Postgrest.QueryOptions { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal }),
+                            new Supabase.Postgrest.QueryOptions { Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal }),
                         $"Tagdos.PushQuickNote({dn.Id})").ConfigureAwait(false);
                     Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
@@ -1008,7 +1008,7 @@ namespace Daily.Services
                         new Supabase.Postgrest.QueryOptions
                         {
                             OnConflict = "user_id,stream_number",
-                            Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
+                            Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
                         }),
                     $"Tagdos.PushSingleStream({ls.OrderIndex + 1})").ConfigureAwait(false);
                 Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -1066,7 +1066,7 @@ namespace Daily.Services
                 await ExecuteWithAuthAsync(
                     () => _supabaseClient.From<RemoteTagdoQuickNote>().Upsert(
                         remoteNote,
-                        new Supabase.Postgrest.QueryOptions { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal }),
+                        new Supabase.Postgrest.QueryOptions { Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal }),
                     $"Tagdos.PushSingleQuickNote({dn.Id})").ConfigureAwait(false);
                 Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 

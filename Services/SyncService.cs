@@ -19,7 +19,7 @@ namespace Daily.Services
         private readonly ISupabaseSessionGuardian? _sessionGuardian;
         private bool _watermarkRecoveryChecked = false;
         private static readonly Supabase.Postgrest.QueryOptions MinimalReturnOptions =
-            new() { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal };
+            new() { Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal };
 
         public SyncService(
             Supabase.Client supabase,
