@@ -100,3 +100,61 @@ Migration: `supabase/migrations/20261105000002_intraday_hr_7d_retention_and_egre
 - **Swift (`DailyCoreTests`)**: All 65 Swift Testing + XCTest suites passing (`swift test --package-path DailyCore`), including `testArchivedCardiovascularCurvePreservedAfter7DayRetention` and `testScalarSleepProjectionHasGranularStages`.
 - **Android (`:core-health:testDebugUnitTest`, `:core-database`, `:core-network`)**: All JUnit tests + Kotlin compilation passing, including `testArchivedCardiovascularCurvePreservedAfter7DayIntradayPrune` and `testScalarSleepAndSummaryProjectionsDecodeCleanly`.
 - **Windows / .NET 10 (`Tests/Daily.Health.Tests`)**: All xUnit tests passing, including `TestHistoricalIntradayHeartRatePreservedAfter7DayRetention` and `TestScalarSleepProjectionDetectsGranularStages`.
+
+---
+
+## 6. Baseline Egress Telemetry, Multi-Device Root Cause & Forecast Model
+
+### 6.1 Production Baseline Snapshot (Pre-Optimization — November 5, 2026)
+Before applying the optimizations in this document, Supabase Dashboard telemetry recorded the following footprint:
+- **Billing Tier Plafond**: 5 GB / month (Free Tier).
+- **Consumption in Current Period** (October 19 – November 5, ~17 days): **3.01 GB** (60.2% of free allowance, **0 GB overage**).
+- **Daily Run-Rate**: **200 – 350 MB / day** during active multi-device development.
+  - Peaks: October 23 (~340 MB), October 29 (~350 MB), November 2–4 (~200–250 MB/day).
+- **Component Breakdown**:
+  - **PostgREST API (Dark Green)**: **85–90%** of total egress (~180–220 MB/day). Driven by unprojected `SELECT *` queries on multi-day health summaries/hypnograms and full-collection non-health syncs.
+  - **Edge Functions & Auth (Orange / Brown)**: **10–15%** (~20–30 MB/day normal, spiking to ~150 MB on heavy recalculation days). Driven by `health-engine` returning ~35 KB full summary JSON bodies per invocation.
+  - **Realtime WebSockets (Purple)**: **3–5%** (~5–15 MB/day).
+
+### 6.2 Root Cause Analysis — Development Fleet Multiplier
+The primary driver of the ~220–250 MB/day consumption was the simultaneous operation of **8 to 11 active client instances on a single developer account**:
+1. **Host Mac**: `Daily.app` (macOS 15 native).
+2. **Parallels VM**: `Daily.WinUI.exe` (Windows 11 ARM64).
+3. **Physical iPhone**: `Schmitz` (iPhone 16 Pro).
+4. **Simulated iOS Devices**: `SimulaDuo` (iPhone Duo foldable) and `SimulaPhone` (iPhone 18 Pro).
+5. **Physical Android Phones**: `Trapper` (Pixel 9 Pro) and `Radar` (Galaxy Z Fold 8).
+6. **Smartwatches**: `Apple Watch Ultra 2`, `Pixel Watch 5`, `OnePlus Watch 3`, plus simulated `SimulaWatch`.
+
+**Compounding Multipliers in Pre-Optimization Code:**
+- **Realtime Fan-Out (1 → 10)**: Every data change uploaded by one device was broadcast to all 10 other active clients, triggering cascade re-fetches without client-side self-echo suppression or debouncing.
+- **Rogue Android Retry Loop**: Android's `NewsRepository` encountered `POST 400` on `rss_subscriptions` due to non-UUID seed IDs and empty string `timestamptz` values, generating **4,213 failed HTTP requests per 24 hours**.
+- **Heavy WinUI Cache Purges**: `PullDeltasAsync()` ran every 3 minutes, wiping memory caches and re-querying all raw tables.
+- **Unprojected Multi-Day Queries**: Opening Trends, Sleep, or Heart Rate loaded 7 days of raw `SELECT *` summaries (~245 KB per load).
+- **Smartwatch Duplicate Ingestion**: Apple Watch uploading raw HealthKit samples over Wi-Fi/LTE in parallel with iPhone companion BLE uploads.
+
+### 6.3 Post-Optimization Forecast & Benchmark Targets
+
+| Metric / Scenario | Pre-Optimization Baseline | Post-Optimization Target | Improvement |
+| :--- | :--- | :--- | :--- |
+| **`health-engine` Ack Payload** | ~35,000 bytes | **131 bytes** | **-99.6%** |
+| **Multi-Day Trends Summary Query (7d)** | ~245,000 bytes | **~2,800 bytes** | **-98.8%** |
+| **Watch `Pulse Studio` Fetch** | ~26,000 bytes | **~650 bytes** | **-97.5%** |
+| **PostgREST Writes / Upserts** | Full row representation | **0 bytes** (`return=minimal`) | **-100%** body |
+| **Active Dev Fleet Egress (10 devices)** | ~200 – 350 MB / day | **20 – 40 MB / day** | **~85–90% reduction** |
+| **Dev Fleet Monthly Run-Rate** | ~6.0 – 10.5 GB / month | **~0.6 – 1.2 GB / month** | Safely within Free Tier (5 GB) |
+| **Single Production User (Phone + Watch)** | ~15 – 30 MB / day | **1.5 – 3.0 MB / day** | **~45 – 90 MB / month / user** |
+
+### 6.4 Production Scaling Capacity
+With single-user consumption estimated at **~45 – 90 MB / month**:
+- **Supabase Free Plan (5 GB / month)**: Safely supports **50 to 80 Daily Active Users (DAU)**.
+- **Supabase Pro Plan (\$25/mo, 250 GB included egress)**: Supports **3,000 to 5,000 Daily Active Users (DAU)** before incurring any overage costs (\$0.09/GB thereafter).
+
+### 6.5 Future Audit & Comparison Checklist
+When reviewing Supabase Egress in future billing cycles, verify that:
+1. **PostgREST API egress** remains proportional to daily active sessions and does not exceed ~3 MB per user-day.
+2. **`health-engine`** invocations continue passing `compact: true` (payload < 200 bytes).
+3. **No rogue HTTP 4xx loops** appear in Supabase log drains (e.g. check for repeated dirty sync retries).
+4. **Multi-day queries** strictly use scalar projections (`id,user_id,local_date,...`) and do not regress to `SELECT *`.
+5. **PostgREST writes** retain `Prefer: return=minimal` / `QueryOptions.Returning = Minimal`.
+6. **Smartwatches** remain strictly consumer-only for Health, serving UI from local cache (< 1ms) and throttling remote sync to >= 15-minute TTL.
+
