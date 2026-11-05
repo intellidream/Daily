@@ -48,13 +48,26 @@ namespace Daily.Health.Tests
 
     public class HealthHubServiceTests
     {
+        private static async Task CleanupDbAsync(MockDatabaseService? mockDb, string dbPath)
+        {
+            if (mockDb != null)
+            {
+                try { await mockDb.Connection.CloseAsync(); } catch { }
+            }
+            if (File.Exists(dbPath))
+            {
+                try { File.Delete(dbPath); } catch { }
+            }
+        }
+
         [Fact]
         public async Task TestOfflineColdStartAndMetricMapping()
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_{Guid.NewGuid():N}.db");
+            MockDatabaseService? mockDb = null;
             try
             {
-                var mockDb = new MockDatabaseService(dbPath);
+                mockDb = new MockDatabaseService(dbPath);
                 await mockDb.InitializeAsync();
 
                 var testDate = new DateTime(2026, 10, 5);
@@ -189,10 +202,7 @@ namespace Daily.Health.Tests
             }
             finally
             {
-                if (File.Exists(dbPath))
-                {
-                    File.Delete(dbPath);
-                }
+                await CleanupDbAsync(mockDb, dbPath);
             }
         }
 
@@ -200,9 +210,10 @@ namespace Daily.Health.Tests
         public async Task TestFiveTabPayloadAndStressParity()
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_tabs_{Guid.NewGuid():N}.db");
+            MockDatabaseService? mockDb = null;
             try
             {
-                var mockDb = new MockDatabaseService(dbPath);
+                mockDb = new MockDatabaseService(dbPath);
                 await mockDb.InitializeAsync();
 
                 var testDate = new DateTime(2026, 10, 5);
@@ -330,10 +341,7 @@ namespace Daily.Health.Tests
             }
             finally
             {
-                if (File.Exists(dbPath))
-                {
-                    File.Delete(dbPath);
-                }
+                await CleanupDbAsync(mockDb, dbPath);
             }
         }
 
@@ -341,9 +349,10 @@ namespace Daily.Health.Tests
         public async Task TestDateRangeAndHistoryIntegrity()
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_range_{Guid.NewGuid():N}.db");
+            MockDatabaseService? mockDb = null;
             try
             {
-                var mockDb = new MockDatabaseService(dbPath);
+                mockDb = new MockDatabaseService(dbPath);
                 await mockDb.InitializeAsync();
 
                 var baseDate = DateTime.Today.AddDays(-4);
@@ -381,10 +390,7 @@ namespace Daily.Health.Tests
             }
             finally
             {
-                if (File.Exists(dbPath))
-                {
-                    File.Delete(dbPath);
-                }
+                await CleanupDbAsync(mockDb, dbPath);
             }
         }
 
@@ -392,9 +398,10 @@ namespace Daily.Health.Tests
         public async Task TestInitializeAsyncDoesNotHang()
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_init_{Guid.NewGuid():N}.db");
+            MockDatabaseService? mockDb = null;
             try
             {
-                var mockDb = new MockDatabaseService(dbPath);
+                mockDb = new MockDatabaseService(dbPath);
                 await mockDb.InitializeAsync();
 
                 var options = new Supabase.SupabaseOptions { AutoConnectRealtime = false };
@@ -409,10 +416,7 @@ namespace Daily.Health.Tests
             }
             finally
             {
-                if (File.Exists(dbPath))
-                {
-                    File.Delete(dbPath);
-                }
+                await CleanupDbAsync(mockDb, dbPath);
             }
         }
 
@@ -420,9 +424,10 @@ namespace Daily.Health.Tests
         public async Task TestParallelGetDailySummaryDeduplication()
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_parallel_{Guid.NewGuid():N}.db");
+            MockDatabaseService? mockDb = null;
             try
             {
-                var mockDb = new MockDatabaseService(dbPath);
+                mockDb = new MockDatabaseService(dbPath);
                 await mockDb.InitializeAsync();
 
                 var testDate = new DateTime(2026, 10, 6);
@@ -461,10 +466,7 @@ namespace Daily.Health.Tests
             }
             finally
             {
-                if (File.Exists(dbPath))
-                {
-                    File.Delete(dbPath);
-                }
+                await CleanupDbAsync(mockDb, dbPath);
             }
         }
 

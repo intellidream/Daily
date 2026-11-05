@@ -123,7 +123,7 @@ namespace Daily.Health.Tests
             var dbPath = Path.Combine(Path.GetTempPath(), $"test_daily_{Guid.NewGuid():N}.db");
             try
             {
-                var conn = new SQLiteConnection(dbPath);
+                using var conn = new SQLiteConnection(dbPath);
                 conn.CreateTable<HealthDailySummaryEntity>();
 
                 var entity = new HealthDailySummaryEntity
@@ -149,6 +149,7 @@ namespace Daily.Health.Tests
                 Assert.Equal(31, retrieved.StressAvg);
                 Assert.Equal(60.5, retrieved.Rhr);
                 Assert.Equal("{\"sample\": true}", retrieved.SummaryJson);
+                conn.Close();
             }
             finally
             {
