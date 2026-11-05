@@ -171,9 +171,14 @@ class NewsRepository(
                         }
                     }
                 } else {
-                    // Seed default feeds to Room
-                    val seedEntities = defaultFeeds.map { RssSubscriptionEntity.fromFeedSource(it, userId) }
-                    dao.upsertSubscriptions(seedEntities)
+                    if (isValidUuid(userId)) {
+                        // Seed default feeds to Room with deterministic valid UUIDs for authenticated user
+                        val seedEntities = defaultFeeds.map { feed ->
+                            val deterministicId = ensureValidUuid(feed.id, "$userId:${normalizeFeedUrl(feed.url)}")
+                            RssSubscriptionEntity.fromFeedSource(feed.copy(id = deterministicId), userId)
+                        }
+                        dao.upsertSubscriptions(seedEntities)
+                    }
                     _feeds.value = defaultFeeds
                 }
             }
@@ -674,22 +679,30 @@ class NewsRepository(
             category = category,
             displayOrder = _feeds.value.size
         )
-        val entity = RssSubscriptionEntity.fromFeedSource(newFeed, userId)
+        val entity = RssSubscriptionEntity.fromFeedSource(
+            newFeed.copy(id = ensureValidUuid(newFeed.id, "$userId:$norm")),
+            userId
+        )
         dao.upsertSubscription(entity)
 
-        syncHandler?.let { handler ->
-            scope.launch {
-                val sub = RssSubscription(
-                    id = entity.id,
-                    userId = userId,
-                    name = entity.name,
-                    url = entity.url,
-                    iconUrl = entity.iconUrl,
-                    category = entity.category,
-                    displayOrder = entity.displayOrder
-                )
-                if (handler.pushSubscription(sub)) {
-                    dao.markSubscriptionsSynced(listOf(entity.id), System.currentTimeMillis())
+        if (isValidUuid(userId)) {
+            syncHandler?.let { handler ->
+                scope.launch {
+                    val nowIso = java.time.Instant.ofEpochMilli(entity.createdAt).toString()
+                    val sub = RssSubscription(
+                        id = entity.id,
+                        userId = userId,
+                        name = entity.name,
+                        url = entity.url,
+                        iconUrl = entity.iconUrl,
+                        category = entity.category,
+                        displayOrder = entity.displayOrder,
+                        createdAt = nowIso,
+                        updatedAt = nowIso
+                    )
+                    if (handler.pushSubscription(sub)) {
+                        dao.markSubscriptionsSynced(listOf(entity.id), System.currentTimeMillis())
+                    }
                 }
             }
         }
@@ -769,7 +782,7 @@ class NewsRepository(
     // MARK: - Supabase Synchronization
 
     suspend fun syncWithSupabase(userId: String) = withContext(Dispatchers.IO) {
-        if (userId == "guest") return@withContext
+        if (!isValidUuid(userId)) return@withContext
         val handler = syncHandler ?: return@withContext
 
         try {
@@ -836,21 +849,58 @@ class NewsRepository(
                 }
             }
 
-            // 2. Push unsynced subscriptions
+            // 2. Push unsynced subscriptions (healing legacy "seed_*" IDs & "guest" rows so HTTP 400 never loops)
+            val currentUserSubsByUrl = dao.getSubscriptions(userId).associateBy { normalizeFeedUrl(it.url) }.toMutableMap()
             val unsyncedSubs = dao.getUnsyncedSubscriptions()
             for (sub in unsyncedSubs) {
+                val normUrl = normalizeFeedUrl(sub.url)
+                if (!isValidUuid(sub.userId)) {
+                    // Legacy "guest" row created prior to auth: drop if user already has this URL, else migrate cleanly
+                    if (currentUserSubsByUrl.containsKey(normUrl)) {
+                        dao.deleteSubscriptionPermanently(sub.id)
+                        continue
+                    }
+                } else if (sub.userId != userId) {
+                    continue
+                }
+
+                val targetUserId = userId
+                val existingSynced = currentUserSubsByUrl[normUrl]
+                if (existingSynced != null && existingSynced.id != sub.id && existingSynced.syncedAt != null) {
+                    dao.deleteSubscriptionPermanently(sub.id)
+                    continue
+                }
+
+                val validId = ensureValidUuid(sub.id, "$targetUserId:$normUrl")
+                val createdIso = java.time.Instant.ofEpochMilli(sub.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis()).toString()
+                val updatedIso = java.time.Instant.ofEpochMilli((sub.updatedAt ?: sub.createdAt).takeIf { it > 0L } ?: System.currentTimeMillis()).toString()
+
                 val model = RssSubscription(
-                    id = sub.id,
-                    userId = sub.userId,
+                    id = validId,
+                    userId = targetUserId,
                     name = sub.name,
                     url = sub.url,
                     iconUrl = sub.iconUrl,
                     category = sub.category,
                     displayOrder = sub.displayOrder,
+                    createdAt = createdIso,
+                    updatedAt = updatedIso,
                     isDeleted = sub.isDeleted
                 )
                 if (handler.pushSubscription(model)) {
-                    dao.markSubscriptionsSynced(listOf(sub.id), System.currentTimeMillis())
+                    val syncedNow = System.currentTimeMillis()
+                    if (validId != sub.id || sub.userId != targetUserId) {
+                        dao.deleteSubscriptionPermanently(sub.id)
+                        val migrated = sub.copy(
+                            id = validId,
+                            userId = targetUserId,
+                            syncedAt = syncedNow
+                        )
+                        dao.upsertSubscription(migrated)
+                        currentUserSubsByUrl[normUrl] = migrated
+                    } else {
+                        dao.markSubscriptionsSynced(listOf(validId), syncedNow)
+                    }
                 }
             }
 
@@ -878,7 +928,7 @@ class NewsRepository(
                                 articleType = remote.articleType,
                                 articleDate = try { java.time.Instant.parse(remote.articleDate).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() },
                                 isDeleted = remote.isDeleted,
-                                createdAt = try { java.time.Instant.parse(remote.createdAt).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() },
+                                createdAt = remote.createdAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: System.currentTimeMillis(),
                                 syncedAt = System.currentTimeMillis()
                             )
                         )
@@ -892,9 +942,17 @@ class NewsRepository(
             // 4. Push unsynced saved articles
             val unsyncedArticles = dao.getUnsyncedSavedArticles()
             for (art in unsyncedArticles) {
+                if (!isValidUuid(art.userId)) {
+                    if (art.userId == "guest") {
+                        dao.markSavedArticlesSynced(listOf(art.id), System.currentTimeMillis())
+                    }
+                    continue
+                }
+                if (art.userId != userId) continue
+                val validArtId = ensureValidUuid(art.id, "$userId:${art.articleUrl}:${art.articleType}")
                 val model = SavedArticle(
-                    id = art.id,
-                    userId = art.userId,
+                    id = validArtId,
+                    userId = userId,
                     articleUrl = art.articleUrl,
                     title = art.title,
                     imageUrl = art.imageUrl,
@@ -905,7 +963,7 @@ class NewsRepository(
                     articleType = art.articleType,
                     articleDate = java.time.Instant.ofEpochMilli(art.articleDate).toString(),
                     createdAt = java.time.Instant.ofEpochMilli(art.createdAt).toString(),
-                    updatedAt = art.updatedAt?.let { java.time.Instant.ofEpochMilli(it).toString() },
+                    updatedAt = java.time.Instant.ofEpochMilli(art.updatedAt ?: System.currentTimeMillis()).toString(),
                     isDeleted = art.isDeleted
                 )
                 if (handler.pushSavedArticle(model)) {
@@ -918,6 +976,23 @@ class NewsRepository(
     fun normalizeFeedUrl(url: String): String = Companion.normalizeFeedUrl(url)
 
     companion object {
+        fun isValidUuid(candidate: String?): Boolean {
+            if (candidate.isNullOrBlank() || candidate == "guest") return false
+            return try {
+                UUID.fromString(candidate)
+                true
+            } catch (_: IllegalArgumentException) {
+                false
+            }
+        }
+
+        fun ensureValidUuid(candidate: String, deterministicSeed: String): String {
+            return if (isValidUuid(candidate)) {
+                candidate
+            } else {
+                UUID.nameUUIDFromBytes(deterministicSeed.lowercase(java.util.Locale.ROOT).toByteArray(Charsets.UTF_8)).toString()
+            }
+        }
         fun isMediumTeaser(content: String?): Boolean = ArticleExtractor.isMediumTeaser(content)
 
         fun normalizeFeedUrl(url: String): String {

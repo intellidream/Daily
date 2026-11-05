@@ -157,34 +157,49 @@ public final class SavedArticlesService: ObservableObject {
         
         do {
             let client = SupabaseService.shared.client
-            let res = try await client
+            let syncKey = "dayone_saved_articles_sync_ts_\(effectiveUserId)"
+            let isoFormatter = ISO8601DateFormatter()
+            let nowIso = isoFormatter.string(from: Date())
+            
+            var query = client
                 .from("rss_saved_articles")
                 .select()
                 .eq("user_id", value: effectiveUserId)
-                .execute()
             
-            let response = try JSONDecoder().decode([SavedArticle].self, from: res.data)
-            print("[SavedArticlesService] Successfully synced \(response.count) saved articles from Supabase.")
-            
-            // Merge remote items with local items
-            var merged = allSavedArticles
-            for remote in response {
-                if let idx = merged.firstIndex(where: {
-                    $0.id.lowercased() == remote.id.lowercased() ||
-                    ($0.articleUrl == remote.articleUrl && $0.articleType == remote.articleType)
-                }) {
-                    let local = merged[idx]
-                    let remoteTime = remote.updatedAt ?? remote.createdAt
-                    let localTime = local.updatedAt ?? local.createdAt
-                    if remoteTime >= localTime {
-                        merged[idx] = remote
-                    }
-                } else {
-                    merged.append(remote)
-                }
+            if !allSavedArticles.isEmpty,
+               let lastSyncIso = GroupDefaults.shared.userDefaults.string(forKey: syncKey),
+               let lastSyncDate = isoFormatter.date(from: lastSyncIso) {
+                let overlapIso = isoFormatter.string(from: lastSyncDate.addingTimeInterval(-120))
+                query = query.gte("updated_at", value: overlapIso)
+            } else {
+                query = query.eq("is_deleted", value: false)
             }
             
-            allSavedArticles = merged
+            let res = try await query.execute()
+            
+            let response = try JSONDecoder().decode([SavedArticle].self, from: res.data)
+            GroupDefaults.shared.userDefaults.set(nowIso, forKey: syncKey)
+            
+            // Merge remote items with local items
+            if !response.isEmpty {
+                var merged = allSavedArticles
+                for remote in response {
+                    if let idx = merged.firstIndex(where: {
+                        $0.id.lowercased() == remote.id.lowercased() ||
+                        ($0.articleUrl == remote.articleUrl && $0.articleType == remote.articleType)
+                    }) {
+                        let local = merged[idx]
+                        let remoteTime = remote.updatedAt ?? remote.createdAt
+                        let localTime = local.updatedAt ?? local.createdAt
+                        if remoteTime >= localTime {
+                            merged[idx] = remote
+                        }
+                    } else if !remote.isDeleted {
+                        merged.append(remote)
+                    }
+                }
+                allSavedArticles = merged
+            }
         } catch {
             print("[SavedArticlesService] Supabase sync error: \(error)")
         }
@@ -196,9 +211,8 @@ public final class SavedArticlesService: ObservableObject {
             let client = SupabaseService.shared.client
             try await client
                 .from("rss_saved_articles")
-                .upsert(article)
+                .upsert(article, returning: .minimal)
                 .execute()
-            print("[SavedArticlesService] Successfully upserted article \(article.id) to Supabase.")
         } catch {
             print("[SavedArticlesService] Failed to upsert article to Supabase: \(error)")
         }

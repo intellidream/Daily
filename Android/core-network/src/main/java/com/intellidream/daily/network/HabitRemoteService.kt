@@ -44,7 +44,17 @@ class HabitRemoteService(
         if (userId.isEmpty() || userId == "guest") return@withContext null
         try {
             val list = clientManager.client.postgrest["user_preferences"]
-                .select {
+                .select(
+                    columns = io.github.jan.supabase.postgrest.query.Columns.list(
+                        "id",
+                        "water_goal",
+                        "smokes_baseline",
+                        "smokes_pack_size",
+                        "smokes_pack_cost",
+                        "smokes_currency",
+                        "smokes_quit_date"
+                    )
+                ) {
                     filter {
                         eq("id", userId)
                     }

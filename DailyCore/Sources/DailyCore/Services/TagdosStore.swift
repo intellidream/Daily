@@ -34,7 +34,12 @@ public final class TagdosStore: ObservableObject {
     public static let defaultStream5 = "HOM/ORD/CLN & BUY/MKT/GROC & FAM/CALL/VIS"
 
     private var realtimeChannel: RealtimeChannelV2?
+    private var realtimeDebounceTask: Task<Void, Never>?
     private var pushDebounceTask: Task<Void, Never>?
+    private var lastLocalPushAt: Date = .distantPast
+    private var lastForegroundSyncAt: Date = .distantPast
+    private var lastPushedStreamSignatures: [Int: String] = [:]
+    private var lastPushedNoteSignatures: [UUID: String] = [:]
 
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: GroupDefaults.suiteName) ?? UserDefaults.standard
@@ -62,6 +67,8 @@ public final class TagdosStore: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 self.loadFromStorage()
+                guard Date().timeIntervalSince(self.lastForegroundSyncAt) >= 120 else { return }
+                self.lastForegroundSyncAt = Date()
                 await self.syncWithSupabase()
             }
         }
@@ -357,15 +364,17 @@ public final class TagdosStore: ObservableObject {
 
     public func deleteQuickNote(id: UUID) {
         quickNotes.removeAll { $0.id == id }
-        save()
+        lastPushedNoteSignatures.removeValue(forKey: id)
+        save(triggerCloudSync: false)
         
         // Also delete from Supabase if authenticated
         if let userId = getEffectiveUserId() {
+            lastLocalPushAt = Date()
             Task {
                 let client = SupabaseService.shared.client
                 _ = try? await client
                     .from("tagdos_quick_notes")
-                    .delete()
+                    .delete(returning: .minimal)
                     .eq("id", value: id.uuidString.lowercased())
                     .eq("user_id", value: userId)
                     .execute()
@@ -477,10 +486,13 @@ public final class TagdosStore: ObservableObject {
 
                 merged.sort { $0.orderIndex < $1.orderIndex }
                 self.streams = merged
+                for s in merged {
+                    self.lastPushedStreamSignatures[s.orderIndex + 1] = self.streamSignature(s)
+                }
                 self.save(triggerCloudSync: false)
             } else {
                 // Remote has no streams yet: push local initial streams up!
-                await pushAllStreamsToSupabase(userId: userId)
+                await pushAllStreamsToSupabase(userId: userId, forceAll: true)
             }
         } catch {
             print("[TagdosStore] Supabase streams sync notice: \(error.localizedDescription)")
@@ -516,6 +528,9 @@ public final class TagdosStore: ObservableObject {
                     return $0.updatedAt > $1.updatedAt
                 }
                 self.quickNotes = mergedNotes
+                for n in mergedNotes {
+                    self.lastPushedNoteSignatures[n.id] = self.noteSignature(n)
+                }
                 self.save(triggerCloudSync: false)
             }
         } catch {
@@ -523,6 +538,15 @@ public final class TagdosStore: ObservableObject {
         }
 
         self.lastSyncedAt = Date()
+    }
+
+    private func streamSignature(_ stream: TagDoStream) -> String {
+        let rem = stream.streamReminder.map { "\(Int($0.timeIntervalSince1970))" } ?? ""
+        return "\(stream.title)|\(stream.rawText)|\(stream.activeMemos)|\(rem)|\(stream.attachments.count)"
+    }
+
+    private func noteSignature(_ note: TagDoQuickNote) -> String {
+        "\(note.title)|\(note.content)|\(note.isPinned)|\(note.tags.joined(separator: ","))"
     }
 
     private func scheduleCloudPush() {
@@ -536,7 +560,7 @@ public final class TagdosStore: ObservableObject {
         }
     }
 
-    private func pushAllStreamsToSupabase(userId: String) async {
+    private func pushAllStreamsToSupabase(userId: String, forceAll: Bool = false) async {
         let client = SupabaseService.shared.client
 
         struct StreamPayload: Codable {
@@ -555,10 +579,16 @@ public final class TagdosStore: ObservableObject {
         timeFormatter.dateFormat = "HH:mm"
 
         for stream in streams {
+            let streamNum = stream.orderIndex + 1
+            let sig = streamSignature(stream)
+            if !forceAll, lastPushedStreamSignatures[streamNum] == sig {
+                continue
+            }
+
             let reminderStr = stream.streamReminder.map { timeFormatter.string(from: $0) }
             let payload = StreamPayload(
                 user_id: userId,
-                stream_number: stream.orderIndex + 1,
+                stream_number: streamNum,
                 title: stream.title,
                 raw_syntax: stream.rawText,
                 reminder_time: reminderStr,
@@ -568,32 +598,59 @@ public final class TagdosStore: ObservableObject {
             )
 
             do {
+                self.lastLocalPushAt = Date()
                 _ = try await client
                     .from("tagdos_streams")
-                    .upsert(payload, onConflict: "user_id,stream_number")
+                    .upsert(payload, onConflict: "user_id,stream_number", returning: .minimal)
                     .execute()
+                lastPushedStreamSignatures[streamNum] = sig
+                self.lastLocalPushAt = Date()
             } catch {
-                print("[TagdosStore] Failed to upsert stream \(stream.orderIndex + 1): \(error.localizedDescription)")
+                print("[TagdosStore] Failed to upsert stream \(streamNum): \(error.localizedDescription)")
             }
         }
     }
 
-    private func pushAllQuickNotesToSupabase(userId: String) async {
+    private func pushAllQuickNotesToSupabase(userId: String, forceAll: Bool = false) async {
         let client = SupabaseService.shared.client
         for note in quickNotes {
+            let sig = noteSignature(note)
+            if !forceAll, lastPushedNoteSignatures[note.id] == sig {
+                continue
+            }
             var n = note
             n.userId = userId
-            _ = try? await client
-                .from("tagdos_quick_notes")
-                .upsert(n)
-                .execute()
+            do {
+                self.lastLocalPushAt = Date()
+                _ = try await client
+                    .from("tagdos_quick_notes")
+                    .upsert(n, returning: .minimal)
+                    .execute()
+                lastPushedNoteSignatures[note.id] = sig
+                self.lastLocalPushAt = Date()
+            } catch {
+                print("[TagdosStore] Failed to upsert quick note: \(error.localizedDescription)")
+            }
         }
     }
 
     // MARK: - Supabase Realtime Subscription
 
+    private func scheduleRealtimeSync() {
+        // Ignore self-echo events arriving right after our own cloud push
+        guard Date().timeIntervalSince(lastLocalPushAt) >= 6.0 else { return }
+        realtimeDebounceTask?.cancel()
+        realtimeDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard let self = self, !Task.isCancelled else { return }
+            guard Date().timeIntervalSince(self.lastLocalPushAt) >= 6.0 else { return }
+            await self.syncWithSupabase()
+        }
+    }
+
     private func setupRealtimeSubscription() async {
         guard let userId = await getEffectiveUserIdAsync() else { return }
+        if realtimeChannel != nil { return }
         
         let client = SupabaseService.shared.client
         let channelName = "daily_tagdos_\(userId)"
@@ -619,13 +676,13 @@ public final class TagdosStore: ObservableObject {
 
             Task { [weak self] in
                 for await _ in streamUpdates {
-                    await self?.syncWithSupabase()
+                    self?.scheduleRealtimeSync()
                 }
             }
 
             Task { [weak self] in
                 for await _ in streamInserts {
-                    await self?.syncWithSupabase()
+                    self?.scheduleRealtimeSync()
                 }
             }
         } catch {

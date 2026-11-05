@@ -154,13 +154,10 @@ public final class WatchPulseStore: ObservableObject {
             isSyncing = false
         }
 
-        // 1. Push any fresh watchOS HealthKit vitals/HR/sleep (honoring 10m throttle unless forced)
-        let didPushWatchKit = await HealthTelemetryManager.shared.syncTelemetry(
-            isDeepSync: force,
-            force: force
-        )
+        // Smartwatches operate in 100% consumer-only mode for Health (`Pulse Studio`).
+        // Companion phone (Schmitz / Trapper / Radar) ingests biometrics over BLE and updates Supabase.
 
-        // 2. Query canonical health_daily_summary for today
+        // 1. Query canonical health_daily_summary for today (slim JSON projection, ~650 B instead of ~26 KB)
         var summaryRowJson = await fetchSummaryRowFromRest(
             supabaseUrl: session.supabaseUrl,
             anonKey: session.supabaseAnonKey,
@@ -169,11 +166,10 @@ public final class WatchPulseStore: ObservableObject {
             dateStr: todayStr
         )
 
-        // 3. Determine whether server-side Stress v2.0 + Sleep recomputation is needed
+        // 2. Determine whether server-side Stress v2.0 + Sleep recomputation is needed
         let needsEngineRecompute = shouldInvokeHealthEngine(
             row: summaryRowJson,
             force: force,
-            didPushWatchKit: didPushWatchKit,
             now: now
         )
 
@@ -222,13 +218,43 @@ public final class WatchPulseStore: ObservableObject {
             resolvingAgainstBaseURL: false
         ) else { return nil }
 
+        let slimSelect = [
+            "local_date",
+            "computed_at",
+            "engine_version",
+            "steps",
+            "active_kcal",
+            "sleep_asleep_s",
+            "sleep_score",
+            "stress_avg",
+            "rhr",
+            "hrv_sdnn",
+            "hrv_rmssd",
+            "spo2",
+            "sleep_verdict:summary->sleep->guidance->verdict",
+            "sleep_source:summary->sleep->primary_session->>source_device",
+            "sleep_eff:summary->sleep->primary_session->efficiency_percent",
+            "sleep_rest:summary->sleep->primary_session->restorative_percent",
+            "sleep_rating:summary->sleep->primary_session->>quality_rating",
+            "deep_s:summary->sleep->primary_session->deep_seconds",
+            "rem_s:summary->sleep->primary_session->rem_seconds",
+            "light_s:summary->sleep->primary_session->light_seconds",
+            "awake_s:summary->sleep->primary_session->awake_seconds",
+            "stress_score:summary->stress->current_score",
+            "stress_level:summary->stress->>current_level",
+            "stress_daily_avg:summary->stress->daily_average",
+            "monkey_mood:summary->stress->>monkey_mood",
+            "parasym_pct:summary->stress->parasympathetic_percent",
+            "advice_quote:summary->stress->>advice_quote",
+            "rec_breathing:summary->stress->>recommended_breathing",
+            "stress_hrv:summary->stress->current_hrv_ms",
+            "stress_rhr:summary->stress->resting_heart_rate_bpm"
+        ].joined(separator: ",")
+
         components.queryItems = [
             URLQueryItem(name: "user_id", value: "eq.\(userId)"),
             URLQueryItem(name: "local_date", value: "eq.\(dateStr)"),
-            URLQueryItem(
-                name: "select",
-                value: "local_date,computed_at,engine_version,steps,active_kcal,sleep_asleep_s,sleep_score,stress_avg,rhr,hrv_sdnn,hrv_rmssd,spo2,summary"
-            ),
+            URLQueryItem(name: "select", value: slimSelect),
             URLQueryItem(name: "limit", value: "1")
         ]
         guard let url = components.url else { return nil }
@@ -272,7 +298,8 @@ public final class WatchPulseStore: ObservableObject {
         let payload: [String: Any] = [
             "user_id": userId,
             "date": dateStr,
-            "tz_offset_min": tzOffsetMin == 0 ? 120 : tzOffsetMin
+            "tz_offset_min": tzOffsetMin == 0 ? 120 : tzOffsetMin,
+            "slim_watch": true
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
@@ -292,23 +319,16 @@ public final class WatchPulseStore: ObservableObject {
     private func shouldInvokeHealthEngine(
         row: [String: Any]?,
         force: Bool,
-        didPushWatchKit: Bool,
         now: Date
     ) -> Bool {
-        if force || didPushWatchKit { return true }
+        if force { return true }
         guard let row = row else { return true }
 
         let version = row["engine_version"] as? String ?? ""
-        if version != "v2.0" { return true }
+        if !(version.hasPrefix("v2") || version.hasPrefix("2.")) { return true }
 
-        if let computedStr = row["computed_at"] as? String,
-           let computedDate = parseIsoDate(computedStr) {
-            if now.timeIntervalSince(computedDate) > serverSummaryMaxAgeSeconds {
-                return true
-            }
-        } else {
-            return true
-        }
+        // Consumer-only watch mode: only ask health-engine to synthesize if the server summary is missing
+        // or user explicitly tapped Refresh (`force == true`).
         return false
     }
 
@@ -337,11 +357,12 @@ public final class WatchPulseStore: ObservableObject {
         let localDate = (row["local_date"] as? String) ?? fallbackDate
         let summaryObj = row["summary"] as? [String: Any] ?? [:]
 
-        // --- Sleep & Recovery ---
+        // --- Sleep & Recovery (supports both slim flat PostgREST aliases and summary JSON) ---
         let sleepContainer = summaryObj["sleep"] as? [String: Any] ?? [:]
         let primarySession = sleepContainer["primary_session"] as? [String: Any]
         let guidanceObj = sleepContainer["guidance"] as? [String: Any]
-        let verdictObj = guidanceObj?["verdict"] as? [String: Any]
+        let verdictObj = (row["sleep_verdict"] as? [String: Any])
+            ?? (guidanceObj?["verdict"] as? [String: Any])
 
         let asleepSeconds = Self.intVal(primarySession?["asleep_seconds"])
             ?? Self.intVal(row["sleep_asleep_s"])
@@ -362,6 +383,7 @@ public final class WatchPulseStore: ObservableObject {
 
         let readinessScore = Self.intVal(verdictObj?["readiness_score"])
         let verdictStatus = (verdictObj?["status"] as? String)
+            ?? (row["sleep_rating"] as? String)
             ?? (primarySession?["quality_rating"] as? String)
             ?? (hasSleepData ? (sleepScore >= 85 ? "Optimal" : (sleepScore >= 75 ? "Good" : "Fair")) : "Pending")
 
@@ -379,19 +401,19 @@ public final class WatchPulseStore: ObservableObject {
         if let narrative = rawNarrative, !narrative.isEmpty, hasSleepData {
             sleepNarrative = narrative
         } else if hasSleepData {
-            let eff = Self.intVal(primarySession?["efficiency_percent"]) ?? 90
-            let restPct = Self.intVal(primarySession?["restorative_percent"]) ?? 25
+            let eff = Self.intVal(row["sleep_eff"]) ?? Self.intVal(primarySession?["efficiency_percent"]) ?? 90
+            let restPct = Self.intVal(row["sleep_rest"]) ?? Self.intVal(primarySession?["restorative_percent"]) ?? 25
             sleepNarrative = "Efficiency \(eff)% • \(restPct)% restorative stages."
         } else {
             sleepNarrative = "Wear watch or ring overnight to populate recovery."
         }
 
-        let sleepSourceDevice = primarySession?["source_device"] as? String
+        let sleepSourceDevice = (row["sleep_source"] as? String) ?? (primarySession?["source_device"] as? String)
 
-        let deepS = Double(Self.intVal(primarySession?["deep_seconds"]) ?? 0)
-        let remS = Double(Self.intVal(primarySession?["rem_seconds"]) ?? 0)
-        let lightS = Double(Self.intVal(primarySession?["light_seconds"]) ?? 0)
-        let awakeS = Double(Self.intVal(primarySession?["awake_seconds"]) ?? 0)
+        let deepS = Double(Self.intVal(row["deep_s"]) ?? Self.intVal(primarySession?["deep_seconds"]) ?? 0)
+        let remS = Double(Self.intVal(row["rem_s"]) ?? Self.intVal(primarySession?["rem_seconds"]) ?? 0)
+        let lightS = Double(Self.intVal(row["light_s"]) ?? Self.intVal(primarySession?["light_seconds"]) ?? 0)
+        let awakeS = Double(Self.intVal(row["awake_s"]) ?? Self.intVal(primarySession?["awake_seconds"]) ?? 0)
         let stageTotal = deepS + remS + lightS + awakeS
 
         let deepFrac: Double
@@ -421,6 +443,7 @@ public final class WatchPulseStore: ObservableObject {
 
         let rhrVal = Self.doubleVal(row["rhr"])
             ?? Self.doubleVal(cardioObj?["resting_bpm"])
+            ?? Self.doubleVal(row["stress_rhr"])
             ?? Self.doubleVal(stressObj?["resting_heart_rate_bpm"])
         let restingHrText: String
         if let r = rhrVal, r > 0 {
@@ -429,7 +452,8 @@ public final class WatchPulseStore: ObservableObject {
             restingHrText = "RHR: -- bpm"
         }
 
-        let hrvVal = Self.doubleVal(stressObj?["current_hrv_ms"])
+        let hrvVal = Self.doubleVal(row["stress_hrv"])
+            ?? Self.doubleVal(stressObj?["current_hrv_ms"])
             ?? Self.doubleVal(row["hrv_rmssd"])
             ?? Self.doubleVal(row["hrv_sdnn"])
         let hrvText: String
@@ -440,15 +464,18 @@ public final class WatchPulseStore: ObservableObject {
         }
 
         // --- Autonomic Stress (Engine v2.0) ---
-        let currentStressScore = Self.intVal(stressObj?["current_score"])
+        let currentStressScore = Self.intVal(row["stress_score"])
+            ?? Self.intVal(stressObj?["current_score"])
             ?? Self.intVal(row["stress_avg"])
         let hasStressData = (currentStressScore != nil)
         let finalStressScore = max(0, min(100, currentStressScore ?? 0))
         let stressBadgeText = hasStressData ? "\(finalStressScore)/100" : "--/100"
 
-        let rawLevel = (stressObj?["current_level"] as? String)
+        let rawLevel = (row["stress_level"] as? String)
+            ?? (stressObj?["current_level"] as? String)
             ?? Self.levelFromScore(finalStressScore)
-        let dailyAvg = Self.intVal(stressObj?["daily_average"])
+        let dailyAvg = Self.intVal(row["stress_daily_avg"])
+            ?? Self.intVal(stressObj?["daily_average"])
             ?? Self.intVal(row["stress_avg"])
             ?? finalStressScore
 
@@ -461,7 +488,8 @@ public final class WatchPulseStore: ObservableObject {
             stressHeadline = "\(rawLevel) Tone"
         }
 
-        let moodRaw = (stressObj?["monkey_mood"] as? String)
+        let moodRaw = (row["monkey_mood"] as? String)
+            ?? (stressObj?["monkey_mood"] as? String)
             ?? Self.moodFromScore(finalStressScore)
         let monkeyMoodText = moodRaw
 
@@ -472,13 +500,15 @@ public final class WatchPulseStore: ObservableObject {
         let formattedSteps = Self.stepsFormatter.string(from: NSNumber(value: totalSteps)) ?? "\(totalSteps)"
         let stepsText = "\(formattedSteps) steps"
 
-        let parasym = Self.intVal(stressObj?["parasympathetic_percent"])
+        let parasym = Self.intVal(row["parasym_pct"])
+            ?? Self.intVal(stressObj?["parasympathetic_percent"])
             ?? (hasStressData ? max(0, min(100, 100 - finalStressScore)) : 0)
         let parasympatheticText = hasStressData ? "Parasym: \(parasym)%" : "Parasym: --%"
 
-        let adviceQuote = (stressObj?["advice_quote"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let adviceQuote = ((row["advice_quote"] as? String) ?? (stressObj?["advice_quote"] as? String))?.trimmingCharacters(in: .whitespacesAndNewlines)
             ?? "Autonomic tone is steady. Stay hydrated and pace calmly."
-        let recommendedBreathing = (stressObj?["recommended_breathing"] as? String)
+        let recommendedBreathing = (row["rec_breathing"] as? String)
+            ?? (stressObj?["recommended_breathing"] as? String)
             ?? "Physiological Sigh"
 
         return WatchPulseSnapshot(

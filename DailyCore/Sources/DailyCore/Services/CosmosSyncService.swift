@@ -255,7 +255,7 @@ public final class CosmosSyncService: ObservableObject {
         payload.userId = userId
         _ = try? await SupabaseService.shared.client
             .from("cosmos_bookmarks")
-            .upsert(payload, onConflict: "user_id,object_id")
+            .upsert(payload, onConflict: "user_id,object_id", returning: .minimal)
             .execute()
     }
 
@@ -264,7 +264,7 @@ public final class CosmosSyncService: ObservableObject {
               let userId = await effectiveUserIdAsync() else { return }
         _ = try? await SupabaseService.shared.client
             .from("cosmos_bookmarks")
-            .delete()
+            .delete(returning: .minimal)
             .eq("user_id", value: userId)
             .eq("object_id", value: item.objectId)
             .execute()
@@ -283,7 +283,7 @@ public final class CosmosSyncService: ObservableObject {
               let userId = await effectiveUserIdAsync() else { return }
         _ = try? await SupabaseService.shared.client
             .from("cosmos_observations")
-            .delete()
+            .delete(returning: .minimal)
             .eq("user_id", value: userId)
             .eq("id", value: item.id.uuidString.lowercased())
             .execute()
@@ -296,7 +296,7 @@ public final class CosmosSyncService: ObservableObject {
         payload.userId = userId
         _ = try? await SupabaseService.shared.client
             .from("cosmos_observations")
-            .upsert(payload)
+            .upsert(payload, returning: .minimal)
             .execute()
     }
 

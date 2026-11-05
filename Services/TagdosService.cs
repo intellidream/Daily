@@ -45,6 +45,8 @@ namespace Daily.Services
         private RealtimeChannel? _streamsRealtimeChannel;
         private RealtimeChannel? _notesRealtimeChannel;
         private string? _realtimeUserId;
+        private long _lastLocalPushMs = 0;
+        private CancellationTokenSource? _realtimeDebounceCts;
         private readonly IGotrueClient<User, Session>.AuthEventHandler? _authListener;
 
         public event EventHandler? DataChanged;
@@ -73,7 +75,7 @@ namespace Daily.Services
             {
                 _ = Task.Run(async () =>
                 {
-                    await SetupRealtimeAsync(forceRecreate: state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed).ConfigureAwait(false);
+                    await SetupRealtimeAsync(forceRecreate: false).ConfigureAwait(false);
                     if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
                     {
                         await SyncWithRemoteAsync().ConfigureAwait(false);
@@ -347,7 +349,7 @@ namespace Daily.Services
             }
 
             DataChanged?.Invoke(this, EventArgs.Empty);
-            _ = Task.Run(SyncWithRemoteAsync);
+            _ = Task.Run(() => PushSingleStreamAsync(local));
         }
 
         public async Task UpdateStreamRawTextAsync(string streamId, string newRawText)
@@ -463,7 +465,7 @@ namespace Daily.Services
             }
 
             DataChanged?.Invoke(this, EventArgs.Empty);
-            _ = Task.Run(SyncWithRemoteAsync);
+            _ = Task.Run(() => PushSingleQuickNoteAsync(local));
             return note;
         }
 
@@ -498,7 +500,7 @@ namespace Daily.Services
             }
 
             DataChanged?.Invoke(this, EventArgs.Empty);
-            _ = Task.Run(SyncWithRemoteAsync);
+            _ = Task.Run(() => PushSingleQuickNoteAsync(local));
         }
 
         public async Task TogglePinQuickNoteAsync(string noteId)
@@ -543,14 +545,16 @@ namespace Daily.Services
                         var userId = _supabaseClient.Auth.CurrentUser?.Id;
                         if (!string.IsNullOrEmpty(userId))
                         {
+                            Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                             await ExecuteWithAuthAsync(async () =>
                             {
                                 await _supabaseClient.From<RemoteTagdoQuickNote>()
                                     .Where(x => x.Id == noteId && x.UserId == userId)
-                                    .Delete()
+                                    .Delete(new Supabase.Postgrest.QueryOptions { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal })
                                     .ConfigureAwait(false);
                                 return true;
                             }, "Tagdos.DeleteQuickNote").ConfigureAwait(false);
+                            Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                         }
                     }
                     catch (Exception ex)
@@ -700,11 +704,17 @@ namespace Daily.Services
                         UpdatedAt = updatedUtc
                     };
 
+                    Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                     await ExecuteWithAuthAsync(
                         () => _supabaseClient.From<RemoteTagdoStream>().Upsert(
                             remotePayload,
-                            new Supabase.Postgrest.QueryOptions { OnConflict = "user_id,stream_number" }),
+                            new Supabase.Postgrest.QueryOptions
+                            {
+                                OnConflict = "user_id,stream_number",
+                                Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
+                            }),
                         $"Tagdos.PushStream({ls.OrderIndex + 1})").ConfigureAwait(false);
+                    Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
                     ls.Id = remotePayload.Id;
                     ls.UpdatedAtTicks = updatedUtc.Ticks;
@@ -811,9 +821,13 @@ namespace Daily.Services
                         UpdatedAt = updatedUtc
                     };
 
+                    Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                     await ExecuteWithAuthAsync(
-                        () => _supabaseClient.From<RemoteTagdoQuickNote>().Upsert(remoteNote),
+                        () => _supabaseClient.From<RemoteTagdoQuickNote>().Upsert(
+                            remoteNote,
+                            new Supabase.Postgrest.QueryOptions { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal }),
                         $"Tagdos.PushQuickNote({dn.Id})").ConfigureAwait(false);
+                    Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
                     dn.Id = remoteNote.Id;
                     dn.UserId = userId;
@@ -884,7 +898,7 @@ namespace Daily.Services
                 var subStreamsTask = _supabaseClient.From<RemoteTagdoStream>()
                     .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
                     {
-                        _ = Task.Run(SyncWithRemoteAsync);
+                        ScheduleDebouncedRemoteSync();
                     });
                 if (await Task.WhenAny(subStreamsTask, Task.Delay(5000)).ConfigureAwait(false) == subStreamsTask)
                 {
@@ -894,7 +908,7 @@ namespace Daily.Services
                 var subNotesTask = _supabaseClient.From<RemoteTagdoQuickNote>()
                     .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
                     {
-                        _ = Task.Run(SyncWithRemoteAsync);
+                        ScheduleDebouncedRemoteSync();
                     });
                 if (await Task.WhenAny(subNotesTask, Task.Delay(5000)).ConfigureAwait(false) == subNotesTask)
                 {
@@ -910,6 +924,160 @@ namespace Daily.Services
             catch (Exception ex)
             {
                 SupabaseSessionGuardian.LogGuardian($"[TagdosService] Realtime setup warning: {ex.Message}");
+            }
+        }
+
+        private void ScheduleDebouncedRemoteSync()
+        {
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (nowMs - Interlocked.Read(ref _lastLocalPushMs) < 6000)
+            {
+                return;
+            }
+
+            var prev = Interlocked.Exchange(ref _realtimeDebounceCts, new CancellationTokenSource());
+            try { prev?.Cancel(); prev?.Dispose(); } catch { }
+            var token = _realtimeDebounceCts?.Token ?? CancellationToken.None;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(2500, token).ConfigureAwait(false);
+                    if (!token.IsCancellationRequested)
+                    {
+                        await SyncWithRemoteAsync().ConfigureAwait(false);
+                    }
+                }
+                catch { }
+            }, token);
+        }
+
+        private async Task PushSingleStreamAsync(LocalTagdoStream ls)
+        {
+            if (_supabaseClient == null) return;
+            try
+            {
+                if (_sessionGuardian != null)
+                    await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false);
+
+                var userId = _supabaseClient.Auth.CurrentUser?.Id;
+                if (string.IsNullOrEmpty(userId)) return;
+
+                var effectiveTitle = !string.IsNullOrWhiteSpace(ls.CustomTitle) ? ls.CustomTitle! : ls.Title;
+                string? reminderStr = null;
+                if (ls.StreamReminderTicks.HasValue)
+                {
+                    var dt = new DateTime(ls.StreamReminderTicks.Value, DateTimeKind.Utc);
+                    reminderStr = $"{dt.Hour:D2}:{dt.Minute:D2}";
+                }
+
+                JToken attachmentsToken;
+                try
+                {
+                    attachmentsToken = string.IsNullOrWhiteSpace(ls.AttachmentsJson)
+                        ? new JArray()
+                        : JToken.Parse(ls.AttachmentsJson);
+                }
+                catch
+                {
+                    attachmentsToken = new JArray();
+                }
+
+                var updatedUtc = ls.UpdatedAtTicks > DateTime.UnixEpoch.Ticks
+                    ? new DateTime(ls.UpdatedAtTicks, DateTimeKind.Utc)
+                    : DateTime.UtcNow;
+
+                var remotePayload = new RemoteTagdoStream
+                {
+                    Id = Guid.TryParse(ls.Id, out _) ? ls.Id : Guid.NewGuid().ToString(),
+                    UserId = userId,
+                    StreamNumber = ls.OrderIndex + 1,
+                    Title = effectiveTitle,
+                    RawSyntax = ls.RawText ?? string.Empty,
+                    ReminderTime = reminderStr,
+                    ActiveMemos = ls.ActiveMemos ?? string.Empty,
+                    Attachments = attachmentsToken,
+                    UpdatedAt = updatedUtc
+                };
+
+                Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                await ExecuteWithAuthAsync(
+                    () => _supabaseClient.From<RemoteTagdoStream>().Upsert(
+                        remotePayload,
+                        new Supabase.Postgrest.QueryOptions
+                        {
+                            OnConflict = "user_id,stream_number",
+                            Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
+                        }),
+                    $"Tagdos.PushSingleStream({ls.OrderIndex + 1})").ConfigureAwait(false);
+                Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+                ls.Id = remotePayload.Id;
+                ls.UpdatedAtTicks = updatedUtc.Ticks;
+                ls.SyncedAtTicks = DateTime.UtcNow.Ticks;
+                await _databaseService.Connection.InsertOrReplaceAsync(ls).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning("PushSingleStreamAsync warning: {Message}", ex.Message);
+            }
+        }
+
+        private async Task PushSingleQuickNoteAsync(LocalTagdoQuickNote dn)
+        {
+            if (_supabaseClient == null) return;
+            try
+            {
+                if (_sessionGuardian != null)
+                    await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false);
+
+                var userId = _supabaseClient.Auth.CurrentUser?.Id;
+                if (string.IsNullOrEmpty(userId)) return;
+
+                List<string> tags = new();
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(dn.TagsJson))
+                        tags = JsonSerializer.Deserialize<List<string>>(dn.TagsJson) ?? new();
+                }
+                catch { }
+
+                var createdUtc = dn.CreatedAtTicks > DateTime.UnixEpoch.Ticks
+                    ? new DateTime(dn.CreatedAtTicks, DateTimeKind.Utc)
+                    : DateTime.UtcNow;
+                var updatedUtc = dn.UpdatedAtTicks > DateTime.UnixEpoch.Ticks
+                    ? new DateTime(dn.UpdatedAtTicks, DateTimeKind.Utc)
+                    : DateTime.UtcNow;
+
+                var remoteNote = new RemoteTagdoQuickNote
+                {
+                    Id = Guid.TryParse(dn.Id, out _) ? dn.Id : Guid.NewGuid().ToString(),
+                    UserId = userId,
+                    Title = dn.Title ?? string.Empty,
+                    Content = dn.Content ?? string.Empty,
+                    IsPinned = dn.IsPinned,
+                    Tags = tags,
+                    CreatedAt = createdUtc,
+                    UpdatedAt = updatedUtc
+                };
+
+                Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                await ExecuteWithAuthAsync(
+                    () => _supabaseClient.From<RemoteTagdoQuickNote>().Upsert(
+                        remoteNote,
+                        new Supabase.Postgrest.QueryOptions { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal }),
+                    $"Tagdos.PushSingleQuickNote({dn.Id})").ConfigureAwait(false);
+                Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+                dn.Id = remoteNote.Id;
+                dn.UserId = userId;
+                dn.SyncedAtTicks = DateTime.UtcNow.Ticks;
+                await _databaseService.Connection.InsertOrReplaceAsync(dn).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning("PushSingleQuickNoteAsync warning: {Message}", ex.Message);
             }
         }
 

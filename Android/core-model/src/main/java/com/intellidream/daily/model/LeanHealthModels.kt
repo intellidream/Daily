@@ -36,17 +36,17 @@ data class HealthSourceRecord(
 @Serializable
 data class HealthSleepSessionRecord(
     val id: String,
-    @SerialName("user_id") @JsonNames("userId") val userId: String,
+    @SerialName("user_id") @JsonNames("userId") val userId: String = "",
     @SerialName("local_date") @JsonNames("localDate") val localDate: String,
     @SerialName("session_type") @JsonNames("sessionType") val sessionType: String = "primary_sleep",
     @SerialName("source_device_key") @JsonNames("sourceDeviceKey") val sourceDeviceKey: String,
     @SerialName("host_device_name") @JsonNames("hostDeviceName") val hostDeviceName: String? = null,
     @Serializable(with = TimestampSerializer::class)
-    @SerialName("start_time") @JsonNames("startTime") val startTime: Long,
+    @SerialName("start_time") @JsonNames("startTime") val startTime: Long = 0L,
     @Serializable(with = TimestampSerializer::class)
-    @SerialName("end_time") @JsonNames("endTime") val endTime: Long,
+    @SerialName("end_time") @JsonNames("endTime") val endTime: Long = 0L,
     @SerialName("duration_seconds") @JsonNames("durationSeconds") val durationSeconds: Int,
-    @SerialName("time_in_bed_seconds") @JsonNames("timeInBedSeconds") val timeInBedSeconds: Int,
+    @SerialName("time_in_bed_seconds") @JsonNames("timeInBedSeconds") val timeInBedSeconds: Int = 0,
     @SerialName("efficiency_percent") @JsonNames("efficiencyPercent") val efficiencyPercent: Double? = null,
     @SerialName("sleep_score") @JsonNames("sleepScore") val sleepScore: Int? = null,
     @SerialName("deep_seconds") @JsonNames("deepSeconds") val deepSeconds: Int = 0,
@@ -60,6 +60,9 @@ data class HealthSleepSessionRecord(
     @SerialName("is_user_selected") @JsonNames("isUserSelected") val isUserSelected: Boolean = false,
     @SerialName("ingested_at") @JsonNames("ingestedAt") val ingestedAt: String? = null
 ) {
+    val hasGranularSleepStages: Boolean
+        get() = stages.isNotEmpty() || (deepSeconds + remSeconds + lightSeconds) > 0
+
     fun toSleepSession(): SleepSession {
         val canonDevice = DeviceSource.from(sourceDeviceKey).displayName
         val effectiveStages: List<SleepStageRecord> = if (stages.isNotEmpty()) {
@@ -101,7 +104,7 @@ data class HealthSleepSessionRecord(
             isNap = sessionType == "nap",
             stages = effectiveStages,
             sourceDevice = canonDevice,
-            hasGranularHypnogram = stages.isNotEmpty()
+            hasGranularHypnogram = hasGranularSleepStages
         )
     }
 }

@@ -45,11 +45,12 @@ Deno.serve(async (req: Request) => {
     let tzOffsetMin = 120;
     let preferredDevice: string | undefined = undefined;
     let processDirty = false;
+    let responseMode: 'full' | 'compact' | 'watch' = 'full';
 
     if (req.method === 'POST') {
       const body = await req.json().catch(() => ({}));
-      userId = body.user_id || body.userId;
-      targetDate = body.date || body.local_date;
+      userId = body.user_id || body.userId || null;
+      targetDate = body.date || body.local_date || null;
       if (Array.isArray(body.dates)) {
         targetDates = body.dates;
       }
@@ -59,6 +60,11 @@ Deno.serve(async (req: Request) => {
       }
       preferredDevice = body.preferred_device || body.preferredDevice;
       processDirty = body.process_dirty === true;
+      if (body.include_summary === false || body.compact === true) {
+        responseMode = 'compact';
+      } else if (body.include_summary === 'watch' || body.slim_watch === true) {
+        responseMode = 'watch';
+      }
     } else if (req.method === 'GET') {
       const url = new URL(req.url);
       userId = url.searchParams.get('user_id');
@@ -70,6 +76,27 @@ Deno.serve(async (req: Request) => {
       }
       preferredDevice = url.searchParams.get('preferred_device') || undefined;
       processDirty = url.searchParams.get('process_dirty') === 'true';
+      if (url.searchParams.get('include_summary') === 'false' || url.searchParams.get('compact') === 'true') {
+        responseMode = 'compact';
+      } else if (url.searchParams.get('include_summary') === 'watch' || url.searchParams.get('slim_watch') === 'true') {
+        responseMode = 'watch';
+      }
+    }
+
+    if (!userId) {
+      const authHeader = req.headers.get('Authorization') || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (token.split('.').length === 3) {
+        try {
+          const payloadB64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+          const decoded = JSON.parse(atob(payloadB64));
+          if (typeof decoded?.sub === 'string' && decoded.sub.length > 0) {
+            userId = decoded.sub;
+          }
+        } catch (_e) {
+          // Ignore malformed JWT fallback
+        }
+      }
     }
 
     // Mode A: Legacy process_dirty compatibility no-op (health_day_dirty retired in Lean v2.0)
@@ -90,7 +117,7 @@ Deno.serve(async (req: Request) => {
     if (userId && targetDates && targetDates.length > 0) {
       const results = [];
       for (const d of targetDates) {
-        const rowRes = await processDayForUser(supabase, userId, d, tzOffsetMin, preferredDevice);
+        const rowRes = await processDayForUser(supabase, userId, d, tzOffsetMin, preferredDevice, responseMode);
         results.push(rowRes);
       }
       return new Response(JSON.stringify({ processed_count: results.length, results }), {
@@ -111,7 +138,8 @@ Deno.serve(async (req: Request) => {
       userId,
       targetDate,
       tzOffsetMin,
-      preferredDevice
+      preferredDevice,
+      responseMode
     );
 
     return new Response(JSON.stringify(result), {
@@ -131,7 +159,8 @@ async function processDayForUser(
   userId: string,
   targetDate: string,
   tzOffsetMin: number,
-  preferredDevice?: string
+  preferredDevice?: string,
+  responseMode: 'full' | 'compact' | 'watch' = 'full'
 ) {
   // Compute 28-day rolling baseline window [targetDate - 28d, targetDate - 1d]
   const parsedTarget = new Date(`${targetDate}T00:00:00Z`);
@@ -192,18 +221,29 @@ async function processDayForUser(
   const historyVitalsRows = (historyVitalsRes.data || []) as LeanDailyVitalsRow[];
   const sourceRows = (sourcesRes.data || []) as LeanHealthSourceRow[];
 
-  if (vitalsRows.length === 0 && sleepRows.length === 0 && hrRows.length === 0) {
-    // Preserve any pre-existing historical summary when lean tables have 0 rows for an older date
+  let archivedCardiovascular: any = null;
+  if (hrRows.length === 0 && !preferredDevice) {
+    // When granular 5-minute intraday HR buckets were pruned (>7 days retention),
+    // preserve any archived All-Devices cardiovascular curve & HR zones from health_daily_summary.
     const { data: existingSummary } = await supabase
       .from('health_daily_summary')
-      .select('steps, sleep_asleep_s')
+      .select('steps, sleep_asleep_s, summary')
       .eq('user_id', userId)
       .eq('local_date', targetDate)
       .maybeSingle();
 
-    if (existingSummary && (existingSummary.steps !== null || existingSummary.sleep_asleep_s !== null)) {
-      return { success: true, date: targetDate, preserved: true };
+    if (vitalsRows.length === 0 && sleepRows.length === 0) {
+      if (existingSummary && (existingSummary.steps !== null || existingSummary.sleep_asleep_s !== null)) {
+        return { success: true, date: targetDate, preserved: true };
+      }
+      return { success: true, date: targetDate, empty: true };
     }
+
+    const existingCardio = existingSummary?.summary?.cardiovascular;
+    if (existingCardio && Array.isArray(existingCardio.intraday_points) && existingCardio.intraday_points.length > 0) {
+      archivedCardiovascular = existingCardio;
+    }
+  } else if (vitalsRows.length === 0 && sleepRows.length === 0 && hrRows.length === 0) {
     return { success: true, date: targetDate, empty: true };
   }
 
@@ -216,7 +256,8 @@ async function processDayForUser(
     historyVitalsRows,
     sourceRows,
     tzOffsetMin,
-    preferredDevice
+    preferredDevice,
+    archivedCardiovascular
   });
 
   // Only persist canonical unfiltered summary into health_daily_summary
@@ -248,6 +289,52 @@ async function processDayForUser(
     if (upsertErr) {
       throw new Error(`Failed to upsert health_daily_summary: ${upsertErr.message}`);
     }
+  }
+
+  if (responseMode === 'compact') {
+    return {
+      success: true,
+      date: targetDate,
+      synthesized_from_lean: true,
+      computed_at: summaryRow.computed_at,
+      engine_version: summaryRow.engine_version
+    };
+  }
+
+  if (responseMode === 'watch') {
+    const prim = summaryRow.summary.sleep.primary_session;
+    const slimSummary = {
+      ...summaryRow,
+      summary: {
+        date: summaryRow.summary.date,
+        engine_version: summaryRow.summary.engine_version,
+        computed_at: summaryRow.summary.computed_at,
+        sleep: {
+          primary_session: prim ? { ...prim, stages: [] } : null,
+          guidance: summaryRow.summary.sleep.guidance
+            ? { verdict: summaryRow.summary.sleep.guidance.verdict }
+            : null
+        },
+        activity: {
+          total_steps: summaryRow.summary.activity.total_steps,
+          active_calories: summaryRow.summary.activity.active_calories,
+          source_device: summaryRow.summary.activity.source_device
+        },
+        cardiovascular: {
+          latest_bpm: summaryRow.summary.cardiovascular.latest_bpm,
+          resting_bpm: summaryRow.summary.cardiovascular.resting_bpm
+        },
+        stress: summaryRow.summary.stress
+          ? { ...summaryRow.summary.stress, intraday_points: [] }
+          : null
+      }
+    };
+    return {
+      success: true,
+      date: targetDate,
+      synthesized_from_lean: true,
+      summary: slimSummary
+    };
   }
 
   return {

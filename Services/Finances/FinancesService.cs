@@ -25,6 +25,8 @@ namespace Daily.Services.Finances
         private RealtimeChannel? _ledgerRealtimeChannel;
         private string? _realtimeUserId;
         private bool _smartLedgerRealtimeUnsupported;
+        private long _lastLocalLedgerPushTicks = 0;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Guid> _canonicalLedgerIdByUser = new(StringComparer.OrdinalIgnoreCase);
         private readonly IGotrueClient<User, Session>.AuthEventHandler? _authListener;
 
         public event Action OnViewTypeChanged;
@@ -69,7 +71,7 @@ namespace Daily.Services.Finances
             {
                 _ = Task.Run(async () =>
                 {
-                    await SetupSmartLedgerRealtimeAsync(forceRecreate: state == Supabase.Gotrue.Constants.AuthState.TokenRefreshed);
+                    await SetupSmartLedgerRealtimeAsync(forceRecreate: false);
                     if (state == Supabase.Gotrue.Constants.AuthState.SignedIn)
                     {
                         await GetSmartLedgerAsync(forceRefresh: true);
@@ -695,6 +697,7 @@ namespace Daily.Services.Finances
 
                             if (shouldAdoptRemote)
                             {
+                                _canonicalLedgerIdByUser[user.Id] = remote.Id;
                                 bool textChanged = local == null || local.LedgerText != remote.LedgerText;
                                 if (local != null && !string.Equals(local.Id, remote.Id.ToString(), StringComparison.OrdinalIgnoreCase))
                                 {
@@ -904,15 +907,22 @@ namespace Daily.Services.Finances
 
                     if (latestLocal != null && latestLocal.SyncedAt == null && Guid.TryParse(user.Id, out var userGuid))
                     {
-                        // Check if a remote record already exists with a canonical UUID
-                        var existingRemoteRes = await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>()
-                            .Where(x => x.UserId == userGuid)
-                            .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
-                            .Limit(1)
-                            .Get(), "Finances.ResolveCanonicalSmartLedgerId");
+                        if (!_canonicalLedgerIdByUser.TryGetValue(user.Id, out var canonicalGuid))
+                        {
+                            // Query ONLY the id column once per session to resolve canonical row UUID (~40 bytes instead of full ledger_text)
+                            var existingRemoteRes = await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>()
+                                .Select("id")
+                                .Where(x => x.UserId == userGuid)
+                                .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
+                                .Limit(1)
+                                .Get(), "Finances.ResolveCanonicalSmartLedgerId");
 
-                        var existingRemote = existingRemoteRes.Models.FirstOrDefault();
-                        Guid canonicalGuid = existingRemote?.Id ?? (Guid.TryParse(latestLocal.Id, out var parsedG) ? parsedG : Guid.NewGuid());
+                            var existingRemote = existingRemoteRes.Models.FirstOrDefault();
+                            canonicalGuid = (existingRemote != null && existingRemote.Id != Guid.Empty)
+                                ? existingRemote.Id
+                                : (Guid.TryParse(latestLocal.Id, out var parsedG) ? parsedG : Guid.NewGuid());
+                            _canonicalLedgerIdByUser[user.Id] = canonicalGuid;
+                        }
 
                         if (!string.Equals(latestLocal.Id, canonicalGuid.ToString(), StringComparison.OrdinalIgnoreCase))
                         {
@@ -929,7 +939,10 @@ namespace Daily.Services.Finances
                             CreatedAt = Mappers.SafeUtc(latestLocal.CreatedAt),
                             UpdatedAt = Mappers.SafeUtc(latestLocal.UpdatedAt)
                         };
-                        await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>().Upsert(remote), "Finances.SaveSmartLedger");
+                        var minReturnOpts = new QueryOptions { Return = QueryOptions.ReturnType.Minimal };
+                        Interlocked.Exchange(ref _lastLocalLedgerPushTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                        await ExecuteWithAuthAsync(() => _supabaseClient.From<SmartLedger>().Upsert(remote, minReturnOpts), "Finances.SaveSmartLedger");
+                        Interlocked.Exchange(ref _lastLocalLedgerPushTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                         latestLocal.SyncedAt = DateTime.UtcNow;
                         await _databaseService.Connection.InsertOrReplaceAsync(latestLocal);
                     }
@@ -974,6 +987,11 @@ namespace Daily.Services.Finances
                 var subTask = _supabaseClient.From<SmartLedger>()
                     .On(Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.All, (_, _) =>
                     {
+                        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        if (nowMs - Interlocked.Read(ref _lastLocalLedgerPushTicks) < 6000)
+                        {
+                            return;
+                        }
                         _ = Task.Run(async () =>
                         {
                             await GetSmartLedgerAsync(forceRefresh: true);

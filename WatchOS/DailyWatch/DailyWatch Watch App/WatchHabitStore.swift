@@ -227,6 +227,12 @@ public class WatchHabitStore: ObservableObject {
     public func saveToAppGroup() {
         guard let groupPrefs = UserDefaults(suiteName: groupSuiteName) else { return }
         
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = Calendar.current.timeZone
+        fmt.dateFormat = "yyyy-MM-dd"
+        groupPrefs.set(fmt.string(from: Date()), forKey: "cached_habits_date")
+        
         groupPrefs.set(String(waterGoal), forKey: "water_goal")
         groupPrefs.set(String(smokesBaseline), forKey: "smokes_baseline")
         
@@ -396,7 +402,7 @@ public class WatchHabitStore: ObservableObject {
                 let water_goal: Int
             }
             _ = try? await pClient.from("user_preferences")
-                .upsert(WaterPref(id: userId.uuidString, water_goal: newGoal))
+                .upsert(WaterPref(id: userId.uuidString, water_goal: newGoal), returning: .minimal)
                 .execute()
         }
     }
@@ -416,7 +422,7 @@ public class WatchHabitStore: ObservableObject {
                 let smokes_baseline: Int
             }
             _ = try? await pClient.from("user_preferences")
-                .upsert(SmokesPref(id: userId.uuidString, smokes_baseline: newBaseline))
+                .upsert(SmokesPref(id: userId.uuidString, smokes_baseline: newBaseline), returning: .minimal)
                 .execute()
         }
     }
@@ -484,6 +490,9 @@ public class WatchHabitStore: ObservableObject {
     public func fetchFullSync(force: Bool = false) {
         guard let pClient = WatchSessionManager.shared.supabaseClient else { return }
         guard !isRefreshing else { return }
+        if !force, let last = lastSyncDate, Date().timeIntervalSince(last) < 120 {
+            return
+        }
         
         isRefreshing = true
         isSyncing = true

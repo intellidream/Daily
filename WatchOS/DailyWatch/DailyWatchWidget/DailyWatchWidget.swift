@@ -19,77 +19,39 @@ struct DailyProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping @Sendable (DailyEntry) -> Void) {
-        completion(DailyEntry(date: Date(), waterTotal: 850, smokesTotal: 3, isLoggedIn: true))
+        completion(readCachedStats())
     }
 
     func getTimeline(in context: Context, completion: @escaping @Sendable (Timeline<DailyEntry>) -> Void) {
-        Task {
-            let entry = await fetchTodayStats()
-            // Complications update roughly every 15-30 minutes dynamically based on watchOS budgets
-            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-            let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-            DispatchQueue.main.async { completion(timeline) }
-        }
+        // Serve strictly from local App Group cache (<1ms, zero network egress & battery drain)
+        let entry = readCachedStats()
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
+        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+        completion(timeline)
     }
     
-    private func fetchTodayStats() async -> DailyEntry {
+    private func readCachedStats() -> DailyEntry {
         let date = Date()
         let groupPrefs = UserDefaults(suiteName: "group.com.intellidream.daily")
-        guard let token = groupPrefs?.string(forKey: "supabase_access_token") else {
+        let hasToken = !(groupPrefs?.string(forKey: "supabase_access_token") ?? "").isEmpty
+        guard hasToken else {
             return DailyEntry(date: date, waterTotal: 0, smokesTotal: 0, isLoggedIn: false)
         }
         
-        let calendar = Calendar.current
-        let todayStart = calendar.startOfDay(for: date)
-        let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart)!
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = Calendar.current.timeZone
+        fmt.dateFormat = "yyyy-MM-dd"
+        let todayKey = fmt.string(from: date)
+        let cachedDate = groupPrefs?.string(forKey: "cached_habits_date")
         
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let startString = formatter.string(from: todayStart)
-        let endString = formatter.string(from: todayEnd)
-        
-        guard var components = URLComponents(string: "https://akkfouifxztnfwwiclwg.supabase.co/rest/v1/habits_logs") else {
-            return DailyEntry(date: date, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
-        }
-        components.queryItems = [
-            URLQueryItem(name: "is_deleted", value: "eq.false"),
-            URLQueryItem(name: "logged_at", value: "gte.\(startString)"),
-            URLQueryItem(name: "logged_at", value: "lt.\(endString)")
-        ]
-        
-        guard let url = components.url else {
+        if let cachedDate = cachedDate, cachedDate != todayKey {
             return DailyEntry(date: date, waterTotal: 0, smokesTotal: 0, isLoggedIn: true)
         }
         
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.setValue("sb_publishable_6FzrRSdmsH4arDhZS09PSQ_QK_I31DG", forHTTPHeaderField: "apikey")
-        
-        do {
-            let (data, rsp) = try await URLSession.shared.data(for: req)
-            guard let httpResponse = rsp as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                // API error (401, network, etc.) — fall back to last known cached totals
-                let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
-                let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
-                return DailyEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, isLoggedIn: true)
-            }
-            struct LogDto: Decodable { let habit_type: String?; let value: Double? }
-            let logs = try JSONDecoder().decode([LogDto].self, from: data)
-            
-            var water = 0.0
-            var smokes = 0.0
-            for log in logs {
-                if log.habit_type == "water" { water += log.value ?? 0.0 }
-                if log.habit_type == "smokes" { smokes += log.value ?? 0.0 }
-            }
-            return DailyEntry(date: date, waterTotal: Int(water), smokesTotal: Int(smokes), isLoggedIn: true)
-        } catch {
-            // Network error — fall back to last known cached totals
-            let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
-            let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
-            return DailyEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, isLoggedIn: true)
-        }
+        let cachedWater = groupPrefs?.integer(forKey: "cached_water_total") ?? 0
+        let cachedSmokes = groupPrefs?.integer(forKey: "cached_smokes_total") ?? 0
+        return DailyEntry(date: date, waterTotal: cachedWater, smokesTotal: cachedSmokes, isLoggedIn: true)
     }
 }
 

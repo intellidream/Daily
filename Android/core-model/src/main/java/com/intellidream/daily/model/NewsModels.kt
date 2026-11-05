@@ -173,7 +173,7 @@ data class SavedArticle(
     @SerialName("article_date")
     val articleDate: String = "",
     @SerialName("created_at")
-    val createdAt: String = "",
+    val createdAt: String? = null,
     @SerialName("updated_at")
     val updatedAt: String? = null,
     @SerialName("is_deleted")
@@ -226,7 +226,7 @@ data class RssSubscription(
     @SerialName("display_order")
     val displayOrder: Int = 0,
     @SerialName("created_at")
-    val createdAt: String = "",
+    val createdAt: String? = null,
     @SerialName("updated_at")
     val updatedAt: String? = null,
     @SerialName("is_deleted")

@@ -734,6 +734,7 @@ public final class NewsService: ObservableObject {
                 .from("rss_subscriptions")
                 .select()
                 .eq("user_id", value: user.id)
+                .eq("is_deleted", value: false)
                 .order("display_order")
                 .execute()
             
@@ -783,7 +784,7 @@ public final class NewsService: ObservableObject {
             let client = SupabaseService.shared.client
             try await client
                 .from("rss_subscriptions")
-                .upsert(sub)
+                .upsert(sub, returning: .minimal)
                 .execute()
         } catch {
             print("[NewsService] Supabase subscription push error: \(error)")

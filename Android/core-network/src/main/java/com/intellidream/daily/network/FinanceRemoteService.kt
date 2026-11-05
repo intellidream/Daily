@@ -87,15 +87,35 @@ class FinanceRemoteService(
         }
     }
 
+    private val cachedLedgerIdByUser = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     suspend fun pushLedger(rawText: String, userId: String? = null): Boolean = withContext(Dispatchers.IO) {
         if (userId == null) return@withContext false
         try {
             val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
                 timeZone = java.util.TimeZone.getTimeZone("UTC")
             }
-            val existing = fetchLedger(userId)
+            var ledgerId = cachedLedgerIdByUser[userId]
+            if (ledgerId == null) {
+                val idLookup = clientManager.client.postgrest["smart_ledgers"]
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                        order("updated_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        limit(1)
+                    }
+                    .decodeList<kotlinx.serialization.json.JsonObject>()
+                ledgerId = idLookup.firstOrNull()?.get("id")?.jsonPrimitive?.content
+                if (!ledgerId.isNullOrBlank()) {
+                    cachedLedgerIdByUser[userId] = ledgerId
+                }
+            }
+            val resolvedId = ledgerId ?: java.util.UUID.randomUUID().toString().also {
+                cachedLedgerIdByUser[userId] = it
+            }
             val payload = RemoteLedgerRecord(
-                id = existing?.id,
+                id = resolvedId,
                 user_id = userId,
                 ledger_text = rawText,
                 updated_at = isoFormat.format(java.util.Date())
@@ -119,7 +139,9 @@ class FinanceRemoteService(
                     limit(1)
                 }
                 .decodeList<RemoteLedgerRecord>()
-            list.firstOrNull()
+            val record = list.firstOrNull()
+            record?.id?.takeIf { it.isNotBlank() }?.let { cachedLedgerIdByUser[userId] = it }
+            record
         } catch (_: Exception) {
             null
         }

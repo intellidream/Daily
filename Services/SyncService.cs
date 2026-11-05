@@ -18,6 +18,8 @@ namespace Daily.Services
         private readonly ITagdosService? _tagdosService;
         private readonly ISupabaseSessionGuardian? _sessionGuardian;
         private bool _watermarkRecoveryChecked = false;
+        private static readonly Supabase.Postgrest.QueryOptions MinimalReturnOptions =
+            new() { Return = Supabase.Postgrest.QueryOptions.ReturnType.Minimal };
 
         public SyncService(
             Supabase.Client supabase,
@@ -334,23 +336,14 @@ namespace Daily.Services
                         {
                             Console.WriteLine($"[SyncService] Uploading {remoteLogs.Count} logs to Supabase...");
                             
-                            var result = await ExecuteWithAuthAsync(() => _supabase.From<HabitLog>().Upsert(remoteLogs), "PushHabitLogs");
-                            var insertedCount = result.Models.Count;
-                            Console.WriteLine($"[SyncService] Supabase returned {insertedCount} models.");
+                            await ExecuteWithAuthAsync(() => _supabase.From<HabitLog>().Upsert(remoteLogs, MinimalReturnOptions), "PushHabitLogs");
 
-                            if (insertedCount > 0 || remoteLogs.Count > 0)
+                            foreach (var l in dirtyLogs)
                             {
-                                foreach (var l in dirtyLogs)
-                                {
-                                    l.SyncedAt = DateTime.UtcNow;
-                                    await _databaseService.Connection.UpdateAsync(l);
-                                }
-                                Console.WriteLine("[SyncService] Push Logs Success. Marked local as synced.");
+                                l.SyncedAt = DateTime.UtcNow;
+                                await _databaseService.Connection.UpdateAsync(l);
                             }
-                            else
-                            {
-                                 Console.WriteLine("[SyncService] WARNING: Supabase returned 0 models active. RLS might be blocking insert?");
-                            }
+                            Console.WriteLine("[SyncService] Push Logs Success. Marked local as synced.");
                         }
                     }
                     catch(Exception ex)
@@ -380,7 +373,7 @@ namespace Daily.Services
                         
                         if (remoteGoals.Any())
                         {
-                            await ExecuteWithAuthAsync(() => _supabase.From<HabitGoal>().Upsert(remoteGoals), "PushHabitGoals");
+                            await ExecuteWithAuthAsync(() => _supabase.From<HabitGoal>().Upsert(remoteGoals, MinimalReturnOptions), "PushHabitGoals");
 
                             foreach (var g in dirtyGoals)
                             {
@@ -626,7 +619,7 @@ namespace Daily.Services
                     {
                         var query = _supabase.From<HabitLog>()
                             .Order("logged_at", global::Supabase.Postgrest.Constants.Ordering.Descending)
-                            .Filter("created_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
+                            .Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, threshold.ToString("O"));
                         return query.Range(rStart, rEnd).Get();
                     }, "PullHabitLogs");
 
@@ -673,9 +666,16 @@ namespace Daily.Services
         {
             try {
                 Console.WriteLine($"[SyncService] Pulling Goals for User: {userId}...");
+                var localGoalCount = await _databaseService.Connection.Table<LocalHabitGoal>().Where(g => g.UserId == userId).CountAsync();
+                var effectiveLastPull = localGoalCount == 0 ? DateTime.MinValue : lastPull;
                 var goalResponse = await ExecuteWithAuthAsync(() =>
                 {
                     var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<HabitGoal>)_supabase.From<HabitGoal>();
+                    if (effectiveLastPull > DateTime.MinValue)
+                    {
+                        var queryDate = effectiveLastPull.AddMinutes(-5);
+                        query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                    }
                     return query.Get();
                 }, "PullHabitGoals");
 
@@ -729,7 +729,7 @@ namespace Daily.Services
                     }
                     if (remote.Any())
                     {
-                        await ExecuteWithAuthAsync(() => _supabase.From<RssSubscription>().Upsert(remote), "PushRssSubscriptions");
+                        await ExecuteWithAuthAsync(() => _supabase.From<RssSubscription>().Upsert(remote, MinimalReturnOptions), "PushRssSubscriptions");
                         foreach (var l in dirty)
                         {
                             l.SyncedAt = DateTime.UtcNow;
@@ -752,8 +752,19 @@ namespace Daily.Services
             {
                 LogDebug("[SyncService] PullRssSubscriptionsAsync Started");
                 var userGuid = Guid.Parse(userId);
+                var localCount = await _databaseService.Connection.Table<LocalRssSubscription>().Where(x => x.UserId == userId).CountAsync();
+                var effectiveLastPull = localCount == 0 ? DateTime.MinValue : lastPull;
                 var response = await ExecuteWithAuthAsync(
-                    () => _supabase.From<RssSubscription>().Where(x => x.UserId == userGuid).Get(),
+                    () =>
+                    {
+                        var query = _supabase.From<RssSubscription>().Where(x => x.UserId == userGuid);
+                        if (effectiveLastPull > DateTime.MinValue)
+                        {
+                            var queryDate = effectiveLastPull.AddMinutes(-5);
+                            query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                        }
+                        return query.Get();
+                    },
                     "PullRssSubscriptions");
                 int count = response.Models.Count;
                 LogDebug($"[SyncService] Pulled {count} RSS subscriptions from Supabase.");
@@ -823,7 +834,7 @@ namespace Daily.Services
                     }
                     if (remote.Any())
                     {
-                        await ExecuteWithAuthAsync(() => _supabase.From<CalendarAccount>().Upsert(remote), "PushCalendarAccounts");
+                        await ExecuteWithAuthAsync(() => _supabase.From<CalendarAccount>().Upsert(remote, MinimalReturnOptions), "PushCalendarAccounts");
                         foreach (var l in dirty)
                         {
                             l.SyncedAt = DateTime.UtcNow;
@@ -1012,20 +1023,11 @@ namespace Daily.Services
 
                         if (!skipPush)
                         {
-                            // Create or Overwrite (We are newer or new)
-                            var response = await ExecuteWithAuthAsync(() => _supabase.From<UserPreferences>().Upsert(remote), "PushUserPreferences");
-
-                            if (response.Models.Count > 0)
-                            {
-                                local.SyncedAt = DateTime.UtcNow;
-                                await _databaseService.Connection.UpdateAsync(local);
-                                pushedCount++;
-                            }
-                            else
-                            {
-                                 LastSyncError = $"Push Warning: 0 rows written for ID {local.Id}";
-                                 LogDebug(LastSyncError);
-                            }
+                            // Create or Overwrite (We are newer or new) with minimal return
+                            await ExecuteWithAuthAsync(() => _supabase.From<UserPreferences>().Upsert(remote, MinimalReturnOptions), "PushUserPreferences");
+                            local.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.UpdateAsync(local);
+                            pushedCount++;
                         }
                     }
                     catch (Exception ex)
@@ -1172,7 +1174,7 @@ namespace Daily.Services
                  
                  try 
                  {
-                     await ExecuteWithAuthAsync(() => _supabase.From<DailySummary>().Upsert(remoteList), "PushDailySummaries");
+                     await ExecuteWithAuthAsync(() => _supabase.From<DailySummary>().Upsert(remoteList, MinimalReturnOptions), "PushDailySummaries");
                      
                      foreach(var s in dirty)
                      {
@@ -1193,6 +1195,15 @@ namespace Daily.Services
         {
             try
             {
+                const string pruneKey = "SyncService_LastPruneHabitsUtc";
+                var lastPruneStr = GetPreference(pruneKey, "");
+                if (!string.IsNullOrEmpty(lastPruneStr) &&
+                    DateTime.TryParse(lastPruneStr, out var lastPruneDt) &&
+                    (DateTime.UtcNow - lastPruneDt.ToUniversalTime()).TotalHours < 24.0)
+                {
+                    return;
+                }
+
                 // Safety Threshold: 90 Days
                 var thresholdDate = DateTime.UtcNow.AddDays(-90);
 
@@ -1205,38 +1216,20 @@ namespace Daily.Services
 
                 if (latestSyncedSummary == null)
                 {
-                    Console.WriteLine("[SyncService] Pruning Aborted: No synced summaries found.");
+                    SetPreference(pruneKey, DateTime.UtcNow.ToString("O"));
                     return;
                 }
 
-                // 2. Determine Safe Prune Date based on Min(Threshold, LatestSummary)
-                // We must NOT delete logs that are newer than our latest summary (even if they are > 90 days old, though unlikely)
-                // We must NOT delete logs that are newer than 90 days (Business Rule)
-                
-                // Use the Date from the summary (Midnight). 
-                // LoggedAt is exact time. If summary is for 2023-01-01, it covers 2023-01-01 00:00 to 23:59.
-                // It is SAFE to delete logs < 2023-01-02 00:00? No, that's previous day.
-                // If we summarized 2023-01-01, we extracted all logs for that day. 
-                // So logs with LoggedAt < 2023-01-02 00:00 are theoretically safe.
-                // However, let's differ to strict less than Date (Midnight) to be super safe 
-                // (i.e. if summary date is Jan 1, we prune strictly < Jan 1, meaning up to Dec 31).
-                
                 var latestSummaryDate = latestSyncedSummary.Date;
-                
                 var safePruneDate = (latestSummaryDate < thresholdDate) ? latestSummaryDate : thresholdDate;
                 
                 Console.WriteLine($"[SyncService] Pruning Check: Threshold={thresholdDate:d}, LatestSummary={latestSummaryDate:d}. SafeDate={safePruneDate:d}");
 
-                // 3. Execute Deletion on Supabase
-                // "Delete from habits_logs where logged_at < safePruneDate"
-                // Using PostgREST filtering
                 await _supabase.From<HabitLog>()
-                    .Where(x => x.LoggedAt < safePruneDate) // Strict Less Than
-                    //.Where(x => x.UserId == Guid.Parse(userId)) // RLS handles this, but explicit doesn't hurt. 
-                                                                  // Actually PostgREST client might fail if we filter by a field not in the model? 
-                                                                  // HabitLog has UserId.
-                    .Delete();
-                    
+                    .Where(x => x.LoggedAt < safePruneDate)
+                    .Delete(MinimalReturnOptions);
+
+                SetPreference(pruneKey, DateTime.UtcNow.ToString("O"));
                 Console.WriteLine($"[SyncService] Pruning Command Sent. Remote logs older than {safePruneDate:d} should be deleted.");
             }
             catch (Exception ex)
@@ -1334,7 +1327,7 @@ namespace Daily.Services
                 var remoteList = dirty.Select(MapToRemote).ToList();
                 try 
                 {
-                    await ExecuteWithAuthAsync(() => _supabase.From<Account>().Upsert(remoteList), "PushAccounts");
+                    await ExecuteWithAuthAsync(() => _supabase.From<Account>().Upsert(remoteList, MinimalReturnOptions), "PushAccounts");
                     foreach(var a in dirty)
                     {
                         a.SyncedAt = DateTime.UtcNow;
@@ -1407,7 +1400,7 @@ namespace Daily.Services
                     var remoteList = validDirty.Select(MapToRemote).ToList();
                     try
                     {
-                        await ExecuteWithAuthAsync(() => _supabase.From<Transaction>().Upsert(remoteList), "PushTransactions");
+                        await ExecuteWithAuthAsync(() => _supabase.From<Transaction>().Upsert(remoteList, MinimalReturnOptions), "PushTransactions");
                         foreach(var t in validDirty)
                         {
                             t.SyncedAt = DateTime.UtcNow;
@@ -1487,7 +1480,7 @@ namespace Daily.Services
                     var remoteList = validDirty.Select(MapToRemote).ToList();
                     try
                     {
-                        await ExecuteWithAuthAsync(() => _supabase.From<Holding>().Upsert(remoteList), "PushHoldings");
+                        await ExecuteWithAuthAsync(() => _supabase.From<Holding>().Upsert(remoteList, MinimalReturnOptions), "PushHoldings");
                         foreach(var h in validDirty)
                         {
                             h.SyncedAt = DateTime.UtcNow;
@@ -1623,7 +1616,7 @@ namespace Daily.Services
                 {
                     Console.WriteLine($"[SyncService] Pushing {dirty.Count} saved articles...");
                     var remote = dirty.Select(d => d.ToDomain()).ToList();
-                    await ExecuteWithAuthAsync(() => _supabase.From<SavedArticle>().Upsert(remote), "PushSavedArticles");
+                    await ExecuteWithAuthAsync(() => _supabase.From<SavedArticle>().Upsert(remote, MinimalReturnOptions), "PushSavedArticles");
 
                     foreach (var d in dirty)
                     {
@@ -1645,8 +1638,8 @@ namespace Daily.Services
             try
             {
                 Console.WriteLine($"[SyncService] Pulling Saved Articles for User: {userId}...");
-
-                var effectiveLastPull = lastPull;
+                var localSavedCount = await _databaseService.Connection.Table<LocalSavedArticle>().Where(a => a.UserId == userId).CountAsync();
+                var effectiveLastPull = localSavedCount == 0 ? DateTime.MinValue : lastPull;
                 var response = await ExecuteWithAuthAsync(() =>
                 {
                     var query = (Supabase.Postgrest.Interfaces.IPostgrestTable<SavedArticle>)_supabase.From<SavedArticle>();
@@ -1654,6 +1647,10 @@ namespace Daily.Services
                     {
                         var queryDate = effectiveLastPull.AddMinutes(-5);
                         query = query.Filter("updated_at", global::Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                    }
+                    else
+                    {
+                        query = query.Filter("is_deleted", global::Supabase.Postgrest.Constants.Operator.Equals, "false");
                     }
                     return query.Get();
                 }, "PullSavedArticles");
@@ -1748,6 +1745,7 @@ namespace Daily.Services
                 var userGuid = Guid.Parse(userId);
                 var existingResp = await ExecuteWithAuthAsync(
                     () => _supabase.From<SmartLedger>()
+                        .Select("id,updated_at")
                         .Where(x => x.UserId == userGuid)
                         .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
                         .Limit(1)
@@ -1762,18 +1760,28 @@ namespace Daily.Services
 
                     if (remoteTime > localTime)
                     {
-                        // Remote is newer than our unsynced local copy -> adopt remote
-                        await _databaseService.Connection.DeleteAsync(canonical);
-                        var adopted = Mappers.ToLocal(remoteLatest);
-                        adopted.SyncedAt = DateTime.UtcNow;
-                        await _databaseService.Connection.InsertOrReplaceAsync(adopted);
-                        LogDebug("[SyncService] Smart Ledger push skipped: adopted newer cloud version.");
-                        OnFinancesPulled?.Invoke();
-                        return;
+                        // Remote is newer than our unsynced local copy -> fetch full remote row & adopt
+                        var fullResp = await ExecuteWithAuthAsync(
+                            () => _supabase.From<SmartLedger>()
+                                .Where(x => x.Id == remoteLatest.Id)
+                                .Limit(1)
+                                .Get(),
+                            "FetchRemoteSmartLedgerOnConflict");
+                        var fullRemote = fullResp.Models.FirstOrDefault();
+                        if (fullRemote != null)
+                        {
+                            await _databaseService.Connection.DeleteAsync(canonical);
+                            var adopted = Mappers.ToLocal(fullRemote);
+                            adopted.SyncedAt = DateTime.UtcNow;
+                            await _databaseService.Connection.InsertOrReplaceAsync(adopted);
+                            LogDebug("[SyncService] Smart Ledger push skipped: adopted newer cloud version.");
+                            OnFinancesPulled?.Invoke();
+                            return;
+                        }
                     }
 
                     // Adopt canonical remote UUID so we never create duplicate smart_ledgers rows per user!
-                    if (!string.Equals(canonical.Id, remoteLatest.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                    if (remoteLatest.Id != Guid.Empty && !string.Equals(canonical.Id, remoteLatest.Id.ToString(), StringComparison.OrdinalIgnoreCase))
                     {
                         var oldId = canonical.Id;
                         canonical.Id = remoteLatest.Id.ToString();
@@ -1783,7 +1791,7 @@ namespace Daily.Services
                 }
 
                 var remoteModel = Mappers.ToDomain(canonical);
-                await ExecuteWithAuthAsync(() => _supabase.From<SmartLedger>().Upsert(remoteModel), "PushSmartLedger");
+                await ExecuteWithAuthAsync(() => _supabase.From<SmartLedger>().Upsert(remoteModel, MinimalReturnOptions), "PushSmartLedger");
 
                 canonical.SyncedAt = DateTime.UtcNow;
                 await _databaseService.Connection.InsertOrReplaceAsync(canonical);
@@ -1801,30 +1809,35 @@ namespace Daily.Services
             try 
             {
                 var userGuid = Guid.Parse(userId);
+                var localRows = await _databaseService.Connection.Table<LocalSmartLedger>()
+                    .Where(x => x.UserId == userId)
+                    .OrderByDescending(x => x.UpdatedAt)
+                    .ToListAsync();
 
-                // Always inspect the single latest canonical SmartLedger row for this user (tiny 1-row payload, matches macOS/iOS SmartLedgerStore)
+                var existing = localRows.FirstOrDefault();
+                foreach (var extra in localRows.Skip(1))
+                {
+                    await _databaseService.Connection.DeleteAsync(extra);
+                }
+
+                var effectiveLastPull = (existing == null || string.IsNullOrWhiteSpace(existing.LedgerText)) ? DateTime.MinValue : lastPull;
+
                 var remote = await ExecuteWithAuthAsync(
-                    () => _supabase.From<SmartLedger>()
-                        .Where(x => x.UserId == userGuid)
-                        .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
-                        .Limit(1)
-                        .Get(),
+                    () =>
+                    {
+                        var q = _supabase.From<SmartLedger>().Where(x => x.UserId == userGuid);
+                        if (effectiveLastPull > DateTime.MinValue)
+                        {
+                            var queryDate = effectiveLastPull.AddMinutes(-5);
+                            q = q.Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThanOrEqual, queryDate.ToString("O"));
+                        }
+                        return q.Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending).Limit(1).Get();
+                    },
                     "PullSmartLedger");
 
                 var rm = remote.Models.FirstOrDefault();
                 if (rm != null)
                 {
-                    var localRows = await _databaseService.Connection.Table<LocalSmartLedger>()
-                        .Where(x => x.UserId == userId)
-                        .OrderByDescending(x => x.UpdatedAt)
-                        .ToListAsync();
-
-                    var existing = localRows.FirstOrDefault();
-                    foreach (var extra in localRows.Skip(1))
-                    {
-                        await _databaseService.Connection.DeleteAsync(extra);
-                    }
-
                     var remoteTime = rm.UpdatedAt.ToUniversalTime();
                     var localTime = existing != null ? Mappers.SafeUtc(existing.UpdatedAt) : DateTime.MinValue;
                     bool localDirty = existing != null && existing.SyncedAt == null;
@@ -1871,7 +1884,7 @@ namespace Daily.Services
                 var remoteList = dirty.Select(Mappers.ToDomain).ToList();
                 try 
                 {
-                    await ExecuteWithAuthAsync(() => _supabase.From<LedgerTransaction>().Upsert(remoteList), "PushLedgerTransactions");
+                    await ExecuteWithAuthAsync(() => _supabase.From<LedgerTransaction>().Upsert(remoteList, MinimalReturnOptions), "PushLedgerTransactions");
                     foreach (var a in dirty)
                     {
                         a.SyncedAt = DateTime.UtcNow;

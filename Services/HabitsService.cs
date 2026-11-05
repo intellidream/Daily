@@ -90,12 +90,11 @@ namespace Daily.Services
                         {
                             try
                             {
-                                InvalidateRpcCache();
-                                await SetupRealtimeAsync(forceRecreate: true);
+                                await SetupRealtimeAsync(forceRecreate: false);
                             }
                             catch (Exception ex)
                             {
-                                Console.WriteLine($"[HabitsService] TokenRefreshed Realtime re-bind warning: {ex.Message}");
+                                Console.WriteLine($"[HabitsService] TokenRefreshed Realtime check warning: {ex.Message}");
                             }
                         });
                     }

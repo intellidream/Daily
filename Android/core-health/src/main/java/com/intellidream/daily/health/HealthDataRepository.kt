@@ -9,6 +9,7 @@ import com.intellidream.daily.database.entity.HealthDailySummaryEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
 import com.intellidream.daily.model.BreathingProtocol
+import com.intellidream.daily.model.CanonicalCardiovascularSummary
 import com.intellidream.daily.model.DailyHealthSummaryPayload
 import com.intellidream.daily.model.DailyMetricTrendPoint
 import com.intellidream.daily.model.DeviceColorPalette
@@ -36,17 +37,21 @@ import com.intellidream.daily.model.StressLevel
 import com.intellidream.daily.model.VitalMetricRecord
 import com.intellidream.daily.network.HealthRemoteService
 import com.intellidream.daily.network.SupabaseClientManager
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -94,11 +99,37 @@ class HealthDataRepository(
     private val lastEngineInvocation = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val lastEnginePayloadFingerprint = java.util.concurrent.ConcurrentHashMap<String, String>()
     private var lastKnownTodayStart: Long = getStartOfDay(System.currentTimeMillis())
+    private var realtimeChannel: RealtimeChannel? = null
+    private var realtimeDebounceJob: kotlinx.coroutines.Job? = null
+    @Volatile private var pendingRealtimeSourcesRefresh: Boolean = false
+    @Volatile private var lastLocalUploadCompletedAtMs: Long = 0L
+    @Volatile private var lastSourcesFetchAtMs: Long = 0L
+    private val lastUploadedSleepFpByDate = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val lastUploadedVitalsFpByDate = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val lastUploadedHrFpByDate = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val registeredSourceIdsInSession = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private data class TrendsRemoteCacheEntry(
+        val cacheKey: String,
+        val fetchedAtMs: Long,
+        val summaries: List<HealthDailySummaryRecord>,
+        val sleep: List<HealthSleepSessionRecord>,
+        val vitals: List<HealthDailyVitalsRecord>
+    )
+    @Volatile private var trendsRemoteCache: TrendsRemoteCacheEntry? = null
 
     var currentUserId: String = "local_user"
         set(value) {
             val changed = field != value
             field = value
+            if (changed) {
+                trendsRemoteCache = null
+                lastSourcesFetchAtMs = 0L
+                registeredSourceIdsInSession.clear()
+                lastUploadedSleepFpByDate.clear()
+                lastUploadedVitalsFpByDate.clear()
+                lastUploadedHrFpByDate.clear()
+            }
             if (changed && value != "local_user") {
                 setupRealtimeSubscription()
                 loadDataForSelectedDate(forceRefresh = true)
@@ -271,7 +302,8 @@ class HealthDataRepository(
         periodicActiveSyncJob?.cancel()
         periodicActiveSyncJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                kotlinx.coroutines.delay(5 * 60 * 1000L) // 5 minutes periodic cadence
+                val intervalMs = if (realtimeChannel != null) 15 * 60 * 1000L else 5 * 60 * 1000L
+                delay(intervalMs)
                 if (currentUserId != "local_user") {
                     val rolledOver = checkMidnightRolloverIfNeeded()
                     val isToday = isSameDay(_selectedDate.value, System.currentTimeMillis())
@@ -316,36 +348,61 @@ class HealthDataRepository(
     private fun setupRealtimeSubscription() {
         if (currentUserId == "local_user") return
         realtimeJob?.cancel()
+        realtimeDebounceJob?.cancel()
+        val targetUserId = currentUserId
         realtimeJob = scope.launch(Dispatchers.IO) {
             try {
+                runCatching { realtimeChannel?.unsubscribe() }
+                realtimeChannel = null
+
                 SupabaseClientManager.ensureSessionReady()
-                val channel = SupabaseClientManager.client.channel("health_realtime_sub_${currentUserId}")
+                val channel = SupabaseClientManager.client.channel("health_realtime_sub_${targetUserId}")
                 val summaryFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_daily_summary"
-                }
+                    filter("user_id", FilterOperator.EQ, targetUserId)
+                }.map { "health_daily_summary" }
                 val vitalsFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_daily_vitals"
-                }
+                    filter("user_id", FilterOperator.EQ, targetUserId)
+                }.map { "health_daily_vitals" }
                 val sleepFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_sleep_sessions"
-                }
+                    filter("user_id", FilterOperator.EQ, targetUserId)
+                }.map { "health_sleep_sessions" }
                 val sourcesFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "health_sources"
-                }
+                    filter("user_id", FilterOperator.EQ, targetUserId)
+                }.map { "health_sources" }
 
-                merge(summaryFlow, vitalsFlow, sleepFlow, sourcesFlow).collect {
+                channel.subscribe()
+                realtimeChannel = channel
+
+                merge(summaryFlow, vitalsFlow, sleepFlow, sourcesFlow).collect { tableName ->
                     val now = System.currentTimeMillis()
-                    // Throttle realtime bursts to at most once every 3 seconds (1:1 parity with iOS)
-                    if (now - lastRealtimeSummaryFetchMs < 3000L) {
+                    // Suppress self-echoes from our own lean sleep/vitals uploads (health-engine summary notification follows if anything changed)
+                    if ((tableName == "health_sleep_sessions" || tableName == "health_daily_vitals") &&
+                        now - lastLocalUploadCompletedAtMs < 10_000L
+                    ) {
                         return@collect
                     }
-                    lastRealtimeSummaryFetchMs = now
-                    android.util.Log.d("HealthDataRepository", "Realtime update received for health data: silently refreshing")
-                    // Silently refresh remote canonical summary without re-querying Health Connect,
-                    // uploading telemetry, toggling isLoading, or triggering health-engine!
-                    fetchRemoteSummarySilentlyForSelectedDate()
+
+                    if (tableName == "health_sources") {
+                        pendingRealtimeSourcesRefresh = true
+                    }
+
+                    val debounceMs = if (tableName == "health_sources") 1_500L else 5_000L
+                    realtimeDebounceJob?.cancel()
+                    realtimeDebounceJob = scope.launch(Dispatchers.IO) {
+                        delay(debounceMs)
+                        val refreshSources = pendingRealtimeSourcesRefresh
+                        pendingRealtimeSourcesRefresh = false
+                        lastRealtimeSummaryFetchMs = System.currentTimeMillis()
+                        android.util.Log.d("HealthDataRepository", "Coalesced Realtime update ($tableName): silently refreshing")
+                        fetchRemoteSummarySilentlyForSelectedDate(forceSourcesRefresh = refreshSources)
+                    }
                 }
             } catch (e: Exception) {
+                realtimeChannel = null
                 android.util.Log.w("HealthDataRepository", "Realtime subscription exception", e)
             }
         }
@@ -356,13 +413,16 @@ class HealthDataRepository(
      * without triggering local telemetry collection, uploading telemetry, toggling isLoading,
      * or re-invoking health-engine (1:1 parity with iOS fetchRemoteSummarySilentlyForSelectedDate).
      */
-    fun fetchRemoteSummarySilentlyForSelectedDate() {
+    fun fetchRemoteSummarySilentlyForSelectedDate(forceSourcesRefresh: Boolean = false) {
         if (currentUserId == "local_user") return
         scope.launch(Dispatchers.IO) {
             val targetEpochMs = _selectedDate.value
             val targetDate = Date(targetEpochMs)
             val dateKey = isoDateFormatter.format(targetDate)
-            val isToday = isSameDay(targetEpochMs, System.currentTimeMillis())
+            val nowMs = System.currentTimeMillis()
+            val isToday = isSameDay(targetEpochMs, nowMs)
+            val isWithinIntradayRetention = (getStartOfDay(nowMs) - getStartOfDay(targetEpochMs)) <= 8L * 86_400_000L
+            val shouldFetchSources = forceSourcesRefresh || cachedLeanSources.isEmpty() || (nowMs - lastSourcesFetchAtMs) > 15 * 60 * 1000L
 
             try {
                 coroutineScope {
@@ -376,10 +436,14 @@ class HealthDataRepository(
                         try { remoteService.fetchDailyVitals(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
                     }
                     val hrDeferred = async {
-                        try { remoteService.fetchIntradayHeartRate(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
+                        if (isWithinIntradayRetention) {
+                            try { remoteService.fetchIntradayHeartRate(currentUserId, dateKey) } catch (e: Exception) { emptyList() }
+                        } else emptyList()
                     }
                     val sourcesDeferred = async {
-                        try { remoteService.fetchHealthSources(currentUserId) } catch (e: Exception) { emptyList() }
+                        if (shouldFetchSources) {
+                            try { remoteService.fetchHealthSources(currentUserId) } catch (e: Exception) { emptyList() }
+                        } else emptyList()
                     }
 
                     val remoteSummary = summaryDeferred.await()
@@ -406,6 +470,7 @@ class HealthDataRepository(
 
                     if (remoteSources.isNotEmpty()) {
                         cachedLeanSources = remoteSources
+                        lastSourcesFetchAtMs = System.currentTimeMillis()
                     }
 
                     if (remoteSummary != null && !remoteSummary.isEmpty()) {
@@ -607,8 +672,12 @@ class HealthDataRepository(
                     }
                 }
 
+                val nowMs = System.currentTimeMillis()
+                val isWithinIntradayRetention = (getStartOfDay(nowMs) - getStartOfDay(targetEpochMs)) <= 8L * 86_400_000L
+                val shouldFetchSources = cachedLeanSources.isEmpty() || (nowMs - lastSourcesFetchAtMs) > 15 * 60 * 1000L
+
                 val remoteHrDeferred = async(Dispatchers.IO) {
-                    if (currentUserId != "local_user") {
+                    if (currentUserId != "local_user" && isWithinIntradayRetention) {
                         remoteService.fetchIntradayHeartRate(currentUserId, dateKey)
                     } else {
                         emptyList()
@@ -616,7 +685,7 @@ class HealthDataRepository(
                 }
 
                 val remoteSourcesDeferred = async(Dispatchers.IO) {
-                    if (currentUserId != "local_user") {
+                    if (currentUserId != "local_user" && shouldFetchSources) {
                         remoteService.fetchHealthSources(currentUserId)
                     } else {
                         emptyList()
@@ -647,6 +716,7 @@ class HealthDataRepository(
                 cachedLeanIntradayHeartRate = mergeLeanIntradayHr(remote = remoteHr, local = localLeanHr)
                 if (remoteSources.isNotEmpty()) {
                     cachedLeanSources = remoteSources
+                    lastSourcesFetchAtMs = System.currentTimeMillis()
                 }
 
                 if (localTelemetry.isNotEmpty()) {
@@ -990,9 +1060,11 @@ class HealthDataRepository(
         try {
             val ok = remoteService.saveHealthSourcePriorities(orderedIds)
             if (ok) {
+                trendsRemoteCache = null
                 val fresh = remoteService.fetchHealthSources(currentUserId)
                 if (fresh.isNotEmpty()) {
                     cachedLeanSources = fresh
+                    lastSourcesFetchAtMs = System.currentTimeMillis()
                 }
                 withContext(Dispatchers.Main) {
                     rebuildConfigurableSources()
@@ -1017,8 +1089,10 @@ class HealthDataRepository(
         try {
             val ok = remoteService.resetHealthSourcePriorities()
             if (ok) {
+                trendsRemoteCache = null
                 val fresh = remoteService.fetchHealthSources(currentUserId)
                 cachedLeanSources = fresh
+                lastSourcesFetchAtMs = System.currentTimeMillis()
                 withContext(Dispatchers.Main) {
                     rebuildConfigurableSources()
                     rebuildAvailableSourcesForCurrentDate()
@@ -1106,7 +1180,7 @@ class HealthDataRepository(
             .filter { it.sessionType != "nap" }
             .sortedWith(
                 compareByDescending<HealthSleepSessionRecord> { it.isUserSelected }
-                    .thenByDescending { it.stages.isNotEmpty() }
+                    .thenByDescending { it.hasGranularSleepStages }
                     .thenBy { effectivePriorityRank(it.sourceDeviceKey) }
                     .thenByDescending { it.durationSeconds }
             )
@@ -1348,6 +1422,40 @@ class HealthDataRepository(
             _latestBpm.value = null
             _latestBpmAt.value = null
             _latestBpmSource.value = null
+        }
+
+        if (buckets.isEmpty()) {
+            val archived = resolveArchivedCardiovascularFallback(
+                cardio = _canonicalSummary.value?.cardiovascular,
+                filter = filter
+            )
+            if (archived != null) {
+                _intradayHeartRate.value = archived.points
+                _averageBpm.value = archived.averageBpm
+                _minBpm.value = archived.minBpm
+                _maxBpm.value = archived.maxBpm
+                _heartRateZones.value = archived.zones
+                if (_restingBpm.value <= 0.0 && archived.restingBpm != null && archived.restingBpm > 0.0) {
+                    _restingBpm.value = archived.restingBpm
+                }
+                if (_latestBpm.value == null && archived.latestBpm != null && archived.latestBpm > 30.0) {
+                    _latestBpm.value = archived.latestBpm
+                    _latestBpmAt.value = archived.latestTimestampMs
+                    _latestBpmSource.value = archived.latestSourceDevice
+                    val updated = _currentVitals.value.toMutableMap()
+                    updated[HealthMetricType.HEART_RATE] = VitalMetricRecord(
+                        userId = "lean-hr-archived",
+                        type = HealthMetricType.HEART_RATE.rawKey,
+                        value = archived.latestBpm,
+                        unit = "bpm",
+                        date = dateStr,
+                        sourceDevice = archived.latestSourceDevice,
+                        createdAt = archived.latestTimestampMs
+                    )
+                    _currentVitals.value = updated
+                }
+                return
+            }
         }
 
         val maxBucketMinute = buckets.maxOfOrNull { it.bucketMinute } ?: 0
@@ -2070,38 +2178,77 @@ class HealthDataRepository(
             }
         }
 
-        // 3. For authenticated users, fetch remote canonical summaries and lean tables from Supabase
+        // 3. For authenticated users, fetch remote scalar summaries & lean tables (30-min Trends cache + live Today overlay)
         if (currentUserId != "local_user") {
             try {
-                coroutineScope {
-                    val remoteSummariesDeferred = async(Dispatchers.IO) {
-                        if (isAllDevices) {
+                val trendsCacheKey = "$currentUserId|$minDateKey|$selectedDateKey"
+                val nowMs = System.currentTimeMillis()
+                val cachedEntry = trendsRemoteCache?.takeIf {
+                    it.cacheKey == trendsCacheKey && (nowMs - it.fetchedAtMs) < 30 * 60 * 1000L
+                }
+
+                val (remoteSummaries, cachedRemoteSleep, cachedRemoteVitals) = if (cachedEntry != null) {
+                    Triple(cachedEntry.summaries, cachedEntry.sleep, cachedEntry.vitals)
+                } else {
+                    coroutineScope {
+                        val remoteSummariesDeferred = async(Dispatchers.IO) {
                             try {
                                 remoteService.fetchDailySummariesBetween(currentUserId, minDateKey, selectedDateKey)
                             } catch (e: Exception) {
                                 emptyList()
                             }
-                        } else emptyList()
-                    }
-                    val remoteSleepDeferred = async(Dispatchers.IO) {
-                        try {
-                            remoteService.fetchSleepSessionsBetween(currentUserId, minDateKey, selectedDateKey)
-                        } catch (e: Exception) {
-                            emptyList()
                         }
-                    }
-                    val remoteVitalsDeferred = async(Dispatchers.IO) {
-                        try {
-                            remoteService.fetchDailyVitalsBetween(currentUserId, minDateKey, selectedDateKey)
-                        } catch (e: Exception) {
-                            emptyList()
+                        val remoteSleepDeferred = async(Dispatchers.IO) {
+                            try {
+                                remoteService.fetchSleepSessionsBetween(currentUserId, minDateKey, selectedDateKey)
+                            } catch (e: Exception) {
+                                emptyList()
+                            }
                         }
+                        val remoteVitalsDeferred = async(Dispatchers.IO) {
+                            try {
+                                remoteService.fetchDailyVitalsBetween(currentUserId, minDateKey, selectedDateKey)
+                            } catch (e: Exception) {
+                                emptyList()
+                            }
+                        }
+
+                        val fetchedSummaries = remoteSummariesDeferred.await()
+                        val fetchedSleep = remoteSleepDeferred.await()
+                        val fetchedVitals = remoteVitalsDeferred.await()
+                        trendsRemoteCache = TrendsRemoteCacheEntry(
+                            cacheKey = trendsCacheKey,
+                            fetchedAtMs = System.currentTimeMillis(),
+                            summaries = fetchedSummaries,
+                            sleep = fetchedSleep,
+                            vitals = fetchedVitals
+                        )
+                        Triple(fetchedSummaries, fetchedSleep, fetchedVitals)
                     }
+                }
 
-                    val remoteSummaries = remoteSummariesDeferred.await()
-                    val remoteSleep = remoteSleepDeferred.await()
-                    val remoteVitals = remoteVitalsDeferred.await()
+                // Overlay live in-memory lean rows for selectedDateKey so Today's Trend bar stays fresh without invalidating 30m cache
+                val liveSelectedVitals = cachedLeanDailyVitals.filter { it.localDate == selectedDateKey }
+                val remoteVitals = if (liveSelectedVitals.isNotEmpty()) {
+                    mergeLeanDailyVitals(
+                        remote = cachedRemoteVitals.filter { it.localDate == selectedDateKey },
+                        local = liveSelectedVitals
+                    ) + cachedRemoteVitals.filter { it.localDate != selectedDateKey }
+                } else {
+                    cachedRemoteVitals
+                }
 
+                val liveSelectedSleep = cachedLeanSleepSessions.filter { it.localDate == selectedDateKey }
+                val remoteSleep = if (liveSelectedSleep.isNotEmpty()) {
+                    mergeLeanSleepSessions(
+                        remote = cachedRemoteSleep.filter { it.localDate == selectedDateKey },
+                        local = liveSelectedSleep
+                    ) + cachedRemoteSleep.filter { it.localDate != selectedDateKey }
+                } else {
+                    cachedRemoteSleep
+                }
+
+                run {
                     // Group lean vitals by date and apply canonical device filter
                     val vitalsByDate = remoteVitals
                         .filter { v ->
@@ -2172,7 +2319,7 @@ class HealthDataRepository(
                     for ((dKey, rows) in sleepByDate) {
                         val sortedRows = rows.sortedWith(
                             compareByDescending<HealthSleepSessionRecord> { it.isUserSelected }
-                                .thenByDescending { it.stages.isNotEmpty() }
+                                .thenByDescending { it.hasGranularSleepStages }
                                 .thenBy { effectivePriorityRank(it.sourceDeviceKey) }
                                 .thenByDescending { it.durationSeconds }
                         )
@@ -2214,7 +2361,7 @@ class HealthDataRepository(
                                 record.spo2?.takeIf { it > 0 }?.let { map[HealthMetricType.OXYGEN_SATURATION] = it }
                             }
 
-                            // Also cache into Room if payload exists
+                            // Also cache into Room ONLY if full payload exists (never overwrite full JSONB with scalar-only row)
                             val payload = record.summary
                             if (payload != null) {
                                 val payloadJson = jsonSerializer.encodeToString(payload)
@@ -2507,13 +2654,16 @@ class HealthDataRepository(
                 System.currentTimeMillis()
             }
 
-            // Upload Order: 1. Sleep -> 2. Intraday HR -> 3. Daily Vitals (so Realtime vitals notification never sees stale HR!)
+            val isWithinIntradayRetention = (getStartOfDay(System.currentTimeMillis()) - getStartOfDay(dateEpochMs)) <= 7L * 86_400_000L
+
+            // Upload Order: 1. Sleep -> 2. Intraday HR (<= 7d) -> 3. Daily Vitals (so Realtime vitals notification never sees stale HR!)
             val sleepOk = syncLeanSleepSessions(dateRecords, dateKey, dateEpochMs, hostName)
-            val hrOk = syncLeanIntradayHeartRate(dateRecords, dateKey)
+            val hrOk = if (isWithinIntradayRetention) syncLeanIntradayHeartRate(dateRecords, dateKey) else false
             val vitalsOk = syncLeanDailyVitals(dateRecords, dateKey, hostName)
 
             if (sleepOk || vitalsOk || hrOk) {
                 anySyncSucceeded = true
+                lastLocalUploadCompletedAtMs = System.currentTimeMillis()
                 val maxTs = dateRecords.maxOfOrNull { it.endTime ?: it.startTime } ?: 0L
                 val totalSteps = dateRecords.filter { it.isSteps }.sumOf { (it.value ?: 0.0).toInt() }
                 val latestHr = dateRecords.filter { it.isLatestHeartRate || it.isHeartRate }
@@ -2522,16 +2672,18 @@ class HealthDataRepository(
             }
         }
 
-        // 4. Register canonical local health sources (respecting user custom priorities)
+        // 4. Register canonical local health sources (respecting user custom priorities & session dedup)
         registerLocalHealthSources(telemetry, hostName)
 
-        if (anySyncSucceeded) {
+        if (anySyncSucceeded || telemetry.isNotEmpty()) {
             val ids = telemetry.map { it.id }
             withContext(Dispatchers.IO) {
                 for (chunk in ids.chunked(400)) {
                     telemetryDao.markRecordsSynced(chunk, System.currentTimeMillis())
                 }
             }
+        }
+        if (anySyncSucceeded) {
             for ((dKey, fp) in affectedDates) {
                 triggerCanonicalEngineIfNeeded(dateKey = dKey, fingerprint = fp)
             }
@@ -2565,10 +2717,19 @@ class HealthDataRepository(
         )
         if (sessions.isEmpty()) return false
 
+        val fp = sessions.sortedBy { it.id }.joinToString("|") {
+            "${it.id}:${it.durationSeconds}:${it.deepSeconds}:${it.remSeconds}:${it.lightSeconds}:${it.awakeSeconds}:${it.stages.size}:${it.isUserSelected}"
+        }
+        if (lastUploadedSleepFpByDate[dateKey] == fp) return false
+
         var success = true
         for (s in sessions) {
             val ok = remoteService.pushSleepSession(s)
             if (!ok) success = false
+        }
+        if (success) {
+            lastUploadedSleepFpByDate[dateKey] = fp
+            lastLocalUploadCompletedAtMs = System.currentTimeMillis()
         }
         return success
     }
@@ -2586,10 +2747,19 @@ class HealthDataRepository(
         )
         if (vitalsList.isEmpty()) return false
 
+        val fp = vitalsList.sortedBy { it.id }.joinToString("|") {
+            "${it.id}:${it.steps}:${it.activeKcal.toInt()}:${it.restingHeartRate ?: 0}:${it.latestHeartRate ?: 0}:${it.latestHrAt ?: ""}:${it.spo2 ?: 0.0}:${it.weightKg ?: 0.0}:${it.hrvSdnnNightly ?: 0.0}:${it.hrvRmssdNightly ?: 0.0}"
+        }
+        if (lastUploadedVitalsFpByDate[dateKey] == fp) return false
+
         var success = true
         for (v in vitalsList) {
             val ok = remoteService.pushDailyVitals(v)
             if (!ok) success = false
+        }
+        if (success) {
+            lastUploadedVitalsFpByDate[dateKey] = fp
+            lastLocalUploadCompletedAtMs = System.currentTimeMillis()
         }
         return success
     }
@@ -2604,7 +2774,19 @@ class HealthDataRepository(
             dateKey = dateKey
         )
         if (buckets.isEmpty()) return false
-        return remoteService.pushIntradayHeartRate(buckets)
+
+        val maxMin = buckets.maxOf { it.bucketMinute }
+        val totalSamples = buckets.sumOf { it.sampleCount }
+        val lastBpm = buckets.maxByOrNull { it.bucketMinute }?.bpmAvg ?: 0
+        val fp = "${buckets.size}:$maxMin:$totalSamples:$lastBpm"
+        if (lastUploadedHrFpByDate[dateKey] == fp) return false
+
+        val ok = remoteService.pushIntradayHeartRate(buckets)
+        if (ok) {
+            lastUploadedHrFpByDate[dateKey] = fp
+            lastLocalUploadCompletedAtMs = System.currentTimeMillis()
+        }
+        return ok
     }
 
     private suspend fun registerLocalHealthSources(
@@ -2622,12 +2804,20 @@ class HealthDataRepository(
         for (src in canonicalSources) {
             val name = src.displayName
             val sourceId = canonicalSourceId(src, name)
+            if (registeredSourceIdsInSession.contains(sourceId)) {
+                continue
+            }
 
-            // Never overwrite user-configured custom priority ranks!
+            // Never overwrite user-configured custom priority ranks, and skip if already registered identically!
             val existing = cachedLeanSources.firstOrNull {
                 it.id == sourceId || DeviceSource.from(it.displayName) == src
             }
             if (existing?.isCustomPriority == true) {
+                registeredSourceIdsInSession.add(sourceId)
+                continue
+            }
+            if (existing != null && existing.id == sourceId && existing.hostDeviceName == hostName) {
+                registeredSourceIdsInSession.add(sourceId)
                 continue
             }
 
@@ -2665,7 +2855,9 @@ class HealthDataRepository(
                 isCustomPriority = false,
                 color = color
             )
-            remoteService.registerHealthSource(record)
+            if (remoteService.registerHealthSource(record)) {
+                registeredSourceIdsInSession.add(sourceId)
+            }
         }
     }
 
@@ -3427,6 +3619,83 @@ class HealthDataRepository(
                 )
             }
             return results
+        }
+
+        data class ArchivedCardiovascularSnapshot(
+            val points: List<IntradayHeartRatePoint>,
+            val averageBpm: Double,
+            val minBpm: Double,
+            val maxBpm: Double,
+            val zones: Map<HeartRateZone, Int>,
+            val restingBpm: Double?,
+            val latestBpm: Double?,
+            val latestTimestampMs: Long?,
+            val latestSourceDevice: String?
+        )
+
+        fun resolveArchivedCardiovascularFallback(
+            cardio: CanonicalCardiovascularSummary?,
+            filter: String?
+        ): ArchivedCardiovascularSnapshot? {
+            if (cardio == null || cardio.intradayHeartRate.isEmpty()) return null
+
+            fun computeZones(pts: List<IntradayHeartRatePoint>): Map<HeartRateZone, Int> {
+                val z = mutableMapOf(
+                    HeartRateZone.RESTING to 0,
+                    HeartRateZone.FAT_BURN to 0,
+                    HeartRateZone.CARDIO to 0,
+                    HeartRateZone.PEAK to 0
+                )
+                for (pt in pts) {
+                    z[pt.zone] = (z[pt.zone] ?: 0) + 1
+                }
+                return z
+            }
+
+            if (!filter.isNullOrEmpty()) {
+                val targetCanon = DeviceSource.from(filter).displayName
+                val matching = cardio.intradayHeartRate
+                    .filter { !it.sourceDevice.isNullOrEmpty() && DeviceSource.from(it.sourceDevice!!).displayName == targetCanon }
+                    .sortedBy { it.timestamp }
+                if (matching.isEmpty()) return null
+                val avg = round(matching.sumOf { it.bpm } / matching.size.toDouble())
+                val lo = matching.minOf { it.bpm }
+                val hi = matching.maxOf { it.bpm }
+                val latestPt = matching.last()
+                return ArchivedCardiovascularSnapshot(
+                    points = matching,
+                    averageBpm = avg,
+                    minBpm = lo,
+                    maxBpm = hi,
+                    zones = computeZones(matching),
+                    restingBpm = null,
+                    latestBpm = latestPt.bpm,
+                    latestTimestampMs = latestPt.timestamp.takeIf { it > 0L },
+                    latestSourceDevice = targetCanon
+                )
+            }
+
+            val pts = cardio.intradayHeartRate.sortedBy { it.timestamp }
+            val avg = cardio.averageHeartRateBpm?.takeIf { it > 0.0 }
+                ?: round(pts.sumOf { it.bpm } / pts.size.toDouble())
+            val lo = cardio.minHeartRateBpm?.takeIf { it > 0.0 }
+                ?: pts.minOf { it.bpm }
+            val hi = cardio.maxHeartRateBpm?.takeIf { it > 0.0 }
+                ?: pts.maxOf { it.bpm }
+            val zones = cardio.heartRateZones?.toMap() ?: computeZones(pts)
+            val lastPt = pts.lastOrNull()
+            return ArchivedCardiovascularSnapshot(
+                points = pts,
+                averageBpm = avg,
+                minBpm = lo,
+                maxBpm = hi,
+                zones = zones,
+                restingBpm = cardio.restingHeartRateBpm,
+                latestBpm = cardio.latestBpm ?: lastPt?.bpm,
+                latestTimestampMs = lastPt?.timestamp?.takeIf { it > 0L },
+                latestSourceDevice = cardio.latestSourceDevice?.let { DeviceSource.from(it).displayName }
+                    ?: lastPt?.sourceDevice?.let { DeviceSource.from(it).displayName }
+            )
         }
     }
 }

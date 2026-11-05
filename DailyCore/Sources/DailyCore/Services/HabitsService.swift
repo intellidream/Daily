@@ -136,6 +136,8 @@ public final class HabitsService: ObservableObject {
     private let userDefaults: UserDefaults
     private let groupSuiteName = GroupDefaults.suiteName
     private var offlineLogQueue: [HabitLogRecord] = []
+    private var lastForegroundRefreshAt: Date = .distantPast
+    private var lastConsistencyAndPrefsFetchAt: Date = .distantPast
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -164,6 +166,8 @@ public final class HabitsService: ObservableObject {
                 guard let self = self else { return }
                 self.reloadFromLocalStorage()
                 await self.flushOfflineQueue()
+                guard Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
+                self.lastForegroundRefreshAt = Date()
                 await self.loadDataForSelectedDate()
             }
         }
@@ -177,11 +181,14 @@ public final class HabitsService: ObservableObject {
                 guard let self = self else { return }
                 self.reloadFromLocalStorage()
                 await self.flushOfflineQueue()
+                guard Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
+                self.lastForegroundRefreshAt = Date()
                 await self.loadDataForSelectedDate()
             }
         }
         #endif
         Task {
+            self.lastForegroundRefreshAt = Date()
             await loadDataForSelectedDate()
         }
     }
@@ -407,7 +414,7 @@ public final class HabitsService: ObservableObject {
         // 5. Asynchronously mark deleted in Supabase (with offline fallback queue)
         do {
             try await supabase.from("habits_logs")
-                .update(["is_deleted": true])
+                .update(["is_deleted": true], returning: .minimal)
                 .eq("id", value: idString.lowercased())
                 .execute()
         } catch {
@@ -437,14 +444,14 @@ public final class HabitsService: ObservableObject {
                 createdAt: Date(),
                 isDeleted: false
             )
-            _ = try? await supabase.from("habits_goals").upsert(goalRecord).execute()
+            _ = try? await supabase.from("habits_goals").upsert(goalRecord, returning: .minimal).execute()
             
             // 2. Also upsert water_goal into user_preferences
             struct WaterPrefUpdate: Codable {
                 let id: String
                 let water_goal: Double
             }
-            _ = try? await supabase.from("user_preferences").upsert(WaterPrefUpdate(id: userId, water_goal: newGoal)).execute()
+            _ = try? await supabase.from("user_preferences").upsert(WaterPrefUpdate(id: userId, water_goal: newGoal), returning: .minimal).execute()
         }
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
@@ -477,7 +484,7 @@ public final class HabitsService: ObservableObject {
                 smokes_currency: newSettings.currency,
                 smokes_quit_date: isoQuit
             )
-            _ = try? await supabase.from("user_preferences").upsert(prefUpdate).execute()
+            _ = try? await supabase.from("user_preferences").upsert(prefUpdate, returning: .minimal).execute()
             
             // 2. Also keep habits_goals synced
             let goalRecord = HabitGoalRecord(
@@ -489,7 +496,7 @@ public final class HabitsService: ObservableObject {
                 createdAt: Date(),
                 isDeleted: false
             )
-            _ = try? await supabase.from("habits_goals").upsert(goalRecord).execute()
+            _ = try? await supabase.from("habits_goals").upsert(goalRecord, returning: .minimal).execute()
         }
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
@@ -518,69 +525,74 @@ public final class HabitsService: ObservableObject {
         
         let session = try? await supabase.auth.session
         let userId = session?.user.id.uuidString.lowercased()
+        let shouldRefreshConsistencyAndPrefs = forceRefresh
+            || waterDailyTotals.isEmpty
+            || Date().timeIntervalSince(lastConsistencyAndPrefsFetchAt) > 900
         
         if let uid = userId {
             userDefaults.set(uid, forKey: "current_user_id")
             userDefaults.set(uid, forKey: "authenticated_user_id")
             
-            // 1. Fetch user_preferences (smokes configuration & water target)
-            do {
-                let prefs: [UserPreferencesRecord] = try await supabase.from("user_preferences")
-                    .select()
-                    .eq("id", value: uid)
-                    .limit(1)
-                    .execute()
-                    .value
-                
-                if let p = prefs.first {
-                    if let base = p.smokes_baseline, base > 0 {
-                        self.smokesSettings.baselineCigsPerDay = base
-                        userDefaults.set(base, forKey: "smokes_baseline")
+            if shouldRefreshConsistencyAndPrefs {
+                // 1. Fetch user_preferences (only habits columns, omitting unrelated profile blobs)
+                do {
+                    let prefs: [UserPreferencesRecord] = try await supabase.from("user_preferences")
+                        .select("id,water_goal,smokes_baseline,smokes_pack_size,smokes_pack_cost,smokes_currency,smokes_quit_date")
+                        .eq("id", value: uid)
+                        .limit(1)
+                        .execute()
+                        .value
+                    
+                    if let p = prefs.first {
+                        if let base = p.smokes_baseline, base > 0 {
+                            self.smokesSettings.baselineCigsPerDay = base
+                            userDefaults.set(base, forKey: "smokes_baseline")
+                        }
+                        if let pack = p.smokes_pack_size, pack > 0 {
+                            self.smokesSettings.cigsPerPack = pack
+                        }
+                        if let cost = p.smokes_pack_cost, cost >= 0 {
+                            self.smokesSettings.costPerPack = cost
+                        }
+                        if let curr = p.smokes_currency, !curr.isEmpty {
+                            self.smokesSettings.currency = curr
+                        }
+                        if let qStr = p.smokes_quit_date, let qDate = HabitDateParser.parse(qStr) {
+                            self.smokesSettings.quitStartDate = qDate
+                        }
+                        if let wg = p.water_goal, wg > 0 {
+                            self.waterGoal = wg
+                            userDefaults.set(wg, forKey: "water_goal")
+                        }
+                        if let sData = try? JSONEncoder().encode(self.smokesSettings) {
+                            userDefaults.set(sData, forKey: "smokes_settings")
+                        }
                     }
-                    if let pack = p.smokes_pack_size, pack > 0 {
-                        self.smokesSettings.cigsPerPack = pack
-                    }
-                    if let cost = p.smokes_pack_cost, cost >= 0 {
-                        self.smokesSettings.costPerPack = cost
-                    }
-                    if let curr = p.smokes_currency, !curr.isEmpty {
-                        self.smokesSettings.currency = curr
-                    }
-                    if let qStr = p.smokes_quit_date, let qDate = HabitDateParser.parse(qStr) {
-                        self.smokesSettings.quitStartDate = qDate
-                    }
-                    if let wg = p.water_goal, wg > 0 {
-                        self.waterGoal = wg
-                        userDefaults.set(wg, forKey: "water_goal")
-                    }
-                    if let sData = try? JSONEncoder().encode(self.smokesSettings) {
-                        userDefaults.set(sData, forKey: "smokes_settings")
-                    }
+                } catch {
+                    print("[HabitsService] Note: Could not fetch user_preferences: \(error.localizedDescription)")
                 }
-            } catch {
-                print("[HabitsService] Note: Could not fetch user_preferences: \(error.localizedDescription)")
-            }
-            
-            // 2. Fetch Goals from habits_goals (fallback / sync)
-            do {
-                let goals: [HabitGoalRecord] = try await supabase.from("habits_goals")
-                    .select()
-                    .eq("user_id", value: uid)
-                    .eq("is_deleted", value: false)
-                    .execute()
-                    .value
                 
-                for g in goals {
-                    if g.habitType == "water" && g.targetValue > 0 {
-                        self.waterGoal = g.targetValue
-                        userDefaults.set(g.targetValue, forKey: "water_goal")
-                    } else if g.habitType == "smokes" && g.targetValue > 0 && self.smokesSettings.baselineCigsPerDay == 0 {
-                        self.smokesSettings.baselineCigsPerDay = Int(g.targetValue)
-                        userDefaults.set(Int(g.targetValue), forKey: "smokes_baseline")
+                // 2. Fetch Goals from habits_goals (fallback / sync)
+                do {
+                    let goals: [HabitGoalRecord] = try await supabase.from("habits_goals")
+                        .select()
+                        .eq("user_id", value: uid)
+                        .eq("is_deleted", value: false)
+                        .execute()
+                        .value
+                    
+                    for g in goals {
+                        if g.habitType == "water" && g.targetValue > 0 {
+                            self.waterGoal = g.targetValue
+                            userDefaults.set(g.targetValue, forKey: "water_goal")
+                        } else if g.habitType == "smokes" && g.targetValue > 0 && self.smokesSettings.baselineCigsPerDay == 0 {
+                            self.smokesSettings.baselineCigsPerDay = Int(g.targetValue)
+                            userDefaults.set(Int(g.targetValue), forKey: "smokes_baseline")
+                        }
                     }
+                } catch {
+                    print("[HabitsService] Note: Could not fetch habits_goals: \(error.localizedDescription)")
                 }
-            } catch {
-                print("[HabitsService] Note: Could not fetch habits_goals: \(error.localizedDescription)")
             }
         }
         
@@ -644,93 +656,96 @@ public final class HabitsService: ObservableObject {
             loadLocalLogsForSelectedDate()
         }
         
-        // 4. Batch query 112 days (16 full weeks) of consistency history
-        let today = cal.startOfDay(for: Date())
-        let heatStartDate = cal.date(byAdding: .day, value: -111, to: today) ?? today
-        let startStr = isoDateFormatter.string(from: heatStartDate)
-        let endStr = isoDateFormatter.string(from: today)
-        
-        var fetchedConsistency = false
-        var newWaterTotals: [String: Double] = [:]
-        var newSmokesTotals: [String: Int] = [:]
-        
-        // 4A. Primary: Call Supabase RPC get_habits_consistency for Water & Smokes
-        do {
-            let waterParams = HabitsConsistencyParams(p_habit_type: "water", p_start_date: startStr, p_end_date: endStr)
-            let waterRows: [HabitsConsistencyRow] = try await supabase.rpc("get_habits_consistency", params: waterParams).execute().value
+        // 4. Batch query 112 days (16 full weeks) of consistency history (throttled to 15m unless forced)
+        if shouldRefreshConsistencyAndPrefs {
+            let today = cal.startOfDay(for: Date())
+            let heatStartDate = cal.date(byAdding: .day, value: -111, to: today) ?? today
+            let startStr = isoDateFormatter.string(from: heatStartDate)
+            let endStr = isoDateFormatter.string(from: today)
             
-            let smokesParams = HabitsConsistencyParams(p_habit_type: "smokes", p_start_date: startStr, p_end_date: endStr)
-            let smokesRows: [HabitsConsistencyRow] = try await supabase.rpc("get_habits_consistency", params: smokesParams).execute().value
+            var fetchedConsistency = false
+            var newWaterTotals: [String: Double] = [:]
+            var newSmokesTotals: [String: Int] = [:]
             
-            for r in waterRows {
-                newWaterTotals[r.normalizedDayKey] = r.total_value.value
-            }
-            for r in smokesRows {
-                newSmokesTotals[r.normalizedDayKey] = Int(r.total_value.value)
-            }
-            fetchedConsistency = true
-            print("[HabitsService] Successfully fetched consistency RPC: \(waterRows.count) water days, \(smokesRows.count) smokes days.")
-        } catch {
-            print("[HabitsService] Note: RPC get_habits_consistency failed (\(error.localizedDescription)). Falling back to direct tables...")
-        }
-        
-        // 4B. Fallback: Dual-Table Ingestion (habits_daily_summaries + habits_logs)
-        if !fetchedConsistency {
+            // 4A. Primary: Call Supabase RPC get_habits_consistency for Water & Smokes
             do {
-                // 1. Fetch habits_daily_summaries
-                var sumQuery = supabase.from("habits_daily_summaries")
-                    .select("habit_type,date,total_value,log_count")
-                    .gte("date", value: startStr)
-                if let uid = userId {
-                    sumQuery = sumQuery.eq("user_id", value: uid)
-                }
-                let summaries: [HabitsDailySummaryRow] = (try? await sumQuery.execute().value) ?? []
-                for s in summaries {
-                    let k = s.normalizedDayKey
-                    if s.habit_type == "water" {
-                        newWaterTotals[k] = s.total_value.value
-                    } else if s.habit_type == "smokes" {
-                        newSmokesTotals[k] = Int(s.total_value.value)
-                    }
-                }
+                let waterParams = HabitsConsistencyParams(p_habit_type: "water", p_start_date: startStr, p_end_date: endStr)
+                let waterRows: [HabitsConsistencyRow] = try await supabase.rpc("get_habits_consistency", params: waterParams).execute().value
                 
-                // 2. Fetch raw habits_logs (override summaries where raw logs exist)
-                let startIso112 = isoUtcFormatter.string(from: heatStartDate)
-                var logsQuery = supabase.from("habits_logs")
-                    .select("value,metadata,logged_at,habit_type")
-                    .gte("logged_at", value: startIso112)
-                    .eq("is_deleted", value: false)
-                if let uid = userId {
-                    logsQuery = logsQuery.eq("user_id", value: uid)
-                }
-                let rawLogs: [HabitHistoricalLogItem] = (try? await logsQuery.limit(5000).execute().value) ?? []
+                let smokesParams = HabitsConsistencyParams(p_habit_type: "smokes", p_start_date: startStr, p_end_date: endStr)
+                let smokesRows: [HabitsConsistencyRow] = try await supabase.rpc("get_habits_consistency", params: smokesParams).execute().value
                 
-                var rawWater: [String: Double] = [:]
-                var rawSmokes: [String: Int] = [:]
-                for l in rawLogs {
-                    guard let logDate = HabitDateParser.parse(l.logged_at) else { continue }
-                    let k = isoDateFormatter.string(from: logDate)
-                    if l.habit_type == "water" {
-                        rawWater[k, default: 0] += l.value.value
-                    } else if l.habit_type == "smokes" {
-                        rawSmokes[k, default: 0] += Int(l.value.value)
+                for r in waterRows {
+                    newWaterTotals[r.normalizedDayKey] = r.total_value.value
+                }
+                for r in smokesRows {
+                    newSmokesTotals[r.normalizedDayKey] = Int(r.total_value.value)
+                }
+                fetchedConsistency = true
+                lastConsistencyAndPrefsFetchAt = Date()
+            } catch {
+                print("[HabitsService] Note: RPC get_habits_consistency failed (\(error.localizedDescription)). Falling back to direct tables...")
+            }
+            
+            // 4B. Fallback: Dual-Table Ingestion (habits_daily_summaries + habits_logs)
+            if !fetchedConsistency {
+                do {
+                    // 1. Fetch habits_daily_summaries
+                    var sumQuery = supabase.from("habits_daily_summaries")
+                        .select("habit_type,date,total_value,log_count")
+                        .gte("date", value: startStr)
+                    if let uid = userId {
+                        sumQuery = sumQuery.eq("user_id", value: uid)
                     }
-                }
-                for (k, v) in rawWater {
-                    newWaterTotals[k] = v
-                }
-                for (k, v) in rawSmokes {
-                    newSmokesTotals[k] = v
+                    let summaries: [HabitsDailySummaryRow] = (try? await sumQuery.execute().value) ?? []
+                    for s in summaries {
+                        let k = s.normalizedDayKey
+                        if s.habit_type == "water" {
+                            newWaterTotals[k] = s.total_value.value
+                        } else if s.habit_type == "smokes" {
+                            newSmokesTotals[k] = Int(s.total_value.value)
+                        }
+                    }
+                    
+                    // 2. Fetch raw habits_logs (override summaries where raw logs exist)
+                    let startIso112 = isoUtcFormatter.string(from: heatStartDate)
+                    var logsQuery = supabase.from("habits_logs")
+                        .select("value,metadata,logged_at,habit_type")
+                        .gte("logged_at", value: startIso112)
+                        .eq("is_deleted", value: false)
+                    if let uid = userId {
+                        logsQuery = logsQuery.eq("user_id", value: uid)
+                    }
+                    let rawLogs: [HabitHistoricalLogItem] = (try? await logsQuery.limit(5000).execute().value) ?? []
+                    
+                    var rawWater: [String: Double] = [:]
+                    var rawSmokes: [String: Int] = [:]
+                    for l in rawLogs {
+                        guard let logDate = HabitDateParser.parse(l.logged_at) else { continue }
+                        let k = isoDateFormatter.string(from: logDate)
+                        if l.habit_type == "water" {
+                            rawWater[k, default: 0] += l.value.value
+                        } else if l.habit_type == "smokes" {
+                            rawSmokes[k, default: 0] += Int(l.value.value)
+                        }
+                    }
+                    for (k, v) in rawWater {
+                        newWaterTotals[k] = v
+                    }
+                    for (k, v) in rawSmokes {
+                        newSmokesTotals[k] = v
+                    }
+                    lastConsistencyAndPrefsFetchAt = Date()
                 }
             }
-        }
-        
-        // Merge into persistent daily totals
-        for (k, v) in newWaterTotals {
-            self.waterDailyTotals[k] = v
-        }
-        for (k, v) in newSmokesTotals {
-            self.smokesDailyTotals[k] = v
+            
+            // Merge into persistent daily totals
+            for (k, v) in newWaterTotals {
+                self.waterDailyTotals[k] = v
+            }
+            for (k, v) in newSmokesTotals {
+                self.smokesDailyTotals[k] = v
+            }
         }
         
         // Ensure currently selected date's raw logs update the totals
@@ -741,8 +756,10 @@ public final class HabitsService: ObservableObject {
         saveDailyTotals()
         saveWeekCachesForWatch()
         
-        // 5. Fetch Smokes Financials
-        await fetchSmokesFinancials(userId: userId)
+        // 5. Fetch Smokes Financials (throttled alongside consistency unless forced)
+        if shouldRefreshConsistencyAndPrefs {
+            await fetchSmokesFinancials(userId: userId)
+        }
         
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
@@ -810,6 +827,7 @@ public final class HabitsService: ObservableObject {
         let todayKey = isoDateFormatter.string(from: Date())
         userDefaults.set(Int(waterDailyTotals[todayKey] ?? 0), forKey: "cached_water_total")
         userDefaults.set(smokesDailyTotals[todayKey] ?? 0, forKey: "cached_smokes_total")
+        userDefaults.set(todayKey, forKey: "cached_habits_date")
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
@@ -880,7 +898,7 @@ public final class HabitsService: ObservableObject {
         }
         
         do {
-            try await supabase.from("habits_logs").insert(toInsert).execute()
+            try await supabase.from("habits_logs").insert(toInsert, returning: .minimal).execute()
         } catch {
             print("[HabitsService] Supabase insert failed (\(error.localizedDescription)). Queuing offline...")
             offlineLogQueue.append(toInsert)
@@ -912,7 +930,7 @@ public final class HabitsService: ObservableObject {
             for delId in pendingDeletes {
                 do {
                     try await supabase.from("habits_logs")
-                        .update(["is_deleted": true])
+                        .update(["is_deleted": true], returning: .minimal)
                         .eq("id", value: delId.lowercased())
                         .execute()
                 } catch {
@@ -936,7 +954,7 @@ public final class HabitsService: ObservableObject {
                 record.userId = uid
             }
             do {
-                try await supabase.from("habits_logs").insert(record).execute()
+                try await supabase.from("habits_logs").insert(record, returning: .minimal).execute()
             } catch {
                 let errStr = error.localizedDescription.lowercased()
                 if errStr.contains("duplicate") || errStr.contains("already exists") || errStr.contains("23505") || errStr.contains("unique") {

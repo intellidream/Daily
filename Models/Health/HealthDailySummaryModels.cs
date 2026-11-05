@@ -989,6 +989,12 @@ namespace Daily.Models.Health
         [JsonProperty("is_user_selected")]
         public bool IsUserSelected { get; set; }
 
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasGranularSleepStages =>
+            (Stages != null && Stages.Count > 0) ||
+            ((DeepSeconds ?? 0) + (RemSeconds ?? 0) + (LightSeconds ?? 0)) > 0;
+
         public SleepSession ToDomainSleepSession(DateTime fallbackDate)
         {
             var canonDevice = DeviceSource.From(SourceDeviceKey).DisplayName;
@@ -1014,7 +1020,7 @@ namespace Daily.Models.Health
                 AwakeSeconds = AwakeSeconds ?? 0,
                 SleepScore = SleepScore ?? 0,
                 SourceDevice = canonDevice,
-                HasGranularHypnogram = hasGranular
+                HasGranularHypnogram = HasGranularSleepStages
             };
 
             if (hasGranular)

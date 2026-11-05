@@ -6,6 +6,7 @@ import androidx.compose.runtime.Immutable
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -229,10 +230,45 @@ class WatchPulseRepository private constructor(private val context: Context) {
         dateStr: String
     ): JsonObject? {
         return try {
-            val selectCols = "local_date,computed_at,engine_version,steps,active_kcal,sleep_asleep_s,sleep_score,stress_avg,rhr,hrv_sdnn,hrv_rmssd,spo2,summary"
-            val url = "$SUPABASE_URL/rest/v1/health_daily_summary?user_id=eq.$userId&local_date=eq.$dateStr&select=$selectCols&limit=1"
+            val selectCols = listOf(
+                "local_date",
+                "computed_at",
+                "engine_version",
+                "steps",
+                "active_kcal",
+                "sleep_asleep_s",
+                "sleep_score",
+                "stress_avg",
+                "rhr",
+                "hrv_sdnn",
+                "hrv_rmssd",
+                "spo2",
+                "sleep_verdict:summary->sleep->guidance->verdict",
+                "sleep_source:summary->sleep->primary_session->>source_device",
+                "sleep_eff:summary->sleep->primary_session->efficiency_percent",
+                "sleep_rest:summary->sleep->primary_session->restorative_percent",
+                "sleep_rating:summary->sleep->primary_session->>quality_rating",
+                "deep_s:summary->sleep->primary_session->deep_seconds",
+                "rem_s:summary->sleep->primary_session->rem_seconds",
+                "light_s:summary->sleep->primary_session->light_seconds",
+                "awake_s:summary->sleep->primary_session->awake_seconds",
+                "stress_score:summary->stress->current_score",
+                "stress_level:summary->stress->>current_level",
+                "stress_daily_avg:summary->stress->daily_average",
+                "monkey_mood:summary->stress->>monkey_mood",
+                "parasym_pct:summary->stress->parasympathetic_percent",
+                "advice_quote:summary->stress->>advice_quote",
+                "rec_breathing:summary->stress->>recommended_breathing",
+                "stress_hrv:summary->stress->current_hrv_ms",
+                "stress_rhr:summary->stress->resting_heart_rate_bpm"
+            ).joinToString(",")
+            val url = "$SUPABASE_URL/rest/v1/health_daily_summary"
             val response = httpClient.request(url) {
                 method = HttpMethod.Get
+                parameter("user_id", "eq.$userId")
+                parameter("local_date", "eq.$dateStr")
+                parameter("select", selectCols)
+                parameter("limit", "1")
                 header("Authorization", "Bearer $accessToken")
                 header("apikey", SUPABASE_ANON_KEY)
                 header("Accept", "application/json")
@@ -258,6 +294,7 @@ class WatchPulseRepository private constructor(private val context: Context) {
                 put("user_id", userId)
                 put("date", dateStr)
                 put("tz_offset_min", tzOffsetMin)
+                put("slim_watch", true)
             }.toString()
 
             val response = httpClient.request("$SUPABASE_URL/functions/v1/health-engine") {
@@ -284,11 +321,11 @@ class WatchPulseRepository private constructor(private val context: Context) {
         if (row == null) return true
 
         val version = row.str("engine_version") ?: ""
-        if (version != "v2.0") return true
+        if (!(version.startsWith("v2") || version.startsWith("2."))) return true
 
-        val computedStr = row.str("computed_at") ?: return true
-        val computedMs = parseIsoToEpochMs(computedStr) ?: return true
-        return (nowMs - computedMs) > SERVER_SUMMARY_MAX_AGE_MS
+        // Consumer-only smartwatch mode: only invoke health-engine when server summary is missing
+        // or user explicitly tapped Refresh (`force == true`).
+        return false
     }
 
     private fun parseIsoToEpochMs(raw: String): Long? {
@@ -310,10 +347,10 @@ class WatchPulseRepository private constructor(private val context: Context) {
         val localDate = row.str("local_date") ?: fallbackDate
         val summaryObj = row.obj("summary")
 
-        // --- Sleep & Recovery ---
+        // --- Sleep & Recovery (supports both slim flat PostgREST aliases and summary JSON) ---
         val sleepContainer = summaryObj?.obj("sleep")
         val primarySession = sleepContainer?.obj("primary_session")
-        val verdictObj = sleepContainer?.obj("guidance")?.obj("verdict")
+        val verdictObj = row.obj("sleep_verdict") ?: sleepContainer?.obj("guidance")?.obj("verdict")
 
         val asleepSeconds = primarySession?.int("asleep_seconds")
             ?: row.int("sleep_asleep_s")
@@ -333,6 +370,7 @@ class WatchPulseRepository private constructor(private val context: Context) {
 
         val readinessScore = verdictObj?.int("readiness_score")
         val verdictStatus = verdictObj?.str("status")
+            ?: row.str("sleep_rating")
             ?: primarySession?.str("quality_rating")
             ?: if (hasSleepData) {
                 when {
@@ -354,19 +392,19 @@ class WatchPulseRepository private constructor(private val context: Context) {
         val sleepNarrative = when {
             !rawNarrative.isNullOrEmpty() && hasSleepData -> rawNarrative
             hasSleepData -> {
-                val eff = primarySession?.int("efficiency_percent") ?: 90
-                val restPct = primarySession?.int("restorative_percent") ?: 25
+                val eff = row.int("sleep_eff") ?: primarySession?.int("efficiency_percent") ?: 90
+                val restPct = row.int("sleep_rest") ?: primarySession?.int("restorative_percent") ?: 25
                 "Efficiency $eff% • $restPct% restorative stages."
             }
             else -> "Wear watch or ring overnight to populate recovery."
         }
 
-        val sleepSourceDevice = primarySession?.str("source_device")
+        val sleepSourceDevice = row.str("sleep_source") ?: primarySession?.str("source_device")
 
-        val deepS = (primarySession?.int("deep_seconds") ?: 0).toFloat()
-        val remS = (primarySession?.int("rem_seconds") ?: 0).toFloat()
-        val lightS = (primarySession?.int("light_seconds") ?: 0).toFloat()
-        val awakeS = (primarySession?.int("awake_seconds") ?: 0).toFloat()
+        val deepS = (row.int("deep_s") ?: primarySession?.int("deep_seconds") ?: 0).toFloat()
+        val remS = (row.int("rem_s") ?: primarySession?.int("rem_seconds") ?: 0).toFloat()
+        val lightS = (row.int("light_s") ?: primarySession?.int("light_seconds") ?: 0).toFloat()
+        val awakeS = (row.int("awake_s") ?: primarySession?.int("awake_seconds") ?: 0).toFloat()
         val stageTotal = deepS + remS + lightS + awakeS
 
         val deepWeight: Float
@@ -396,6 +434,7 @@ class WatchPulseRepository private constructor(private val context: Context) {
 
         val rhrVal = row.dbl("rhr")
             ?: cardioObj?.dbl("resting_bpm")
+            ?: row.dbl("stress_rhr")
             ?: stressObj?.dbl("resting_heart_rate_bpm")
         val restingHrText = if (rhrVal != null && rhrVal > 0.0) {
             "RHR: ${rhrVal.roundToInt()} bpm"
@@ -403,7 +442,8 @@ class WatchPulseRepository private constructor(private val context: Context) {
             "RHR: -- bpm"
         }
 
-        val hrvVal = stressObj?.dbl("current_hrv_ms")
+        val hrvVal = row.dbl("stress_hrv")
+            ?: stressObj?.dbl("current_hrv_ms")
             ?: row.dbl("hrv_rmssd")
             ?: row.dbl("hrv_sdnn")
         val hrvText = if (hrvVal != null && hrvVal > 0.0) {
@@ -413,14 +453,18 @@ class WatchPulseRepository private constructor(private val context: Context) {
         }
 
         // --- Autonomic Stress (Engine v2.0) ---
-        val currentStressScore = stressObj?.int("current_score")
+        val currentStressScore = row.int("stress_score")
+            ?: stressObj?.int("current_score")
             ?: row.int("stress_avg")
         val hasStressData = (currentStressScore != null)
         val finalStressScore = (currentStressScore ?: 0).coerceIn(0, 100)
         val stressBadgeText = if (hasStressData) "$finalStressScore/100" else "--/100"
 
-        val rawLevel = stressObj?.str("current_level") ?: levelFromScore(finalStressScore)
-        val dailyAvg = stressObj?.int("daily_average")
+        val rawLevel = row.str("stress_level")
+            ?: stressObj?.str("current_level")
+            ?: levelFromScore(finalStressScore)
+        val dailyAvg = row.int("stress_daily_avg")
+            ?: stressObj?.int("daily_average")
             ?: row.int("stress_avg")
             ?: finalStressScore
 
@@ -430,7 +474,9 @@ class WatchPulseRepository private constructor(private val context: Context) {
             else -> "$rawLevel Tone"
         }
 
-        val monkeyMoodText = stressObj?.str("monkey_mood") ?: moodFromScore(finalStressScore)
+        val monkeyMoodText = row.str("monkey_mood")
+            ?: stressObj?.str("monkey_mood")
+            ?: moodFromScore(finalStressScore)
 
         val activityObj = summaryObj?.obj("activity")
         val totalSteps = row.int("steps")
@@ -439,14 +485,16 @@ class WatchPulseRepository private constructor(private val context: Context) {
         val formattedSteps = NumberFormat.getIntegerInstance(Locale.US).format(totalSteps)
         val stepsText = "$formattedSteps steps"
 
-        val parasym = stressObj?.int("parasympathetic_percent")
+        val parasym = row.int("parasym_pct")
+            ?: stressObj?.int("parasympathetic_percent")
             ?: if (hasStressData) (100 - finalStressScore).coerceIn(0, 100) else 0
         val parasympatheticText = if (hasStressData) "Parasym: $parasym%" else "Parasym: --%"
 
-        val adviceQuote = stressObj?.str("advice_quote")?.trim()
+        val adviceQuote = (row.str("advice_quote") ?: stressObj?.str("advice_quote"))?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?: "Autonomic tone is steady. Stay hydrated and pace calmly."
-        val recommendedBreathing = stressObj?.str("recommended_breathing")
+        val recommendedBreathing = row.str("rec_breathing")
+            ?: stressObj?.str("recommended_breathing")
             ?: "Physiological Sigh"
 
         return PulseSnapshot(

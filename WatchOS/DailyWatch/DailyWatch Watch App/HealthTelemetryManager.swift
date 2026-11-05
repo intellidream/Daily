@@ -73,6 +73,10 @@ private struct WatchSleepSessionPayload: Codable {
 
 class HealthTelemetryManager {
     static let shared = HealthTelemetryManager()
+    /// Smartwatches operate in 100% consumer-only mode for Health (`Pulse Studio`).
+    /// Apple Watch buffers all HR, steps, HRV, and sleep locally and syncs automatically
+    /// over BLE to the paired iPhone (`Schmitz`), which is the single canonical uploader.
+    static let isDirectCloudUploadEnabled = false
     private let healthStore = HKHealthStore()
     private let canonicalWatchKey = "Apple Watch Ultra 2"
     private let canonicalWatchSlug = "apple_watch_ultra_2"
@@ -139,6 +143,9 @@ class HealthTelemetryManager {
     /// `health_intraday_heart_rate`, `health_sleep_sessions`) with zero writes to legacy `health_telemetry`.
     @discardableResult
     func syncTelemetry(isDeepSync: Bool = false, force: Bool = false) async -> Bool {
+        guard Self.isDirectCloudUploadEnabled else {
+            return false
+        }
         let now = Date()
         let lastSync = UserDefaults.standard.double(forKey: "last_health_sync_time")
         if !force && !isDeepSync && lastSync > 0 && (now.timeIntervalSince1970 - lastSync) < minSyncIntervalSeconds {

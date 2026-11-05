@@ -20,6 +20,7 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.auth.user.UserSession
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
@@ -1062,9 +1063,9 @@ class WatchSessionManager private constructor(private val context: Context) {
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
-                    // 1. Fetch user_preferences for smokes_baseline
+                    // 1. Fetch user_preferences for smokes_baseline (slim column projection)
                     val prefsList = supabaseClient.postgrest["user_preferences"]
-                        .select {
+                        .select(Columns.list("id", "smokes_baseline")) {
                             filter { eq("id", userId) }
                         }.decodeList<com.intellidream.daily.wearos.domain.model.UserPreference>()
 
@@ -1209,11 +1210,17 @@ class WatchSessionManager private constructor(private val context: Context) {
         isPairingCompleted = false
         android.util.Log.d("WatchSessionManager", "startPolling launched for pin=${_pairingCode.value}")
         pollJob = scope.launch {
-            while (isActive && isPolling) {
+            var attempts = 0
+            while (isActive && isPolling && attempts < 120) {
                 delay(2500)
+                attempts++
                 if (!isActive || !isPolling) break
-                android.util.Log.d("WatchSessionManager", "Polling tick: checking pin=${_pairingCode.value}")
+                android.util.Log.d("WatchSessionManager", "Polling tick $attempts/120: checking pin=${_pairingCode.value}")
                 checkPairingStatus()
+            }
+            if (attempts >= 120 && isPolling && !isPairingCompleted) {
+                isPolling = false
+                _errorMessage.value = "PIN expired — tap Retry"
             }
         }
     }
@@ -1442,7 +1449,7 @@ class WatchSessionManager private constructor(private val context: Context) {
                     }
                 """.trimIndent()
 
-                val response = client.request("$supabaseUrl/rest/v1/paired_watches") {
+                val response = client.request("$supabaseUrl/rest/v1/paired_watches?select=id") {
                     method = io.ktor.http.HttpMethod.Post
                     header("Authorization", "Bearer $accessToken")
                     header("apikey", supabaseAnonKey)

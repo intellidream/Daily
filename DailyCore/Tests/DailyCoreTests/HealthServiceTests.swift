@@ -1166,6 +1166,85 @@ struct HealthServiceTests {
         #expect(spot?.sourceDevice == "OnePlus Watch 3")
         #expect(spot?.value == 99.0)
     }
+
+    @MainActor
+    @Test("7-day retention fallback preserves archived cardiovascular HR curve & per-device filter when raw buckets are pruned")
+    func historicalArchivedCurvePreservedWhenIntradayBucketsPruned() {
+        let svc = HealthDataService()
+        let pastDate = Date(timeIntervalSince1970: 1_761_000_000) // >7 days ago
+        let archivedPts = [
+            IntradayHeartRatePoint(timestamp: pastDate, bpm: 56, sourceDevice: "Oura Ring"),
+            IntradayHeartRatePoint(timestamp: pastDate.addingTimeInterval(3600), bpm: 78, sourceDevice: "OnePlus Watch 3"),
+            IntradayHeartRatePoint(timestamp: pastDate.addingTimeInterval(7200), bpm: 84, sourceDevice: "OnePlus Watch 3")
+        ]
+        svc.canonicalSummary = DailyHealthSummaryPayload(
+            date: "2025-10-20",
+            engineVersion: "v2.0",
+            computedAt: pastDate.addingTimeInterval(10_000),
+            sleep: CanonicalSleepSummary(),
+            activity: CanonicalActivitySummary(totalSteps: 8200, activeCalories: 410),
+            cardiovascular: CanonicalCardiovascularSummary(
+                latestBpm: 84,
+                latestBpmAt: pastDate.addingTimeInterval(7200),
+                latestSourceDevice: "OnePlus Watch 3",
+                averageBpm: 72.7,
+                restingBpm: 54,
+                minBpm: 56,
+                maxBpm: 84,
+                zones: CanonicalHeartRateZones(resting: 2, fatBurn: 1, cardio: 0, peak: 0),
+                intradayPoints: archivedPts
+            )
+        )
+
+        // All Devices mode with 0 rows in `health_intraday_heart_rate`
+        svc.selectedDeviceFilter = nil
+        svc.applyLeanIntradayHeartRate([], targetDate: pastDate)
+        #expect(svc.intradayHeartRate.count == 3)
+        #expect(svc.averageBpm == 72.7)
+        #expect(svc.minBpm == 56)
+        #expect(svc.maxBpm == 84)
+        #expect(svc.heartRateZones[.resting] == 2)
+        #expect(svc.resolvedLatestBpm == 84)
+
+        // Per-device filter mode on >7d historical day
+        svc.selectedDeviceFilter = "OnePlus Watch 3"
+        svc.applyLeanIntradayHeartRate([], targetDate: pastDate)
+        #expect(svc.intradayHeartRate.count == 2)
+        #expect(svc.minBpm == 78)
+        #expect(svc.maxBpm == 84)
+    }
+
+    @Test("Scalar sleep session projection decodes cleanly when stages JSONB is omitted")
+    func scalarSleepSessionDecodesWithoutStagesJsonb() throws {
+        let json = """
+        {
+          "id": "sleep_u1_2026-11-04_oura",
+          "user_id": "u1",
+          "local_date": "2026-11-04",
+          "session_type": "primary_sleep",
+          "source_device_key": "Oura Ring",
+          "start_time": "2026-11-03T23:00:00Z",
+          "end_time": "2026-11-04T06:30:00Z",
+          "duration_seconds": 25200,
+          "time_in_bed_seconds": 27000,
+          "sleep_score": 88,
+          "deep_seconds": 5400,
+          "rem_seconds": 6000,
+          "light_seconds": 13800,
+          "awake_seconds": 1800,
+          "source_priority": 1,
+          "is_user_selected": false
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let record = try decoder.decode(HealthSleepSessionRecord.self, from: json)
+        #expect(record.stages.isEmpty)
+        #expect(record.hasGranularSleepStages == true)
+        let uiSession = record.toSleepSession()
+        #expect(uiSession.hasGranularHypnogram == true)
+        #expect(uiSession.stages.count == 4)
+    }
 }
 
 

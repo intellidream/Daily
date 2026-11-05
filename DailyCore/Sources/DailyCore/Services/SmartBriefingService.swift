@@ -552,7 +552,7 @@ public final class SmartBriefingService: ObservableObject {
         do {
             try await supabase
                 .from("daily_smart_summaries")
-                .upsert(remoteRecord)
+                .upsert(remoteRecord, returning: .minimal)
                 .execute()
         } catch {
             #if DEBUG

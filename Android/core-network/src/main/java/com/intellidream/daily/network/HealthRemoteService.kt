@@ -10,6 +10,7 @@ import com.intellidream.daily.model.HealthSourceRecord
 import com.intellidream.daily.model.HealthTelemetryRecord
 import com.intellidream.daily.model.VitalMetricRecord
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,7 +86,23 @@ class HealthRemoteService(
         if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_daily_summary"]
-                .select {
+                .select(
+                    columns = Columns.list(
+                        "id",
+                        "user_id",
+                        "local_date",
+                        "steps",
+                        "active_kcal",
+                        "sleep_asleep_s",
+                        "sleep_score",
+                        "stress_avg",
+                        "rhr",
+                        "hrv_sdnn",
+                        "hrv_rmssd",
+                        "weight",
+                        "spo2"
+                    )
+                ) {
                     filter {
                         eq("user_id", userId)
                         gte("local_date", startDate)
@@ -110,11 +127,11 @@ class HealthRemoteService(
         try {
             val url = "${SupabaseClientManager.SUPABASE_URL}/functions/v1/health-engine"
             val body = if (processDirty && date.isEmpty()) {
-                """{"user_id":"$userId","process_dirty":true}"""
+                """{"user_id":"$userId","process_dirty":true,"compact":true}"""
             } else if (processDirty) {
-                """{"user_id":"$userId","date":"$date","process_dirty":true}"""
+                """{"user_id":"$userId","date":"$date","process_dirty":true,"compact":true}"""
             } else {
-                """{"user_id":"$userId","date":"$date"}"""
+                """{"user_id":"$userId","date":"$date","compact":true}"""
             }
             val token = clientManager.currentAccessTokenOrAnonKey()
             val req = Request.Builder()
@@ -162,7 +179,26 @@ class HealthRemoteService(
         if (!clientManager.ensureSessionReady()) return@withContext emptyList()
         try {
             clientManager.client.postgrest["health_sleep_sessions"]
-                .select {
+                .select(
+                    columns = Columns.list(
+                        "id",
+                        "user_id",
+                        "local_date",
+                        "session_type",
+                        "source_device_key",
+                        "start_time",
+                        "end_time",
+                        "duration_seconds",
+                        "time_in_bed_seconds",
+                        "sleep_score",
+                        "deep_seconds",
+                        "rem_seconds",
+                        "light_seconds",
+                        "awake_seconds",
+                        "source_priority",
+                        "is_user_selected"
+                    )
+                ) {
                     filter {
                         eq("user_id", userId)
                         gte("local_date", startDate)
@@ -336,6 +372,7 @@ class HealthRemoteService(
             val req = Request.Builder()
                 .url(url)
                 .header("Content-Type", "application/json")
+                .header("Prefer", "return=minimal")
                 .header("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
                 .header("Authorization", "Bearer $token")
                 .post(body.toRequestBody("application/json".toMediaType()))
@@ -357,6 +394,7 @@ class HealthRemoteService(
             val req = Request.Builder()
                 .url(url)
                 .header("Content-Type", "application/json")
+                .header("Prefer", "return=minimal")
                 .header("apikey", SupabaseClientManager.SUPABASE_ANON_KEY)
                 .header("Authorization", "Bearer $token")
                 .post("{}".toRequestBody("application/json".toMediaType()))

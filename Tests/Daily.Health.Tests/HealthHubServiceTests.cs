@@ -619,5 +619,93 @@ namespace Daily.Health.Tests
             Assert.Equal(99.0, spo2!.Value);
             Assert.Equal("OnePlus Watch 3", spo2.SourceDevice);
         }
+
+        [Fact]
+        public async Task TestHistoricalIntradayHeartRatePreservedAfter7DayRetention()
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"test_hub_hist_hr_{Guid.NewGuid():N}.db");
+            MockDatabaseService? mockDb = null;
+            try
+            {
+                mockDb = new MockDatabaseService(dbPath);
+                await mockDb.InitializeAsync();
+
+                var historicalDate = DateTime.Today.AddDays(-12);
+                var dateStr = historicalDate.ToString("yyyy-MM-dd");
+
+                var payload = new DailyHealthSummaryPayload
+                {
+                    Date = dateStr,
+                    Sources = new() { "Pixel Watch 5" },
+                    Cardiovascular = new CanonicalCardiovascularSummary
+                    {
+                        RestingHeartRateBpm = 54.0,
+                        AverageHeartRateBpm = 69.0,
+                        IntradayHeartRate = new()
+                        {
+                            new IntradayHeartRatePoint { Timestamp = $"{dateStr}T09:00:00Z", Bpm = 64.0, SourceDevice = "Pixel Watch 5" },
+                            new IntradayHeartRatePoint { Timestamp = $"{dateStr}T15:30:00Z", Bpm = 88.0, SourceDevice = "Pixel Watch 5" }
+                        }
+                    },
+                    Activity = new CanonicalActivitySummary
+                    {
+                        TotalSteps = 8400,
+                        ActiveCaloriesKcal = 340.0,
+                        SourceDevice = "Pixel Watch 5",
+                        HourlySteps = new()
+                        {
+                            new HourlyStepBucket { Hour = 10, Steps = 1400, ActiveCalories = 55.0 }
+                        }
+                    }
+                };
+
+                await mockDb.Connection.InsertAsync(new HealthDailySummaryEntity
+                {
+                    LocalDate = dateStr,
+                    UserId = "test-user-id",
+                    EngineVersion = "2.1",
+                    Steps = 8400,
+                    Rhr = 54.0,
+                    SummaryJson = HealthJsonSerializer.Serialize(payload),
+                    UpdatedAtTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+
+                var options = new Supabase.SupabaseOptions { AutoConnectRealtime = false };
+                var client = new Supabase.Client("https://dummy.supabase.co", "dummy_key", options);
+                var hubService = new HealthHubService(client, mockDb, new MockSettingsService());
+
+                // Dates >8d skip remote health_intraday_heart_rate queries cleanly
+                var leanHr = await hubService.GetLeanIntradayHeartRateAsync(historicalDate);
+                Assert.Empty(leanHr);
+
+                // Single-day telemetry still reconstructs archived HR curve & steps from Summary JSONB
+                var telemetry = await hubService.GetHealthTelemetryAsync(historicalDate, historicalDate);
+                Assert.Contains(telemetry, t => t.TypeString == "heart_rate" && t.Value == 64.0 && t.SourceDevice == "Pixel Watch 5");
+                Assert.Contains(telemetry, t => t.TypeString == "heart_rate" && t.Value == 88.0 && t.SourceDevice == "Pixel Watch 5");
+                Assert.Contains(telemetry, t => t.TypeString == "steps" && t.Value == 1400);
+            }
+            finally
+            {
+                await CleanupDbAsync(mockDb, dbPath);
+            }
+        }
+
+        [Fact]
+        public void TestScalarSleepProjectionDetectsGranularStages()
+        {
+            var scalarSession = new HealthSleepSessionRecord
+            {
+                LocalDate = "2026-11-05",
+                SourceDeviceKey = "Oura Ring",
+                DurationSeconds = 27600,
+                DeepSeconds = 5400,
+                RemSeconds = 6200,
+                LightSeconds = 14800,
+                AwakeSeconds = 1200,
+                Stages = new() // omitted in scalar range SELECT
+            };
+
+            Assert.True(scalarSession.HasGranularSleepStages);
+        }
     }
 }

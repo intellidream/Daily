@@ -107,12 +107,12 @@ public actor OfflineSyncManager {
             do {
                 switch item.action {
                 case .insert:
-                    try await pClient.from("habits_logs").insert(item.log).execute()
+                    try await pClient.from("habits_logs").insert(item.log, returning: .minimal).execute()
                     os_log("Successfully synced INSERT: %{public}@", type: .info, item.log.id.uuidString)
                 case .delete:
                     struct DeleteUpdate: Encodable { let is_deleted = true }
                     try await pClient.from("habits_logs")
-                        .update(DeleteUpdate())
+                        .update(DeleteUpdate(), returning: .minimal)
                         .eq("id", value: item.log.id.uuidString.lowercased())
                         .execute()
                     os_log("Successfully synced DELETE: %{public}@", type: .info, item.log.id.uuidString)

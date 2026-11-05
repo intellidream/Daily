@@ -1,14 +1,22 @@
 package com.intellidream.daily.health
 
+import com.intellidream.daily.model.CanonicalCardiovascularSummary
+import com.intellidream.daily.model.CanonicalHeartRateZones
+import com.intellidream.daily.model.HealthDailySummaryRecord
 import com.intellidream.daily.model.HealthDailyVitalsRecord
+import com.intellidream.daily.model.HealthSleepSessionRecord
 import com.intellidream.daily.model.HealthSourceRecord
 import com.intellidream.daily.model.HealthTelemetryRecord
+import com.intellidream.daily.model.HeartRateZone
 import com.intellidream.daily.model.HourlyStepBucket
+import com.intellidream.daily.model.IntradayHeartRatePoint
 import com.intellidream.daily.model.SleepSession
 import com.intellidream.daily.model.SleepStageRecord
 import com.intellidream.daily.model.SleepStageType
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -359,5 +367,91 @@ class LeanHealthBuildersTest {
         assertNotNull(winner)
         assertEquals(99.0, winner?.value ?: 0.0, 0.01)
         assertEquals("OnePlus Watch 3", winner?.sourceDevice)
+    }
+
+    @Test
+    fun testArchivedCardiovascularCurvePreservedAfter7DayIntradayPrune() {
+        val archivedCardio = CanonicalCardiovascularSummary(
+            intradayHeartRate = listOf(
+                IntradayHeartRatePoint(timestamp = 1_761_638_400_000L, bpm = 58.0, sourceDevice = "Oura Ring"),
+                IntradayHeartRatePoint(timestamp = 1_761_652_800_000L, bpm = 74.0, sourceDevice = "Pixel Watch 5"),
+                IntradayHeartRatePoint(timestamp = 1_761_667_200_000L, bpm = 92.0, sourceDevice = "Pixel Watch 5")
+            ),
+            restingHeartRateBpm = 54.0,
+            averageHeartRateBpm = 75.0,
+            maxHeartRateBpm = 92.0,
+            minHeartRateBpm = 58.0,
+            latestBpm = 92.0,
+            latestSourceDevice = "Pixel Watch 5",
+            heartRateZones = CanonicalHeartRateZones(restingMinutes = 600, fatBurnMinutes = 40, cardioMinutes = 5, peakMinutes = 0)
+        )
+
+        // All Devices mode: preserves full archived curve & stats when intraday buckets are empty
+        val allDevices = HealthDataRepository.resolveArchivedCardiovascularFallback(archivedCardio, null)
+        assertNotNull(allDevices)
+        assertEquals(3, allDevices?.points?.size)
+        assertEquals(75.0, allDevices?.averageBpm ?: 0.0, 0.01)
+        assertEquals(58.0, allDevices?.minBpm ?: 0.0, 0.01)
+        assertEquals(92.0, allDevices?.maxBpm ?: 0.0, 0.01)
+        assertEquals(600, allDevices?.zones?.get(HeartRateZone.RESTING))
+        assertEquals(54.0, allDevices?.restingBpm ?: 0.0, 0.01)
+
+        // Per-device filter: preserves points recorded by Pixel Watch 5 and recalculates device stats
+        val pw5Only = HealthDataRepository.resolveArchivedCardiovascularFallback(archivedCardio, "Pixel Watch 5")
+        assertNotNull(pw5Only)
+        assertEquals(2, pw5Only?.points?.size)
+        assertEquals(83.0, pw5Only?.averageBpm ?: 0.0, 0.01)
+        assertEquals(74.0, pw5Only?.minBpm ?: 0.0, 0.01)
+        assertEquals(92.0, pw5Only?.maxBpm ?: 0.0, 0.01)
+
+        // Device with zero archived points returns null cleanly
+        val missingDevice = HealthDataRepository.resolveArchivedCardiovascularFallback(archivedCardio, "OnePlus Watch 3")
+        assertNull(missingDevice)
+    }
+
+    @Test
+    fun testScalarSleepAndSummaryProjectionsDecodeCleanly() {
+        val json = Json { ignoreUnknownKeys = true }
+        val scalarSleepJson = """
+            {
+              "id": "sleep_u1_2026-11-01_primary_sleep_oura_ring",
+              "local_date": "2026-11-01",
+              "session_type": "primary_sleep",
+              "source_device_key": "Oura Ring",
+              "start_time": "2026-10-31T22:30:00Z",
+              "end_time": "2026-11-01T06:30:00Z",
+              "duration_seconds": 26400,
+              "sleep_score": 88,
+              "deep_seconds": 5400,
+              "rem_seconds": 6000,
+              "light_seconds": 15000,
+              "awake_seconds": 1800,
+              "source_priority": 1,
+              "is_user_selected": false
+            }
+        """.trimIndent()
+        val sleep = json.decodeFromString<HealthSleepSessionRecord>(scalarSleepJson)
+        assertTrue(sleep.stages.isEmpty())
+        assertTrue(sleep.hasGranularSleepStages)
+        assertTrue(sleep.toSleepSession().hasGranularHypnogram)
+
+        val scalarSummaryJson = """
+            {
+              "id": "sum_1",
+              "user_id": "u1",
+              "local_date": "2026-11-01",
+              "steps": 10420,
+              "active_kcal": 480.5,
+              "sleep_asleep_s": 26400,
+              "sleep_score": 88,
+              "stress_avg": 24,
+              "rhr": 53.0,
+              "hrv_sdnn": 51.2
+            }
+        """.trimIndent()
+        val summary = json.decodeFromString<HealthDailySummaryRecord>(scalarSummaryJson)
+        assertNull(summary.summary)
+        assertEquals(10420, summary.steps)
+        assertEquals(24, summary.stressAvg)
     }
 }

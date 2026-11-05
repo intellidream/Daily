@@ -31,6 +31,8 @@ public final class SmartLedgerStore: ObservableObject {
     
     private var pushDebounceTask: Task<Void, Never>?
     private var realtimeChannel: RealtimeChannelV2?
+    private var realtimeDebounceTask: Task<Void, Never>?
+    private var lastLocalPushAt: Date = .distantPast
     
     // MARK: - Default Starter Ledger Template
     nonisolated public static let defaultLedgerText: String = """
@@ -363,17 +365,24 @@ public final class SmartLedgerStore: ObservableObject {
         )
 
         do {
-            let res = try await client
-                .from("smart_ledgers")
-                .upsert(payload)
-                .select()
-                .execute()
-
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            if let created = try? decoder.decode([RemoteSmartLedgerDTO].self, from: res.data).first {
-                groupDefaults.set(created.id.uuidString, forKey: serverRecordIdKey)
+            self.lastLocalPushAt = Date()
+            if recordId != nil {
+                _ = try await client
+                    .from("smart_ledgers")
+                    .upsert(payload, returning: .minimal)
+                    .execute()
+            } else {
+                struct IdOnlyDTO: Decodable { let id: UUID }
+                let res = try await client
+                    .from("smart_ledgers")
+                    .upsert(payload)
+                    .select("id")
+                    .execute()
+                if let created = try? JSONDecoder().decode([IdOnlyDTO].self, from: res.data).first {
+                    groupDefaults.set(created.id.uuidString, forKey: serverRecordIdKey)
+                }
             }
+            self.lastLocalPushAt = Date()
             self.lastSyncedAt = now
             self.cloudSyncError = nil
         } catch {
@@ -384,8 +393,20 @@ public final class SmartLedgerStore: ObservableObject {
 
     // MARK: - Supabase Realtime Subscription
 
+    private func scheduleRealtimeSync() {
+        guard Date().timeIntervalSince(lastLocalPushAt) >= 6.0 else { return }
+        realtimeDebounceTask?.cancel()
+        realtimeDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard let self = self, !Task.isCancelled else { return }
+            guard Date().timeIntervalSince(self.lastLocalPushAt) >= 6.0 else { return }
+            await self.syncWithSupabase()
+        }
+    }
+
     private func setupRealtimeSubscription() async {
         guard let userId = await getEffectiveUserIdAsync() else { return }
+        if realtimeChannel != nil { return }
 
         let client = SupabaseService.shared.client
         let channelName = "daily_smart_ledger_\(userId)"
@@ -411,13 +432,13 @@ public final class SmartLedgerStore: ObservableObject {
 
             Task { [weak self] in
                 for await _ in ledgerUpdates {
-                    await self?.syncWithSupabase()
+                    self?.scheduleRealtimeSync()
                 }
             }
 
             Task { [weak self] in
                 for await _ in ledgerInserts {
-                    await self?.syncWithSupabase()
+                    self?.scheduleRealtimeSync()
                 }
             }
         } catch {

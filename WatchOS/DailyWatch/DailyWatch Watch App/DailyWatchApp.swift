@@ -7,26 +7,12 @@ class ExtensionDelegate: NSObject, WKExtensionDelegate {
             switch task {
             case let backgroundTask as WKApplicationRefreshBackgroundTask:
                 Task {
-                    // Try to authorize HealthKit if we haven't
-                    try? await HealthTelemetryManager.shared.requestAuthorization()
-                    
-                    // Determine if we need a deep sync (every 4 hours)
-                    let lastDeepSync = UserDefaults.standard.double(forKey: "lastDeepSync")
-                    let isDeepSync = Date().timeIntervalSince1970 - lastDeepSync >= 4 * 3600
-                    
-                    // Sync telemetry
-                    await HealthTelemetryManager.shared.syncTelemetry(isDeepSync: isDeepSync)
-                    
-                    if isDeepSync {
-                        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastDeepSync")
-                    }
-                    
-                    // Also flush any offline habits
+                    // Flush any offline habit actions (Health is 100% consumer-only via companion iPhone BLE)
                     await OfflineSyncManager.shared.processQueue()
                     
-                    // Schedule next task (respects the user's setting, defaults to 15 mins)
+                    // Schedule next task (respects the user's setting, defaults to 30 mins)
                     let syncFreq = UserDefaults.standard.integer(forKey: "WatchSyncFrequency")
-                    let intervalMinutes = syncFreq > 0 ? syncFreq : 15
+                    let intervalMinutes = syncFreq > 0 ? syncFreq : 30
                     let nextDate = Date().addingTimeInterval(TimeInterval(intervalMinutes * 60))
                     
                     WKExtension.shared().scheduleBackgroundRefresh(withPreferredDate: nextDate, userInfo: nil) { error in
@@ -68,29 +54,16 @@ struct DailyWatchApp: App {
                 // Proactively refresh the Supabase session after watchOS sleep
                 sessionManager.onAppBecameActive()
                 
-                // Try to ask for permissions on active if we haven't
-                Task {
-                    try? await HealthTelemetryManager.shared.requestAuthorization()
-                }
-                
-                // Eagerly try to flush any offline habits and health data
+                // Eagerly flush any offline habits and refresh throttled habit state
+                // (Health telemetry is synced exclusively through the companion iPhone over BLE)
                 Task {
                     await OfflineSyncManager.shared.processQueue()
-                    await habitStore.fetchFullSync()
-                    
-                    let lastDeepSync = UserDefaults.standard.double(forKey: "lastDeepSync")
-                    let isDeepSync = Date().timeIntervalSince1970 - lastDeepSync >= 4 * 3600
-                    
-                    await HealthTelemetryManager.shared.syncTelemetry(isDeepSync: isDeepSync)
-                    
-                    if isDeepSync {
-                        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastDeepSync")
-                    }
+                    habitStore.fetchFullSync(force: false)
                 }
                 
                 // Ensure the background refresh loop is running
                 let syncFreq = UserDefaults.standard.integer(forKey: "WatchSyncFrequency")
-                let intervalMinutes = syncFreq > 0 ? syncFreq : 15
+                let intervalMinutes = syncFreq > 0 ? syncFreq : 30
                 let nextDate = Date().addingTimeInterval(TimeInterval(intervalMinutes * 60))
                 WKExtension.shared().scheduleBackgroundRefresh(withPreferredDate: nextDate, userInfo: nil) { _ in }
             }

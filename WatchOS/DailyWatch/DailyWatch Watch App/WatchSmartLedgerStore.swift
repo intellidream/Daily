@@ -282,7 +282,7 @@ public final class WatchSmartLedgerStore: ObservableObject {
 
             _ = try await client
                 .from("smart_ledgers")
-                .update(payload)
+                .update(payload, returning: .minimal)
                 .eq("user_id", value: userId.uuidString.lowercased())
                 .execute()
 

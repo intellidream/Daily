@@ -45,6 +45,8 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     var supabaseClient: SupabaseClient?
     private var baseClient: SupabaseClient
     private var pollTimer: Timer?
+    private var pollAttemptCount: Int = 0
+    private let maxPollAttempts: Int = 120 // 5 minutes max (120 * 2.5s)
     private var authStateTask: Task<Void, Never>?
     private(set) var activeAccessToken: String?
     
@@ -145,7 +147,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
                 request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
                 request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+                request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
                 request.httpBody = try JSONSerialization.data(withJSONObject: ["pin_code": pin])
                 
                 let (_, response) = try await URLSession.shared.data(for: request)
@@ -172,20 +174,29 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     
     private func startPolling(pin: String) {
         pollTimer?.invalidate()
+        pollAttemptCount = 0
         DispatchQueue.main.async {
             self.pollTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
-                self?.pollPairingStatus(pin: pin)
+                guard let self = self else { return }
+                self.pollAttemptCount += 1
+                if self.pollAttemptCount > self.maxPollAttempts {
+                    self.pollTimer?.invalidate()
+                    self.pollTimer = nil
+                    self.pairingStatus = "PIN expired — tap Retry"
+                    return
+                }
+                self.pollPairingStatus(pin: pin)
             }
         }
     }
-    
+
     private func pollPairingStatus(pin: String) {
         Task {
             do {
                 guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/watch_pairing_codes"), resolvingAgainstBaseURL: false) else { return }
                 components.queryItems = [
                     URLQueryItem(name: "pin_code", value: "eq.\(pin)"),
-                    URLQueryItem(name: "select", value: "*")
+                    URLQueryItem(name: "select", value: "pin_code,claimed,access_token,refresh_token,user_id")
                 ]
                 guard let url = components.url else { return }
                 
@@ -351,6 +362,7 @@ class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         
         do {
             guard var components = URLComponents(url: supabaseUrl.appendingPathComponent("rest/v1/paired_watches"), resolvingAgainstBaseURL: false) else { return }
+            components.queryItems = [URLQueryItem(name: "select", value: "id")]
             guard let url = components.url else { return }
             
             var request = URLRequest(url: url)

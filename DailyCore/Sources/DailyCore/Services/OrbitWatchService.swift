@@ -112,7 +112,7 @@ public final class OrbitWatchService: ObservableObject {
             )
             
             try await supabase.from("watch_pairing_codes")
-                .update(claimPayload)
+                .update(claimPayload, returning: .minimal)
                 .eq("pin_code", value: cleanedPin)
                 .execute()
             
@@ -138,7 +138,7 @@ public final class OrbitWatchService: ObservableObject {
             )
             
             try await supabase.from("paired_watches")
-                .insert(insertPayload)
+                .insert(insertPayload, returning: .minimal)
                 .execute()
             
             // 6. Reload paired devices and set success state
@@ -159,7 +159,7 @@ public final class OrbitWatchService: ObservableObject {
     public func unpairWatch(id: String) async -> Bool {
         do {
             try await supabase.from("paired_watches")
-                .delete()
+                .delete(returning: .minimal)
                 .eq("id", value: id)
                 .execute()
             

@@ -185,6 +185,38 @@ public struct HealthSleepSessionRecord: Identifiable, Codable, Hashable, Sendabl
         self.ingestedAt = ingestedAt
     }
     
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        self.localDate = try container.decode(String.self, forKey: .localDate)
+        self.sessionType = try container.decodeIfPresent(String.self, forKey: .sessionType) ?? "primary_sleep"
+        self.sourceDeviceKey = try container.decode(String.self, forKey: .sourceDeviceKey)
+        self.hostDeviceName = try container.decodeIfPresent(String.self, forKey: .hostDeviceName)
+        self.startTime = try container.decodeIfPresent(Date.self, forKey: .startTime) ?? Date()
+        let decodedDuration = try container.decodeIfPresent(Int.self, forKey: .durationSeconds) ?? 0
+        self.endTime = try container.decodeIfPresent(Date.self, forKey: .endTime) ?? self.startTime.addingTimeInterval(Double(decodedDuration))
+        self.durationSeconds = decodedDuration
+        self.timeInBedSeconds = try container.decodeIfPresent(Int.self, forKey: .timeInBedSeconds) ?? decodedDuration
+        self.efficiencyPercent = try container.decodeIfPresent(Double.self, forKey: .efficiencyPercent)
+        self.sleepScore = try container.decodeIfPresent(Int.self, forKey: .sleepScore)
+        self.deepSeconds = try container.decodeIfPresent(Int.self, forKey: .deepSeconds) ?? 0
+        self.remSeconds = try container.decodeIfPresent(Int.self, forKey: .remSeconds) ?? 0
+        self.lightSeconds = try container.decodeIfPresent(Int.self, forKey: .lightSeconds) ?? 0
+        self.awakeSeconds = try container.decodeIfPresent(Int.self, forKey: .awakeSeconds) ?? 0
+        self.latencySeconds = try container.decodeIfPresent(Int.self, forKey: .latencySeconds) ?? 0
+        self.qualityRating = try container.decodeIfPresent(String.self, forKey: .qualityRating)
+        self.stages = try container.decodeIfPresent([SleepStageRecord].self, forKey: .stages) ?? []
+        self.sourcePriority = try container.decodeIfPresent(Int.self, forKey: .sourcePriority) ?? 10
+        self.isUserSelected = try container.decodeIfPresent(Bool.self, forKey: .isUserSelected) ?? false
+        self.ingestedAt = try container.decodeIfPresent(Date.self, forKey: .ingestedAt)
+    }
+    
+    /// True when granular REM/Deep/Light architecture exists (even when the `stages` JSONB array was omitted in scalar Trends projections).
+    public var hasGranularSleepStages: Bool {
+        !stages.isEmpty || (deepSeconds + remSeconds + lightSeconds) > 0
+    }
+    
     /// Converts this lean database record directly to the UI-facing `SleepSession`.
     public func toSleepSession() -> SleepSession {
         let canonDevice = DeviceSource.from(name: sourceDeviceKey).displayName
@@ -218,7 +250,7 @@ public struct HealthSleepSessionRecord: Identifiable, Codable, Hashable, Sendabl
             isNap: sessionType == "nap",
             stages: effectiveStages,
             sourceDevice: canonDevice,
-            hasGranularHypnogram: !stages.isEmpty
+            hasGranularHypnogram: hasGranularSleepStages
         )
     }
 }
@@ -410,5 +442,34 @@ public struct HealthIntradayHeartRateRecord: Identifiable, Codable, Hashable, Se
             bpm: Double(bpmAvg),
             sourceDevice: DeviceSource.from(name: sourceDeviceKey).displayName
         )
+    }
+}
+
+/// Lightweight scalar projection of `health_daily_summary` omitting the heavy `summary` JSONB column (~50 B/row vs ~35 KB/row).
+public struct HealthDailySummaryScalarRow: Codable, Hashable, Sendable {
+    public let localDate: String
+    public let steps: Int?
+    public let activeKcal: Double?
+    public let sleepAsleepS: Int?
+    public let sleepScore: Int?
+    public let stressAvg: Int?
+    public let rhr: Double?
+    public let hrvSdnn: Double?
+    public let hrvRmssd: Double?
+    public let weight: Double?
+    public let spo2: Double?
+    
+    enum CodingKeys: String, CodingKey {
+        case localDate = "local_date"
+        case steps
+        case activeKcal = "active_kcal"
+        case sleepAsleepS = "sleep_asleep_s"
+        case sleepScore = "sleep_score"
+        case stressAvg = "stress_avg"
+        case rhr
+        case hrvSdnn = "hrv_sdnn"
+        case hrvRmssd = "hrv_rmssd"
+        case weight
+        case spo2
     }
 }

@@ -1757,6 +1757,7 @@ export interface LeanEngineInput {
   preferredDevice?: string;
   baselineHrvMs?: number;
   baselineRhrBpm?: number;
+  archivedCardiovascular?: CardiovascularSummary | null;
 }
 
 function computeRollingMedianOrMean(values: number[]): number | undefined {
@@ -1796,7 +1797,8 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     tzOffsetMin = 120,
     preferredDevice,
     baselineHrvMs,
-    baselineRhrBpm
+    baselineRhrBpm,
+    archivedCardiovascular = null
   } = input;
 
   // Build unified single-list priority map from public.health_sources (1 = highest priority)
@@ -1836,6 +1838,14 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     if ((h.bpm_avg ?? 0) > 30) {
       const c = canonicalizeDeviceName(h.source_device_key, null);
       if (c && c !== 'Unknown') activeSourceSet.add(c);
+    }
+  }
+  if (hrRows.length === 0 && archivedCardiovascular && Array.isArray(archivedCardiovascular.intraday_points)) {
+    for (const pt of archivedCardiovascular.intraday_points) {
+      if ((pt.bpm ?? 0) > 30 && pt.source_device) {
+        const c = canonicalizeDeviceName(pt.source_device, null);
+        if (c && c !== 'Unknown') activeSourceSet.add(c);
+      }
     }
   }
 
@@ -2326,16 +2336,51 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
     return merged;
   })();
 
-  const intradayHrPoints: IntradayHeartRatePoint[] = filteredHrRows.map(r => {
-    const tsIso = new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString();
-    return {
-      id: r.id,
-      timestamp: tsIso,
-      bpm: r.bpm_avg,
-      zone: mapHeartRateZone(r.bpm_avg),
-      source_device: r.canonDevice
-    };
-  });
+  const archivedPts =
+    filteredHrRows.length === 0 &&
+    !prefCanon &&
+    archivedCardiovascular &&
+    Array.isArray(archivedCardiovascular.intraday_points) &&
+    archivedCardiovascular.intraday_points.length > 0
+      ? archivedCardiovascular.intraday_points.filter(p => p && p.bpm > 30 && p.bpm < 240)
+      : [];
+
+  const intradayHrPoints: IntradayHeartRatePoint[] =
+    filteredHrRows.length > 0
+      ? filteredHrRows.map(r => {
+          const tsIso = new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString();
+          return {
+            id: r.id,
+            timestamp: tsIso,
+            bpm: r.bpm_avg,
+            zone: mapHeartRateZone(r.bpm_avg),
+            source_device: r.canonDevice
+          };
+        })
+      : archivedPts.map(p => ({
+          id: p.id,
+          timestamp: p.timestamp,
+          bpm: p.bpm,
+          zone: p.zone || mapHeartRateZone(p.bpm),
+          source_device: p.source_device ? canonicalizeDeviceName(p.source_device, null) : null
+        }));
+
+  if (!winningLatestHr && archivedPts.length > 0 && archivedCardiovascular) {
+    const tailPt = archivedPts[archivedPts.length - 1];
+    const archBpm = archivedCardiovascular.latest_bpm ?? tailPt.bpm;
+    const archIso = archivedCardiovascular.latest_bpm_at ?? tailPt.timestamp;
+    const archDev = archivedCardiovascular.latest_source_device ?? tailPt.source_device ?? 'Wearable';
+    if (archBpm > 30 && archIso) {
+      putVitalIfMissing(
+        'heartrate',
+        'heart_rate',
+        archBpm,
+        'bpm',
+        canonicalizeDeviceName(archDev, null),
+        archIso
+      );
+    }
+  }
 
   if (winningLatestHr) {
     const lastPt = intradayHrPoints.length > 0 ? intradayHrPoints[intradayHrPoints.length - 1] : null;
@@ -2358,7 +2403,23 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
   const measuredRhr = vitalsMap['restingheartrate']?.value ?? null;
   const derivedAllRhr = deriveNocturnalRhrFromHrPoints(intradayHrPoints, targetDate, tzOffsetMin);
   let cardioSummary: CardiovascularSummary;
-  if (filteredHrRows.length === 0 && intradayHrPoints.length === 0) {
+  if (filteredHrRows.length === 0 && archivedPts.length > 0 && archivedCardiovascular) {
+    const fallbackTail = intradayHrPoints[intradayHrPoints.length - 1];
+    const effectiveRhr = measuredRhr !== null && measuredRhr > 0
+      ? Math.round(measuredRhr)
+      : (archivedCardiovascular.resting_bpm ?? (derivedAllRhr !== null ? Math.round(derivedAllRhr) : null));
+    cardioSummary = {
+      latest_bpm: winningLatestHr?.bpm ?? archivedCardiovascular.latest_bpm ?? fallbackTail?.bpm ?? null,
+      latest_bpm_at: winningLatestHr?.tsIso ?? archivedCardiovascular.latest_bpm_at ?? fallbackTail?.timestamp ?? null,
+      latest_source_device: winningLatestHr?.device ?? archivedCardiovascular.latest_source_device ?? fallbackTail?.source_device ?? null,
+      average_bpm: archivedCardiovascular.average_bpm,
+      resting_bpm: effectiveRhr,
+      min_bpm: archivedCardiovascular.min_bpm,
+      max_bpm: archivedCardiovascular.max_bpm,
+      zones: archivedCardiovascular.zones ?? { resting: 0, fat_burn: 0, cardio: 0, peak: 0 },
+      intraday_points: intradayHrPoints
+    };
+  } else if (filteredHrRows.length === 0 && intradayHrPoints.length === 0) {
     cardioSummary = {
       latest_bpm: winningLatestHr?.bpm ?? null,
       latest_bpm_at: winningLatestHr?.tsIso ?? null,
@@ -2529,15 +2590,18 @@ export function synthesizeDailyHealthSummaryFromLean(input: LeanEngineInput): He
   for (const src of orderedSources) {
     const devVitals = normalizedVitals.find(v => v.canonDevice === src);
     const devSleep = allSessions.find(s => s.source_device === src);
-    const devHrPoints: IntradayHeartRatePoint[] = rawFilteredHrRows
-      .filter(r => r.canonDevice === src)
-      .map(r => ({
-        id: r.id,
-        timestamp: new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString(),
-        bpm: r.bpm_avg,
-        zone: mapHeartRateZone(r.bpm_avg),
-        source_device: src
-      }));
+    const devHrPoints: IntradayHeartRatePoint[] =
+      rawFilteredHrRows.length > 0
+        ? rawFilteredHrRows
+            .filter(r => r.canonDevice === src)
+            .map(r => ({
+              id: r.id,
+              timestamp: new Date(localMidnightMs + r.bucket_minute * 60 * 1000).toISOString(),
+              bpm: r.bpm_avg,
+              zone: mapHeartRateZone(r.bpm_avg),
+              source_device: src
+            }))
+        : archivedPts.filter(p => p.source_device && canonicalizeDeviceName(p.source_device, null) === src);
 
     const devHasSdnn = (devVitals?.hrv_sdnn_nightly ?? 0) > 0;
     const devHasRmssd = !devHasSdnn && (devVitals?.hrv_rmssd_nightly ?? 0) > 0;

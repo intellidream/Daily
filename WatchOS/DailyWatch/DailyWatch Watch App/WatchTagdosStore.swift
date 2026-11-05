@@ -212,7 +212,7 @@ public final class WatchTagdosStore: ObservableObject {
             do {
                 try await client
                     .from("tagdos_streams")
-                    .update(["raw_syntax": newRawSyntax, "updated_at": ISO8601DateFormatter().string(from: Date())])
+                    .update(["raw_syntax": newRawSyntax, "updated_at": ISO8601DateFormatter().string(from: Date())], returning: .minimal)
                     .eq("user_id", value: userId.uuidString)
                     .eq("stream_number", value: streamNumber)
                     .execute()
@@ -256,7 +256,7 @@ public final class WatchTagdosStore: ObservableObject {
             do {
                 try await client
                     .from("tagdos_streams")
-                    .update(["raw_syntax": newRawSyntax, "updated_at": ISO8601DateFormatter().string(from: Date())])
+                    .update(["raw_syntax": newRawSyntax, "updated_at": ISO8601DateFormatter().string(from: Date())], returning: .minimal)
                     .eq("user_id", value: userId.uuidString)
                     .eq("stream_number", value: streamNumber)
                     .execute()
@@ -298,7 +298,7 @@ public final class WatchTagdosStore: ObservableObject {
             do {
                 try await client
                     .from("tagdos_streams")
-                    .update(["raw_syntax": newRawSyntax, "updated_at": ISO8601DateFormatter().string(from: Date())])
+                    .update(["raw_syntax": newRawSyntax, "updated_at": ISO8601DateFormatter().string(from: Date())], returning: .minimal)
                     .eq("user_id", value: userId.uuidString)
                     .eq("stream_number", value: streamNumber)
                     .execute()
@@ -338,7 +338,7 @@ public final class WatchTagdosStore: ObservableObject {
                 )
                 try await client
                     .from("tagdos_quick_notes")
-                    .insert(dto)
+                    .insert(dto, returning: .minimal)
                     .execute()
             } catch {
                 print("[WatchTagdosStore] Failed to add note: \(error)")

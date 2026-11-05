@@ -315,16 +315,27 @@ class NewsRemoteService(
 
     // MARK: - Supabase Synchronization
 
+    private val lastSubsSyncIsoByUser = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val lastSavedSyncIsoByUser = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     suspend fun pullSubscriptions(userId: String): List<RssSubscription> = withContext(Dispatchers.IO) {
         try {
+            val watermarkIso = lastSubsSyncIsoByUser[userId]
+            val syncStartedIso = java.time.Instant.now().minusSeconds(120).toString()
             val res = clientManager.client.postgrest["rss_subscriptions"]
                 .select {
                     filter {
                         eq("user_id", userId)
+                        if (watermarkIso != null) {
+                            gte("updated_at", watermarkIso)
+                        }
                     }
                 }
-            json.decodeFromString<List<RssSubscription>>(res.data)
-        } catch (_: Exception) {
+            val decoded = json.decodeFromString<List<RssSubscription>>(res.data)
+            lastSubsSyncIsoByUser[userId] = syncStartedIso
+            decoded
+        } catch (e: Exception) {
+            android.util.Log.w("NewsRemoteService", "Failed to pull subscriptions: ${e.message}")
             emptyList()
         }
     }
@@ -333,21 +344,32 @@ class NewsRemoteService(
         try {
             clientManager.client.postgrest["rss_subscriptions"].upsert(subscription)
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("NewsRemoteService", "Failed to push subscription (${subscription.id}): ${e.message}")
             false
         }
     }
 
     suspend fun pullSavedArticles(userId: String): List<SavedArticle> = withContext(Dispatchers.IO) {
         try {
+            val watermarkIso = lastSavedSyncIsoByUser[userId]
+            val syncStartedIso = java.time.Instant.now().minusSeconds(120).toString()
             val res = clientManager.client.postgrest["rss_saved_articles"]
                 .select {
                     filter {
                         eq("user_id", userId)
+                        if (watermarkIso != null) {
+                            gte("updated_at", watermarkIso)
+                        } else {
+                            eq("is_deleted", false)
+                        }
                     }
                 }
-            json.decodeFromString<List<SavedArticle>>(res.data)
-        } catch (_: Exception) {
+            val decoded = json.decodeFromString<List<SavedArticle>>(res.data)
+            lastSavedSyncIsoByUser[userId] = syncStartedIso
+            decoded
+        } catch (e: Exception) {
+            android.util.Log.w("NewsRemoteService", "Failed to pull saved articles: ${e.message}")
             emptyList()
         }
     }
@@ -356,7 +378,8 @@ class NewsRemoteService(
         try {
             clientManager.client.postgrest["rss_saved_articles"].upsert(article)
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("NewsRemoteService", "Failed to push saved article (${article.id}): ${e.message}")
             false
         }
     }
