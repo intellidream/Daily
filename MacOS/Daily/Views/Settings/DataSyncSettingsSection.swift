@@ -3,9 +3,12 @@ import DailyCore
 
 public struct DataSyncSettingsSection: View {
     @ObservedObject private var settingsService = SettingsService.shared
+    @ObservedObject private var adminService = SupabaseAdminService.shared
     @State private var isSyncing: Bool = false
     @State private var syncStatusMessage: String? = nil
     @State private var showResetConfirmation: Bool = false
+    @State private var showAdminLoginSheet: Bool = false
+    @State private var showAdminConsoleSheet: Bool = false
     
     public init() {}
     
@@ -88,7 +91,71 @@ public struct DataSyncSettingsSection: View {
                         .foregroundColor(ThemeColors.success)
                         .transition(.opacity)
                 }
-                
+
+                Divider()
+                    .background(Color.white.opacity(0.15))
+
+                // Non-intrusive Supabase Admin & Cloud Telemetry entry point
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(ThemeColors.accentCyan.opacity(0.12))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: adminService.isConnected ? "chart.bar.xaxis" : "lock.shield")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("Supabase Admin & Usage")
+                                .font(.system(size: 13.5, weight: .medium))
+                                .foregroundColor(.white)
+                            if adminService.isConnected {
+                                Circle()
+                                    .fill(ThemeColors.success)
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                        if adminService.isConnected {
+                            let snapSummary = adminService.snapshot.map {
+                                "Egress \(SupabaseAdminSnapshot.formatBytes($0.egressUsedBytes)) · DB \(SupabaseAdminSnapshot.formatBytes($0.dbSizeBytes))"
+                            } ?? "Authenticated (\(adminService.credentials.adminIdentity ?? "Read-Only"))"
+                            Text(snapSummary)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .lineLimit(1)
+                        } else {
+                            Text("Inspect quotas, egress, DB bloat, Edge Functions & Realtime (GitHub login)")
+                                .font(.system(size: 11))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer()
+
+                    Button {
+                        openAdminExperience()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(adminService.isConnected ? "Open Console" : "Admin Sign In")
+                                .font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(ThemeColors.accentCyan.opacity(0.12))
+                                .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.28), lineWidth: 1))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Divider()
                     .background(Color.white.opacity(0.15))
                 
@@ -111,6 +178,35 @@ public struct DataSyncSettingsSection: View {
                     Button("Cancel", role: .cancel) {}
                 }
             }
+        }
+        .sheet(isPresented: $showAdminLoginSheet) {
+            SupabaseAdminLoginSheet {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    showAdminConsoleSheet = true
+                }
+            }
+        }
+        .sheet(isPresented: $showAdminConsoleSheet) {
+            SupabaseAdminConsoleView()
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-openSupabaseAdmin") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    openAdminExperience()
+                }
+            }
+        }
+    }
+
+    private func openAdminExperience() {
+        if adminService.isConnected {
+            Task {
+                if await adminService.unlockIfNeeded() {
+                    showAdminConsoleSheet = true
+                }
+            }
+        } else {
+            showAdminLoginSheet = true
         }
     }
     

@@ -176,15 +176,7 @@ fun SettingsScreen(
                     )
                 }
 
-                // 5. Cloud & Sync Section
-                item {
-                    CloudSyncSettingsCard(
-                        settings = settings,
-                        onUpdateSettings = onUpdateSettings
-                    )
-                }
-
-                // 6. Smart Briefing Section
+                // 5. Smart Briefing Section
                 item {
                     SmartBriefingSettingsCard(
                         settings = settings,
@@ -192,7 +184,7 @@ fun SettingsScreen(
                     )
                 }
 
-                // 7. News & Briefings Section
+                // 6. News & Briefings Section
                 item {
                     NewsSettingsCard(
                         settings = settings,
@@ -200,9 +192,17 @@ fun SettingsScreen(
                     )
                 }
 
-                // 8. Cosmos & Night Sky Observatory Section
+                // 7. Cosmos & Night Sky Observatory Section
                 item {
                     CosmosSettingsCard(
+                        settings = settings,
+                        onUpdateSettings = onUpdateSettings
+                    )
+                }
+
+                // 8. Data & Cloud Synchronization Section (Penultimate)
+                item {
+                    CloudSyncSettingsCard(
                         settings = settings,
                         onUpdateSettings = onUpdateSettings
                     )
@@ -756,9 +756,35 @@ private fun CloudSyncSettingsCard(
     settings: AppSettings,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit
 ) {
+    val context = LocalContext.current
+    val adminRepo = remember {
+        com.intellidream.daily.network.SupabaseAdminRepository.shared.also { it.initializeIfNeeded(context) }
+    }
+    val adminCreds by adminRepo.credentials.collectAsState()
+    val adminSnapshot by adminRepo.snapshot.collectAsState()
+    var showAdminLoginSheet by remember { mutableStateOf(false) }
+    var showAdminConsole by remember { mutableStateOf(false) }
+
     val coroutineScope = rememberCoroutineScope()
     var pingLatencyMs by remember { mutableStateOf<Long?>(null) }
     var isTestingConnection by remember { mutableStateOf(false) }
+
+    if (showAdminLoginSheet) {
+        SupabaseAdminLoginSheet(
+            onDismiss = { showAdminLoginSheet = false },
+            onAuthenticated = {
+                showAdminLoginSheet = false
+                showAdminConsole = true
+            }
+        )
+    }
+
+    if (showAdminConsole) {
+        SupabaseAdminScreen(
+            geminiApiKey = settings.geminiApiKey,
+            onDismiss = { showAdminConsole = false }
+        )
+    }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -766,7 +792,7 @@ private fun CloudSyncSettingsCard(
         padding = 18.dp
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionHeader(icon = Icons.Filled.CloudSync, title = "Cloud & Sync")
+            SectionHeader(icon = Icons.Filled.CloudSync, title = "Data & Cloud Synchronization")
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -837,6 +863,69 @@ private fun CloudSyncSettingsCard(
                     Text(
                         text = if (isTestingConnection) "Testing..." else "Test Ping",
                         color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+            // Non-intrusive Supabase Admin & Cloud Telemetry entry point
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (adminCreds.hasValidToken) showAdminConsole = true else showAdminLoginSheet = true
+                    },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Supabase Admin & Usage",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (adminCreds.hasValidToken) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(ThemeColors.success)
+                            )
+                        }
+                    }
+                    val adminSub = if (adminCreds.hasValidToken) {
+                        adminSnapshot?.let {
+                            "Egress ${com.intellidream.daily.model.SupabaseAdminSnapshot.formatBytes(it.egressUsedBytes)} · DB ${com.intellidream.daily.model.SupabaseAdminSnapshot.formatBytes(it.dbSizeBytes)}"
+                        } ?: "Authenticated (${adminCreds.adminIdentity ?: "Read-Only"})"
+                    } else {
+                        "Quotas, egress, DB bloat, Edge & Realtime (GitHub login)"
+                    }
+                    Text(
+                        text = adminSub,
+                        color = ThemeColors.textMuted,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ThemeColors.accentCyan.copy(alpha = 0.14f))
+                        .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.32f), CircleShape)
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (adminCreds.hasValidToken) "Console" else "Sign In",
+                        color = ThemeColors.accentCyan,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )

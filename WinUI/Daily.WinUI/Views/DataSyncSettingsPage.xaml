@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Daily_WinUI.Views.DataSyncSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
+        <StackPanel MaxWidth="680" HorizontalAlignment="Left" Spacing="20">
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Data &amp; Cloud Synchronization" FontSize="26" FontWeight="SemiBold" CharacterSpacing="15" />
+                <TextBlock Text="Manage multi-device Supabase synchronization across Windows 11, macOS, iOS, Android, watchOS, and Wear OS."
+                           FontSize="12.5" Opacity="0.65" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <!-- Cloud Connection & Sync Card -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18">
+                <StackPanel Spacing="14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Supabase Cloud Engine" FontWeight="SemiBold" FontSize="14.5" />
+                            <TextBlock x:Name="CloudAccountText" Text="Checking active session..." FontSize="12" Opacity="0.68" />
+                        </StackPanel>
+                        <Border x:Name="ConnectionBadgeBorder"
+                                Grid.Column="1"
+                                Background="#2210B981"
+                                BorderBrush="#5510B981"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="10,3"
+                                VerticalAlignment="Center">
+                            <TextBlock x:Name="ConnectionBadgeText" Text="ONLINE" FontSize="10.5" FontWeight="Bold" Foreground="#10B981" />
+                        </Border>
+                    </Grid>
+
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Text="Sync Smart Preferences &amp; Behavior to Cloud" FontWeight="SemiBold" FontSize="13.5" />
+                            <TextBlock Text="Keep cross-device widget preferences, habits, finances, and notes synchronized automatically."
+                                       FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1"
+                                      x:Name="CloudBehaviorSyncSwitch"
+                                      Toggled="CloudBehaviorSyncSwitch_Toggled"
+                                      VerticalAlignment="Center"
+                                      Margin="12,0,0,0" />
+                    </Grid>
+
+                    <Grid ColumnSpacing="10" Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="SyncNowButton"
+                                Content="Sync Now"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="SyncNowButton_Click" />
+
+                        <Button Grid.Column="1"
+                                x:Name="PingCloudButton"
+                                Content="Test Latency"
+                                Click="PingCloudButton_Click" />
+
+                        <TextBlock Grid.Column="2"
+                                   x:Name="SyncStatusText"
+                                   Text="Ready"
+                                   FontSize="11.5"
+                                   Opacity="0.68"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Local SQLite Cache Card -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                        <TextBlock Text="Local SQLite Offline Cache" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock x:Name="LocalDbFootprintText"
+                                   Text="Daily.db3 · Calculating local footprint..."
+                                   FontSize="12"
+                                   Opacity="0.65"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            x:Name="ReloadCacheButton"
+                            Content="Reload Cache"
+                            Click="ReloadCacheButton_Click"
+                            VerticalAlignment="Center"
+                            Margin="12,0,0,0" />
+                </Grid>
+            </Border>
+
+            <!-- Non-Intrusive Supabase Admin & Usage Observability Entry Row -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="34"
+                            Height="34"
+                            CornerRadius="8"
+                            Background="#1E38BDF8"
+                            VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#38BDF8" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Supabase Admin &amp; Usage" FontWeight="SemiBold" FontSize="13.5" />
+                            <Border x:Name="AdminConnectedBadge"
+                                    Visibility="Collapsed"
+                                    Background="#2210B981"
+                                    BorderBrush="#5510B981"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="6,1">
+                                <TextBlock Text="CONNECTED" FontSize="9.5" FontWeight="Bold" Foreground="#10B981" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="AdminSubtitleText"
+                                   Text="Read-only cloud quotas, DB size, egress, gateway logs, Edge Functions &amp; Realtime"
+                                   FontSize="11.5"
+                                   Opacity="0.65"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button x:Name="AdminPrimaryActionButton"
+                                Content="Admin Sign-In"
+                                Click="AdminPrimaryActionButton_Click" />
+                        <Button x:Name="AdminDisconnectButton"
+                                Visibility="Collapsed"
+                                Content="Disconnect"
+                                Click="AdminDisconnectButton_Click" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

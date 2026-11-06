@@ -38,4 +38,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.multiplatform.settings)
     implementation(libs.multiplatform.settings.coroutines)
+    testImplementation(libs.junit)
 }

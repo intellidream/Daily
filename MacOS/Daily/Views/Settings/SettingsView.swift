@@ -46,6 +46,7 @@ public struct SettingsView: View {
                         
                         // Data & Cloud Sync Section
                         DataSyncSettingsSection()
+                            .id("data_sync")
                     
                         // About DayOne
                         AboutSettingsSection()
@@ -90,6 +91,12 @@ public struct SettingsView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             withAnimation {
                                 proxy.scrollTo("smart_briefing", anchor: .center)
+                            }
+                        }
+                    } else if ProcessInfo.processInfo.arguments.contains("-scrollToDataSync") {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            withAnimation {
+                                proxy.scrollTo("data_sync", anchor: .center)
                             }
                         }
                     }

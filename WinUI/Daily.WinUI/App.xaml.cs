@@ -280,6 +280,21 @@ public partial class App : Application
                                 });
                             }
                         }
+                        else if (line.Equals("nav:settings-data", StringComparison.OrdinalIgnoreCase) ||
+                                 line.Equals("nav:settings", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetTag = line.EndsWith("-data", StringComparison.OrdinalIgnoreCase) ? "Data" : null;
+                            var app = App.Current;
+                            if (app?.MainWindow != null)
+                            {
+                                app.MainWindow.DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    app.MainWindow.ShowAndActivate();
+                                    var sw = new SettingsWindow(targetTag);
+                                    sw.Activate();
+                                });
+                            }
+                        }
                         else if (line.StartsWith("nav:", StringComparison.OrdinalIgnoreCase) && int.TryParse(line.Substring(4), out int tabIndex))
                         {
                             System.Diagnostics.Debug.WriteLine($"[Pipe] Received nav:{tabIndex} command");
@@ -524,6 +539,21 @@ public partial class App : Application
         {
             _window.Activate();
             LogDiagnostic("MainWindow created and activated");
+
+            foreach (var arg in cmdArgs)
+            {
+                if (arg.Equals("--nav:settings-data", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("--nav:settings", StringComparison.OrdinalIgnoreCase))
+                {
+                    var targetTag = arg.EndsWith("-data", StringComparison.OrdinalIgnoreCase) ? "Data" : null;
+                    _window.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        var sw = new SettingsWindow(targetTag);
+                        sw.Activate();
+                    });
+                    break;
+                }
+            }
         }
         else
         {
@@ -598,6 +628,7 @@ public partial class App : Application
 
         services.AddSingleton(SupabaseClient);
         services.AddSingleton<Daily.Services.Auth.ISupabaseSessionGuardian, Daily.Services.Auth.SupabaseSessionGuardian>();
+        services.AddSingleton(Daily_WinUI.Services.SupabaseAdminService.Shared);
 
         // Core Services
         services.AddSingleton<Daily.Services.IDatabaseService, Daily.Services.DatabaseService>();

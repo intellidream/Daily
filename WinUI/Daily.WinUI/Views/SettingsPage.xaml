@@ -56,7 +56,7 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
-            <NavigationViewItem Tag="Data" Content="Data &amp; Sync">
+            <NavigationViewItem Tag="Data" Content="Data &amp; Cloud Sync">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE8CB;" FontFamily="Segoe Fluent Icons"/>
                 </NavigationViewItem.Icon>

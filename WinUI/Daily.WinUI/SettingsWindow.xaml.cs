@@ -13,7 +13,7 @@ public sealed partial class SettingsWindow : Window
 
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
 
-    public SettingsWindow()
+    public SettingsWindow(string? initialSectionTag = null)
     {
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
@@ -26,7 +26,7 @@ public sealed partial class SettingsWindow : Window
         this.Closed += SettingsWindow_Closed;
 
         RestorePosition();
-        NavigateTo(typeof(Views.SettingsPage));
+        NavigateTo(typeof(Views.SettingsPage), initialSectionTag);
 
         if (this.Content is UIElement rootContent)
         {

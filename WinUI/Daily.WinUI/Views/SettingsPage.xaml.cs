@@ -14,9 +14,11 @@ public sealed partial class SettingsPage : Page
         { "Notifications", typeof(AboutPage) },
         { "Cosmos",        typeof(CosmosSettingsPage) },
         { "Account",       typeof(AboutPage) },
-        { "Data",          typeof(AboutPage) },
+        { "Data",          typeof(DataSyncSettingsPage) },
         { "Debug",         typeof(DebugSettingsPage) },
     };
+
+    private string _initialTag = "Features";
 
     public SettingsPage()
     {
@@ -24,18 +26,26 @@ public sealed partial class SettingsPage : Page
         Loaded += SettingsPage_Loaded;
     }
 
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        if (e.Parameter is string requestedTag && _pageMap.ContainsKey(requestedTag))
+        {
+            _initialTag = requestedTag;
+        }
+    }
+
     private void SettingsPage_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        // Select "Features" by default
         foreach (var item in NavView.MenuItems)
         {
-            if (item is NavigationViewItem navItem && navItem.Tag?.ToString() == "Features")
+            if (item is NavigationViewItem navItem && navItem.Tag?.ToString() == _initialTag)
             {
                 NavView.SelectedItem = navItem;
                 break;
             }
         }
-        NavigateTo("Features");
+        NavigateTo(_initialTag);
     }
 
     private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
