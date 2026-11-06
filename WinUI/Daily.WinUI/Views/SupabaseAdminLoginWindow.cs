@@ -42,6 +42,9 @@ public sealed class SupabaseAdminLoginWindow : Window
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
     public SupabaseAdminLoginWindow(Action onAuthenticated, ElementTheme theme = ElementTheme.Dark)
     {
         _handshake = SupabaseAdminService.CreateHandshakeSession("DayOne-Windows11");
@@ -230,7 +233,15 @@ public sealed class SupabaseAdminLoginWindow : Window
             var windowId = Win32Interop.GetWindowIdFromWindow(_hWnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
             appWindow.SetIcon("Assets/AppIcon.ico");
-            appWindow.Resize(new SizeInt32(880, 780));
+
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Primary);
+            var workArea = displayArea.WorkArea;
+            double scale = Math.Max(1.0, GetDpiForWindow(_hWnd) / 96.0);
+            int w = Math.Min((int)(860 * scale), workArea.Width - 40);
+            int h = Math.Min((int)(740 * scale), workArea.Height - 40);
+            int x = workArea.X + (workArea.Width - w) / 2;
+            int y = workArea.Y + (workArea.Height - h) / 2;
+            appWindow.MoveAndResize(new RectInt32(x, y, w, h));
 
             int dark = _theme == ElementTheme.Dark ? 1 : 0;
             DwmSetWindowAttribute(_hWnd, 20, ref dark, sizeof(int));
