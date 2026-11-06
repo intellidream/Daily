@@ -106,10 +106,10 @@ When the console opens (and the 10-minute local snapshot TTL has expired) or whe
 
 ---
 
-## 5. Verification Summary
+## 5. Verification & Physical Device Delivery Summary
 
 - **`DailyCore` Unit Tests**: `swift test --package-path DailyCore --filter SupabaseAdminServiceTests` — **5/5 passed** (`0.005s`).
-- **macOS Native Build & Live Run**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`** with automatic `Apple Development` (`7LZ9ZT2Z5B`) signing; verified live on macOS (`Data & Cloud Synchronization` + `SupabaseAdminLoginSheet` WebView + PAT drawer) with zero `SecurityAgent` Keychain prompts.
-- **iOS Build**: `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'generic/platform=iOS' build` — **`** BUILD SUCCEEDED **`** (ready for live device verification on **Schmitz**).
-- **Android Unit Tests & APK Build**: `./gradlew :core-network:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL`** with zero Kotlin warnings in new files (ready for live device verification on **Radar**).
-- **Windows 11 (`WinUI 3` ARM64 in Parallels)**: `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` — **`0 Error(s)`**, zero warnings in new files; registered MSIX and verified `Data & Cloud Synchronization` + `SupabaseAdminLoginWindow` (`WebView2`) live on Windows 11 at 200% DPI.
+- **macOS Native Build & Live Delivery**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`** with automatic `Apple Development` (`7LZ9ZT2Z5B`) signing; launched and verified live on the host Mac (`Data & Cloud Synchronization` + `SupabaseAdminLoginSheet` WebView + PAT drawer) with zero `SecurityAgent` Keychain prompts.
+- **iOS Physical Device Delivery ("Schmitz" — iPhone 16 Pro, `00008140-000E2C863EFB001C`)**: `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' -allowProvisioningUpdates build` — **`** BUILD SUCCEEDED **`**, signed and installed directly onto **Schmitz** via `xcrun devicectl device install app` (`com.intellidream.daily`, sequence `4568`).
+- **Android Physical Foldable Delivery ("Radar" — Samsung Galaxy Z Fold 8, `SM_F971B`)**: `./gradlew :core-network:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL`** with zero Kotlin warnings in new files; installed via wireless TLS ADB (`adb install -r app-debug.apk` → `Success`) and launched `com.intellidream.daily.debug` live on **Radar** (`PID 31768`).
+- **Windows 11 (`WinUI 3` ARM64 in Parallels)**: `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` — **`0 Error(s)`**, zero warnings in new files; registered MSIX (`AppxManifest.xml`) and verified `Data & Cloud Synchronization` + `SupabaseAdminLoginWindow` (`WebView2`) live on Windows 11 at 200% HiDPI.
