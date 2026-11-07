@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Daily_WinUI.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Windows.Security.Credentials.UI;
 using Windows.Security.Cryptography;
 using Windows.Security.Cryptography.DataProtection;
 
@@ -223,6 +224,7 @@ public sealed class SupabaseAdminService
                 AuthMethod = "pat",
                 AuthenticatedAtEpochMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             };
+            IsUnlockedInMemory = true;
             await PersistCredentialsAsync().ConfigureAwait(false);
             await RefreshSnapshotAsync(force: true).ConfigureAwait(false);
         }
@@ -305,6 +307,7 @@ public sealed class SupabaseAdminService
                 AuthenticatedAtEpochMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             };
 
+            IsUnlockedInMemory = true;
             await PersistCredentialsAsync().ConfigureAwait(false);
             await RefreshSnapshotAsync(force: true).ConfigureAwait(false);
         }
@@ -329,6 +332,7 @@ public sealed class SupabaseAdminService
     public void Disconnect()
     {
         Credentials = new SupabaseAdminCredentials();
+        IsUnlockedInMemory = false;
         Snapshot = null;
         AiAnalysis = null;
         ErrorMessage = null;
@@ -339,6 +343,100 @@ public sealed class SupabaseAdminService
         }
         catch { }
         NotifyStateChanged();
+    }
+
+    public bool IsUnlockedInMemory { get; private set; }
+
+    public void Lock()
+    {
+        if (Credentials.RequireBiometrics)
+        {
+            IsUnlockedInMemory = false;
+        }
+    }
+
+    public void UnlockDirectly()
+    {
+        IsUnlockedInMemory = true;
+    }
+
+    public async Task<bool> CanUseWindowsHelloAsync()
+    {
+        try
+        {
+            var avail = await UserConsentVerifier.CheckAvailabilityAsync();
+            return avail == UserConsentVerifierAvailability.Available;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> UnlockIfNeededAsync()
+    {
+        if (!Credentials.RequireBiometrics)
+        {
+            IsUnlockedInMemory = true;
+            return true;
+        }
+
+        if (IsUnlockedInMemory) return true;
+
+        try
+        {
+            var avail = await UserConsentVerifier.CheckAvailabilityAsync();
+            if (avail == UserConsentVerifierAvailability.Available)
+            {
+                var result = await UserConsentVerifier.RequestVerificationAsync("Confirm Windows Hello or PIN to access Supabase Admin Console");
+                if (result == UserConsentVerificationResult.Verified)
+                {
+                    IsUnlockedInMemory = true;
+                    return true;
+                }
+                return false;
+            }
+            else
+            {
+                IsUnlockedInMemory = true;
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SupabaseAdminService] Windows Hello check exception: {ex.Message}");
+            IsUnlockedInMemory = true;
+            return true;
+        }
+    }
+
+    public async Task<bool> SetRequireBiometricsAsync(bool enabled)
+    {
+        if (enabled)
+        {
+            try
+            {
+                var avail = await UserConsentVerifier.CheckAvailabilityAsync();
+                if (avail == UserConsentVerifierAvailability.Available)
+                {
+                    var result = await UserConsentVerifier.RequestVerificationAsync("Authenticate with Windows Hello to protect Supabase Admin Console");
+                    if (result != UserConsentVerificationResult.Verified)
+                    {
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SupabaseAdminService] SetRequireBiometrics exception: {ex.Message}");
+            }
+        }
+
+        Credentials.RequireBiometrics = enabled;
+        IsUnlockedInMemory = true;
+        await PersistCredentialsAsync().ConfigureAwait(false);
+        NotifyStateChanged();
+        return true;
     }
 
     public void ClearError()

@@ -231,11 +231,14 @@ public sealed partial class DataSyncSettingsPage : Page
         }
     }
 
-    private void AdminPrimaryActionButton_Click(object sender, RoutedEventArgs e)
+    private async void AdminPrimaryActionButton_Click(object sender, RoutedEventArgs e)
     {
         if (_admin.Credentials.IsAuthenticated)
         {
-            Frame?.Navigate(typeof(SupabaseAdminPage));
+            if (await _admin.UnlockIfNeededAsync())
+            {
+                Frame?.Navigate(typeof(SupabaseAdminPage));
+            }
             return;
         }
 

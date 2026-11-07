@@ -52,6 +52,7 @@ public sealed partial class SupabaseAdminPage : Page
     private void SupabaseAdminPage_Unloaded(object sender, RoutedEventArgs e)
     {
         _admin.StateChanged -= OnAdminStateChanged;
+        _admin.Lock();
     }
 
     private void OnAdminStateChanged()
@@ -61,6 +62,7 @@ public sealed partial class SupabaseAdminPage : Page
 
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
+        _admin.Lock();
         if (Frame != null && Frame.CanGoBack)
         {
             Frame.GoBack();
@@ -75,6 +77,28 @@ public sealed partial class SupabaseAdminPage : Page
     {
         _transientToast = null;
         await _admin.RefreshSnapshotAsync(force: true);
+    }
+
+    private bool _suppressHelloToggleEvent;
+
+    private async void RequireHelloToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressHelloToggleEvent) return;
+        var target = RequireHelloToggle.IsOn;
+        var ok = await _admin.SetRequireBiometricsAsync(target);
+        if (!ok)
+        {
+            _suppressHelloToggleEvent = true;
+            RequireHelloToggle.IsOn = _admin.Credentials.RequireBiometrics;
+            _suppressHelloToggleEvent = false;
+            _transientToast = "Windows Hello auth cancelled or unavailable.";
+            RenderFromState();
+        }
+        else
+        {
+            _transientToast = target ? "Windows Hello protection enabled." : "Windows Hello protection disabled.";
+            RenderFromState();
+        }
     }
 
     private async void AnalyzeAiButton_Click(object sender, RoutedEventArgs e)
@@ -184,6 +208,10 @@ public sealed partial class SupabaseAdminPage : Page
         AnalyzeAiButtonLabel.Text = _admin.IsAnalyzingAi ? "Analyzing..." : "Analyze SRE";
         CopyReportButton.IsEnabled = snap != null;
         SaveReportButton.IsEnabled = snap != null;
+
+        _suppressHelloToggleEvent = true;
+        RequireHelloToggle.IsOn = creds.RequireBiometrics;
+        _suppressHelloToggleEvent = false;
 
         if (!string.IsNullOrWhiteSpace(_admin.ErrorMessage))
         {

@@ -769,11 +769,39 @@ private fun CloudSyncSettingsCard(
     var pingLatencyMs by remember { mutableStateOf<Long?>(null) }
     var isTestingConnection by remember { mutableStateOf(false) }
 
+    val onOpenConsole = {
+        if (!adminCreds.hasValidToken) {
+            showAdminLoginSheet = true
+        } else if (adminCreds.requireBiometrics && !adminRepo.isUnlockedInMemory.value) {
+            val act = BiometricAuthHelper.getActivity(context)
+            if (act != null && BiometricAuthHelper.isBiometricAvailable(act)) {
+                BiometricAuthHelper.prompt(
+                    activity = act,
+                    title = "Supabase Admin Console",
+                    subtitle = "Confirm identity to access cloud telemetry",
+                    onSuccess = {
+                        adminRepo.unlockDirectly()
+                        showAdminConsole = true
+                    },
+                    onError = {
+                        // cancelled or failed
+                    }
+                )
+            } else {
+                adminRepo.unlockDirectly()
+                showAdminConsole = true
+            }
+        } else {
+            showAdminConsole = true
+        }
+    }
+
     if (showAdminLoginSheet) {
         SupabaseAdminLoginSheet(
             onDismiss = { showAdminLoginSheet = false },
             onAuthenticated = {
                 showAdminLoginSheet = false
+                adminRepo.unlockDirectly()
                 showAdminConsole = true
             }
         )
@@ -782,7 +810,10 @@ private fun CloudSyncSettingsCard(
     if (showAdminConsole) {
         SupabaseAdminScreen(
             geminiApiKey = settings.geminiApiKey,
-            onDismiss = { showAdminConsole = false }
+            onDismiss = {
+                adminRepo.lock()
+                showAdminConsole = false
+            }
         )
     }
 
@@ -875,9 +906,7 @@ private fun CloudSyncSettingsCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        if (adminCreds.hasValidToken) showAdminConsole = true else showAdminLoginSheet = true
-                    },
+                    .clickable { onOpenConsole() },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

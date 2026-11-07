@@ -337,6 +337,9 @@ class SupabaseAdminRepository private constructor() {
     private val _credentials = MutableStateFlow(SupabaseAdminCredentials())
     val credentials: StateFlow<SupabaseAdminCredentials> = _credentials.asStateFlow()
 
+    private val _isUnlockedInMemory = MutableStateFlow(false)
+    val isUnlockedInMemory: StateFlow<Boolean> = _isUnlockedInMemory.asStateFlow()
+
     private val _snapshot = MutableStateFlow<SupabaseAdminSnapshot?>(null)
     val snapshot: StateFlow<SupabaseAdminSnapshot?> = _snapshot.asStateFlow()
 
@@ -402,9 +405,28 @@ class SupabaseAdminRepository private constructor() {
         val ctx = appContext
         ctx?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()?.clear()?.apply()
         _credentials.value = SupabaseAdminCredentials()
+        _isUnlockedInMemory.value = false
         _snapshot.value = null
         _aiAnalysis.value = null
         _errorMessage.value = null
+    }
+
+    fun lock() {
+        if (_credentials.value.requireBiometrics) {
+            _isUnlockedInMemory.value = false
+        }
+    }
+
+    fun unlockDirectly() {
+        _isUnlockedInMemory.value = true
+    }
+
+    fun setRequireBiometrics(enabled: Boolean) {
+        val updated = _credentials.value.copy(requireBiometrics = enabled)
+        saveCredentials(updated)
+        if (enabled) {
+            _isUnlockedInMemory.value = true
+        }
     }
 
     suspend fun completeCliHandshake(
@@ -456,6 +478,7 @@ class SupabaseAdminRepository private constructor() {
                 selectedOrgSlug = preferred?.organizationSlug
             )
             saveCredentials(newCreds)
+            _isUnlockedInMemory.value = true
             refreshSnapshot(force = true)
         } catch (t: Throwable) {
             _errorMessage.value = t.message ?: "Authentication failed."
@@ -480,6 +503,7 @@ class SupabaseAdminRepository private constructor() {
                 selectedOrgSlug = preferred?.organizationSlug
             )
             saveCredentials(newCreds)
+            _isUnlockedInMemory.value = true
             refreshSnapshot(force = true)
         } catch (t: Throwable) {
             _errorMessage.value = t.message ?: "Invalid Personal Access Token."

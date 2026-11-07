@@ -16,6 +16,7 @@ public sealed class SupabaseAdminCredentials
     public string? AdminIdentity { get; set; }
     public string AuthMethod { get; set; } = "none";
     public long AuthenticatedAtEpochMs { get; set; }
+    public bool RequireBiometrics { get; set; } = false;
 
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(PatToken);
 

@@ -134,14 +134,63 @@ public final class SupabaseAdminService: ObservableObject {
 
     // MARK: - Biometric Gate
 
-    public func setRequireBiometrics(_ enabled: Bool) {
-        credentials.requireBiometrics = enabled
-        if !enabled {
-            isUnlockedInMemory = true
+    public var biometryTypeString: String {
+        let context = LAContext()
+        var authError: NSError?
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &authError)
+        switch context.biometryType {
+        case .faceID:
+            return "Face ID"
+        case .touchID:
+            return "Touch ID"
+        case .opticID:
+            return "Optic ID"
+        default:
+            return "Passcode"
         }
-        Self.saveCredentialsToLocalStorage(credentials)
     }
 
+    public var canUseBiometrics: Bool {
+        let context = LAContext()
+        var error: NSError?
+        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+            || context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
+    }
+
+    public func lock() {
+        if credentials.requireBiometrics {
+            isUnlockedInMemory = false
+        }
+    }
+
+    @discardableResult
+    public func setRequireBiometrics(_ enabled: Bool) async -> Bool {
+        let context = LAContext()
+        context.localizedCancelTitle = "Cancel"
+        var authError: NSError?
+        let policy: LAPolicy = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &authError)
+            ? .deviceOwnerAuthenticationWithBiometrics
+            : .deviceOwnerAuthentication
+
+        if context.canEvaluatePolicy(policy, error: &authError) {
+            let prompt = enabled
+                ? "Authenticate with \(biometryTypeString) to protect Supabase Admin Console"
+                : "Authenticate with \(biometryTypeString) to disable protection"
+            do {
+                let success = try await context.evaluatePolicy(policy, localizedReason: prompt)
+                guard success else { return false }
+            } catch {
+                return false
+            }
+        }
+
+        credentials.requireBiometrics = enabled
+        isUnlockedInMemory = true
+        Self.saveCredentialsToLocalStorage(credentials)
+        return true
+    }
+
+    @discardableResult
     public func unlockIfNeeded() async -> Bool {
         guard credentials.requireBiometrics else {
             isUnlockedInMemory = true
@@ -150,14 +199,15 @@ public final class SupabaseAdminService: ObservableObject {
         if isUnlockedInMemory { return true }
 
         let context = LAContext()
+        context.localizedCancelTitle = "Cancel"
         var authError: NSError?
         let policy: LAPolicy = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &authError)
             ? .deviceOwnerAuthenticationWithBiometrics
             : .deviceOwnerAuthentication
 
         guard context.canEvaluatePolicy(policy, error: &authError) else {
-            isUnlockedInMemory = true
-            return true
+            isUnlockedInMemory = false
+            return false
         }
 
         do {
@@ -168,6 +218,7 @@ public final class SupabaseAdminService: ObservableObject {
             isUnlockedInMemory = success
             return success
         } catch {
+            isUnlockedInMemory = false
             return false
         }
     }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storage
@@ -43,8 +44,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -116,10 +120,21 @@ fun SupabaseAdminScreen(
         repo.ensureLoadedOnAppear()
     }
 
-    BackHandler { onDismiss() }
+    val onDismissWithLock = {
+        repo.lock()
+        onDismiss()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            repo.lock()
+        }
+    }
+
+    BackHandler { onDismissWithLock() }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onDismissWithLock,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false
@@ -281,13 +296,13 @@ fun SupabaseAdminScreen(
                 IconButton(
                     onClick = {
                         repo.disconnect()
-                        onDismiss()
+                        onDismissWithLock()
                     }
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = "Disconnect", tint = ThemeColors.error)
                 }
 
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = onDismissWithLock) {
                     Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
                 }
             }
@@ -488,6 +503,33 @@ fun SupabaseAdminScreen(
                         item {
                             FleetAndAdvisorsCard(snap = snap)
                         }
+                    }
+
+                    // 6. Console Security & Biometric Lock
+                    item {
+                        ConsoleSecurityCard(
+                            requireBiometrics = creds.requireBiometrics,
+                            onToggleBiometrics = { target ->
+                                val act = BiometricAuthHelper.getActivity(context)
+                                if (act != null && BiometricAuthHelper.isBiometricAvailable(act)) {
+                                    BiometricAuthHelper.prompt(
+                                        activity = act,
+                                        title = if (target) "Enable Biometric Protection" else "Disable Biometric Protection",
+                                        subtitle = "Authenticate to update Supabase Admin console security",
+                                        onSuccess = {
+                                            repo.setRequireBiometrics(target)
+                                            feedbackToast = if (target) "Biometric Lock Enabled" else "Biometric Lock Disabled"
+                                        },
+                                        onError = { err ->
+                                            feedbackToast = "Auth cancelled: $err"
+                                        }
+                                    )
+                                } else {
+                                    repo.setRequireBiometrics(target)
+                                    feedbackToast = if (target) "Biometrics required" else "Biometrics disabled"
+                                }
+                            }
+                        )
                     }
                 }
 
@@ -803,6 +845,59 @@ private fun FleetAndAdvisorsCard(snap: SupabaseAdminSnapshot) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ConsoleSecurityCard(
+    requireBiometrics: Boolean,
+    onToggleBiometrics: (Boolean) -> Unit
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 18.dp, padding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Fingerprint,
+                        contentDescription = null,
+                        tint = ThemeColors.accentCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Require Biometric Lock",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Switch(
+                    checked = requireBiometrics,
+                    onCheckedChange = { onToggleBiometrics(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ThemeColors.accentCyan,
+                        uncheckedThumbColor = Color.LightGray,
+                        uncheckedTrackColor = Color.White.copy(alpha = 0.12f)
+                    )
+                )
+            }
+
+            Text(
+                text = "Require Fingerprint, Face, or device credential each time the Supabase Admin Console is opened to safeguard database and API telemetry.",
+                color = ThemeColors.fgMutedDark,
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
         }
     }
 }

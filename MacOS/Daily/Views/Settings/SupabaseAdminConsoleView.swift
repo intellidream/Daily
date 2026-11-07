@@ -23,6 +23,7 @@ public struct SupabaseAdminConsoleView: View {
     @State private var selectedFilter: SupabaseAdminSectionFilter = .all
     @State private var copyFeedback: String?
     @State private var showDisconnectConfirm = false
+    @State private var isTouchIdOn: Bool = false
 
     public init() {}
 
@@ -97,7 +98,14 @@ public struct SupabaseAdminConsoleView: View {
             .frame(minWidth: 920, idealWidth: 1060, maxWidth: 1280, minHeight: 720, idealHeight: 840, maxHeight: 980)
         }
         .task {
+            isTouchIdOn = adminService.credentials.requireBiometrics
             await adminService.ensureLoadedOnAppear()
+        }
+        .onAppear {
+            isTouchIdOn = adminService.credentials.requireBiometrics
+        }
+        .onDisappear {
+            adminService.lock()
         }
         .confirmationDialog(
             "Disconnect Supabase Admin Session?",
@@ -200,10 +208,15 @@ public struct SupabaseAdminConsoleView: View {
             }
 
             Toggle(isOn: Binding(
-                get: { adminService.credentials.requireBiometrics },
-                set: { adminService.setRequireBiometrics($0) }
+                get: { isTouchIdOn },
+                set: { newVal in
+                    Task {
+                        _ = await adminService.setRequireBiometrics(newVal)
+                        isTouchIdOn = adminService.credentials.requireBiometrics
+                    }
+                }
             )) {
-                Label("Touch ID", systemImage: "touchid")
+                Label(adminService.biometryTypeString, systemImage: adminService.biometryTypeString.contains("Touch") ? "touchid" : "faceid")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(ThemeColors.fgMutedDark)
             }
@@ -256,6 +269,7 @@ public struct SupabaseAdminConsoleView: View {
             .help("Disconnect Supabase Admin Session")
 
             Button("Done") {
+                adminService.lock()
                 dismiss()
             }
             .buttonStyle(GlassButtonStyle(variant: .primary, cornerRadius: 9))

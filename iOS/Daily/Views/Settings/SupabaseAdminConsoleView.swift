@@ -23,6 +23,7 @@ public struct SupabaseAdminConsoleView: View {
     @State private var selectedFilter: SupabaseAdminSectionFilter = .all
     @State private var copyFeedback: String?
     @State private var showDisconnectConfirm = false
+    @State private var isBiometricsOn: Bool = false
 
     public init() {}
 
@@ -116,8 +117,11 @@ public struct SupabaseAdminConsoleView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .foregroundColor(ThemeColors.accentCyan)
+                    Button("Done") {
+                        adminService.lock()
+                        dismiss()
+                    }
+                    .foregroundColor(ThemeColors.accentCyan)
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
                     if let md = adminService.snapshot?.toMarkdownReport() {
@@ -141,7 +145,14 @@ public struct SupabaseAdminConsoleView: View {
             }
         }
         .task {
+            isBiometricsOn = adminService.credentials.requireBiometrics
             await adminService.ensureLoadedOnAppear()
+        }
+        .onAppear {
+            isBiometricsOn = adminService.credentials.requireBiometrics
+        }
+        .onDisappear {
+            adminService.lock()
         }
         .confirmationDialog(
             "Disconnect Supabase Admin Session?",
@@ -583,12 +594,20 @@ public struct SupabaseAdminConsoleView: View {
         GlassCard(cornerRadius: 16, padding: 14) {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: Binding(
-                    get: { adminService.credentials.requireBiometrics },
-                    set: { adminService.setRequireBiometrics($0) }
+                    get: { isBiometricsOn },
+                    set: { newVal in
+                        Task {
+                            let ok = await adminService.setRequireBiometrics(newVal)
+                            isBiometricsOn = adminService.credentials.requireBiometrics
+                        }
+                    }
                 )) {
-                    Label("Require Face ID to Open Console", systemImage: "faceid")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white)
+                    Label(
+                        "Require \(adminService.biometryTypeString) to Open Console",
+                        systemImage: adminService.biometryTypeString.contains("Touch") ? "touchid" : "faceid"
+                    )
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
                 }
                 .tint(ThemeColors.accentCyan)
 

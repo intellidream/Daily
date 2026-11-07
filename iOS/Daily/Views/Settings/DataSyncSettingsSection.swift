@@ -2,6 +2,7 @@ import SwiftUI
 import DailyCore
 
 public struct DataSyncSettingsSection: View {
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var settingsService = SettingsService.shared
     @ObservedObject private var adminService = SupabaseAdminService.shared
     @State private var isSyncing: Bool = false
@@ -182,6 +183,14 @@ public struct DataSyncSettingsSection: View {
         }
         .fullScreenCover(isPresented: $showAdminConsoleSheet) {
             SupabaseAdminConsoleView()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                adminService.lock()
+                if adminService.credentials.requireBiometrics {
+                    showAdminConsoleSheet = false
+                }
+            }
         }
     }
 

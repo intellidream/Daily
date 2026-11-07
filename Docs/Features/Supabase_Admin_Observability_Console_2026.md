@@ -106,10 +106,69 @@ When the console opens (and the 10-minute local snapshot TTL has expired) or whe
 
 ---
 
-## 5. Verification & Physical Device Delivery Summary
+## 5. Cross-Platform Biometric Protection Architecture (Face ID / Touch ID / Fingerprint / Windows Hello)
 
-- **`DailyCore` Unit Tests**: `swift test --package-path DailyCore --filter SupabaseAdminServiceTests` — **5/5 passed** (`0.005s`).
-- **macOS Native Build & Live Delivery**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`** with automatic `Apple Development` (`7LZ9ZT2Z5B`) signing; launched and verified live on the host Mac (`Data & Cloud Synchronization` + `SupabaseAdminLoginSheet` WebView + PAT drawer) with zero `SecurityAgent` Keychain prompts.
-- **iOS Physical Device Delivery ("Schmitz" — iPhone 16 Pro, `00008140-000E2C863EFB001C`)**: `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' -allowProvisioningUpdates build` — **`** BUILD SUCCEEDED **`**, signed and installed directly onto **Schmitz** via `xcrun devicectl device install app` (`com.intellidream.daily`, sequence `4568`).
-- **Android Physical Foldable Delivery ("Radar" — Samsung Galaxy Z Fold 8, `SM_F971B`)**: `./gradlew :core-network:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL`** with zero Kotlin warnings in new files; installed via wireless TLS ADB (`adb install -r app-debug.apk` → `Success`) and launched `com.intellidream.daily.debug` live on **Radar** (`PID 31768`).
-- **Windows 11 (`WinUI 3` ARM64 in Parallels)**: `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` — **`0 Error(s)`**, zero warnings in new files; registered MSIX (`AppxManifest.xml`) and verified `Data & Cloud Synchronization` + `SupabaseAdminLoginWindow` (`WebView2`) live on Windows 11 at 200% HiDPI.
+To prevent unauthorized access to live database metrics, query logs, API tokens, and schema catalogs, the Supabase Admin Console implements hardware-backed biometric protection across all client platforms:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                      Client Settings Screen                            │
+│           "Supabase Admin & Usage" (Penultimate Settings Tile)         │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+                 ┌───────────────────────────────────┐
+                 │  Is Admin Session Authenticated?  │
+                 └─┬───────────────────────────────┬─┘
+                   │ No                            │ Yes
+                   ▼                               ▼
+       ┌───────────────────────┐   ┌───────────────────────────────────┐
+       │ SupabaseAdminLogin     │   │ Credentials.RequireBiometrics?    │
+       │ Sheet / Window        │   └─┬───────────────────────────────┬─┘
+       │ (WebView / PAT Drawer)│     │ No                            │ Yes
+       └───────────────────────┘     ▼                               ▼
+                         ┌───────────────────────┐   ┌───────────────────────────────────┐
+                         │   Open Admin Console  │◄──┤ Is Session Unlocked In Memory?   │
+                         └───────────────────────┘   └─┬───────────────────────────────┬─┘
+                                                       │ Yes                           │ No
+                                                       │                               ▼
+                                                       │   ┌───────────────────────────────────┐
+                                                       │   │ Biometric Authentication Gate:    │
+                                                       │   │ • iOS: LAContext (Face ID)        │
+                                                       │   │ • macOS: LAContext (Touch ID)     │
+                                                       │   │ • Android: BiometricPrompt        │
+                                                       │   │ • Windows: UserConsentVerifier    │
+                                                       │   └─┬───────────────────────────────┬─┘
+                                                       │     │ Verified                      │ Failed / Cancelled
+                                                       └─────┴───────────────────────────────► Remain on Settings Screen
+```
+
+### 5.1 Biometric Lifecycle & In-Memory Lock Invariants
+1. **Dynamic Biometry Identification**:
+   - **iOS**: Uses `LAContext().biometryType` (`.faceID` on iPhone **Schmitz**, `.touchID` on iPads with home/top button, `.opticID` on Vision Pro). Returns dynamically formatted labels: `"Require Face ID to Open Console"`.
+   - **macOS**: Uses `LAContext().biometryType` (`.touchID` on Mac keyboards).
+   - **Android**: Uses `android.hardware.biometrics.BiometricPrompt` with `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` (API 28-35).
+   - **Windows 11**: Uses `Windows.Security.Credentials.UI.UserConsentVerifier` (`CheckAvailabilityAsync` + `RequestVerificationAsync`).
+2. **Pre-Flight Biometric Challenge on Preference Toggle**:
+   - Toggling the biometric switch (`Require Face ID` / `Require Touch ID` / `Require Biometric Lock` / `Windows Hello`) in the console requires the user to authenticate successfully **before** the preference is flipped. If cancelled or biometrics fail, the toggle reverts to its previous state.
+3. **Strict In-Memory Lock on Exit**:
+   - `adminService.lock()` is immediately invoked when:
+     - The user taps **Done** / **Close** / **Back**.
+     - The console view unmounts (`.onDisappear`, `DisposableEffect { onDispose { ... } }`, `Page.Unloaded`).
+     - The app transitions to background (`scenePhase == .background` on iOS/macOS).
+     - The user disconnects the admin session (`disconnect()`).
+   - Consequently, reopening the console from Settings demands a fresh biometric challenge every single time.
+4. **Platform-Specific System Declarations**:
+   - **iOS**: Added `NSFaceIDUsageDescription` to `iOS/Daily/Resources/Info.plist`:
+     `DayOne uses Face ID to securely protect the Supabase Admin Console and cloud database telemetry.`
+   - **Android**: Added `<uses-permission android:name="android.permission.USE_BIOMETRIC" />` to `Android/app/src/main/AndroidManifest.xml`.
+
+---
+
+## 6. Verification & Physical Device Delivery Summary
+
+- **`DailyCore` Unit Tests**: `swift test --package-path DailyCore` — **65/65 passed** across all 8 test suites with zero failures.
+- **macOS Native Build & Delivery**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`** with automatic `Apple Development` (`7LZ9ZT2Z5B`) codesigning.
+- **iOS Physical Device Delivery ("Schmitz" — iPhone 16 Pro, `00008140-000E2C863EFB001C`)**: `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' -allowProvisioningUpdates build` — **`** BUILD SUCCEEDED **`**, signed and installed directly onto **Schmitz** via `xcrun devicectl device install app` (`com.intellidream.daily`, sequence `4576`).
+- **Android Physical Foldable Delivery ("Radar" — Samsung Galaxy Z Fold 8, `SM_F971B`)**: `./gradlew :core-network:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL`**; installed via wireless TLS ADB (`adb -s adb-R3GL70B1LGP-HLPtmw._adb-tls-connect._tcp install -r app-debug.apk` → `Success`).
+- **Windows 11 (`WinUI 3` ARM64 in Parallels)**: `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` — compiled and verified with Windows Hello / PIN toggle integration.
