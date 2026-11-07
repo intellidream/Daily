@@ -253,6 +253,8 @@ public sealed class SupabaseAdminSnapshot
     public double DbUsagePercent => DbQuotaBytes > 0 ? Math.Min(100.0, (double)DbTotalBytes / DbQuotaBytes * 100.0) : 0.0;
     public double EgressUsagePercent => EgressQuotaGb > 0 ? Math.Min(100.0, EgressUsedGb / EgressQuotaGb * 100.0) : 0.0;
     public double StorageUsagePercent => StorageQuotaBytes > 0 ? Math.Min(100.0, (double)StorageTotalBytes / StorageQuotaBytes * 100.0) : 0.0;
+    public double LogIngestionPercent => LogIngestionQuotaGb > 0 ? Math.Min(100.0, LogIngestionGb / LogIngestionQuotaGb * 100.0) : 0.0;
+    public double LogQueryPercent => LogQueryQuotaGb > 0 ? Math.Min(100.0, LogQueryGb / LogQueryQuotaGb * 100.0) : 0.0;
     public double GatewayErrorRatePercent => GatewayRequests24h > 0
         ? (double)(Gateway4xx24h + Gateway5xx24h) / GatewayRequests24h * 100.0
         : 0.0;
@@ -270,6 +272,8 @@ public sealed class SupabaseAdminSnapshot
         sb.AppendLine($"- **Database Size**: {SupabaseAdminFormatter.FormatBytes(DbTotalBytes)} / {SupabaseAdminFormatter.FormatBytes(DbQuotaBytes)} ({DbUsagePercent:F1}%) — Heap {SupabaseAdminFormatter.FormatBytes(DbHeapBytes)}, Indexes {SupabaseAdminFormatter.FormatBytes(DbIndexBytes)}");
         sb.AppendLine($"- **Unified Egress**: {EgressUsedGb:F3} GB / {EgressQuotaGb:F1} GB ({EgressUsagePercent:F1}%) {(HasExactBillingMetrics ? "[Exact Billing]" : "[Gateway Estimate]")}");
         sb.AppendLine($"- **Storage Size**: {SupabaseAdminFormatter.FormatBytes(StorageTotalBytes)} / {SupabaseAdminFormatter.FormatBytes(StorageQuotaBytes)} ({StorageObjectCount} objects in {StorageBucketCount} buckets)");
+        sb.AppendLine($"- **Log Ingestion**: {LogIngestionGb:F3} GB / {LogIngestionQuotaGb:F1} GB ({LogIngestionPercent:F1}%)");
+        sb.AppendLine($"- **Log Query**: {LogQueryGb:F3} GB / {LogQueryQuotaGb:F0} GB ({LogQueryPercent:F1}%)");
         sb.AppendLine($"- **Auth Footprint**: {MonthlyActiveUsers} MAU / {MauQuota} · {ActiveSessionsCount} active sessions · {PairedWatchesCount} paired watches");
         sb.AppendLine($"- **24h Gateway Traffic**: {GatewayRequests24h} reqs (`2xx`: {Gateway2xx24h}, `4xx`: {Gateway4xx24h}, `5xx`: {Gateway5xx24h}) · {SupabaseAdminFormatter.FormatBytes(GatewayEgressBytes24h)} response payload");
         sb.AppendLine($"- **Realtime**: {ActiveRealtimeSubscriptions} active subscriptions · `realtime.list_changes` CPU share {RealtimeListChangesCpuPercent:F1}% ({RealtimeListChangesCalls} calls)");

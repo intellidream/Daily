@@ -671,27 +671,100 @@ private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) 
         else SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes)
     }
 
+    val logIngestUsedGb = snap.logIngestionBytes.toDouble() / 1_000_000_000.0
+    val logIngestQuotaGb = snap.logIngestionQuotaBytes.toDouble() / 1_000_000_000.0
+    val logIngestUsed = remember(snap.logIngestionBytes) {
+        String.format(Locale.US, "%.3f GB", logIngestUsedGb)
+    }
+    val logIngestQuota = remember(snap.logIngestionQuotaBytes) {
+        String.format(Locale.US, "%.1f GB", logIngestQuotaGb)
+    }
+
+    val logQueryUsedGb = snap.logQueryBytes.toDouble() / 1_000_000_000.0
+    val logQueryQuotaGb = snap.logQueryQuotaBytes.toDouble() / 1_000_000_000.0
+    val logQueryUsed = remember(snap.logQueryBytes) {
+        String.format(Locale.US, "%.3f GB", logQueryUsedGb)
+    }
+    val logQueryQuota = remember(snap.logQueryQuotaBytes) {
+        String.format(Locale.US, "%.0f GB", logQueryQuotaGb)
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BillingCycleEgressCard(snap = snap)
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuotaGaugeTile(
-                modifier = Modifier.weight(1f),
-                title = "Gateway Egress (24h)",
-                used = h24Used,
-                quota = "${snap.totalHttpRequests24h} reqs",
-                percent = snap.egress24hQuotaPercent,
-                sub = if (snap.cachedEgressUsedBytes > 0) "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}" else "24h HTTP: ${snap.totalHttpRequests24h}"
-            )
-            QuotaGaugeTile(
-                modifier = Modifier.weight(1f),
-                title = "Database Size",
-                used = dbUsed,
-                quota = dbQuota,
-                percent = snap.dbQuotaPercent,
-                sub = "Cache Hit ${String.format(Locale.US, "%.1f%%", snap.cacheHitRatioPercent)}"
-            )
-            if (isWide) {
+        if (isWide) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Gateway Egress (24h)",
+                    used = h24Used,
+                    quota = "${snap.totalHttpRequests24h} reqs",
+                    percent = snap.egress24hQuotaPercent,
+                    sub = if (snap.cachedEgressUsedBytes > 0) "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}" else "24h HTTP: ${snap.totalHttpRequests24h}"
+                )
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Database Size",
+                    used = dbUsed,
+                    quota = dbQuota,
+                    percent = snap.dbQuotaPercent,
+                    sub = "Cache Hit ${String.format(Locale.US, "%.1f%%", snap.cacheHitRatioPercent)}"
+                )
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Edge Calls",
+                    used = "${snap.functionInvocations}",
+                    quota = "${snap.functionInvocationsQuota}",
+                    percent = if (snap.functionInvocationsQuota > 0) snap.functionInvocations * 100.0 / snap.functionInvocationsQuota else 0.0,
+                    sub = "${snap.edgeFunctions.size} functions"
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Realtime & MAU",
+                    used = "${snap.realtimeActiveSubscriptions} subs",
+                    quota = "Peak ${snap.realtimePeakConnections}",
+                    percent = if (snap.realtimePeakConnectionsQuota > 0) snap.realtimePeakConnections * 100.0 / snap.realtimePeakConnectionsQuota else 0.0,
+                    sub = "MAU: ${snap.mauCount}"
+                )
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Log Ingestion",
+                    used = logIngestUsed,
+                    quota = logIngestQuota,
+                    percent = snap.logIngestionQuotaPercent,
+                    sub = if (snap.logIngestionEvents > 0) "${snap.logIngestionEvents} events" else "Drain events"
+                )
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Log Query",
+                    used = logQueryUsed,
+                    quota = logQueryQuota,
+                    percent = snap.logQueryQuotaPercent,
+                    sub = "Analytics queries"
+                )
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Gateway Egress (24h)",
+                    used = h24Used,
+                    quota = "${snap.totalHttpRequests24h} reqs",
+                    percent = snap.egress24hQuotaPercent,
+                    sub = if (snap.cachedEgressUsedBytes > 0) "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}" else "24h HTTP: ${snap.totalHttpRequests24h}"
+                )
+                QuotaGaugeTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Database Size",
+                    used = dbUsed,
+                    quota = dbQuota,
+                    percent = snap.dbQuotaPercent,
+                    sub = "Cache Hit ${String.format(Locale.US, "%.1f%%", snap.cacheHitRatioPercent)}"
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 QuotaGaugeTile(
                     modifier = Modifier.weight(1f),
                     title = "Edge Calls",
@@ -709,24 +782,22 @@ private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) 
                     sub = "MAU: ${snap.mauCount}"
                 )
             }
-        }
-        if (!isWide) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 QuotaGaugeTile(
                     modifier = Modifier.weight(1f),
-                    title = "Edge Calls",
-                    used = "${snap.functionInvocations}",
-                    quota = "${snap.functionInvocationsQuota}",
-                    percent = if (snap.functionInvocationsQuota > 0) snap.functionInvocations * 100.0 / snap.functionInvocationsQuota else 0.0,
-                    sub = "${snap.edgeFunctions.size} functions"
+                    title = "Log Ingestion",
+                    used = logIngestUsed,
+                    quota = logIngestQuota,
+                    percent = snap.logIngestionQuotaPercent,
+                    sub = if (snap.logIngestionEvents > 0) "${snap.logIngestionEvents} events" else "Drain events"
                 )
                 QuotaGaugeTile(
                     modifier = Modifier.weight(1f),
-                    title = "Realtime & MAU",
-                    used = "${snap.realtimeActiveSubscriptions} subs",
-                    quota = "Peak ${snap.realtimePeakConnections}",
-                    percent = if (snap.realtimePeakConnectionsQuota > 0) snap.realtimePeakConnections * 100.0 / snap.realtimePeakConnectionsQuota else 0.0,
-                    sub = "MAU: ${snap.mauCount}"
+                    title = "Log Query",
+                    used = logQueryUsed,
+                    quota = logQueryQuota,
+                    percent = snap.logQueryQuotaPercent,
+                    sub = "Analytics queries"
                 )
             }
         }

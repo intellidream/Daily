@@ -807,6 +807,16 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         return min(999.0, (Double(dbSizeBytes) / Double(dbQuotaBytes)) * 100.0)
     }
 
+    public var logIngestionQuotaPercent: Double {
+        guard logIngestionQuotaBytes > 0 else { return 0 }
+        return min(999.0, (Double(logIngestionBytes) / Double(logIngestionQuotaBytes)) * 100.0)
+    }
+
+    public var logQueryQuotaPercent: Double {
+        guard logQueryQuotaBytes > 0 else { return 0 }
+        return min(999.0, (Double(logQueryBytes) / Double(logQueryQuotaBytes)) * 100.0)
+    }
+
     public var totalHttpRequests24h: Int {
         http2xxCount24h + http4xxCount24h + http5xxCount24h
     }
@@ -843,6 +853,8 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         lines.append("| **Realtime Messages** | \(realtimeMessages) | \(realtimeMessagesQuota) | \(realtimeMessagesQuota > 0 ? String(format: "%.1f%%", Double(realtimeMessages) * 100.0 / Double(realtimeMessagesQuota)) : "—") |")
         lines.append("| **Realtime Peak Connections** | \(realtimePeakConnections) | \(realtimePeakConnectionsQuota) | \(realtimePeakConnectionsQuota > 0 ? String(format: "%.1f%%", Double(realtimePeakConnections) * 100.0 / Double(realtimePeakConnectionsQuota)) : "—") |")
         lines.append("| **Monthly Active Users (MAU)** | \(mauCount) | \(mauQuota) | \(mauQuota > 0 ? String(format: "%.1f%%", Double(mauCount) * 100.0 / Double(mauQuota)) : "—") |")
+        lines.append("| **Log Ingestion** | \(Self.formatBytes(logIngestionBytes)) | \(Self.formatBytes(logIngestionQuotaBytes)) | **\(String(format: "%.1f%%", logIngestionQuotaPercent))** |")
+        lines.append("| **Log Query** | \(Self.formatBytes(logQueryBytes)) | \(Self.formatBytes(logQueryQuotaBytes)) | **\(String(format: "%.1f%%", logQueryQuotaPercent))** |")
         lines.append("")
 
         if !dailyEgress.isEmpty {

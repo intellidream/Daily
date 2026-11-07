@@ -261,6 +261,12 @@ data class SupabaseAdminSnapshot(
     val dbQuotaPercent: Double
         get() = if (dbQuotaBytes > 0L) minOf(999.0, dbSizeBytes.toDouble() * 100.0 / dbQuotaBytes.toDouble()) else 0.0
 
+    val logIngestionQuotaPercent: Double
+        get() = if (logIngestionQuotaBytes > 0L) minOf(999.0, logIngestionBytes.toDouble() * 100.0 / logIngestionQuotaBytes.toDouble()) else 0.0
+
+    val logQueryQuotaPercent: Double
+        get() = if (logQueryQuotaBytes > 0L) minOf(999.0, logQueryBytes.toDouble() * 100.0 / logQueryQuotaBytes.toDouble()) else 0.0
+
     val totalHttpRequests24h: Int
         get() = http2xxCount24h + http4xxCount24h + http5xxCount24h
 
@@ -290,6 +296,8 @@ data class SupabaseAdminSnapshot(
         sb.appendLine("| **Edge Function Invocations** | $functionInvocations | $functionInvocationsQuota | — |")
         sb.appendLine("| **Realtime Active / Peak** | $realtimeActiveSubscriptions / $realtimePeakConnections | $realtimePeakConnectionsQuota | — |")
         sb.appendLine("| **Monthly Active Users (MAU)** | $mauCount | $mauQuota | — |")
+        sb.appendLine("| **Log Ingestion** | ${formatBytes(logIngestionBytes)} | ${formatBytes(logIngestionQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", logIngestionQuotaPercent)}** |")
+        sb.appendLine("| **Log Query** | ${formatBytes(logQueryBytes)} | ${formatBytes(logQueryQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", logQueryQuotaPercent)}** |")
         sb.appendLine()
         sb.appendLine("## 2. PostgreSQL Table Storage & Index Bloat")
         sb.appendLine()

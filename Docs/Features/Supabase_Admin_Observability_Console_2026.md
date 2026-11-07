@@ -281,6 +281,18 @@ To ensure 100% mathematical and visual parity with the official Supabase Web Por
   - Bumped snapshot cache key prefix to `v3` (`admin_snapshot_v3_`, `supabase_admin_snapshot_v3.json`).
   - Added proactive corrupt snapshot rejection in `loadCachedSnapshot`: if `cached.egress24hBytes >= cached.egressUsedBytes && cached.egressUsedBytes > 500_000_000`, the cache is rejected immediately to purge corrupted 3.17 GB values.
 
+### 7.10 Edge Calls String Formatting & Comprehensive Log Ingestion / Log Query Telemetry
+- **Edge Calls Darwin String Formatting Fix**:
+  - In Swift on Darwin libc, `String(format: "%,d", ...)` is not a valid format specifier (unlike Java/Kotlin where `%,d` inserts comma groupings), causing Darwin `printf` to output literal `",d"`.
+  - Replaced with standard Swift 6 `.formatted()` (`snap.functionInvocations.formatted()` and `snap.functionInvocationsQuota.formatted()`), displaying formatted invocation counts (e.g. `4,218 / 500,000`) cleanly.
+- **Log Ingestion & Log Query Quota Tiles Across All Platforms**:
+  - Surfaced `Log Ingestion` (`0.411 / 1.0 GB (41%)`) and `Log Query` (`49.563 / 100 GB (50%)`) directly in the executive quota grids across iOS, macOS, Android, and Windows 11 WinUI 3:
+    - **iOS**: Expanded `executiveQuotasGrid` from 4 to 6 symmetrical tiles (Gateway 24h, DB Size, Edge Calls, Realtime Peak, Log Ingestion, Log Query).
+    - **macOS**: Configured a balanced 3-column desktop layout (2 rows of 3 tiles) featuring dedicated icons (`tray.and.arrow.down.fill`, `magnifyingglass.circle.fill`).
+    - **Android**: Updated `ExecutiveQuotaSection` with adaptive 3x2 layout on phones and 2x3 layout on foldable unfolded screens (`isWide`), with event counters (`411 events`).
+    - **Windows 11 (WinUI 3)**: Added Row 3 to `BuildQuotaGrid` with purple and cyan accents, displaying SI decimal usage, percentage utilization, and quota limits.
+    - **Markdown Exporters**: Added Log Ingestion and Log Query rows to `toMarkdownReport()` / `ToMarkdownReport()` across Swift, Kotlin, and C#.
+
 ---
 
 ## 8. Verification & Physical Device Delivery Summary

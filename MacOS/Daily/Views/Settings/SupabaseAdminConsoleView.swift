@@ -540,7 +540,6 @@ public struct SupabaseAdminConsoleView: View {
         let cols = [
             GridItem(.flexible(), spacing: 14),
             GridItem(.flexible(), spacing: 14),
-            GridItem(.flexible(), spacing: 14),
             GridItem(.flexible(), spacing: 14)
         ]
         let dbUsedFormatted = snap.dbSizeBytes > 0
@@ -548,12 +547,18 @@ public struct SupabaseAdminConsoleView: View {
             : SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)
         let dbQuotaFormatted = String(format: "%.1f GB", Double(snap.dbQuotaBytes) / 1_000_000_000.0)
 
-        let fnUsedFormatted = snap.functionInvocations >= 1000
-            ? String(format: "%,d", snap.functionInvocations)
-            : "\(snap.functionInvocations)"
-        let fnQuotaFormatted = snap.functionInvocationsQuota >= 1000
-            ? String(format: "%,d", snap.functionInvocationsQuota)
-            : "\(snap.functionInvocationsQuota)"
+        let fnUsedFormatted = snap.functionInvocations.formatted()
+        let fnQuotaFormatted = snap.functionInvocationsQuota.formatted()
+
+        let logIngestUsedGb = Double(snap.logIngestionBytes) / 1_000_000_000.0
+        let logIngestQuotaGb = Double(snap.logIngestionQuotaBytes) / 1_000_000_000.0
+        let logIngestUsedFormatted = String(format: "%.3f GB", logIngestUsedGb)
+        let logIngestQuotaFormatted = String(format: "%.1f GB", logIngestQuotaGb)
+
+        let logQueryUsedGb = Double(snap.logQueryBytes) / 1_000_000_000.0
+        let logQueryQuotaGb = Double(snap.logQueryQuotaBytes) / 1_000_000_000.0
+        let logQueryUsedFormatted = String(format: "%.3f GB", logQueryUsedGb)
+        let logQueryQuotaFormatted = String(format: "%.0f GB", logQueryQuotaGb)
 
         return LazyVGrid(columns: cols, spacing: 14) {
             quotaGaugeTile(
@@ -589,6 +594,22 @@ public struct SupabaseAdminConsoleView: View {
                 quotaLabel: "/ \(snap.realtimePeakConnectionsQuota)",
                 percent: snap.realtimePeakConnectionsQuota > 0 ? (Double(snap.realtimePeakConnections) * 100.0 / Double(snap.realtimePeakConnectionsQuota)) : 0,
                 subtitle: "Msgs: \(snap.realtimeMessages) · MAU: \(snap.mauCount)"
+            )
+            quotaGaugeTile(
+                title: "Log Ingestion",
+                icon: "tray.and.arrow.down.fill",
+                usedLabel: logIngestUsedFormatted,
+                quotaLabel: logIngestQuotaFormatted,
+                percent: snap.logIngestionQuotaPercent,
+                subtitle: snap.logIngestionEvents > 0 ? "\(snap.logIngestionEvents.formatted()) events" : "Analytics ingestion"
+            )
+            quotaGaugeTile(
+                title: "Log Query",
+                icon: "magnifyingglass.circle.fill",
+                usedLabel: logQueryUsedFormatted,
+                quotaLabel: logQueryQuotaFormatted,
+                percent: snap.logQueryQuotaPercent,
+                subtitle: "ClickHouse analytics query"
             )
         }
     }

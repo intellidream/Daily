@@ -341,6 +341,7 @@ public sealed partial class SupabaseAdminPage : Page
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         // Row 0: Full-width Billing Cycle Egress Card
         var billingCard = BuildBillingCycleEgressCard(snap);
@@ -406,6 +407,30 @@ public sealed partial class SupabaseAdminPage : Page
         Grid.SetRow(c4, 2);
         Grid.SetColumn(c4, 1);
         grid.Children.Add(c4);
+
+        // Row 3, Col 0: Log Ingestion
+        var c5 = BuildQuotaTile(
+            "Log Ingestion",
+            $"{snap.LogIngestionGb:F3} GB",
+            $"of {snap.LogIngestionQuotaGb:F1} GB ({snap.LogIngestionPercent:F1}%)",
+            "Logs ingested into analytics storage",
+            snap.LogIngestionPercent,
+            PurpleAccent);
+        Grid.SetRow(c5, 3);
+        Grid.SetColumn(c5, 0);
+        grid.Children.Add(c5);
+
+        // Row 3, Col 1: Log Query
+        var c6 = BuildQuotaTile(
+            "Log Query",
+            $"{snap.LogQueryGb:F3} GB",
+            $"of {snap.LogQueryQuotaGb:F0} GB ({snap.LogQueryPercent:F1}%)",
+            "ClickHouse log querying data processed",
+            snap.LogQueryPercent,
+            CyanAccent);
+        Grid.SetRow(c6, 3);
+        Grid.SetColumn(c6, 1);
+        grid.Children.Add(c6);
 
         return grid;
     }
