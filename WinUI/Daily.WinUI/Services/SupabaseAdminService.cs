@@ -1981,13 +1981,17 @@ public sealed class SupabaseAdminService
                 return list;
             }
 
-            var byDate = new SortedDictionary<string, (long RestB, long FnB, long RtB, long StorageB, long AuthB, long SupaB)>(StringComparer.Ordinal);
+            var byDate = new SortedDictionary<string, long[]>(StringComparer.Ordinal);
             foreach (var row in usages.EnumerateArray())
             {
                 var dateRaw = FirstNonEmpty(Str(row, "date"), Str(row, "period_start"), Str(row, "timestamp"));
                 if (dateRaw.Length < 10) continue;
                 var dateShort = dateRaw.Substring(0, 10);
-                var acc = byDate.TryGetValue(dateShort, out var existing) ? existing : (0L, 0L, 0L, 0L, 0L, 0L);
+                if (!byDate.TryGetValue(dateShort, out var acc))
+                {
+                    acc = new long[6];
+                    byDate[dateShort] = acc;
+                }
                 var breakdown = row.TryGetProperty("breakdown", out var bd) && bd.ValueKind == JsonValueKind.Object ? bd : row;
 
                 static long Bv(JsonElement el, string key)
@@ -2006,12 +2010,12 @@ public sealed class SupabaseAdminService
                 long bAuth = Bv(breakdown, "egress_auth") + Bv(breakdown, "auth_egress");
                 long bSupa = Bv(breakdown, "egress_supavisor") + Bv(breakdown, "supavisor_egress");
 
-                acc.RestB += bRest;
-                acc.FnB += bFn;
-                acc.RtB += bRt;
-                acc.StorageB += bStorage;
-                acc.AuthB += bAuth;
-                acc.SupaB += bSupa;
+                acc[0] += bRest;
+                acc[1] += bFn;
+                acc[2] += bRt;
+                acc[3] += bStorage;
+                acc[4] += bAuth;
+                acc[5] += bSupa;
 
                 var metric = Str(row, "metric").ToUpperInvariant();
                 if (!string.IsNullOrEmpty(metric))
@@ -2026,40 +2030,39 @@ public sealed class SupabaseAdminService
                             case "EGRESS_REST":
                             case "DATABASE_EGRESS":
                             case "POSTGREST_EGRESS":
-                                if (bRest == 0) acc.RestB += metricBytes;
+                                if (bRest == 0) acc[0] += metricBytes;
                                 break;
                             case "EGRESS_FUNCTION":
                             case "FUNCTION_EGRESS":
                             case "FUNCTIONS_EGRESS":
                             case "EDGE_FUNCTION_EGRESS":
-                                if (bFn == 0) acc.FnB += metricBytes;
+                                if (bFn == 0) acc[1] += metricBytes;
                                 break;
                             case "EGRESS_REALTIME":
                             case "REALTIME_EGRESS":
-                                if (bRt == 0) acc.RtB += metricBytes;
+                                if (bRt == 0) acc[2] += metricBytes;
                                 break;
                             case "EGRESS_STORAGE":
                             case "STORAGE_EGRESS":
-                                if (bStorage == 0) acc.StorageB += metricBytes;
+                                if (bStorage == 0) acc[3] += metricBytes;
                                 break;
                             case "EGRESS_AUTH":
                             case "AUTH_EGRESS":
-                                if (bAuth == 0) acc.AuthB += metricBytes;
+                                if (bAuth == 0) acc[4] += metricBytes;
                                 break;
                             case "EGRESS_SUPAVISOR":
                             case "SUPAVISOR_EGRESS":
                             case "SHARED_POOLER_EGRESS":
-                                if (bSupa == 0) acc.SupaB += metricBytes;
+                                if (bSupa == 0) acc[5] += metricBytes;
                                 break;
                             case "EGRESS":
                             case "UNIFIED_EGRESS":
                             case "TOTAL_EGRESS":
-                                if (acc.RestB + acc.FnB + acc.RtB + acc.StorageB + acc.AuthB + acc.SupaB == 0) acc.RestB += metricBytes;
+                                if (acc[0] + acc[1] + acc[2] + acc[3] + acc[4] + acc[5] == 0) acc[0] += metricBytes;
                                 break;
                         }
                     }
                 }
-                byDate[dateShort] = acc;
             }
 
             foreach (var kv in byDate)
@@ -2067,12 +2070,12 @@ public sealed class SupabaseAdminService
                 list.Add(new SupabaseDailyEgressPoint
                 {
                     DateLabel = kv.Key.Length >= 10 ? kv.Key.Substring(5, 5) : kv.Key,
-                    RestBytes = kv.Value.RestB,
-                    FunctionsBytes = kv.Value.FnB,
-                    RealtimeBytes = kv.Value.RtB,
-                    StorageBytes = kv.Value.StorageB,
-                    AuthBytes = kv.Value.AuthB,
-                    SupavisorBytes = kv.Value.SupaB
+                    RestBytes = kv.Value[0],
+                    FunctionsBytes = kv.Value[1],
+                    RealtimeBytes = kv.Value[2],
+                    StorageBytes = kv.Value[3],
+                    AuthBytes = kv.Value[4],
+                    SupavisorBytes = kv.Value[5]
                 });
             }
         }
