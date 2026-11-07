@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Daily_WinUI.Models;
@@ -31,7 +32,7 @@ public sealed class SupabaseAdminService
         "Daily.WinUI");
 
     private static readonly string CredentialsFilePath = Path.Combine(LocalDir, "supabase_admin_creds.dpapi");
-    private static readonly string SnapshotCachePath = Path.Combine(LocalDir, "supabase_admin_snapshot_v1.json");
+    private static readonly string SnapshotCachePath = Path.Combine(LocalDir, "supabase_admin_snapshot_v2.json");
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -290,7 +291,7 @@ public sealed class SupabaseAdminService
                 decryptedPat = DecryptCliAccessToken(session.PrivateKeyPkcs8, serverPubKey, nonceHex, encTokenHex);
             }
 
-            var (dashJwt, dashExp, identity) = ExtractDashboardJwt(dashboardSessionJson);
+            var (dashJwt, dashRefresh, dashExp, identity) = ExtractDashboardSession(dashboardSessionJson);
 
             using var projDoc = await PerformGetJsonAsync($"{ManagementBaseUrl}/projects", decryptedPat).ConfigureAwait(false);
             var projects = ParseProjects(projDoc.RootElement);
@@ -300,7 +301,8 @@ public sealed class SupabaseAdminService
             {
                 PatToken = decryptedPat,
                 DashboardAccessToken = dashJwt,
-                DashboardExpiresAtEpochSec = dashExp,
+                DashboardRefreshToken = dashRefresh,
+                DashboardExpiresAtEpochSec = dashExp ?? ExtractJwtExpEpochSec(dashJwt),
                 SelectedProjectRef = preferredRef,
                 AdminIdentity = identity ?? "GitHub Admin",
                 AuthMethod = "cli_oauth",
@@ -458,20 +460,130 @@ public sealed class SupabaseAdminService
         if (snap != null)
         {
             var ageMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - snap.FetchedAtEpochMs;
-            if (ageMs < SnapshotCacheTtlMs && snap.Project.Ref == Credentials.SelectedProjectRef)
+            if (snap.HasExactBillingMetrics && ageMs < SnapshotCacheTtlMs && snap.Project.Ref == Credentials.SelectedProjectRef)
             {
                 return;
             }
         }
-        await RefreshSnapshotAsync(force: false).ConfigureAwait(false);
+        await RefreshSnapshotAsync(force: true).ConfigureAwait(false);
+    }
+
+    private async Task<string?> EnsureFreshDashboardTokenAsync(bool forceRefresh = false)
+    {
+        if (!forceRefresh && !string.IsNullOrWhiteSpace(Credentials.DashboardAccessToken))
+        {
+            var exp = Credentials.DashboardExpiresAtEpochSec ?? ExtractJwtExpEpochSec(Credentials.DashboardAccessToken);
+            if (exp.HasValue && DateTimeOffset.UtcNow.ToUnixTimeSeconds() < (exp.Value - 120))
+            {
+                if (Credentials.DashboardExpiresAtEpochSec != exp)
+                {
+                    Credentials.DashboardExpiresAtEpochSec = exp;
+                    await PersistCredentialsAsync().ConfigureAwait(false);
+                }
+                return Credentials.DashboardAccessToken;
+            }
+        }
+
+        var refreshTok = Credentials.DashboardRefreshToken;
+        if (string.IsNullOrWhiteSpace(refreshTok))
+        {
+            refreshTok = TryRecoverRefreshTokenFromWebView2Storage();
+            if (!string.IsNullOrWhiteSpace(refreshTok))
+            {
+                Credentials.DashboardRefreshToken = refreshTok;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(refreshTok))
+        {
+            var refreshed = await RefreshGoTrueDashboardSessionAsync(refreshTok!).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(refreshed.Jwt))
+            {
+                Credentials.DashboardAccessToken = refreshed.Jwt;
+                if (!string.IsNullOrWhiteSpace(refreshed.RefreshToken))
+                {
+                    Credentials.DashboardRefreshToken = refreshed.RefreshToken;
+                }
+                Credentials.DashboardExpiresAtEpochSec = refreshed.ExpiresAt ?? ExtractJwtExpEpochSec(refreshed.Jwt);
+                if (string.IsNullOrWhiteSpace(Credentials.AdminIdentity) && !string.IsNullOrWhiteSpace(refreshed.Identity))
+                {
+                    Credentials.AdminIdentity = refreshed.Identity;
+                }
+                await PersistCredentialsAsync().ConfigureAwait(false);
+                return refreshed.Jwt;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(Credentials.DashboardAccessToken) ? null : Credentials.DashboardAccessToken;
+    }
+
+    private async Task<(string? Jwt, string? RefreshToken, long? ExpiresAt, string? Identity)> RefreshGoTrueDashboardSessionAsync(string refreshToken)
+    {
+        try
+        {
+            var payload = JsonSerializer.Serialize(new { refresh_token = refreshToken });
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://auth.supabase.io/auth/v1/token?grant_type=refresh_token")
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var resp = await _httpClient.SendAsync(req).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return (null, null, null, null);
+            var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return ExtractDashboardSession(body);
+        }
+        catch
+        {
+            return (null, null, null, null);
+        }
+    }
+
+    private static string? TryRecoverRefreshTokenFromWebView2Storage()
+    {
+        try
+        {
+            var levelDbDir = Path.Combine(LocalDir, "WebView2", "EBWebView", "Default", "Local Storage", "leveldb");
+            if (!Directory.Exists(levelDbDir)) return null;
+
+            var files = Directory.GetFiles(levelDbDir)
+                .Where(f => f.EndsWith(".ldb", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ToList();
+
+            var rx = new Regex(@"""refresh_token""\s*:\s*""([A-Za-z0-9_\-\.]{10,})""", RegexOptions.Compiled);
+            foreach (var file in files)
+            {
+                try
+                {
+                    using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var ms = new MemoryStream();
+                    fs.CopyTo(ms);
+                    var bytes = ms.ToArray();
+
+                    foreach (var enc in new[] { Encoding.UTF8, Encoding.Unicode })
+                    {
+                        var text = enc.GetString(bytes);
+                        int markerIdx = text.LastIndexOf("supabase.dashboard.auth.token", StringComparison.Ordinal);
+                        if (markerIdx >= 0)
+                        {
+                            var slice = text.Substring(markerIdx, Math.Min(16_384, text.Length - markerIdx));
+                            var m = rx.Match(slice);
+                            if (m.Success) return m.Groups[1].Value;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return null;
     }
 
     public async Task RefreshSnapshotAsync(bool force)
     {
-        var pat = Credentials.PatToken;
-        if (string.IsNullOrWhiteSpace(pat)) return;
+        if (!Credentials.IsAuthenticated) return;
 
-        if (!force && Snapshot != null)
+        if (!force && Snapshot != null && Snapshot.HasExactBillingMetrics)
         {
             var ageMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - Snapshot.FetchedAtEpochMs;
             if (ageMs < SnapshotCacheTtlMs && Snapshot.Project.Ref == Credentials.SelectedProjectRef)
@@ -486,8 +598,12 @@ public sealed class SupabaseAdminService
 
         try
         {
-            var projectsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects", pat);
-            var orgsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations", pat);
+            var freshDashBearer = await EnsureFreshDashboardTokenAsync(forceRefresh: false).ConfigureAwait(false);
+            var mgmtBearer = !string.IsNullOrWhiteSpace(Credentials.PatToken) ? Credentials.PatToken! : (freshDashBearer ?? Credentials.DashboardAccessToken ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(mgmtBearer)) return;
+
+            var projectsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects", mgmtBearer);
+            var orgsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations", mgmtBearer);
             await Task.WhenAll(projectsTask, orgsTask).ConfigureAwait(false);
 
             var availableProjects = ParseProjectsFromJsonString(projectsTask.Result);
@@ -510,40 +626,44 @@ public sealed class SupabaseAdminService
             }
 
             // Launch all read-only telemetry queries in parallel
-            var diskTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/config/disk", pat);
-            var addonsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/billing/addons", pat);
-            var apiCountsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/analytics/endpoints/usage.api-counts?interval=1day", pat);
-            var functionsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/functions", pat);
-            var fnStatsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/analytics/endpoints/functions.combined-stats?interval=1day", pat);
-            var perfAdvTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/advisors/performance", pat);
-            var secAdvTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/advisors/security", pat);
+            var diskTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/config/disk", mgmtBearer);
+            var addonsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/billing/addons", mgmtBearer);
+            var apiCountsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/analytics/endpoints/usage.api-counts?interval=1day", mgmtBearer);
+            var functionsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/functions", mgmtBearer);
+            var fnStatsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/analytics/endpoints/functions.combined-stats?interval=1day", mgmtBearer);
+            var perfAdvTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/advisors/performance", mgmtBearer);
+            var secAdvTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/advisors/security", mgmtBearer);
 
-            var dbSqlTask = ExecuteReadOnlySqlAsync(activeProject.Ref, pat, BuildDatabaseForensicsSql());
-            var cronSqlTask = ExecuteReadOnlySqlAsync(activeProject.Ref, pat, BuildCronAndStatementsSql());
-            var logsSummaryTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildGatewaySummaryClickHouseSql());
-            var logsRoutesTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildTopRoutesClickHouseSql());
-            var logsClientsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildClientFootprintClickHouseSql());
-            var logsErrorsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildRecentErrorsClickHouseSql());
+            var dbSqlTask = ExecuteReadOnlySqlAsync(activeProject.Ref, mgmtBearer, BuildDatabaseForensicsSql());
+            var cronSqlTask = ExecuteReadOnlySqlAsync(activeProject.Ref, mgmtBearer, BuildCronAndStatementsSql());
+            var logsSummaryTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildGatewaySummaryClickHouseSql());
+            var logsRoutesTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildTopRoutesClickHouseSql());
+            var logsClientsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildClientFootprintClickHouseSql());
+            var logsErrorsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildRecentErrorsClickHouseSql());
 
-            var platformBearer = !string.IsNullOrWhiteSpace(pat) ? pat : (Credentials.DashboardAccessToken ?? pat);
+            // /platform/organizations/{slug}/usage strictly requires GoTrue Dashboard session JWT (falls back to PAT if needed)
+            var platformPrimary = !string.IsNullOrWhiteSpace(freshDashBearer)
+                ? freshDashBearer!
+                : (!string.IsNullOrWhiteSpace(Credentials.DashboardAccessToken) ? Credentials.DashboardAccessToken! : mgmtBearer);
+            var platformFallback = platformPrimary != mgmtBearer ? mgmtBearer : null;
 
             // Subscription query for billing cycle dates
             var subTask1 = !string.IsNullOrWhiteSpace(orgSlug)
-                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", platformBearer)
+                ? PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", platformPrimary, platformFallback)
                 : Task.FromResult<string?>(null);
             var subTask2 = !string.IsNullOrWhiteSpace(orgSlug)
-                ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", pat)
+                ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", mgmtBearer)
                 : Task.FromResult<string?>(null);
 
             // Platform usage queries: org-level first, then project-level fallback
             var usageOrgTask = !string.IsNullOrWhiteSpace(orgSlug)
-                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", platformBearer)
+                ? PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", platformPrimary, platformFallback)
                 : Task.FromResult<string?>(null);
             var usageProjTask = !string.IsNullOrWhiteSpace(orgSlug)
-                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage?project_ref={Uri.EscapeDataString(activeProject.Ref)}", platformBearer)
+                ? PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage?project_ref={Uri.EscapeDataString(activeProject.Ref)}", platformPrimary, platformFallback)
                 : Task.FromResult<string?>(null);
             var usageV1Task = !string.IsNullOrWhiteSpace(orgSlug)
-                ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", pat)
+                ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", mgmtBearer)
                 : Task.FromResult<string?>(null);
 
             await Task.WhenAll(
@@ -564,8 +684,29 @@ public sealed class SupabaseAdminService
             var edgeFunctions = ParseEdgeFunctions(functionsTask.Result, fnStatsTask.Result);
             var advisors = ParseAdvisors(perfAdvTask.Result, secAdvTask.Result);
 
-            string? billingCyclePeriod = null;
             var subRaw = subTask1.Result ?? subTask2.Result;
+            var usageRaw = usageOrgTask.Result;
+            if (string.IsNullOrWhiteSpace(usageRaw) && !string.IsNullOrWhiteSpace(orgSlug))
+            {
+                var rotatedDash = await EnsureFreshDashboardTokenAsync(forceRefresh: true).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(rotatedDash) && rotatedDash != platformPrimary)
+                {
+                    platformPrimary = rotatedDash!;
+                    subRaw ??= await PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", platformPrimary, platformFallback).ConfigureAwait(false);
+                    usageRaw = await PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", platformPrimary, platformFallback).ConfigureAwait(false);
+                }
+            }
+            if (string.IsNullOrWhiteSpace(usageRaw) || !usageRaw.Contains("\"usages\""))
+            {
+                usageRaw = usageProjTask.Result;
+            }
+            if (string.IsNullOrWhiteSpace(usageRaw) || !usageRaw.Contains("\"usages\""))
+            {
+                usageRaw = usageV1Task.Result;
+            }
+
+            string? billingCyclePeriod = null;
+            long? subStartEpochSec = null;
             if (!string.IsNullOrWhiteSpace(subRaw))
             {
                 try
@@ -576,20 +717,11 @@ public sealed class SupabaseAdminService
                     var endSec = Long(sroot, "current_period_end");
                     if (startSec > 0 && endSec > startSec)
                     {
+                        subStartEpochSec = startSec;
                         billingCyclePeriod = SupabaseAdminFormatter.FormatBillingCyclePeriod(startSec, endSec);
                     }
                 }
                 catch { }
-            }
-
-            var usageRaw = usageOrgTask.Result;
-            if (string.IsNullOrWhiteSpace(usageRaw) || !usageRaw.Contains("\"usages\""))
-            {
-                usageRaw = usageProjTask.Result;
-            }
-            if (string.IsNullOrWhiteSpace(usageRaw) || !usageRaw.Contains("\"usages\""))
-            {
-                usageRaw = usageV1Task.Result;
             }
 
             bool isPro = orgPlan.Contains("pro", StringComparison.OrdinalIgnoreCase) ||
@@ -597,8 +729,8 @@ public sealed class SupabaseAdminService
                          orgPlan.Contains("enterprise", StringComparison.OrdinalIgnoreCase);
 
             double defaultEgressQuotaGb = isPro ? 250.0 : 5.0;
-            long defaultDbQuotaBytes = isPro ? 8L * 1024 * 1024 * 1024 : 500L * 1024 * 1024;
-            long defaultStorageQuotaBytes = isPro ? 100L * 1024 * 1024 * 1024 : 1024L * 1024 * 1024;
+            long defaultDbQuotaBytes = isPro ? 8_000_000_000L : 500_000_000L;
+            long defaultStorageQuotaBytes = isPro ? 100_000_000_000L : 1_000_000_000L;
             int defaultMauQuota = isPro ? 100_000 : 50_000;
 
             var billing = ParsePlatformUsage(
@@ -611,7 +743,22 @@ public sealed class SupabaseAdminService
                 defaultMauQuota,
                 gwBytes);
 
-            var dailySeries = ScaleDailySeriesWithGatewayBytes(dailySeriesFromCounts, gwBytes);
+            List<SupabaseDailyEgressPoint>? platformDailySeries = null;
+            if (!string.IsNullOrWhiteSpace(orgSlug))
+            {
+                var cycleStartUtc = SupabaseAdminFormatter.ComputeBillingCycleStartDate(subStartEpochSec, orgCreatedAt ?? activeProject.CreatedAt);
+                var minStartUtc = DateTime.UtcNow.AddDays(-35);
+                var effectiveStartUtc = cycleStartUtc > minStartUtc ? cycleStartUtc : minStartUtc;
+                var startIso = effectiveStartUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+                var endIso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+                var dailyUrl = $"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage/daily?start={Uri.EscapeDataString(startIso)}&end={Uri.EscapeDataString(endIso)}";
+                var dailyRaw = await PerformGetStringWithFallbackAsync(dailyUrl, platformPrimary, platformFallback).ConfigureAwait(false);
+                platformDailySeries = ParsePlatformDailyEgress(dailyRaw);
+            }
+
+            var dailySeries = (platformDailySeries != null && platformDailySeries.Count > 0)
+                ? platformDailySeries.TakeLast(14).ToList()
+                : ScaleDailySeriesWithGatewayBytes(dailySeriesFromCounts, gwBytes);
 
             var built = new SupabaseAdminSnapshot
             {
@@ -1012,6 +1159,20 @@ public sealed class SupabaseAdminService
         {
             return null;
         }
+    }
+
+    private async Task<string?> PerformGetStringWithFallbackAsync(string url, string primaryBearer, string? fallbackBearer)
+    {
+        if (!string.IsNullOrWhiteSpace(primaryBearer))
+        {
+            var res = await PerformGetStringOptionalAsync(url, primaryBearer).ConfigureAwait(false);
+            if (res != null) return res;
+        }
+        if (!string.IsNullOrWhiteSpace(fallbackBearer) && fallbackBearer != primaryBearer)
+        {
+            return await PerformGetStringOptionalAsync(url, fallbackBearer!).ConfigureAwait(false);
+        }
+        return null;
     }
 
     private async Task<string?> ExecuteReadOnlySqlAsync(string projectRef, string pat, string sql)
@@ -1670,7 +1831,7 @@ public sealed class SupabaseAdminService
         int fallbackMauQuota,
         long gatewayBytes24h)
     {
-        double estGb = Math.Max(0.0, gatewayBytes24h / (1024.0 * 1024.0 * 1024.0));
+        double estGb = Math.Max(0.0, gatewayBytes24h / 1_000_000_000.0);
         string? cyclePeriod = precomputedPeriod;
 
         if (string.IsNullOrWhiteSpace(json))
@@ -1686,7 +1847,7 @@ public sealed class SupabaseAdminService
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             string? plan = StrOrNull(root, "plan");
-            double egressUsed = estGb, egressQuota = fallbackEgressQuotaGb;
+            double egressUsed = 0.0, egressQuota = fallbackEgressQuotaGb;
             double cachedUsed = 0.0, cachedQuota = fallbackEgressQuotaGb;
             long dbSize = 0L, dbQuota = fallbackDbQuota;
             long storageSize = 0L, stQuota = fallbackStorageQuota;
@@ -1710,10 +1871,12 @@ public sealed class SupabaseAdminService
                 }
             }
 
+            // Supabase Studio uses SI decimal GB (`1_000_000_000` bytes) for `pricing_free_units` and `usage`
+            // while `usage_original` carries exact raw decimal bytes.
             static long ResolveBytes(double val, long orig)
             {
                 if (orig > 0) return orig;
-                if (val > 0 && val < 100_000.0) return (long)(val * 1_073_741_824.0);
+                if (val > 0 && val < 100_000.0) return (long)(val * 1_000_000_000.0);
                 return (long)val;
             }
 
@@ -1730,20 +1893,21 @@ public sealed class SupabaseAdminService
 
                     if (metric == "egress" || (metric.Contains("egress") && !metric.Contains("cached")))
                     {
-                        var parsedEgress = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
+                        var parsedEgress = (usageOrig > 0) ? (usageOrig / 1_000_000_000.0) : (usageVal > 1_000_000 ? usageVal / 1_000_000_000.0 : usageVal);
                         egressUsed = Math.Max(egressUsed, parsedEgress);
-                        if (limitVal > 0) egressQuota = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
+                        if (limitVal > 0) egressQuota = limitVal > 1_000_000 ? limitVal / 1_000_000_000.0 : limitVal;
                         exact = true;
                     }
                     else if (metric.Contains("cached_egress"))
                     {
-                        cachedUsed = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
-                        if (limitVal > 0) cachedQuota = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
+                        cachedUsed = (usageOrig > 0) ? (usageOrig / 1_000_000_000.0) : (usageVal > 1_000_000 ? usageVal / 1_000_000_000.0 : usageVal);
+                        if (limitVal > 0) cachedQuota = limitVal > 1_000_000 ? limitVal / 1_000_000_000.0 : limitVal;
                     }
                     else if (metric == "database_size" || metric == "db_size")
                     {
                         dbSize = ResolveBytes(usageVal, usageOrig);
                         if (limitVal > 0) dbQuota = ResolveBytes(limitVal, 0);
+                        exact = true;
                     }
                     else if (metric == "storage_size")
                     {
@@ -1772,15 +1936,20 @@ public sealed class SupabaseAdminService
                     }
                     else if (metric == "log_ingestion" || metric == "log_drain_events")
                     {
-                        logIngestGb = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
-                        if (limitVal > 0) logIngestQuotaGb = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
+                        logIngestGb = (usageOrig > 0) ? (usageOrig / 1_000_000_000.0) : (usageVal > 1_000_000 ? usageVal / 1_000_000_000.0 : usageVal);
+                        if (limitVal > 0) logIngestQuotaGb = limitVal > 1_000_000 ? limitVal / 1_000_000_000.0 : limitVal;
                     }
                     else if (metric == "log_query" || metric == "log_querying")
                     {
-                        logQueryGb = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
-                        if (limitVal > 0) logQueryQuotaGb = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
+                        logQueryGb = (usageOrig > 0) ? (usageOrig / 1_000_000_000.0) : (usageVal > 1_000_000 ? usageVal / 1_000_000_000.0 : usageVal);
+                        if (limitVal > 0) logQueryQuotaGb = limitVal > 1_000_000 ? limitVal / 1_000_000_000.0 : limitVal;
                     }
                 }
+            }
+
+            if (!exact && egressUsed <= 0)
+            {
+                egressUsed = estGb;
             }
 
             cyclePeriod ??= SupabaseAdminFormatter.ComputeBillingCyclePeriodFromCreation(anchorCreationDate);
@@ -1800,9 +1969,120 @@ public sealed class SupabaseAdminService
         }
     }
 
-    private static (string? Jwt, long? ExpiresAt, string? Identity) ExtractDashboardJwt(string? rawJson)
+    private static List<SupabaseDailyEgressPoint> ParsePlatformDailyEgress(string? json)
     {
-        if (string.IsNullOrWhiteSpace(rawJson)) return (null, null, null);
+        var list = new List<SupabaseDailyEgressPoint>();
+        if (string.IsNullOrWhiteSpace(json)) return list;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("usages", out var usages) || usages.ValueKind != JsonValueKind.Array)
+            {
+                return list;
+            }
+
+            var byDate = new SortedDictionary<string, (long Rest, long Fn, long Rt, long Storage, long Auth, long Supa)>(StringComparer.Ordinal);
+            foreach (var row in usages.EnumerateArray())
+            {
+                var dateRaw = FirstNonEmpty(Str(row, "date"), Str(row, "period_start"), Str(row, "timestamp"));
+                if (dateRaw.Length < 10) continue;
+                var dateShort = dateRaw.Substring(0, 10);
+                var acc = byDate.TryGetValue(dateShort, out var existing) ? existing : (0L, 0L, 0L, 0L, 0L, 0L);
+                var breakdown = row.TryGetProperty("breakdown", out var bd) && bd.ValueKind == JsonValueKind.Object ? bd : row;
+
+                static long Bv(JsonElement el, string key)
+                {
+                    var orig = Long(el, $"{key}_original");
+                    if (orig > 0) return orig;
+                    var d = Double(el, key);
+                    if (d <= 0) return 0L;
+                    return d < 100_000.0 ? (long)(d * 1_000_000_000.0) : (long)d;
+                }
+
+                long bRest = Bv(breakdown, "egress_rest") + Bv(breakdown, "database_egress");
+                long bFn = Bv(breakdown, "egress_function") + Bv(breakdown, "functions_egress");
+                long bRt = Bv(breakdown, "egress_realtime") + Bv(breakdown, "realtime_egress");
+                long bStorage = Bv(breakdown, "egress_storage") + Bv(breakdown, "storage_egress");
+                long bAuth = Bv(breakdown, "egress_auth") + Bv(breakdown, "auth_egress");
+                long bSupa = Bv(breakdown, "egress_supavisor") + Bv(breakdown, "supavisor_egress");
+
+                acc.Rest += bRest;
+                acc.Fn += bFn;
+                acc.Rt += bRt;
+                acc.Storage += bStorage;
+                acc.Auth += bAuth;
+                acc.Supa += bSupa;
+
+                var metric = Str(row, "metric").ToUpperInvariant();
+                if (!string.IsNullOrEmpty(metric))
+                {
+                    var orig = Long(row, "usage_original");
+                    var uVal = Double(row, "usage");
+                    long metricBytes = orig > 0 ? orig : (uVal > 0 && uVal < 100_000.0 ? (long)(uVal * 1_000_000_000.0) : (long)uVal);
+                    if (metricBytes > 0)
+                    {
+                        switch (metric)
+                        {
+                            case "EGRESS_REST":
+                            case "DATABASE_EGRESS":
+                            case "POSTGREST_EGRESS":
+                                if (bRest == 0) acc.Rest += metricBytes;
+                                break;
+                            case "EGRESS_FUNCTION":
+                            case "FUNCTION_EGRESS":
+                            case "FUNCTIONS_EGRESS":
+                            case "EDGE_FUNCTION_EGRESS":
+                                if (bFn == 0) acc.Fn += metricBytes;
+                                break;
+                            case "EGRESS_REALTIME":
+                            case "REALTIME_EGRESS":
+                                if (bRt == 0) acc.Rt += metricBytes;
+                                break;
+                            case "EGRESS_STORAGE":
+                            case "STORAGE_EGRESS":
+                                if (bStorage == 0) acc.Storage += metricBytes;
+                                break;
+                            case "EGRESS_AUTH":
+                            case "AUTH_EGRESS":
+                                if (bAuth == 0) acc.Auth += metricBytes;
+                                break;
+                            case "EGRESS_SUPAVISOR":
+                            case "SUPAVISOR_EGRESS":
+                            case "SHARED_POOLER_EGRESS":
+                                if (bSupa == 0) acc.Supa += metricBytes;
+                                break;
+                            case "EGRESS":
+                            case "UNIFIED_EGRESS":
+                            case "TOTAL_EGRESS":
+                                if (acc.Rest + acc.Fn + acc.Rt + acc.Storage + acc.Auth + acc.Supa == 0) acc.Rest += metricBytes;
+                                break;
+                        }
+                    }
+                }
+                byDate[dateShort] = acc;
+            }
+
+            foreach (var kv in byDate)
+            {
+                list.Add(new SupabaseDailyEgressPoint
+                {
+                    DateLabel = kv.Key.Length >= 10 ? kv.Key.Substring(5, 5) : kv.Key,
+                    RestBytes = kv.Value.Rest,
+                    FunctionsBytes = kv.Value.Fn,
+                    RealtimeBytes = kv.Value.Rt,
+                    StorageBytes = kv.Value.Storage,
+                    AuthBytes = kv.Value.Auth,
+                    SupavisorBytes = kv.Value.Supa
+                });
+            }
+        }
+        catch { }
+        return list;
+    }
+
+    private static (string? Jwt, string? RefreshToken, long? ExpiresAt, string? Identity) ExtractDashboardSession(string? rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson)) return (null, null, null, null);
         try
         {
             using var doc = JsonDocument.Parse(rawJson);
@@ -1810,32 +2090,61 @@ public sealed class SupabaseAdminService
             if (root.ValueKind == JsonValueKind.String)
             {
                 using var inner = JsonDocument.Parse(root.GetString() ?? "{}");
-                return ExtractDashboardJwtFromElement(inner.RootElement);
+                return ExtractDashboardSessionFromElement(inner.RootElement);
             }
-            return ExtractDashboardJwtFromElement(root);
+            return ExtractDashboardSessionFromElement(root);
         }
         catch
         {
-            return (null, null, null);
+            return (null, null, null, null);
         }
     }
 
-    private static (string? Jwt, long? ExpiresAt, string? Identity) ExtractDashboardJwtFromElement(JsonElement el)
+    private static (string? Jwt, string? RefreshToken, long? ExpiresAt, string? Identity) ExtractDashboardSessionFromElement(JsonElement el)
     {
-        if (el.ValueKind != JsonValueKind.Object) return (null, null, null);
-        var target = el.TryGetProperty("currentSession", out var cs) && cs.ValueKind == JsonValueKind.Object ? cs : el;
+        if (el.ValueKind != JsonValueKind.Object) return (null, null, null, null);
+        var target = el.TryGetProperty("currentSession", out var cs) && cs.ValueKind == JsonValueKind.Object
+            ? cs
+            : (el.TryGetProperty("session", out var ss) && ss.ValueKind == JsonValueKind.Object ? ss : el);
         var jwt = StrOrNull(target, "access_token");
-        long? exp = target.TryGetProperty("expires_at", out var expProp) && expProp.TryGetInt64(out var e) ? e : null;
+        var refresh = StrOrNull(target, "refresh_token");
+        long? exp = target.TryGetProperty("expires_at", out var expProp) && expProp.TryGetInt64(out var e) ? e : ExtractJwtExpEpochSec(jwt);
         string? identity = null;
         if (target.TryGetProperty("user", out var u) && u.ValueKind == JsonValueKind.Object)
         {
             identity = StrOrNull(u, "email");
             if (u.TryGetProperty("user_metadata", out var meta) && meta.ValueKind == JsonValueKind.Object)
             {
-                identity = FirstNonEmpty(Str(meta, "user_name"), Str(meta, "preferred_username"), identity ?? string.Empty);
+                var gh = FirstNonEmpty(Str(meta, "user_name"), Str(meta, "preferred_username"));
+                if (!string.IsNullOrWhiteSpace(gh))
+                {
+                    identity = gh.StartsWith('@') ? gh : $"@{gh}";
+                }
             }
         }
-        return (jwt, exp, string.IsNullOrWhiteSpace(identity) ? null : identity);
+        return (jwt, refresh, exp, string.IsNullOrWhiteSpace(identity) ? null : identity);
+    }
+
+    private static long? ExtractJwtExpEpochSec(string? jwt)
+    {
+        if (string.IsNullOrWhiteSpace(jwt)) return null;
+        var parts = jwt.Trim().Split('.');
+        if (parts.Length < 2) return null;
+        try
+        {
+            var b64 = parts[1].Replace('-', '+').Replace('_', '/');
+            int rem = b64.Length % 4;
+            if (rem > 0) b64 += new string('=', 4 - rem);
+            var bytes = Convert.FromBase64String(b64);
+            using var doc = JsonDocument.Parse(bytes);
+            if (doc.RootElement.TryGetProperty("exp", out var expEl))
+            {
+                if (expEl.TryGetInt64(out var l)) return l;
+                if (expEl.TryGetDouble(out var d)) return (long)d;
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static JsonElement? ExtractFirstSqlPayloadObject(JsonElement root)

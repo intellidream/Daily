@@ -10,6 +10,7 @@ public sealed class SupabaseAdminCredentials
 {
     public string? PatToken { get; set; }
     public string? DashboardAccessToken { get; set; }
+    public string? DashboardRefreshToken { get; set; }
     public long? DashboardExpiresAtEpochSec { get; set; }
     public string SelectedProjectRef { get; set; } = SupabaseAdminSnapshot.DefaultProjectRef;
     public string? SelectedOrgSlug { get; set; }
@@ -18,7 +19,7 @@ public sealed class SupabaseAdminCredentials
     public long AuthenticatedAtEpochMs { get; set; }
     public bool RequireBiometrics { get; set; } = false;
 
-    public bool IsAuthenticated => !string.IsNullOrWhiteSpace(PatToken);
+    public bool IsAuthenticated => !string.IsNullOrWhiteSpace(PatToken) || !string.IsNullOrWhiteSpace(DashboardAccessToken);
 
     public bool HasValidDashboardJwt
     {
@@ -27,9 +28,9 @@ public sealed class SupabaseAdminCredentials
             if (string.IsNullOrWhiteSpace(DashboardAccessToken)) return false;
             if (DashboardExpiresAtEpochSec is long exp && exp > 0)
             {
-                return DateTimeOffset.UtcNow.ToUnixTimeSeconds() < (exp - 60);
+                return DateTimeOffset.UtcNow.ToUnixTimeSeconds() < (exp - 120);
             }
-            return true;
+            return false;
         }
     }
 }
@@ -189,7 +190,7 @@ public sealed class SupabaseAdminSnapshot
 
     // Database & Disk
     public long DbTotalBytes { get; init; }
-    public long DbQuotaBytes { get; init; } = 500L * 1024L * 1024L;
+    public long DbQuotaBytes { get; init; } = 500_000_000L;
     public long DbHeapBytes { get; init; }
     public long DbIndexBytes { get; init; }
     public int DiskSizeGb { get; init; } = 8;
@@ -199,7 +200,7 @@ public sealed class SupabaseAdminSnapshot
 
     // Storage
     public long StorageTotalBytes { get; init; }
-    public long StorageQuotaBytes { get; init; } = 1024L * 1024L * 1024L;
+    public long StorageQuotaBytes { get; init; } = 1_000_000_000L;
     public int StorageObjectCount { get; init; }
     public int StorageBucketCount { get; init; }
 
@@ -327,9 +328,9 @@ public static class SupabaseAdminFormatter
     public static string FormatBytes(long bytes)
     {
         if (bytes <= 0) return "0 B";
-        const double kb = 1024.0;
-        const double mb = kb * 1024.0;
-        const double gb = mb * 1024.0;
+        const double kb = 1_000.0;
+        const double mb = 1_000_000.0;
+        const double gb = 1_000_000_000.0;
         return bytes switch
         {
             >= (long)gb => $"{bytes / gb:F2} GB",

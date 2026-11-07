@@ -232,22 +232,32 @@ To ensure 100% mathematical and visual parity with the official Supabase Web Por
 - Internal PostgreSQL catalog queries (`pg_database_size(current_database())`) include internal system catalogs, Toast tables, temp buffers, and extension files (~68 MB).
 - **Resolution**: When exact billing telemetry is available (`isExactBillingUsageAvailable`), `dbSizeBytes` prioritizes `usages.DATABASE_SIZE` directly. Disk heap and index breakdowns remain visible in the subtitle for forensic DBA inspection.
 
-### 7.5 Precision Formatting
-- Egress and Database Size cards format gigabytes with 3 decimal places (`String(format: "%.3f GB")` / `{bytes:F3} GB`), rendering values like `3.167 / 5 GB (63%)` and `0.044 / 0.5 GB (9%)` matching the Supabase portal exactly.
+### 7.5 Precision & SI Decimal Gigabyte Parity (`1 GB = 1,000,000,000 bytes`)
+- Supabase's billing control plane (`/platform/organizations/{slug}/usage`) measures quotas and byte metrics in **SI decimal gigabytes (`10^9 = 1,000,000,000` bytes)**, **not** binary gibibytes (`2^30 = 1,073,741,824` bytes):
+  - Free Plan quotas: Egress `5,000,000,000 B` (`5 GB`), Database Size `500,000,000 B` (`0.5 GB`), Storage / Log Ingestion `1,000,000,000 B` (`1 GB`), Log Query `100,000,000,000 B` (`100 GB`).
+  - Example: `usage_original = 3,169,916,695` bytes divided by `1,000,000,000` equals **`3.170 / 5 GB` (`63.4%` → `63%`)**, whereas binary GiB division previously under-reported it as `2.952 GB` (`59%`).
+- All models, services, and UI quota cards across `DailyCore`, `iOS`, `macOS`, `Android`, and `WinUI 3` uniformly format byte quotas using SI decimal (`1_000_000_000`) with 3 decimal places (`3.170 / 5 GB (63%)`, `0.044 / 0.5 GB (9%)`).
 
-### 7.6 Durable Management PAT Priority & Token Expiration Immunity
-- GoTrue web dashboard tokens (`dashboardAccessToken`) are short-lived JSON Web Tokens that expire after 1 hour (3,600 seconds). In contrast, Supabase Personal Access Tokens (`managementAccessToken`, `sbp_...`) are durable and do not expire.
-- `primaryPlatformBearer` prioritizes the durable PAT token over the dashboard token across Swift, Kotlin, and C#.
-- **Automatic Multi-Bearer Fallback**: `performGetJsonWithFallback` automatically retries requests with the secondary bearer if the primary bearer encounters an HTTP 401 Unauthorized or 403 Forbidden, guaranteeing zero telemetry loss across sessions.
+### 7.6 Dual Control-Plane Authentication, GoTrue Auto-Refresh & Silent Session Self-Healing
+- Supabase splits observability across two distinct authentication planes:
+  1. **`api.supabase.com/v1/...` (Management API, ClickHouse Logs, Read-Only SQL)**: Accepts durable Personal Access Tokens (`managementAccessToken`, `sbp_...`).
+  2. **`api.supabase.com/platform/...` (`/organizations/{slug}/usage`, `/billing/subscription`, `/usage/daily`)**: Strictly requires a **GoTrue Dashboard session JWT (`dashboardAccessToken`, `eyJ...`)** and rejects `sbp_...` PATs with `HTTP 401 Unauthorized`.
+- Because GoTrue dashboard JWTs expire after 1 hour (`3,600s`), all platforms implement a three-tier self-healing pipeline:
+  1. **`primaryPlatformBearer` Prioritization & Multi-Bearer Fallback**: Prioritizes a valid `dashboardAccessToken` for `/platform/...` endpoints while maintaining `performGetJsonWithFallback` / `getJsonObjectWithFallback` / `PerformGetStringWithFallbackAsync` across both tokens.
+  2. **Automatic GoTrue `refresh_token` Rotation**: Before querying `/platform/...` (when `isJwtExpiredOrExpiringSoon` detects `< 180s` remaining) or upon receiving `401`, clients automatically call `POST https://auth.supabase.io/auth/v1/token?grant_type=refresh_token` with `{ "refresh_token": "..." }` and persist the rotated `access_token` + `refresh_token` locally.
+  3. **Zero-Friction Session Self-Healing & Committed-Origin Capture**:
+     - **iOS & macOS (`WKWebView`)**: Fixed `SupabaseAdminLoginSheet` so `device_code` extraction waits until navigation commits to `https://supabase.com` (rather than inside `decidePolicyFor navigationAction` before origin commit), with brief hydration retry for `localStorage['supabase.dashboard.auth.token']`. For existing sessions missing a refresh token, `WebKitDashboardSessionHarvester` silently reads `localStorage['supabase.dashboard.auth.token']` from `WKWebsiteDataStore.default()` on `https://supabase.com/robots.txt` and refreshes via GoTrue without requiring re-login.
+     - **Windows 11 (`WebView2`)**: `SupabaseAdminLoginWindow` captures `?device_code=` and `localStorage['supabase.dashboard.auth.token']` with hydration retry, while `TryRecoverRefreshTokenFromWebView2Storage()` recovers existing GoTrue refresh tokens from the local `EBWebView` LevelDB store so existing Windows sessions self-heal transparently.
 
-### 7.7 Dynamic Billing Cycle Window & Unified Egress Aggregation
-- **14-Day Window Truncation Eliminated**: Previously, `/usage/daily` was queried with `start = now - 14 days`. For billing cycles that started 19–20 days prior (e.g. October 19), this missed the initial days, causing Android to display ~59% (2.95 GB) instead of the full billing cycle's 63.3% (3.167 GB).
-- **Dynamic Cycle Start Date**: `computeBillingCycleStartDate` dynamically resolves the start timestamp using:
+### 7.7 Dynamic Billing Cycle Window, Exact Summary Precedence & Daily Deduplication
+- **Dynamic Cycle Start Date**: `computeBillingCycleStartDate` dynamically resolves the billing cycle start timestamp (zero hardcoded dates) from:
   1. `current_period_start` from `/billing/subscription`
   2. `billing_cycle_start` or `period_start` from `/usage`
-  3. `created_at` timestamp from the organization or project API response
-  4. Standard calendar month start (Day 1) as safe fallback (zero hardcoded dates).
-- **Billing Cycle Egress Synthesis**: `resolvedCycleEgress` is resolved as `max(billingData.egressUsedBytes, sumDailyEgressBytes)`, ensuring that whether the portal exposes total egress in the summary table or as daily aggregated slices, the full cycle bandwidth (e.g. 3.167 GB / 63%) is faithfully rendered.
+  3. `created_at` anchor day from the organization or project API response
+  4. Standard calendar month start (Day 1) as safe fallback.
+- **Exact Billing Summary Precedence**: When `/platform/organizations/{slug}/usage` returns exact billing metrics (`isExact && egressUsedBytes > 0`), `resolvedCycleEgress` uses `billingData.egressUsedBytes` (`usages.EGRESS.usage_original`) directly as single source of truth; `sumDailyEgressBytes` is used only as fallback when exact org usage is unavailable.
+- **`/usage/daily` Date Deduplication**: Because `/platform/organizations/{slug}/usage/daily` emits multiple metric rows per `YYYY-MM-DD`, all platforms group and sum breakdown slices (`rest` / `functions` / `realtime` / `storage` / `auth`) by date so the Daily Bandwidth chart renders one consolidated stacked bar per calendar day.
+- **Snapshot Cache Validation (`v2`)**: Bumped local snapshot cache keys to `v2` across all 4 platforms and bypassed cached snapshots whenever `!isExactBillingUsageAvailable`, ensuring stale 24h fallback snapshots never mask live billing cycle quotas.
 
 ### 7.8 Android UX & Header Streamlining
 - **Streamlined TopAppBar**: Replaced 5 individual action buttons in the top bar with a single elegant `MoreVert` (3-dots) overflow menu containing Refresh, Multi-project switcher, Markdown export, and Disconnect options.

@@ -534,10 +534,16 @@ private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
         percent >= 78.0 -> ThemeColors.warning
         else -> ThemeColors.accentCyan
     }
-    val cycleUsedGb = snap.egressCycleUsedBytes.toDouble() / 1_073_741_824.0
-    val cycleQuotaGb = snap.egressCycleQuotaBytes.toDouble() / 1_073_741_824.0
-    val cycleUsed = remember(snap.egressCycleUsedBytes) { String.format(Locale.US, "%.3f GB", cycleUsedGb) }
-    val cycleQuota = remember(snap.egressCycleQuotaBytes) { String.format(Locale.US, "%.0f GB", cycleQuotaGb) }
+    val cycleUsedGb = snap.egressCycleUsedBytes.toDouble() / 1_000_000_000.0
+    val cycleQuotaGb = snap.egressCycleQuotaBytes.toDouble() / 1_000_000_000.0
+    val cycleUsed = remember(snap.egressCycleUsedBytes) {
+        if (snap.egressCycleUsedBytes >= 1_000_000_000L) String.format(Locale.US, "%.3f GB", cycleUsedGb)
+        else SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
+    }
+    val cycleQuota = remember(snap.egressCycleQuotaBytes) {
+        if (snap.egressCycleQuotaBytes >= 1_000_000_000L) String.format(Locale.US, "%.0f GB", cycleQuotaGb)
+        else SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
+    }
     val egress24h = remember(snap.egress24hBytes) { SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes) }
     val cachedEgress = remember(snap.cachedEgressUsedBytes) { SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes) }
 
@@ -654,8 +660,8 @@ private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
 @Composable
 private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) {
     val h24Used = remember(snap.egress24hBytes) { SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes) }
-    val dbUsedGb = snap.dbSizeBytes.toDouble() / 1_073_741_824.0
-    val dbQuotaGb = snap.dbQuotaBytes.toDouble() / 1_073_741_824.0
+    val dbUsedGb = snap.dbSizeBytes.toDouble() / 1_000_000_000.0
+    val dbQuotaGb = snap.dbQuotaBytes.toDouble() / 1_000_000_000.0
     val dbUsed = remember(snap.dbSizeBytes) {
         if (dbUsedGb > 0 && dbUsedGb < 10) String.format(Locale.US, "%.3f GB", dbUsedGb)
         else SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)
@@ -742,6 +748,9 @@ private fun QuotaGaugeTile(
         else -> ThemeColors.accentCyan
     }
     val pctText = remember(percent) { String.format(Locale.US, "%.1f%%", percent) }
+    val quotaText = remember(quota) {
+        if (quota.startsWith("Peak") || quota.endsWith("reqs") || quota.startsWith("/")) quota else "/ $quota"
+    }
 
     GlassCard(modifier = modifier, cornerRadius = 16.dp, padding = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -750,7 +759,7 @@ private fun QuotaGaugeTile(
                 Text(pctText, color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
             }
             Text(used, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("/ $quota", color = ThemeColors.textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            Text(quotaText, color = ThemeColors.textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

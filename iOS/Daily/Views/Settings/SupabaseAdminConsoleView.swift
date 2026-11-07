@@ -332,11 +332,11 @@ public struct SupabaseAdminConsoleView: View {
     private func billingCycleEgressCard(_ snap: SupabaseAdminSnapshot) -> some View {
         let percent = snap.egressCycleQuotaPercent
         let accent: Color = percent >= 95 ? ThemeColors.error : (percent >= 78 ? ThemeColors.warning : ThemeColors.accentCyan)
-        let formattedCycle = snap.egressCycleUsedBytes >= 1_073_741_824
-            ? String(format: "%.3f GB", Double(snap.egressCycleUsedBytes) / 1_073_741_824.0)
+        let formattedCycle = snap.egressCycleUsedBytes >= 1_000_000_000
+            ? String(format: "%.3f GB", Double(snap.egressCycleUsedBytes) / 1_000_000_000.0)
             : SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
-        let formattedQuota = snap.egressCycleQuotaBytes >= 1_073_741_824
-            ? String(format: "%.0f GB", Double(snap.egressCycleQuotaBytes) / 1_073_741_824.0)
+        let formattedQuota = snap.egressCycleQuotaBytes >= 1_000_000_000
+            ? String(format: "%.0f GB", Double(snap.egressCycleQuotaBytes) / 1_000_000_000.0)
             : SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
         let formatted24h = SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes)
         let formattedCached = SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)
@@ -436,9 +436,9 @@ public struct SupabaseAdminConsoleView: View {
     private func executiveQuotasGrid(_ snap: SupabaseAdminSnapshot) -> some View {
         let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
         let dbUsedFormatted = snap.dbSizeBytes > 0
-            ? String(format: "%.3f GB", Double(snap.dbSizeBytes) / 1_073_741_824.0)
+            ? String(format: "%.3f GB", Double(snap.dbSizeBytes) / 1_000_000_000.0)
             : SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)
-        let dbQuotaFormatted = String(format: "%.1f GB", Double(snap.dbQuotaBytes) / 1_073_741_824.0)
+        let dbQuotaFormatted = String(format: "%.1f GB", Double(snap.dbQuotaBytes) / 1_000_000_000.0)
 
         let fnUsedFormatted = snap.functionInvocations >= 1000
             ? String(format: "%,d", snap.functionInvocations)
@@ -516,13 +516,17 @@ public struct SupabaseAdminConsoleView: View {
 
                 if !snap.dailyEgress.isEmpty {
                     Chart {
-                        ForEach(snap.dailyEgress.suffix(10)) { pt in
-                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.restBytes) / 1_048_576.0))
+                        ForEach(snap.dailyEgress.suffix(12)) { pt in
+                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.restBytes) / 1_000_000.0))
                                 .foregroundStyle(by: .value("Service", "REST"))
-                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.functionBytes) / 1_048_576.0))
+                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.functionBytes) / 1_000_000.0))
                                 .foregroundStyle(by: .value("Service", "Edge"))
-                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.realtimeBytes) / 1_048_576.0))
+                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.realtimeBytes) / 1_000_000.0))
                                 .foregroundStyle(by: .value("Service", "Realtime"))
+                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.authBytes) / 1_000_000.0))
+                                .foregroundStyle(by: .value("Service", "Auth"))
+                            BarMark(x: .value("Day", String(pt.date.suffix(5))), y: .value("MB", Double(pt.storageBytes) / 1_000_000.0))
+                                .foregroundStyle(by: .value("Service", "Storage"))
                         }
                     }
                     .frame(height: 150)

@@ -23,8 +23,8 @@ data class SupabaseAdminCredentials(
             ?: dashboardAccessToken?.trim()?.takeIf { it.isNotEmpty() }
 
     val primaryPlatformBearer: String?
-        get() = managementAccessToken?.trim()?.takeIf { it.isNotEmpty() }
-            ?: dashboardAccessToken?.trim()?.takeIf { it.isNotEmpty() }
+        get() = dashboardAccessToken?.trim()?.takeIf { it.isNotEmpty() }
+            ?: managementAccessToken?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 @Serializable
@@ -188,13 +188,13 @@ data class SupabaseAdminSnapshot(
     val isExactBillingUsageAvailable: Boolean = false,
     val billingCyclePeriod: String? = null,
     val egressUsedBytes: Long = 0L,
-    val egressQuotaBytes: Long = 5_368_709_120L,
+    val egressQuotaBytes: Long = 5_000_000_000L,
     val cachedEgressUsedBytes: Long = 0L,
     val egress24hBytes: Long = 0L,
     val dbSizeBytes: Long = 0L,
-    val dbQuotaBytes: Long = 524_288_000L,
+    val dbQuotaBytes: Long = 500_000_000L,
     val storageSizeBytes: Long = 0L,
-    val storageQuotaBytes: Long = 1_073_741_824L,
+    val storageQuotaBytes: Long = 1_000_000_000L,
     val functionInvocations: Long = 0L,
     val functionInvocationsQuota: Long = 500_000L,
     val realtimeMessages: Long = 0L,
@@ -204,9 +204,9 @@ data class SupabaseAdminSnapshot(
     val mauCount: Long = 0L,
     val mauQuota: Long = 50_000L,
     val logIngestionBytes: Long = 0L,
-    val logIngestionQuotaBytes: Long = 1_073_741_824L,
+    val logIngestionQuotaBytes: Long = 1_000_000_000L,
     val logQueryBytes: Long = 0L,
-    val logQueryQuotaBytes: Long = 107_374_182_400L,
+    val logQueryQuotaBytes: Long = 100_000_000_000L,
     val logIngestionEvents: Long = 0L,
     val dailyEgress: List<SupabaseDailyEgressPoint> = emptyList(),
     val apiCounts24h: List<SupabaseApiCountPoint> = emptyList(),
@@ -317,11 +317,16 @@ data class SupabaseAdminSnapshot(
         fun formatBytes(bytes: Long): String {
             val b = maxOf(0L, bytes).toDouble()
             return when {
-                b >= 1_073_741_824.0 -> String.format(Locale.US, "%.2f GB", b / 1_073_741_824.0)
-                b >= 1_048_576.0 -> String.format(Locale.US, "%.1f MB", b / 1_048_576.0)
-                b >= 1024.0 -> String.format(Locale.US, "%.1f KB", b / 1024.0)
+                b >= 1_000_000_000.0 -> String.format(Locale.US, "%.2f GB", b / 1_000_000_000.0)
+                b >= 1_000_000.0 -> String.format(Locale.US, "%.1f MB", b / 1_000_000.0)
+                b >= 1_000.0 -> String.format(Locale.US, "%.1f KB", b / 1_000.0)
                 else -> "${b.toLong()} B"
             }
+        }
+
+        fun formatGigabytesPrecise(bytes: Long, decimals: Int = 3): String {
+            val gb = maxOf(0L, bytes).toDouble() / 1_000_000_000.0
+            return String.format(Locale.US, "%.${decimals}f GB", gb)
         }
 
         fun formatBillingCyclePeriod(startEpochSeconds: Long, endEpochSeconds: Long): String {

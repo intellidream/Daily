@@ -232,6 +232,7 @@ private struct SupabaseAdminIOSWebView: UIViewRepresentable {
         let bridgeJs = """
         (function() {
           var sentCode = null;
+          var emptyChecks = 0;
           function checkSupabaseCliState() {
             try {
               var host = (window.location.hostname || '').toLowerCase();
@@ -239,9 +240,13 @@ private struct SupabaseAdminIOSWebView: UIViewRepresentable {
               var params = new URLSearchParams(window.location.search || '');
               var code = params.get('device_code');
               if (code && code.length > 0 && code !== sentCode) {
-                sentCode = code;
                 var dashToken = null;
                 try { dashToken = window.localStorage.getItem('supabase.dashboard.auth.token'); } catch (e) {}
+                if (!dashToken && emptyChecks < 3) {
+                  emptyChecks++;
+                  return;
+                }
+                sentCode = code;
                 window.webkit.messageHandlers.supabaseCliBridge.postMessage({
                   deviceCode: code,
                   dashboardSession: dashToken || ''
@@ -252,18 +257,18 @@ private struct SupabaseAdminIOSWebView: UIViewRepresentable {
           var origPush = history.pushState;
           history.pushState = function() {
             var r = origPush.apply(this, arguments);
-            setTimeout(checkSupabaseCliState, 50);
+            setTimeout(checkSupabaseCliState, 80);
             return r;
           };
           var origReplace = history.replaceState;
           history.replaceState = function() {
             var r = origReplace.apply(this, arguments);
-            setTimeout(checkSupabaseCliState, 50);
+            setTimeout(checkSupabaseCliState, 80);
             return r;
           };
           window.addEventListener('popstate', checkSupabaseCliState);
-          setInterval(checkSupabaseCliState, 450);
-          setTimeout(checkSupabaseCliState, 100);
+          setInterval(checkSupabaseCliState, 400);
+          setTimeout(checkSupabaseCliState, 120);
         })();
         """
         let script = WKUserScript(source: bridgeJs, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
@@ -330,17 +335,8 @@ private struct SupabaseAdminIOSWebView: UIViewRepresentable {
                 decisionHandler(.cancel)
                 return
             }
-            if let urlStr = navigationAction.request.url?.absoluteString,
-               !didDeliverCode,
-               let code = SupabaseAdminCrypto.extractDeviceCode(from: urlStr) {
-                didDeliverCode = true
-                webView.evaluateJavaScript("window.localStorage.getItem('supabase.dashboard.auth.token')") { val, _ in
-                    let dash = val as? String
-                    DispatchQueue.main.async {
-                        self.parent.onHandshakeDetected(code, dash)
-                    }
-                }
-            }
+            // Allow navigation to commit to `https://supabase.com` first so `didFinish` and `supabaseCliBridge`
+            // read `window.localStorage['supabase.dashboard.auth.token']` from the committed Supabase origin.
             decisionHandler(.allow)
         }
 

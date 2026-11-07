@@ -70,13 +70,31 @@ class SupabaseAdminTest {
                 region = "eu-central-1",
                 status = "ACTIVE_HEALTHY"
             ),
-            egressUsedBytes = 4_831_838_208L,
-            egressQuotaBytes = 5_368_709_120L,
+            egressUsedBytes = 4_500_000_000L,
+            egressQuotaBytes = 5_000_000_000L,
             tables = listOf(bloated)
         )
         val md = snap.toMarkdownReport()
         assertTrue(md.contains("akkfouifxztnfwwiclwg"))
         assertTrue(md.contains("4.50 GB"))
         assertTrue(md.contains("Bloat (5.0x)"))
+
+        // Verify exact Supabase Portal SI decimal parity (3,169,916,695 bytes / 5 GB = 3.170 GB / 63.4% -> 63%)
+        val portalSnap = SupabaseAdminSnapshot(
+            project = snap.project,
+            isExactBillingUsageAvailable = true,
+            egressUsedBytes = 3_169_916_695L,
+            egressQuotaBytes = 5_000_000_000L,
+            dbSizeBytes = 43_580_213L,
+            dbQuotaBytes = 500_000_000L
+        )
+        assertEquals("3.170 GB", SupabaseAdminSnapshot.formatGigabytesPrecise(portalSnap.egressUsedBytes, 3))
+        assertEquals(63.4, portalSnap.egressCycleQuotaPercent, 0.05)
+        assertEquals("0.044 GB", SupabaseAdminSnapshot.formatGigabytesPrecise(portalSnap.dbSizeBytes, 3))
+
+        val testJwt = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE5OTk5OTk5OTl9.sig"
+        assertEquals(1_999_999_999L, SupabaseAdminCrypto.jwtExpirationEpochSeconds(testJwt))
+        assertFalse(SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(testJwt, nowEpochSeconds = 1_900_000_000L))
+        assertTrue(SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(testJwt, nowEpochSeconds = 1_999_999_950L))
     }
 }

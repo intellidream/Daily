@@ -91,10 +91,10 @@ final class SupabaseAdminServiceTests: XCTestCase {
             orgName: "DayOne Org",
             orgPlan: "free",
             isExactBillingUsageAvailable: true,
-            egressUsedBytes: 4_831_838_208,  // 4.50 GB
-            egressQuotaBytes: 5_368_709_120, // 5.00 GB
-            dbSizeBytes: 188_743_680,        // 180 MB
-            dbQuotaBytes: 524_288_000,       // 500 MB
+            egressUsedBytes: 4_500_000_000,  // 4.50 GB (SI decimal matching Supabase Portal)
+            egressQuotaBytes: 5_000_000_000, // 5.00 GB
+            dbSizeBytes: 180_000_000,        // 180 MB
+            dbQuotaBytes: 500_000_000,       // 500 MB (0.5 GB)
             tables: [bloatedTable]
         )
 
@@ -107,6 +107,42 @@ final class SupabaseAdminServiceTests: XCTestCase {
         let aiFallback = SupabaseAdminService.buildDeterministicDiagnosticSummary(snapshot: snap)
         XCTAssertTrue(aiFallback.contains("Egress Quota Pressure"))
         XCTAssertTrue(aiFallback.contains("public.health_metrics"))
+    }
+
+    func testSupabasePortalExactSiDecimalQuotaParityAndJwtExpiry() {
+        // Real Supabase Portal usage_original = 3,169,916,695 bytes vs 5 GB Free quota = 3.170 GB / 5 GB (63.4% -> 63%)
+        let snap = SupabaseAdminSnapshot(
+            project: SupabaseProjectSummary(
+                ref: "akkfouifxztnfwwiclwg",
+                name: "Daily",
+                organizationSlug: "ysecyyonrhezcfmqfbhg",
+                region: "eu-central-1",
+                status: "ACTIVE_HEALTHY",
+                postgresVersion: "17"
+            ),
+            isExactBillingUsageAvailable: true,
+            egressUsedBytes: 3_169_916_695,
+            egressQuotaBytes: 5_000_000_000,
+            dbSizeBytes: 43_580_213,
+            dbQuotaBytes: 500_000_000
+        )
+        XCTAssertEqual(SupabaseAdminSnapshot.formatGigabytesPrecise(snap.egressUsedBytes, decimals: 3), "3.170 GB")
+        XCTAssertEqual(snap.egressCycleQuotaPercent, 63.398, accuracy: 0.01)
+        XCTAssertEqual(Int(snap.egressCycleQuotaPercent.rounded()), 63)
+        XCTAssertEqual(SupabaseAdminSnapshot.formatGigabytesPrecise(snap.dbSizeBytes, decimals: 3), "0.044 GB")
+        XCTAssertEqual(Int(snap.dbQuotaPercent.rounded()), 9)
+
+        // Credentials must prefer GoTrue dashboardAccessToken for /platform/ endpoints
+        let creds = SupabaseAdminCredentials(
+            managementAccessToken: "sbp_pat_token",
+            dashboardAccessToken: "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE5OTk5OTk5OTl9.sig",
+            dashboardRefreshToken: "refresh_abc"
+        )
+        XCTAssertEqual(creds.primaryManagementBearer, "sbp_pat_token")
+        XCTAssertEqual(creds.primaryPlatformBearer, "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE5OTk5OTk5OTl9.sig")
+        XCTAssertEqual(SupabaseAdminCrypto.jwtExpirationEpochSeconds(creds.dashboardAccessToken), 1_999_999_999)
+        XCTAssertFalse(SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(creds.dashboardAccessToken, nowEpochSeconds: 1_900_000_000))
+        XCTAssertTrue(SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(creds.dashboardAccessToken, nowEpochSeconds: 1_999_999_950))
     }
 
     func testBillingCyclePeriodFormattingAndCreationDateAnchorCalculation() {

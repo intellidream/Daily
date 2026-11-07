@@ -350,7 +350,7 @@ public sealed partial class SupabaseAdminPage : Page
         grid.Children.Add(billingCard);
 
         // Row 1, Col 0: 24h Gateway Egress
-        double gwDailyBudget = (snap.EgressQuotaGb * 1024L * 1024L * 1024L) / 30.0;
+        double gwDailyBudget = (snap.EgressQuotaGb * 1_000_000_000.0) / 30.0;
         double gwPct = gwDailyBudget > 0 ? Math.Min(100.0, (double)snap.GatewayEgressBytes24h / gwDailyBudget * 100.0) : 0.0;
         var c1 = BuildQuotaTile(
             "Gateway Egress (24h)",
@@ -366,8 +366,8 @@ public sealed partial class SupabaseAdminPage : Page
         grid.Children.Add(c1);
 
         // Row 1, Col 1: Database Size
-        double dbTotalGb = snap.DbTotalBytes / (1024.0 * 1024.0 * 1024.0);
-        double dbQuotaGb = snap.DbQuotaBytes / (1024.0 * 1024.0 * 1024.0);
+        double dbTotalGb = snap.DbTotalBytes / 1_000_000_000.0;
+        double dbQuotaGb = snap.DbQuotaBytes / 1_000_000_000.0;
         string dbUsedStr = (dbTotalGb > 0 && dbTotalGb < 10) ? $"{dbTotalGb:F3} GB" : SupabaseAdminFormatter.FormatBytes(snap.DbTotalBytes);
         string dbQuotaStr = (dbQuotaGb > 0 && dbQuotaGb < 10) ? $"{dbQuotaGb:F1} GB" : SupabaseAdminFormatter.FormatBytes(snap.DbQuotaBytes);
 

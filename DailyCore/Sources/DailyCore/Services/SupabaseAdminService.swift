@@ -1,5 +1,8 @@
 import Foundation
 import LocalAuthentication
+#if canImport(WebKit) && (os(iOS) || os(macOS))
+import WebKit
+#endif
 #if !os(macOS)
 import Security
 #endif
@@ -16,7 +19,7 @@ public final class SupabaseAdminService: ObservableObject {
 
     public static let defaultProjectRef = "akkfouifxztnfwwiclwg"
     private static let credentialsStorageKey = "com.intellidream.daily.supabase.admin.credentials.v1"
-    private static let snapshotCacheKeyPrefix = "com.intellidream.daily.supabase.admin.snapshot.v1."
+    private static let snapshotCacheKeyPrefix = "com.intellidream.daily.supabase.admin.snapshot.v2."
     private static let cacheTtlSeconds: TimeInterval = 600 // 10 minutes
 
     @Published public private(set) var credentials: SupabaseAdminCredentials
@@ -29,6 +32,7 @@ public final class SupabaseAdminService: ObservableObject {
     @Published public private(set) var isUnlockedInMemory: Bool = false
 
     private let session: URLSession
+    private var didAttemptWebKitSessionRecovery: Bool = false
 
     public var isConnected: Bool {
         credentials.hasValidToken
@@ -303,6 +307,7 @@ public final class SupabaseAdminService: ObservableObject {
 
         self.credentials = newCreds
         self.isUnlockedInMemory = true
+        self.didAttemptWebKitSessionRecovery = false
         Self.saveCredentialsToLocalStorage(newCreds)
 
         await refreshSnapshot(force: true)
@@ -338,6 +343,7 @@ public final class SupabaseAdminService: ObservableObject {
 
         self.credentials = newCreds
         self.isUnlockedInMemory = true
+        self.didAttemptWebKitSessionRecovery = false
         Self.saveCredentialsToLocalStorage(newCreds)
 
         await refreshSnapshot(force: true)
@@ -354,7 +360,8 @@ public final class SupabaseAdminService: ObservableObject {
 
         if let cached = Self.loadCachedSnapshot(projectRef: ref) {
             self.snapshot = cached
-            if Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
+            if cached.isExactBillingUsageAvailable,
+               Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
                 return
             }
         }
@@ -369,6 +376,103 @@ public final class SupabaseAdminService: ObservableObject {
         aiAnalysis = nil
         errorMessage = nil
         isUnlockedInMemory = false
+        didAttemptWebKitSessionRecovery = false
+    }
+
+    // MARK: - Dashboard Session Refresh & Silent WebKit Recovery
+
+    /// Ensures we hold a non-expired GoTrue Dashboard JWT (`eyJ...`) for `/platform/organizations/{slug}/usage`.
+    /// 1. Returns existing `dashboardAccessToken` if valid and not expiring within 2 minutes.
+    /// 2. Exchanges `dashboardRefreshToken` via `POST https://auth.supabase.io/auth/v1/token?grant_type=refresh_token`.
+    /// 3. On iOS/macOS, if `dashboardRefreshToken` was missed during an earlier WebView login, silently recovers
+    ///    `localStorage['supabase.dashboard.auth.token']` from `WKWebsiteDataStore.default()` and refreshes it.
+    private func ensureFreshDashboardBearer(forceRefresh: Bool = false) async -> String? {
+        if !forceRefresh,
+           let existing = credentials.dashboardAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !existing.isEmpty,
+           !SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(existing) {
+            return existing
+        }
+
+        if let refreshTok = credentials.dashboardRefreshToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !refreshTok.isEmpty,
+           let refreshed = await refreshGoTrueDashboardSession(refreshToken: refreshTok) {
+            credentials.dashboardAccessToken = refreshed.accessToken
+            if let newRef = refreshed.refreshToken, !newRef.isEmpty {
+                credentials.dashboardRefreshToken = newRef
+            }
+            if credentials.adminIdentity == nil, let id = refreshed.identity {
+                credentials.adminIdentity = id
+            }
+            Self.saveCredentialsToLocalStorage(credentials)
+            return refreshed.accessToken
+        }
+
+        #if canImport(WebKit) && (os(iOS) || os(macOS))
+        if !didAttemptWebKitSessionRecovery {
+            didAttemptWebKitSessionRecovery = true
+            let harvester = WebKitDashboardSessionHarvester()
+            if let rawJson = await harvester.harvest() {
+                let parsed = SupabaseAdminCrypto.parseDashboardSessionJson(rawJson)
+                if let recoveredRef = parsed.refreshToken, !recoveredRef.isEmpty {
+                    credentials.dashboardRefreshToken = recoveredRef
+                }
+                if credentials.adminIdentity == nil, let id = parsed.identity {
+                    credentials.adminIdentity = id
+                }
+                if let recoveredAcc = parsed.accessToken,
+                   !SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(recoveredAcc) {
+                    credentials.dashboardAccessToken = recoveredAcc
+                    Self.saveCredentialsToLocalStorage(credentials)
+                    return recoveredAcc
+                }
+                if let recoveredRef = parsed.refreshToken,
+                   let refreshed = await refreshGoTrueDashboardSession(refreshToken: recoveredRef) {
+                    credentials.dashboardAccessToken = refreshed.accessToken
+                    if let newRef = refreshed.refreshToken, !newRef.isEmpty {
+                        credentials.dashboardRefreshToken = newRef
+                    }
+                    Self.saveCredentialsToLocalStorage(credentials)
+                    return refreshed.accessToken
+                }
+                if let recoveredAcc = parsed.accessToken, !recoveredAcc.isEmpty {
+                    credentials.dashboardAccessToken = recoveredAcc
+                    Self.saveCredentialsToLocalStorage(credentials)
+                    return recoveredAcc
+                }
+            }
+        }
+        #endif
+
+        if let fallbackExisting = credentials.dashboardAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fallbackExisting.isEmpty {
+            return fallbackExisting
+        }
+        return nil
+    }
+
+    private func refreshGoTrueDashboardSession(
+        refreshToken: String
+    ) async -> (accessToken: String, refreshToken: String?, identity: String?)? {
+        guard let url = URL(string: "https://auth.supabase.io/auth/v1/token?grant_type=refresh_token") else {
+            return nil
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 10.0
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
+
+        guard let (data, resp) = try? await session.data(for: req),
+              let http = resp as? HTTPURLResponse,
+              (200...299).contains(http.statusCode),
+              let raw = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let parsed = SupabaseAdminCrypto.parseDashboardSessionJson(raw)
+        guard let acc = parsed.accessToken, !acc.isEmpty else { return nil }
+        return (acc, parsed.refreshToken, parsed.identity)
     }
 
     // MARK: - Snapshot Refresh (10-Minute Local Cache + Parallel Aggregation)
@@ -377,21 +481,26 @@ public final class SupabaseAdminService: ObservableObject {
         guard isConnected else { return }
         if let current = snapshot,
            current.project.ref == credentials.selectedProjectRef,
+           current.isExactBillingUsageAvailable,
            Date().timeIntervalSince(current.fetchedAt) < Self.cacheTtlSeconds {
             return
         }
         if let cached = Self.loadCachedSnapshot(projectRef: credentials.selectedProjectRef) {
             self.snapshot = cached
-            if Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
+            if cached.isExactBillingUsageAvailable,
+               Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
                 return
             }
         }
-        await refreshSnapshot(force: false)
+        await refreshSnapshot(force: true)
     }
 
     public func refreshSnapshot(force: Bool = true) async {
-        guard let mgmtBearer = credentials.primaryManagementBearer else { return }
-        if !force, let snap = snapshot, Date().timeIntervalSince(snap.fetchedAt) < Self.cacheTtlSeconds {
+        guard credentials.primaryManagementBearer != nil else { return }
+        if !force,
+           let snap = snapshot,
+           snap.isExactBillingUsageAvailable,
+           Date().timeIntervalSince(snap.fetchedAt) < Self.cacheTtlSeconds {
             return
         }
 
@@ -399,8 +508,11 @@ public final class SupabaseAdminService: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
+        let freshDashboardBearer = await ensureFreshDashboardBearer(forceRefresh: false)
+        guard let mgmtBearer = credentials.primaryManagementBearer else { return }
+
         let targetRef = credentials.selectedProjectRef
-        let primaryPlatform = credentials.primaryPlatformBearer ?? mgmtBearer
+        let primaryPlatform = freshDashboardBearer ?? credentials.primaryPlatformBearer ?? mgmtBearer
         let fallbackPlatform: String? = {
             if let pat = credentials.managementAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !pat.isEmpty, pat != primaryPlatform {
                 return pat
@@ -410,7 +522,7 @@ public final class SupabaseAdminService: ObservableObject {
             }
             return nil
         }()
-        let hasDashboardToken = (credentials.dashboardAccessToken?.isEmpty == false)
+        let hasDashboardToken = (freshDashboardBearer?.isEmpty == false) || (credentials.dashboardAccessToken?.isEmpty == false)
 
         do {
             let knownOrgs = await fetchOrganizations(bearer: mgmtBearer)
@@ -470,11 +582,11 @@ public final class SupabaseAdminService: ObservableObject {
             let pgData = await pgCatalogTask
             let billingData = await platformUsageTask
 
-            // Plan-aware default quotas when exact `/platform/organizations/{slug}/usage` isn't returned (e.g. PAT-only mode)
+            // Plan-aware SI decimal default quotas when exact `/platform/organizations/{slug}/usage` isn't returned (e.g. PAT-only mode)
             let isProOrHigher = ["pro", "team", "enterprise"].contains(orgPlan.lowercased())
-            let defaultEgressQuota: Int64 = isProOrHigher ? 268_435_456_000 : 5_368_709_120 // 250 GB vs 5 GB
-            let defaultDbQuota: Int64 = isProOrHigher ? 8_589_934_592 : 524_288_000          // 8 GB vs 500 MB
-            let defaultStorageQuota: Int64 = isProOrHigher ? 107_374_182_400 : 1_073_741_824 // 100 GB vs 1 GB
+            let defaultEgressQuota: Int64 = isProOrHigher ? 250_000_000_000 : 5_000_000_000 // 250 GB vs 5 GB (SI decimal)
+            let defaultDbQuota: Int64 = isProOrHigher ? 8_000_000_000 : 500_000_000          // 8 GB vs 0.5 GB (SI decimal)
+            let defaultStorageQuota: Int64 = isProOrHigher ? 100_000_000_000 : 1_000_000_000 // 100 GB vs 1 GB (SI decimal)
             let defaultFnQuota: Int64 = isProOrHigher ? 2_000_000 : 500_000
             let defaultRtMsgQuota: Int64 = isProOrHigher ? 5_000_000 : 2_000_000
             let defaultRtPeakQuota: Int64 = isProOrHigher ? 500 : 200
@@ -506,14 +618,17 @@ public final class SupabaseAdminService: ObservableObject {
             }
 
             // Billing Cycle / Monthly Egress resolution:
-            // 1. Max of exact billing usage & sum of daily points across the entire active billing period
-            // 2. Fallback to at least 24h burst if platform usage metrics are empty
+            // 1. Authoritative `/platform/organizations/{slug}/usage` `EGRESS` (`usage_original`) when exact billing usage is available
+            // 2. Otherwise sum of daily egress points across the active billing cycle
+            // 3. Otherwise fallback to 24h gateway burst
             let sumDailyEgressBytes = billingData.dailyEgress.reduce(0) { $0 + $1.totalBytes }
-            var resolvedCycleEgress: Int64 = max(billingData.egressUsedBytes, sumDailyEgressBytes)
-            if resolvedCycleEgress == 0 {
-                resolvedCycleEgress = resolved24hEgress
-            } else if resolved24hEgress > resolvedCycleEgress {
-                resolvedCycleEgress = max(resolvedCycleEgress, resolved24hEgress)
+            let resolvedCycleEgress: Int64
+            if billingData.isExact && billingData.egressUsedBytes > 0 {
+                resolvedCycleEgress = billingData.egressUsedBytes
+            } else if sumDailyEgressBytes > 0 {
+                resolvedCycleEgress = max(sumDailyEgressBytes, resolved24hEgress)
+            } else {
+                resolvedCycleEgress = max(billingData.egressUsedBytes, resolved24hEgress)
             }
 
             let resolvedDbSize = billingData.dbSizeBytes > 0 ? billingData.dbSizeBytes : pgData.dbSizeBytes
@@ -578,9 +693,9 @@ public final class SupabaseAdminService: ObservableObject {
                 mauCount: resolvedMau,
                 mauQuota: billingData.mauQuota > 0 ? billingData.mauQuota : defaultMauQuota,
                 logIngestionBytes: billingData.logIngestionBytes,
-                logIngestionQuotaBytes: billingData.logIngestionQuotaBytes > 0 ? billingData.logIngestionQuotaBytes : 1_073_741_824,
+                logIngestionQuotaBytes: billingData.logIngestionQuotaBytes > 0 ? billingData.logIngestionQuotaBytes : 1_000_000_000,
                 logQueryBytes: billingData.logQueryBytes,
-                logQueryQuotaBytes: billingData.logQueryQuotaBytes > 0 ? billingData.logQueryQuotaBytes : 107_374_182_400,
+                logQueryQuotaBytes: billingData.logQueryQuotaBytes > 0 ? billingData.logQueryQuotaBytes : 100_000_000_000,
                 logIngestionEvents: resolvedLogEvents,
                 dailyEgress: dailySeries,
                 apiCounts24h: apiCounts,
@@ -1609,13 +1724,39 @@ public final class SupabaseAdminService: ObservableObject {
         var out = PlatformBillingResult()
         guard !orgSlug.isEmpty else { return out }
 
+        var effectivePrimary = primaryBearer
+
         // 0. Query Organization Subscription for Billing Cycle Period & Plan
         let subUrl1 = "https://api.supabase.com/platform/organizations/\(orgSlug)/billing/subscription"
         let subUrl2 = "https://api.supabase.com/v1/organizations/\(orgSlug)/billing/subscription"
-        var subJson = await performGetJsonWithFallback(url: subUrl1, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
+        var subJson = await performGetJsonWithFallback(url: subUrl1, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
         if subJson == nil {
-            subJson = await performGetJsonWithFallback(url: subUrl2, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
+            subJson = await performGetJsonWithFallback(url: subUrl2, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
         }
+
+        // 1. Organization / Project exact billing usage
+        // Note: Query org-level usage first (without project_ref) matching the Studio "All projects" scope.
+        let usageUrlOrg = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage"
+        let usageUrlProj = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage?project_ref=\(ref)"
+        let usageUrlV1 = "https://api.supabase.com/v1/organizations/\(orgSlug)/usage"
+
+        var usageJson = await performGetJsonWithFallback(url: usageUrlOrg, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
+        if usageJson == nil,
+           let rotatedDash = await ensureFreshDashboardBearer(forceRefresh: true),
+           rotatedDash != effectivePrimary {
+            effectivePrimary = rotatedDash
+            if subJson == nil {
+                subJson = await performGetJsonWithFallback(url: subUrl1, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
+            }
+            usageJson = await performGetJsonWithFallback(url: usageUrlOrg, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
+        }
+        if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
+            usageJson = await performGetJsonWithFallback(url: usageUrlProj, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
+        }
+        if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
+            usageJson = await performGetJsonWithFallback(url: usageUrlV1, primaryBearer: effectivePrimary, fallbackBearer: fallbackBearer) as? [String: Any]
+        }
+
         var subscriptionStartSec: Int64?
         if let subJson {
             var startSec: Int64?
@@ -1625,20 +1766,6 @@ public final class SupabaseAdminService: ObservableObject {
             if let s = startSec, let e = endSec, s > 0, e > s {
                 out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startEpochSeconds: s, endEpochSeconds: e)
             }
-        }
-
-        // 1. Organization / Project exact billing usage
-        // Note: Query org-level usage first (without project_ref) matching the Studio "All projects" scope.
-        let usageUrlOrg = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage"
-        let usageUrlProj = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage?project_ref=\(ref)"
-        let usageUrlV1 = "https://api.supabase.com/v1/organizations/\(orgSlug)/usage"
-
-        var usageJson = await performGetJsonWithFallback(url: usageUrlOrg, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
-        if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
-            usageJson = await performGetJsonWithFallback(url: usageUrlProj, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
-        }
-        if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
-            usageJson = await performGetJsonWithFallback(url: usageUrlV1, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
         }
 
         if let usageJson, let usages = usageJson["usages"] as? [[String: Any]], !usages.isEmpty {
@@ -1660,11 +1787,12 @@ public final class SupabaseAdminService: ObservableObject {
                 let usageOrig = Self.int64(u["usage_original"])
                 let limitVal = Self.double(u["pricing_free_units"]) ?? Self.double(u["capped_quota"]) ?? Self.double(u["available_in_plan"]) ?? 0
 
-                // Note: Supabase Studio returns byte metrics either in bytes (`usage_original`) or GB (`usage` when < 100,000 and metric is bytes)
+                // Supabase Studio uses SI decimal GB (`1_000_000_000` bytes) for `pricing_free_units` and `usage`
+                // while `usage_original` carries exact raw decimal bytes.
                 func resolveBytes(_ val: Double, orig: Int64?) -> Int64 {
                     if let orig, orig > 0 { return orig }
                     if val > 0 && val < 100_000 {
-                        return Int64(val * 1_073_741_824.0)
+                        return Int64(val * 1_000_000_000.0)
                     }
                     return Int64(val)
                 }
@@ -1722,7 +1850,7 @@ public final class SupabaseAdminService: ObservableObject {
             creationDateString: orgCreatedAt ?? projectCreatedAt
         )
 
-        // 2. Daily Egress stacked breakdown across the active billing cycle
+        // 2. Daily Egress stacked breakdown across the active billing cycle (deduplicated & summed per YYYY-MM-DD)
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
         let endStr = iso.string(from: Date())
@@ -1730,63 +1858,120 @@ public final class SupabaseAdminService: ObservableObject {
         let effectiveStart = max(cycleStartDate, minAllowedStart)
         let startStr = iso.string(from: effectiveStart)
 
-        var dailyComps = URLComponents(string: "https://api.supabase.com/platform/organizations/\(orgSlug)/usage/daily")!
-        dailyComps.queryItems = [
-            URLQueryItem(name: "project_ref", value: ref),
+        var dailyCompsOrg = URLComponents(string: "https://api.supabase.com/platform/organizations/\(orgSlug)/usage/daily")!
+        dailyCompsOrg.queryItems = [
             URLQueryItem(name: "start", value: startStr),
             URLQueryItem(name: "end", value: endStr)
         ]
         var dailyJson = await performGetJsonWithFallback(
-            url: dailyComps.url?.absoluteString ?? "",
-            primaryBearer: primaryBearer,
+            url: dailyCompsOrg.url?.absoluteString ?? "",
+            primaryBearer: effectivePrimary,
             fallbackBearer: fallbackBearer
         ) as? [String: Any]
         if dailyJson == nil || (dailyJson?["usages"] as? [[String: Any]])?.isEmpty == true {
-            var dailyCompsNoProj = URLComponents(string: "https://api.supabase.com/platform/organizations/\(orgSlug)/usage/daily")!
-            dailyCompsNoProj.queryItems = [
+            var dailyCompsProj = URLComponents(string: "https://api.supabase.com/platform/organizations/\(orgSlug)/usage/daily")!
+            dailyCompsProj.queryItems = [
+                URLQueryItem(name: "project_ref", value: ref),
                 URLQueryItem(name: "start", value: startStr),
                 URLQueryItem(name: "end", value: endStr)
             ]
             dailyJson = await performGetJsonWithFallback(
-                url: dailyCompsNoProj.url?.absoluteString ?? "",
-                primaryBearer: primaryBearer,
+                url: dailyCompsProj.url?.absoluteString ?? "",
+                primaryBearer: effectivePrimary,
                 fallbackBearer: fallbackBearer
             ) as? [String: Any]
         }
 
         if let dailyJson, let series = dailyJson["usages"] as? [[String: Any]] {
-            var points: [SupabaseDailyEgressPoint] = []
+            struct DailyBucket {
+                var rest: Int64 = 0
+                var fn: Int64 = 0
+                var rt: Int64 = 0
+                var auth: Int64 = 0
+                var storage: Int64 = 0
+                var supavisor: Int64 = 0
+            }
+            var byDate: [String: DailyBucket] = [:]
             for row in series {
-                let dateRaw = Self.str(row["date"]) ?? Self.str(row["period_start"]) ?? ""
+                let dateRaw = Self.str(row["date"]) ?? Self.str(row["period_start"]) ?? Self.str(row["timestamp"]) ?? ""
                 let dateShort = String(dateRaw.prefix(10))
-                guard !dateShort.isEmpty else { continue }
+                guard dateShort.count == 10 else { continue }
+                var bucket = byDate[dateShort] ?? DailyBucket()
                 let breakdown = (row["breakdown"] as? [String: Any]) ?? row
                 func b(_ key: String) -> Int64 {
+                    if let orig = Self.int64(breakdown["\(key)_original"]), orig > 0 { return orig }
                     if let v = Self.double(breakdown[key]), v > 0 {
-                        return v < 5_000 ? Int64(v * 1_073_741_824.0) : Int64(v)
+                        return v < 100_000 ? Int64(v * 1_000_000_000.0) : Int64(v)
                     }
                     return 0
                 }
-                points.append(
-                    SupabaseDailyEgressPoint(
-                        date: dateShort,
-                        restBytes: b("egress_rest"),
-                        functionBytes: b("egress_function"),
-                        realtimeBytes: b("egress_realtime"),
-                        authBytes: b("egress_auth"),
-                        storageBytes: b("egress_storage"),
-                        supavisorBytes: b("egress_supavisor")
-                    )
+                let bRest = b("egress_rest") + b("database_egress")
+                let bFn = b("egress_function") + b("functions_egress")
+                let bRt = b("egress_realtime") + b("realtime_egress")
+                let bAuth = b("egress_auth") + b("auth_egress")
+                let bStorage = b("egress_storage") + b("storage_egress")
+                let bSupa = b("egress_supavisor") + b("supavisor_egress")
+
+                bucket.rest += bRest
+                bucket.fn += bFn
+                bucket.rt += bRt
+                bucket.auth += bAuth
+                bucket.storage += bStorage
+                bucket.supavisor += bSupa
+
+                if let metric = Self.str(row["metric"])?.uppercased() {
+                    let orig = Self.int64(row["usage_original"])
+                    let usageVal = Self.double(row["usage"]) ?? 0
+                    let metricBytes: Int64 = {
+                        if let orig, orig > 0 { return orig }
+                        if usageVal > 0 {
+                            return usageVal < 100_000 ? Int64(usageVal * 1_000_000_000.0) : Int64(usageVal)
+                        }
+                        return 0
+                    }()
+                    if metricBytes > 0 {
+                        switch metric {
+                        case "EGRESS_REST", "DATABASE_EGRESS", "POSTGREST_EGRESS":
+                            if bRest == 0 { bucket.rest += metricBytes }
+                        case "EGRESS_FUNCTION", "FUNCTION_EGRESS", "FUNCTIONS_EGRESS", "EDGE_FUNCTION_EGRESS":
+                            if bFn == 0 { bucket.fn += metricBytes }
+                        case "EGRESS_REALTIME", "REALTIME_EGRESS":
+                            if bRt == 0 { bucket.rt += metricBytes }
+                        case "EGRESS_AUTH", "AUTH_EGRESS":
+                            if bAuth == 0 { bucket.auth += metricBytes }
+                        case "EGRESS_STORAGE", "STORAGE_EGRESS":
+                            if bStorage == 0 { bucket.storage += metricBytes }
+                        case "EGRESS_SUPAVISOR", "SUPAVISOR_EGRESS", "SHARED_POOLER_EGRESS":
+                            if bSupa == 0 { bucket.supavisor += metricBytes }
+                        case "EGRESS", "UNIFIED_EGRESS", "TOTAL_EGRESS":
+                            let curSum = bucket.rest + bucket.fn + bucket.rt + bucket.auth + bucket.storage + bucket.supavisor
+                            if curSum == 0 { bucket.rest += metricBytes }
+                        default:
+                            break
+                        }
+                    }
+                }
+                byDate[dateShort] = bucket
+            }
+            out.dailyEgress = byDate.keys.sorted().map { d in
+                let b = byDate[d]!
+                return SupabaseDailyEgressPoint(
+                    date: d,
+                    restBytes: b.rest,
+                    functionBytes: b.fn,
+                    realtimeBytes: b.rt,
+                    authBytes: b.auth,
+                    storageBytes: b.storage,
+                    supavisorBytes: b.supavisor
                 )
             }
-            out.dailyEgress = points.sorted { $0.date < $1.date }
         }
 
         // 3. Resource warnings (disk/CPU/memory exhaustion banners)
-        if preferDashboardEndpoint,
+        if preferDashboardEndpoint || effectivePrimary != fallbackBearer,
            let warnArr = await performGetJsonWithFallback(
                url: "https://api.supabase.com/platform/projects-resource-warnings?ref=\(ref)",
-               primaryBearer: primaryBearer,
+               primaryBearer: effectivePrimary,
                fallbackBearer: fallbackBearer
            ) as? [[String: Any]],
            let wObj = warnArr.first {
@@ -1988,3 +2173,89 @@ public final class SupabaseAdminService: ObservableObject {
         return nil
     }
 }
+
+#if canImport(WebKit) && (os(iOS) || os(macOS))
+/// Lightweight offscreen harvester that reads `localStorage['supabase.dashboard.auth.token']`
+/// from `WKWebsiteDataStore.default()` on the `https://supabase.com` origin so existing GitHub
+/// admin sessions self-heal automatically without requiring a manual sign-out / sign-in.
+@MainActor
+private final class WebKitDashboardSessionHarvester: NSObject, WKNavigationDelegate {
+    private var webView: WKWebView?
+    private var continuation: CheckedContinuation<String?, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    private var selfRetainer: WebKitDashboardSessionHarvester?
+
+    func harvest() async -> String? {
+        guard let originUrl = URL(string: "https://supabase.com/robots.txt") else {
+            return nil
+        }
+        return await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
+            self.continuation = cont
+            self.selfRetainer = self
+
+            let config = WKWebViewConfiguration()
+            config.websiteDataStore = .default()
+            let wv = WKWebView(frame: .zero, configuration: config)
+            wv.navigationDelegate = self
+            self.webView = wv
+
+            self.timeoutTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 5_500_000_000)
+                self?.finish(with: nil)
+            }
+
+            let req = URLRequest(
+                url: originUrl,
+                cachePolicy: .reloadIgnoringLocalCacheData,
+                timeoutInterval: 5.5
+            )
+            wv.load(req)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let js = """
+        (function() {
+          try {
+            var direct = window.localStorage.getItem('supabase.dashboard.auth.token');
+            if (direct) return direct;
+            for (var i = 0; i < window.localStorage.length; i++) {
+              var k = window.localStorage.key(i);
+              if (k && k.indexOf('supabase') !== -1 && k.indexOf('auth') !== -1) {
+                var v = window.localStorage.getItem(k);
+                if (v && v.indexOf('access_token') !== -1) return v;
+              }
+            }
+          } catch (e) {}
+          return null;
+        })();
+        """
+        webView.evaluateJavaScript(js) { [weak self] result, _ in
+            let strVal = result as? String
+            Task { @MainActor in
+                self?.finish(with: strVal)
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        finish(with: nil)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finish(with: nil)
+    }
+
+    private func finish(with value: String?) {
+        guard let cont = continuation else { return }
+        continuation = nil
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        webView?.navigationDelegate = nil
+        webView?.stopLoading()
+        webView = nil
+        selfRetainer = nil
+        cont.resume(returning: value)
+    }
+}
+#endif

@@ -186,16 +186,29 @@ public enum SupabaseAdminCrypto {
 
     /// Parses `localStorage['supabase.dashboard.auth.token']` JSON to extract the GoTrue session token & GitHub identity.
     public static func parseDashboardSessionJson(_ rawJson: String?) -> (accessToken: String?, refreshToken: String?, identity: String?) {
-        guard let rawJson = rawJson?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawJson.isEmpty,
-              let data = rawJson.data(using: .utf8),
+        guard let trimmed = rawJson?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              trimmed != "null" else {
+            return (nil, nil, nil)
+        }
+
+        var jsonData = trimmed.data(using: .utf8)
+        // Handle double-encoded JSON strings returned by some JS bridges
+        if let d = jsonData,
+           let unwrappedString = try? JSONSerialization.jsonObject(with: d, options: [.fragmentsAllowed]) as? String {
+            jsonData = unwrappedString.data(using: .utf8)
+        }
+
+        guard let data = jsonData,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return (nil, nil, nil)
         }
 
-        // GoTrue stores session either at root or nested inside "currentSession"
+        // GoTrue stores session either at root or nested inside "currentSession" / "session"
         let sessionDict: [String: Any]
         if let nested = root["currentSession"] as? [String: Any] {
+            sessionDict = nested
+        } else if let nested = root["session"] as? [String: Any] {
             sessionDict = nested
         } else {
             sessionDict = root
@@ -222,6 +235,41 @@ public enum SupabaseAdminCrypto {
             refreshToken?.isEmpty == false ? refreshToken : nil,
             identity
         )
+    }
+
+    /// Extracts the `exp` UNIX epoch timestamp from a JWT payload without requiring external libraries.
+    public static func jwtExpirationEpochSeconds(_ token: String?) -> Int64? {
+        guard let token = token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
+            return nil
+        }
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var payloadB64 = parts[1]
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let rem = payloadB64.count % 4
+        if rem > 0 {
+            payloadB64 += String(repeating: "=", count: 4 - rem)
+        }
+        guard let data = Data(base64Encoded: payloadB64),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        if let exp = obj["exp"] as? Int64 { return exp }
+        if let exp = obj["exp"] as? Int { return Int64(exp) }
+        if let exp = obj["exp"] as? NSNumber { return exp.int64Value }
+        if let exp = obj["exp"] as? Double { return Int64(exp) }
+        return nil
+    }
+
+    /// Returns true if the JWT is nil, not a valid JWT, or expires within `leewaySeconds`.
+    public static func isJwtExpiredOrExpiringSoon(
+        _ token: String?,
+        leewaySeconds: Int64 = 120,
+        nowEpochSeconds: Int64 = Int64(Date().timeIntervalSince1970)
+    ) -> Bool {
+        guard let exp = jwtExpirationEpochSeconds(token) else { return true }
+        return (nowEpochSeconds + leewaySeconds) >= exp
     }
 
     /// Maps raw HTTP User-Agent headers from `edge_logs` to DayOne ecosystem devices.

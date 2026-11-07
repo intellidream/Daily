@@ -52,13 +52,13 @@ public struct SupabaseAdminCredentials: Codable, Sendable, Equatable {
         return nil
     }
 
-    /// Primary bearer token for `/platform/` billing/usage endpoints (prefers durable management PAT token, falls back to dashboard token).
+    /// Primary bearer token for `/platform/` billing/usage endpoints (prefers GoTrue dashboard session token, falls back to management PAT).
     public var primaryPlatformBearer: String? {
-        if let mgmt = managementAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !mgmt.isEmpty {
-            return mgmt
-        }
         if let dash = dashboardAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !dash.isEmpty {
             return dash
+        }
+        if let mgmt = managementAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !mgmt.isEmpty {
+            return mgmt
         }
         return nil
     }
@@ -530,13 +530,13 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         isExactBillingUsageAvailable: Bool = false,
         billingCyclePeriod: String? = nil,
         egressUsedBytes: Int64 = 0,
-        egressQuotaBytes: Int64 = 5_368_709_120, // 5 GB default Free
+        egressQuotaBytes: Int64 = 5_000_000_000, // 5 GB default Free (SI decimal matching Supabase Portal)
         cachedEgressUsedBytes: Int64 = 0,
         egress24hBytes: Int64 = 0,
         dbSizeBytes: Int64 = 0,
-        dbQuotaBytes: Int64 = 524_288_000, // 500 MB default Free
+        dbQuotaBytes: Int64 = 500_000_000, // 0.5 GB (500 MB) default Free
         storageSizeBytes: Int64 = 0,
-        storageQuotaBytes: Int64 = 1_073_741_824, // 1 GB default Free
+        storageQuotaBytes: Int64 = 1_000_000_000, // 1 GB default Free
         functionInvocations: Int64 = 0,
         functionInvocationsQuota: Int64 = 500_000,
         realtimeMessages: Int64 = 0,
@@ -546,9 +546,9 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         mauCount: Int64 = 0,
         mauQuota: Int64 = 50_000,
         logIngestionBytes: Int64 = 0,
-        logIngestionQuotaBytes: Int64 = 1_073_741_824, // 1 GB default Free
+        logIngestionQuotaBytes: Int64 = 1_000_000_000, // 1 GB default Free
         logQueryBytes: Int64 = 0,
-        logQueryQuotaBytes: Int64 = 107_374_182_400, // 100 GB default Free
+        logQueryQuotaBytes: Int64 = 100_000_000_000, // 100 GB default Free
         logIngestionEvents: Int64 = 0,
         dailyEgress: [SupabaseDailyEgressPoint] = [],
         apiCounts24h: [SupabaseApiCountPoint] = [],
@@ -650,19 +650,19 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
 
     public static func formatBytes(_ bytes: Int64) -> String {
         let absBytes = Double(max(0, bytes))
-        if absBytes >= 1_073_741_824 {
-            return String(format: "%.2f GB", absBytes / 1_073_741_824.0)
-        } else if absBytes >= 1_048_576 {
-            return String(format: "%.1f MB", absBytes / 1_048_576.0)
-        } else if absBytes >= 1024 {
-            return String(format: "%.1f KB", absBytes / 1024.0)
+        if absBytes >= 1_000_000_000 {
+            return String(format: "%.2f GB", absBytes / 1_000_000_000.0)
+        } else if absBytes >= 1_000_000 {
+            return String(format: "%.1f MB", absBytes / 1_000_000.0)
+        } else if absBytes >= 1_000 {
+            return String(format: "%.1f KB", absBytes / 1_000.0)
         } else {
             return "\(Int(absBytes)) B"
         }
     }
 
     public static func formatGigabytesPrecise(_ bytes: Int64, decimals: Int = 3) -> String {
-        let gb = Double(max(0, bytes)) / 1_073_741_824.0
+        let gb = Double(max(0, bytes)) / 1_000_000_000.0
         return String(format: "%.\(decimals)f GB", gb)
     }
 

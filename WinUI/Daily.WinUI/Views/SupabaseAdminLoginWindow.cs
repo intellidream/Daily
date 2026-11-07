@@ -386,19 +386,33 @@ public sealed class SupabaseAdminLoginWindow : Window
             if (window.__dayOneSupaHookInstalled) return;
             window.__dayOneSupaHookInstalled = true;
             var sent = false;
+            var emptyDashRetries = 0;
+            function deliverCode(codeVal) {
+                var dash = null;
+                try { dash = window.localStorage.getItem('supabase.dashboard.auth.token'); } catch(e) {}
+                if (!dash && emptyDashRetries < 3) {
+                    emptyDashRetries++;
+                    return;
+                }
+                sent = true;
+                window.chrome.webview.postMessage({ deviceCode: codeVal, dashJson: dash });
+            }
             function checkPage() {
                 if (sent) return;
                 try {
                     var href = String(window.location.href || '');
                     if (href.indexOf('supabase.com/dashboard/cli/login') === -1) return;
+                    var params = new URLSearchParams(window.location.search || '');
+                    var qCode = (params.get('device_code') || '').trim();
+                    if (qCode.length > 0) {
+                        deliverCode(qCode);
+                        return;
+                    }
                     var inputs = document.querySelectorAll('input[readonly], input[type="text"], code');
                     for (var i = 0; i < inputs.length; i++) {
                         var v = (inputs[i].value || inputs[i].textContent || '').trim();
                         if (/^[a-f0-9]{8}$/i.test(v)) {
-                            sent = true;
-                            var dash = null;
-                            try { dash = window.localStorage.getItem('supabase.dashboard.auth.token'); } catch(e) {}
-                            window.chrome.webview.postMessage({ deviceCode: v, dashJson: dash });
+                            deliverCode(v);
                             return;
                         }
                     }
@@ -406,15 +420,12 @@ public sealed class SupabaseAdminLoginWindow : Window
                     if (bodyTxt.indexOf('verification code') !== -1 || bodyTxt.indexOf('Verification Code') !== -1 || bodyTxt.indexOf('Enter this code') !== -1) {
                         var m = bodyTxt.match(/\b([a-f0-9]{8})\b/i);
                         if (m && m[1]) {
-                            sent = true;
-                            var dash2 = null;
-                            try { dash2 = window.localStorage.getItem('supabase.dashboard.auth.token'); } catch(e) {}
-                            window.chrome.webview.postMessage({ deviceCode: m[1], dashJson: dash2 });
+                            deliverCode(m[1]);
                         }
                     }
                 } catch (err) {}
             }
-            setInterval(checkPage, 450);
+            setInterval(checkPage, 400);
             document.addEventListener('DOMContentLoaded', checkPage);
         })();
         """;
