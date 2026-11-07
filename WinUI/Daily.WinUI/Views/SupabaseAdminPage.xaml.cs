@@ -340,30 +340,44 @@ public sealed partial class SupabaseAdminPage : Page
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+        // Row 0: Full-width Billing Cycle Egress Card
+        var billingCard = BuildBillingCycleEgressCard(snap);
+        Grid.SetRow(billingCard, 0);
+        Grid.SetColumn(billingCard, 0);
+        Grid.SetColumnSpan(billingCard, 2);
+        grid.Children.Add(billingCard);
+
+        // Row 1, Col 0: 24h Gateway Egress
+        double gwDailyBudget = (snap.EgressQuotaGb * 1024L * 1024L * 1024L) / 30.0;
+        double gwPct = gwDailyBudget > 0 ? Math.Min(100.0, (double)snap.GatewayEgressBytes24h / gwDailyBudget * 100.0) : 0.0;
         var c1 = BuildQuotaTile(
+            "Gateway Egress (24h)",
+            SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h),
+            $"{snap.GatewayRequests24h:N0} requests",
+            snap.CachedEgressUsedGb > 0
+                ? $"Cached CDN: {snap.CachedEgressUsedGb:F3} GB · {gwPct:F1}% of daily share"
+                : $"24h HTTP: {snap.GatewayRequests24h:N0} reqs · {gwPct:F1}% daily budget",
+            gwPct,
+            CyanAccent);
+        Grid.SetRow(c1, 1);
+        Grid.SetColumn(c1, 0);
+        grid.Children.Add(c1);
+
+        // Row 1, Col 1: Database Size
+        var c2 = BuildQuotaTile(
             "Database Size",
             SupabaseAdminFormatter.FormatBytes(snap.DbTotalBytes),
             $"of {SupabaseAdminFormatter.FormatBytes(snap.DbQuotaBytes)} ({snap.DbUsagePercent:F1}%)",
             $"Heap {SupabaseAdminFormatter.FormatBytes(snap.DbHeapBytes)} · Indexes {SupabaseAdminFormatter.FormatBytes(snap.DbIndexBytes)}",
             snap.DbUsagePercent,
-            CyanAccent);
-        Grid.SetRow(c1, 0);
-        Grid.SetColumn(c1, 0);
-        grid.Children.Add(c1);
-
-        var egressBadge = snap.HasExactBillingMetrics ? "Exact Billing" : "24h Gateway Est.";
-        var c2 = BuildQuotaTile(
-            $"Unified Egress ({egressBadge})",
-            $"{snap.EgressUsedGb:F3} GB",
-            $"of {snap.EgressQuotaGb:F1} GB ({snap.EgressUsagePercent:F1}%)",
-            $"Cached {snap.CachedEgressUsedGb:F3} GB · 24h Payload {SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h)}",
-            snap.EgressUsagePercent,
             EmeraldAccent);
-        Grid.SetRow(c2, 0);
+        Grid.SetRow(c2, 1);
         Grid.SetColumn(c2, 1);
         grid.Children.Add(c2);
 
+        // Row 2, Col 0: Storage Buckets
         var c3 = BuildQuotaTile(
             "Storage Buckets",
             SupabaseAdminFormatter.FormatBytes(snap.StorageTotalBytes),
@@ -371,10 +385,11 @@ public sealed partial class SupabaseAdminPage : Page
             $"{snap.StorageObjectCount} objects across {snap.StorageBucketCount} buckets",
             snap.StorageUsagePercent,
             PurpleAccent);
-        Grid.SetRow(c3, 1);
+        Grid.SetRow(c3, 2);
         Grid.SetColumn(c3, 0);
         grid.Children.Add(c3);
 
+        // Row 2, Col 1: Auth & Active Fleet
         double mauPct = snap.MauQuota > 0 ? Math.Min(100.0, (double)snap.MonthlyActiveUsers / snap.MauQuota * 100.0) : 0.0;
         var c4 = BuildQuotaTile(
             "Auth & Active Fleet",
@@ -383,11 +398,116 @@ public sealed partial class SupabaseAdminPage : Page
             $"{snap.ActiveSessionsCount} active sessions · {snap.PairedWatchesCount} paired watches",
             mauPct,
             AmberAccent);
-        Grid.SetRow(c4, 1);
+        Grid.SetRow(c4, 2);
         Grid.SetColumn(c4, 1);
         grid.Children.Add(c4);
 
         return grid;
+    }
+
+    private Border BuildBillingCycleEgressCard(SupabaseAdminSnapshot snap)
+    {
+        var card = BuildCardContainer(18);
+        var stack = new StackPanel { Spacing = 10 };
+
+        var topRow = new Grid();
+        topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var headerStack = new StackPanel { Spacing = 3 };
+        var titleStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        titleStack.Children.Add(new FontIcon { Glyph = "\uE896", FontSize = 16, Foreground = new SolidColorBrush(CyanAccent) });
+        titleStack.Children.Add(new TextBlock { Text = "Unified Egress · Billing Cycle", FontSize = 15, FontWeight = FontWeights.Bold });
+        var badgeText = snap.HasExactBillingMetrics ? "EXACT INVOICE" : "ROLLING 30-DAY";
+        var badgeColor = snap.HasExactBillingMetrics ? EmeraldAccent : CyanAccent;
+        titleStack.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Background = new SolidColorBrush(Color.FromArgb(36, badgeColor.R, badgeColor.G, badgeColor.B)),
+            Padding = new Thickness(8, 2, 8, 2),
+            Child = new TextBlock
+            {
+                Text = badgeText,
+                FontSize = 9.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(badgeColor)
+            }
+        });
+        headerStack.Children.Add(titleStack);
+
+        headerStack.Children.Add(new TextBlock
+        {
+            Text = snap.HasExactBillingMetrics
+                ? "Current Billing Month · Invoiced Bandwidth from /platform/organizations/{slug}/usage"
+                : "Aggregated from ClickHouse gateway edge logs & historical daily metrics",
+            FontSize = 11,
+            Opacity = 0.65
+        });
+        Grid.SetColumn(headerStack, 0);
+        topRow.Children.Add(headerStack);
+
+        var pctColor = snap.EgressUsagePercent >= 85 ? RedAccent : snap.EgressUsagePercent >= 65 ? AmberAccent : CyanAccent;
+        var pctBadge = new Border
+        {
+            CornerRadius = new CornerRadius(12),
+            Background = new SolidColorBrush(Color.FromArgb(38, pctColor.R, pctColor.G, pctColor.B)),
+            Padding = new Thickness(10, 4, 10, 4),
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = new TextBlock
+            {
+                Text = $"{snap.EgressUsagePercent:F1}% OF QUOTA",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(pctColor)
+            }
+        };
+        Grid.SetColumn(pctBadge, 1);
+        topRow.Children.Add(pctBadge);
+        stack.Children.Add(topRow);
+
+        var valRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Bottom };
+        valRow.Children.Add(new TextBlock { Text = $"{snap.EgressUsedGb:F3} GB", FontSize = 28, FontWeight = FontWeights.Bold });
+        valRow.Children.Add(new TextBlock { Text = $"/ {snap.EgressQuotaGb:F1} GB", FontSize = 14, Opacity = 0.65, Margin = new Thickness(0, 0, 0, 4) });
+        stack.Children.Add(valRow);
+
+        var pb = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = Math.Clamp(snap.EgressUsagePercent, 1.0, 100.0),
+            Foreground = new SolidColorBrush(pctColor),
+            Height = 7,
+            Margin = new Thickness(0, 4, 0, 4)
+        };
+        stack.Children.Add(pb);
+
+        var footerRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 24 };
+        footerRow.Children.Add(new TextBlock
+        {
+            Text = $"Gateway 24h: {SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h)}",
+            FontSize = 11.5,
+            Opacity = 0.85
+        });
+        footerRow.Children.Add(new TextBlock
+        {
+            Text = $"24h Requests: {snap.GatewayRequests24h:N0}",
+            FontSize = 11.5,
+            Opacity = 0.85
+        });
+        if (snap.CachedEgressUsedGb > 0)
+        {
+            footerRow.Children.Add(new TextBlock
+            {
+                Text = $"Cached CDN: {snap.CachedEgressUsedGb:F3} GB",
+                FontSize = 11.5,
+                Opacity = 0.85,
+                Foreground = new SolidColorBrush(CyanAccent)
+            });
+        }
+        stack.Children.Add(footerRow);
+
+        card.Child = stack;
+        return card;
     }
 
     private Border BuildQuotaTile(string title, string headline, string quotaLabel, string footer, double pct, Color accent)

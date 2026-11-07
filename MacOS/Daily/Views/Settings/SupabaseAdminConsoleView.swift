@@ -57,6 +57,7 @@ public struct SupabaseAdminConsoleView: View {
                                 filterPillsBar
 
                                 if selectedFilter == .all || selectedFilter == .quotas {
+                                    billingCycleEgressCard(snap)
                                     executiveQuotasGrid(snap)
                                     dailyEgressChartCard(snap)
                                 }
@@ -411,6 +412,119 @@ public struct SupabaseAdminConsoleView: View {
 
     // MARK: - 1. Executive Quota Grid
 
+    private func billingCycleEgressCard(_ snap: SupabaseAdminSnapshot) -> some View {
+        let percent = snap.egressCycleQuotaPercent
+        let accent: Color = percent >= 95 ? ThemeColors.error : (percent >= 78 ? ThemeColors.warning : ThemeColors.accentCyan)
+        let formattedCycle = SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
+        let formattedQuota = SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
+        let formatted24h = SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes)
+        let formattedCached = SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)
+
+        return GlassCard(cornerRadius: 16, padding: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.arrow.down.circle.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(accent)
+                            Text("Unified Egress · Billing Cycle")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                            Text(snap.isExactBillingUsageAvailable ? "EXACT INVOICE" : "ROLLING 30-DAY")
+                                .font(.system(size: 9.5, weight: .heavy, design: .monospaced))
+                                .foregroundColor(snap.isExactBillingUsageAvailable ? ThemeColors.success : ThemeColors.accentCyan)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill((snap.isExactBillingUsageAvailable ? ThemeColors.success : ThemeColors.accentCyan).opacity(0.14)))
+                        }
+                        Text(snap.isExactBillingUsageAvailable ? "Current Billing Month · Invoiced Bandwidth from /platform/organizations/{slug}/usage" : "Aggregated from ClickHouse gateway edge logs & historical daily rolling metrics")
+                            .font(.system(size: 11))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: 6) {
+                        Text(String(format: "%.1f%%", percent))
+                            .font(.system(size: 13, weight: .heavy, design: .monospaced))
+                            .foregroundColor(accent)
+                        Text("OF QUOTA")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(accent.opacity(0.15)))
+                }
+
+                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                    Text(formattedCycle)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("/ \(formattedQuota)")
+                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .foregroundColor(ThemeColors.textMuted)
+                    Spacer()
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.10))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent, accent.opacity(0.75)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(6, geo.size.width * CGFloat(min(1.0, percent / 100.0))))
+                    }
+                }
+                .frame(height: 8)
+
+                HStack(spacing: 24) {
+                    HStack(spacing: 6) {
+                        Text("Gateway 24h:")
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text(formatted24h)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                    HStack(spacing: 6) {
+                        Text("24h Requests:")
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text("\(snap.totalHttpRequests24h)")
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                    if snap.cachedEgressUsedBytes > 0 {
+                        HStack(spacing: 6) {
+                            Text("Cached CDN:")
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                            Text(formattedCached)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ThemeColors.accentCyan)
+                        }
+                    }
+                    if let top = snap.topRoutes24h.first {
+                        HStack(spacing: 6) {
+                            Text("Top Route:")
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                            Text("\(top.method) \(top.path)")
+                                .fontWeight(.medium)
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer()
+                }
+                .font(.system(size: 11.5, design: .monospaced))
+            }
+        }
+    }
+
     private func executiveQuotasGrid(_ snap: SupabaseAdminSnapshot) -> some View {
         let cols = [
             GridItem(.flexible(), spacing: 14),
@@ -420,11 +534,11 @@ public struct SupabaseAdminConsoleView: View {
         ]
         return LazyVGrid(columns: cols, spacing: 14) {
             quotaGaugeTile(
-                title: snap.isExactBillingUsageAvailable ? "Unified Egress (Cycle)" : "Gateway Egress (24h)",
+                title: "Gateway Egress (24h)",
                 icon: "arrow.up.right.circle.fill",
-                usedLabel: SupabaseAdminSnapshot.formatBytes(snap.egressUsedBytes),
-                quotaLabel: SupabaseAdminSnapshot.formatBytes(snap.egressQuotaBytes),
-                percent: snap.egressQuotaPercent,
+                usedLabel: SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes),
+                quotaLabel: "\(snap.totalHttpRequests24h) reqs",
+                percent: snap.egress24hQuotaPercent,
                 subtitle: snap.cachedEgressUsedBytes > 0
                     ? "Cached CDN: \(SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes))"
                     : "24h HTTP: \(snap.totalHttpRequests24h) reqs"
@@ -446,7 +560,7 @@ public struct SupabaseAdminConsoleView: View {
                 subtitle: "\(snap.edgeFunctions.count) deployed functions"
             )
             quotaGaugeTile(
-                title: "Realtime & Auth MAU",
+                title: "Realtime & Fleet",
                 icon: "dot.radiowaves.left.and.right",
                 usedLabel: "\(snap.realtimeActiveSubscriptions) live subs",
                 quotaLabel: "Peak \(snap.realtimePeakConnections)/\(snap.realtimePeakConnectionsQuota)",

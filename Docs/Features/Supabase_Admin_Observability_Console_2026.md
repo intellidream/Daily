@@ -165,7 +165,50 @@ To prevent unauthorized access to live database metrics, query logs, API tokens,
 
 ---
 
-## 6. Verification & Physical Device Delivery Summary
+## 6. Unified Egress Architecture: Billing Cycle Quota & 24h Gateway Egress Forensics
+
+To provide both a comprehensive monthly financial quota picture and high-granularity 24-hour traffic analysis, the console implements a dedicated dual-layer egress pipeline:
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│                    Full-Width Billing Cycle Egress Card (Row 0 / Top)                     │
+│  "Unified Egress · Billing Cycle" ── 4.50 GB / 250 GB (1.8% OF QUOTA) ── [EXACT INVOICE]  │
+│  [======================================== ProgressBar =================================]  │
+│  Gateway 24h: 38.4 MB   ·   24h Requests: 1,420   ·   Cached CDN: 12.1 MB                 │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+              ┌───────────────────────────────┴───────────────────────────────┐
+              ▼                                                               ▼
+┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐
+│     Tile 1: Gateway Egress (24h)          │   │         Tile 2: Database Size             │
+│   38.4 MB / 1,420 requests (0.5% daily)   │   │     180 MB / 8 GB (2.3% of quota)         │
+│   CDN: 12.1 MB · 24h HTTP Traffic         │   │     Heap 120 MB · Indexes 60 MB           │
+└───────────────────────────────────────────┘   └───────────────────────────────────────────┘
+┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐
+│       Tile 3: Edge Function Calls         │   │       Tile 4: Realtime & Active Fleet     │
+│   142 calls / 2,000,000 quota             │   │   12 live subs · Peak 4 / 500             │
+│   3 deployed functions                    │   │   MAU: 1 · Log events: 4,820              │
+└───────────────────────────────────────────┘   └───────────────────────────────────────────┘
+```
+
+### 6.1 Root Cause & Solution for 24h Egress Visibility
+1. **Unified ClickHouse Table Source Filter**: Modern Supabase edge logs may populate either `source = 'edge_logs'` or `source_name = 'edge_logs'`. All ClickHouse SQL queries across platforms now filter via `WHERE (source = 'edge_logs' OR source_name = 'edge_logs')`.
+2. **Multi-Field Response Size Extraction**: Streaming responses (e.g. PostgREST `application/json` stream, Edge Function responses, Supavisor pooling) frequently use HTTP chunked transfer encoding (`Transfer-Encoding: chunked`) or HTTP/2 without a static `Content-Length` header. The SQL query extracts sizes using:
+   ```sql
+   sum(greatest(
+       toInt64OrZero(log_attributes['response.headers.content-length']),
+       toInt64OrZero(log_attributes['response.headers.content_length']),
+       toInt64OrZero(log_attributes['response.size']),
+       toInt64OrZero(log_attributes['response.body_size']),
+       toInt64OrZero(log_attributes['response.bytes'])
+   )) AS resp_bytes
+   ```
+3. **Payload Heuristic Fallback**: In environments where proxies omit response headers entirely, if `req_count > 0 && resp_bytes == 0`, a route-specific payload size heuristic is applied (`/storage/` ~8 KB, `/rest/` ~1.28 KB, `/functions/` ~1.15 KB, `/auth/` ~850 B, `/realtime/` ~450 B, default ~900 B).
+4. **Independent Metric Decoupling**: Billing cycle egress (`egressUsedBytes` / `EgressUsedGb`) and 24h gateway egress (`egress24hBytes` / `GatewayEgressBytes24h`) are persisted and rendered independently, preventing cycle figures from overwriting daily burst visibility.
+
+---
+
+## 7. Verification & Physical Device Delivery Summary
 
 - **`DailyCore` Unit Tests**: `swift test --package-path DailyCore` — **65/65 passed** across all 8 test suites with zero failures.
 - **macOS Native Build & Delivery**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`** with automatic `Apple Development` (`7LZ9ZT2Z5B`) codesigning.

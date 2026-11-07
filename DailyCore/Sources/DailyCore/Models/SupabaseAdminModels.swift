@@ -455,6 +455,7 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
     public var egressUsedBytes: Int64
     public var egressQuotaBytes: Int64
     public var cachedEgressUsedBytes: Int64
+    public var egress24hBytes: Int64
     public var dbSizeBytes: Int64
     public var dbQuotaBytes: Int64
     public var storageSizeBytes: Int64
@@ -525,6 +526,7 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         egressUsedBytes: Int64 = 0,
         egressQuotaBytes: Int64 = 5_368_709_120, // 5 GB default Free
         cachedEgressUsedBytes: Int64 = 0,
+        egress24hBytes: Int64 = 0,
         dbSizeBytes: Int64 = 0,
         dbQuotaBytes: Int64 = 524_288_000, // 500 MB default Free
         storageSizeBytes: Int64 = 0,
@@ -582,6 +584,7 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         self.egressUsedBytes = egressUsedBytes
         self.egressQuotaBytes = egressQuotaBytes
         self.cachedEgressUsedBytes = cachedEgressUsedBytes
+        self.egress24hBytes = egress24hBytes
         self.dbSizeBytes = dbSizeBytes
         self.dbQuotaBytes = dbQuotaBytes
         self.storageSizeBytes = storageSizeBytes
@@ -648,6 +651,23 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         return min(999.0, (Double(egressUsedBytes) / Double(egressQuotaBytes)) * 100.0)
     }
 
+    public var egressCycleUsedBytes: Int64 {
+        egressUsedBytes
+    }
+
+    public var egressCycleQuotaBytes: Int64 {
+        egressQuotaBytes
+    }
+
+    public var egressCycleQuotaPercent: Double {
+        egressQuotaPercent
+    }
+
+    public var egress24hQuotaPercent: Double {
+        guard egressQuotaBytes > 0 else { return 0 }
+        return min(999.0, (Double(egress24hBytes) / Double(egressQuotaBytes)) * 100.0)
+    }
+
     public var dbQuotaPercent: Double {
         guard dbQuotaBytes > 0 else { return 0 }
         return min(999.0, (Double(dbSizeBytes) / Double(dbQuotaBytes)) * 100.0)
@@ -680,8 +700,9 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         lines.append("")
         lines.append("| Resource Metric | Current Usage | Plan Quota | Utilization |")
         lines.append("| :--- | :--- | :--- | :--- |")
-        let egressNote = isExactBillingUsageAvailable ? "" : " *(24h HTTP Gateway est.)*"
-        lines.append("| **Unified Egress** | \(Self.formatBytes(egressUsedBytes))\(egressNote) | \(Self.formatBytes(egressQuotaBytes)) | **\(String(format: "%.1f%%", egressQuotaPercent))** |")
+        let egressNote = isExactBillingUsageAvailable ? " *(Current Cycle)*" : " *(Billing Cycle)*"
+        lines.append("| **Billing Cycle Egress** | \(Self.formatBytes(egressUsedBytes))\(egressNote) | \(Self.formatBytes(egressQuotaBytes)) | **\(String(format: "%.1f%%", egressCycleQuotaPercent))** |")
+        lines.append("| **24h Gateway Egress** | \(Self.formatBytes(egress24hBytes)) *(24h traffic)* | \(Self.formatBytes(egressQuotaBytes)) | **\(String(format: "%.1f%%", egress24hQuotaPercent))** |")
         lines.append("| **Database Size** | \(Self.formatBytes(dbSizeBytes)) | \(Self.formatBytes(dbQuotaBytes)) | **\(String(format: "%.1f%%", dbQuotaPercent))** |")
         lines.append("| **Storage Size** | \(Self.formatBytes(storageSizeBytes)) | \(Self.formatBytes(storageQuotaBytes)) | \(storageQuotaBytes > 0 ? String(format: "%.1f%%", Double(storageSizeBytes) * 100.0 / Double(storageQuotaBytes)) : "—") |")
         lines.append("| **Edge Function Invocations** | \(functionInvocations) | \(functionInvocationsQuota) | \(functionInvocationsQuota > 0 ? String(format: "%.1f%%", Double(functionInvocations) * 100.0 / Double(functionInvocationsQuota)) : "—") |")

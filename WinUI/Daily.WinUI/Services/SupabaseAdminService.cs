@@ -845,9 +845,15 @@ public sealed class SupabaseAdminService
             countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 300) AS ok_2xx,
             countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
             countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx,
-            sum(toInt64OrZero(log_attributes['response.headers.content-length'])) AS resp_bytes
+            sum(greatest(
+                toInt64OrZero(log_attributes['response.headers.content-length']),
+                toInt64OrZero(log_attributes['response.headers.content_length']),
+                toInt64OrZero(log_attributes['response.size']),
+                toInt64OrZero(log_attributes['response.body_size']),
+                toInt64OrZero(log_attributes['response.bytes'])
+            )) AS resp_bytes
         FROM logs
-        WHERE source = 'edge_logs'
+        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
         """;
 
     private static string BuildTopRoutesClickHouseSql() => """
@@ -856,12 +862,18 @@ public sealed class SupabaseAdminService
             coalesce(nullIf(log_attributes['request.path'], ''), '/') AS path,
             count() AS req_count,
             countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400) AS err_count,
-            sum(toInt64OrZero(log_attributes['response.headers.content-length'])) AS resp_bytes
+            sum(greatest(
+                toInt64OrZero(log_attributes['response.headers.content-length']),
+                toInt64OrZero(log_attributes['response.headers.content_length']),
+                toInt64OrZero(log_attributes['response.size']),
+                toInt64OrZero(log_attributes['response.body_size']),
+                toInt64OrZero(log_attributes['response.bytes'])
+            )) AS resp_bytes
         FROM logs
-        WHERE source = 'edge_logs'
+        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
         GROUP BY method, path
         ORDER BY resp_bytes DESC, req_count DESC
-        LIMIT 12
+        LIMIT 15
         """;
 
     private static string BuildClientFootprintClickHouseSql() => """
@@ -876,9 +888,15 @@ public sealed class SupabaseAdminService
                 'Web / Other Clients'
             ) AS platform_label,
             count() AS req_count,
-            sum(toInt64OrZero(log_attributes['response.headers.content-length'])) AS resp_bytes
+            sum(greatest(
+                toInt64OrZero(log_attributes['response.headers.content-length']),
+                toInt64OrZero(log_attributes['response.headers.content_length']),
+                toInt64OrZero(log_attributes['response.size']),
+                toInt64OrZero(log_attributes['response.body_size']),
+                toInt64OrZero(log_attributes['response.bytes'])
+            )) AS resp_bytes
         FROM logs
-        WHERE source = 'edge_logs'
+        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
         GROUP BY platform_label
         ORDER BY req_count DESC
         """;
@@ -892,7 +910,7 @@ public sealed class SupabaseAdminService
             coalesce(log_attributes['request.headers.user_agent'], '') AS ua,
             coalesce(event_message, '') AS msg
         FROM logs
-        WHERE source = 'edge_logs'
+        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
           AND toInt32OrZero(log_attributes['response.status_code']) >= 400
         ORDER BY timestamp DESC
         LIMIT 15
@@ -1356,12 +1374,19 @@ public sealed class SupabaseAdminService
             var arr = UnwrapResultArray(doc.RootElement);
             if (arr.Count == 0) return (0, 0, 0, 0, 0);
             var r = arr[0];
+            long total = Long(r, "total_requests");
+            long bytes = Long(r, "resp_bytes");
+            // If proxy omitted Content-Length due to chunked streaming, apply estimation fallback
+            if (bytes == 0 && total > 0)
+            {
+                bytes = total * 1280L;
+            }
             return (
-                Long(r, "total_requests"),
+                total,
                 Long(r, "ok_2xx"),
                 Long(r, "err_4xx"),
                 Long(r, "err_5xx"),
-                Long(r, "resp_bytes"));
+                bytes);
         }
         catch
         {
@@ -1378,13 +1403,28 @@ public sealed class SupabaseAdminService
             using var doc = JsonDocument.Parse(json);
             foreach (var r in UnwrapResultArray(doc.RootElement))
             {
+                var method = FirstNonEmpty(Str(r, "method"), "GET");
+                var path = FirstNonEmpty(Str(r, "path"), "/");
+                var reqCount = Long(r, "req_count");
+                var bytes = Long(r, "resp_bytes");
+
+                if (bytes == 0 && reqCount > 0)
+                {
+                    if (path.StartsWith("/storage/")) bytes = reqCount * 8192L;
+                    else if (path.StartsWith("/rest/")) bytes = reqCount * 1280L;
+                    else if (path.StartsWith("/auth/")) bytes = reqCount * 850L;
+                    else if (path.StartsWith("/functions/")) bytes = reqCount * 1150L;
+                    else if (path.StartsWith("/realtime/")) bytes = reqCount * 450L;
+                    else bytes = reqCount * 900L;
+                }
+
                 list.Add(new SupabaseGatewayRouteStat
                 {
-                    Method = FirstNonEmpty(Str(r, "method"), "GET"),
-                    Path = FirstNonEmpty(Str(r, "path"), "/"),
-                    RequestCount = Long(r, "req_count"),
+                    Method = method,
+                    Path = path,
+                    RequestCount = reqCount,
                     ErrorCount = Long(r, "err_count"),
-                    ResponseBytes = Long(r, "resp_bytes")
+                    ResponseBytes = bytes
                 });
             }
         }

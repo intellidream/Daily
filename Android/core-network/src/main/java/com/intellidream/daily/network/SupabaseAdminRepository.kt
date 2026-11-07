@@ -598,7 +598,36 @@ class SupabaseAdminRepository private constructor() {
                 val defDbQuota = if (isPro) 8_589_934_592L else 524_288_000L
                 val defStorageQuota = if (isPro) 107_374_182_400L else 1_073_741_824L
 
-                val resolvedEgress = if (bill.isExact) bill.egressUsed else logs.totalEdgeBytes
+                val todayStr = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString()
+                val todayDailyPointBytes = bill.dailyEgress.firstOrNull { it.date == todayStr }?.totalBytes ?: 0L
+                val apiCountEstimatedBytes: Long = apiCounts.sumOf { pt ->
+                    pt.restRequests.toLong() * 1280L +
+                    pt.authRequests.toLong() * 850L +
+                    pt.storageRequests.toLong() * 8192L +
+                    pt.realtimeRequests.toLong() * 450L
+                }
+
+                var resolved24hEgress: Long = logs.totalEdgeBytes
+                if (resolved24hEgress == 0L) {
+                    if (todayDailyPointBytes > 0L) {
+                        resolved24hEgress = todayDailyPointBytes
+                    } else if (apiCountEstimatedBytes > 0L) {
+                        resolved24hEgress = apiCountEstimatedBytes
+                    }
+                }
+
+                val sumDailyEgressBytes = bill.dailyEgress.sumOf { it.totalBytes }
+                var resolvedCycleEgress: Long = bill.egressUsed
+                if (resolvedCycleEgress == 0L) {
+                    if (sumDailyEgressBytes > 0L) {
+                        resolvedCycleEgress = sumDailyEgressBytes
+                    } else {
+                        resolvedCycleEgress = resolved24hEgress
+                    }
+                } else if (resolved24hEgress > resolvedCycleEgress) {
+                    resolvedCycleEgress = maxOf(resolvedCycleEgress, resolved24hEgress)
+                }
+
                 val resolvedDb = maxOf(bill.dbSize, pg.dbSizeBytes)
 
                 val snap = SupabaseAdminSnapshot(
@@ -611,9 +640,10 @@ class SupabaseAdminRepository private constructor() {
                     serviceHealth = health,
                     resourceWarnings = bill.warnings,
                     isExactBillingUsageAvailable = bill.isExact,
-                    egressUsedBytes = resolvedEgress,
+                    egressUsedBytes = resolvedCycleEgress,
                     egressQuotaBytes = if (bill.egressQuota > 0L) bill.egressQuota else defEgressQuota,
                     cachedEgressUsedBytes = bill.cachedEgress,
+                    egress24hBytes = resolved24hEgress,
                     dbSizeBytes = resolvedDb,
                     dbQuotaBytes = if (bill.dbQuota > 0L) bill.dbQuota else defDbQuota,
                     storageSizeBytes = maxOf(bill.storageSize, pg.storageBytes),
@@ -951,13 +981,19 @@ class SupabaseAdminRepository private constructor() {
                   log_attributes['request.method'] AS method,
                   log_attributes['request.path'] AS path,
                   count() AS req_count,
-                  sum(toInt64OrZero(log_attributes['response.headers.content-length'])) AS resp_bytes,
+                  sum(greatest(
+                    toInt64OrZero(log_attributes['response.headers.content-length']),
+                    toInt64OrZero(log_attributes['response.headers.content_length']),
+                    toInt64OrZero(log_attributes['response.size']),
+                    toInt64OrZero(log_attributes['response.body_size']),
+                    toInt64OrZero(log_attributes['response.bytes'])
+                  )) AS resp_bytes,
                   avg(toFloat64OrZero(log_attributes['response.origin_time'])) AS avg_ms,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 400) AS ok_cnt,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx
-                FROM logs WHERE source = 'edge_logs'
-                GROUP BY method, path ORDER BY resp_bytes DESC, req_count DESC LIMIT 20
+                FROM logs WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+                GROUP BY method, path ORDER BY resp_bytes DESC, req_count DESC LIMIT 25
                 """.trimIndent(),
                 startIso, endIso
             )
@@ -969,9 +1005,15 @@ class SupabaseAdminRepository private constructor() {
                 SELECT
                   log_attributes['request.headers.user_agent'] AS ua,
                   count() AS req_count,
-                  sum(toInt64OrZero(log_attributes['response.headers.content-length'])) AS resp_bytes,
+                  sum(greatest(
+                    toInt64OrZero(log_attributes['response.headers.content-length']),
+                    toInt64OrZero(log_attributes['response.headers.content_length']),
+                    toInt64OrZero(log_attributes['response.size']),
+                    toInt64OrZero(log_attributes['response.body_size']),
+                    toInt64OrZero(log_attributes['response.bytes'])
+                  )) AS resp_bytes,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx
-                FROM logs WHERE source = 'edge_logs'
+                FROM logs WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
                 GROUP BY ua ORDER BY req_count DESC LIMIT 25
                 """.trimIndent(),
                 startIso, endIso
@@ -987,8 +1029,8 @@ class SupabaseAdminRepository private constructor() {
                   log_attributes['request.path'] AS path,
                   log_attributes['request.headers.user_agent'] AS ua,
                   event_message
-                FROM logs WHERE source = 'edge_logs' AND toInt32OrZero(log_attributes['response.status_code']) >= 400
-                ORDER BY timestamp DESC LIMIT 12
+                FROM logs WHERE (source = 'edge_logs' OR source_name = 'edge_logs') AND toInt32OrZero(log_attributes['response.status_code']) >= 400
+                ORDER BY timestamp DESC LIMIT 15
                 """.trimIndent(),
                 startIso, endIso
             )
@@ -1003,7 +1045,22 @@ class SupabaseAdminRepository private constructor() {
 
         val routes = mutableListOf<SupabaseTopRouteStat>()
         routeDef.await().forEach { r ->
-            val bytes = r.long("resp_bytes") ?: 0L
+            val path = r.str("path") ?: "/"
+            val reqCount = r.int("req_count") ?: 0
+            var bytes = r.long("resp_bytes") ?: 0L
+
+            // Fallback for HTTP chunked encoding where Content-Length header is omitted by proxies/streaming
+            if (bytes == 0L && reqCount > 0) {
+                bytes = when {
+                    path.startsWith("/storage/") -> reqCount.toLong() * 8192L
+                    path.startsWith("/rest/") -> reqCount.toLong() * 1280L
+                    path.startsWith("/auth/") -> reqCount.toLong() * 850L
+                    path.startsWith("/functions/") -> reqCount.toLong() * 1150L
+                    path.startsWith("/realtime/") -> reqCount.toLong() * 450L
+                    else -> reqCount.toLong() * 900L
+                }
+            }
+
             val ok = r.int("ok_cnt") ?: 0
             val e4 = r.int("err_4xx") ?: 0
             val e5 = r.int("err_5xx") ?: 0
@@ -1013,14 +1070,14 @@ class SupabaseAdminRepository private constructor() {
             out.totalEdgeBytes += bytes
             routes += SupabaseTopRouteStat(
                 method = r.str("method") ?: "GET",
-                path = r.str("path") ?: "/",
-                requests24h = r.int("req_count") ?: 0,
+                path = path,
+                requests24h = reqCount,
                 responseBytes24h = bytes,
                 avgLatencyMs = r.dbl("avg_ms") ?: 0.0,
                 errors4xx5xx = e4 + e5
             )
         }
-        out.topRoutes = routes.take(10)
+        out.topRoutes = routes.take(12)
 
         data class Acc(val name: String, var req: Int = 0, var bytes: Long = 0L, var e4: Int = 0)
         val fleetMap = mutableMapOf<String, Acc>()
@@ -1029,8 +1086,11 @@ class SupabaseAdminRepository private constructor() {
         fleetRows.forEach { r ->
             val (key, label) = SupabaseAdminCrypto.classifyFleetUserAgent(r.str("ua") ?: "")
             val acc = fleetMap.getOrPut(key) { Acc(label) }
-            acc.req += r.int("req_count") ?: 0
-            acc.bytes += r.long("resp_bytes") ?: 0L
+            val c = r.int("req_count") ?: 0
+            var b = r.long("resp_bytes") ?: 0L
+            if (b == 0L && c > 0) b = c.toLong() * 1280L
+            acc.req += c
+            acc.bytes += b
             acc.e4 += r.int("err_4xx") ?: 0
         }
         out.fleetDevices = fleetMap.map { (k, a) ->

@@ -189,6 +189,7 @@ data class SupabaseAdminSnapshot(
     val egressUsedBytes: Long = 0L,
     val egressQuotaBytes: Long = 5_368_709_120L,
     val cachedEgressUsedBytes: Long = 0L,
+    val egress24hBytes: Long = 0L,
     val dbSizeBytes: Long = 0L,
     val dbQuotaBytes: Long = 524_288_000L,
     val storageSizeBytes: Long = 0L,
@@ -237,6 +238,21 @@ data class SupabaseAdminSnapshot(
     val egressQuotaPercent: Double
         get() = if (egressQuotaBytes > 0L) minOf(999.0, egressUsedBytes.toDouble() * 100.0 / egressQuotaBytes.toDouble()) else 0.0
 
+    val egressCycleUsedBytes: Long
+        get() = egressUsedBytes
+
+    val egressCycleQuotaBytes: Long
+        get() = egressQuotaBytes
+
+    val egressCycleQuotaPercent: Double
+        get() = egressQuotaPercent
+
+    val egress24hQuotaPercent: Double
+        get() = if (egressQuotaBytes > 0L) {
+            val dailyBudget = egressQuotaBytes.toDouble() / 30.0
+            minOf(999.0, (egress24hBytes.toDouble() * 100.0) / maxOf(dailyBudget, 1.0))
+        } else 0.0
+
     val dbQuotaPercent: Double
         get() = if (dbQuotaBytes > 0L) minOf(999.0, dbSizeBytes.toDouble() * 100.0 / dbQuotaBytes.toDouble()) else 0.0
 
@@ -262,8 +278,8 @@ data class SupabaseAdminSnapshot(
         sb.appendLine()
         sb.appendLine("| Resource Metric | Current Usage | Plan Quota | Utilization |")
         sb.appendLine("| :--- | :--- | :--- | :--- |")
-        val egNote = if (isExactBillingUsageAvailable) "" else " *(24h Gateway)*"
-        sb.appendLine("| **Unified Egress** | ${formatBytes(egressUsedBytes)}$egNote | ${formatBytes(egressQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", egressQuotaPercent)}** |")
+        sb.appendLine("| **Unified Egress (Cycle)** | ${formatBytes(egressCycleUsedBytes)} | ${formatBytes(egressCycleQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", egressCycleQuotaPercent)}** |")
+        sb.appendLine("| **24h Gateway Egress** | ${formatBytes(egress24hBytes)} | ${totalHttpRequests24h} reqs | **${String.format(Locale.US, "%.1f%%", egress24hQuotaPercent)}** (vs daily share) |")
         sb.appendLine("| **Database Size** | ${formatBytes(dbSizeBytes)} | ${formatBytes(dbQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", dbQuotaPercent)}** |")
         sb.appendLine("| **Storage Size** | ${formatBytes(storageSizeBytes)} | ${formatBytes(storageQuotaBytes)} | ${if (storageQuotaBytes > 0) String.format(Locale.US, "%.1f%%", storageSizeBytes * 100.0 / storageQuotaBytes) else "—"} |")
         sb.appendLine("| **Edge Function Invocations** | $functionInvocations | $functionInvocationsQuota | — |")

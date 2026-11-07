@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -542,22 +544,145 @@ fun SupabaseAdminScreen(
 }
 
 @Composable
+private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
+    val percent = snap.egressCycleQuotaPercent
+    val accent = when {
+        percent >= 95.0 -> ThemeColors.error
+        percent >= 78.0 -> ThemeColors.warning
+        else -> ThemeColors.accentCyan
+    }
+    val cycleUsed = remember(snap.egressCycleUsedBytes) { SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes) }
+    val cycleQuota = remember(snap.egressCycleQuotaBytes) { SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes) }
+    val egress24h = remember(snap.egress24hBytes) { SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes) }
+    val cachedEgress = remember(snap.cachedEgressUsedBytes) { SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes) }
+
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 18.dp, padding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Sync,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Unified Egress · Billing Cycle",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = if (snap.isExactBillingUsageAvailable) "Current Billing Month · Invoiced Bandwidth" else "Rolling 30-Day Aggregation",
+                        color = ThemeColors.fgMutedDark,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.16f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = String.format(Locale.US, "%.1f%%", percent),
+                        color = accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = cycleUsed,
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "/ $cycleQuota",
+                    color = ThemeColors.textMuted,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(bottom = 3.dp)
+                )
+            }
+
+            // Progress bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(7.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.10f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction = (percent / 100.0).coerceIn(0.02, 1.0).toFloat())
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(accent, accent.copy(alpha = 0.75f))
+                            )
+                        )
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(text = "Gateway 24h:", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text(text = egress24h, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+                }
+                if (snap.cachedEgressUsedBytes > 0L) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(text = "Cached CDN:", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        Text(text = cachedEgress, color = ThemeColors.accentCyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(text = "Requests:", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        Text(text = "${snap.totalHttpRequests24h}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) {
-    val egTitle = if (snap.isExactBillingUsageAvailable) "Egress (Cycle)" else "Egress (24h)"
-    val egUsed = remember(snap.egressUsedBytes) { SupabaseAdminSnapshot.formatBytes(snap.egressUsedBytes) }
-    val egQuota = remember(snap.egressQuotaBytes) { SupabaseAdminSnapshot.formatBytes(snap.egressQuotaBytes) }
+    val h24Used = remember(snap.egress24hBytes) { SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes) }
     val dbUsed = remember(snap.dbSizeBytes) { SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes) }
     val dbQuota = remember(snap.dbQuotaBytes) { SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        BillingCycleEgressCard(snap = snap)
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             QuotaGaugeTile(
                 modifier = Modifier.weight(1f),
-                title = egTitle,
-                used = egUsed,
-                quota = egQuota,
-                percent = snap.egressQuotaPercent,
-                sub = "24h HTTP: ${snap.totalHttpRequests24h}"
+                title = "Gateway Egress (24h)",
+                used = h24Used,
+                quota = "${snap.totalHttpRequests24h} reqs",
+                percent = snap.egress24hQuotaPercent,
+                sub = if (snap.cachedEgressUsedBytes > 0) "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}" else "24h HTTP: ${snap.totalHttpRequests24h}"
             )
             QuotaGaugeTile(
                 modifier = Modifier.weight(1f),

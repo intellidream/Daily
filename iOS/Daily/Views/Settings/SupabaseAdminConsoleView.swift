@@ -73,6 +73,7 @@ public struct SupabaseAdminConsoleView: View {
                             filterPillsBar
 
                             if selectedFilter == .all || selectedFilter == .quotas {
+                                billingCycleEgressCard(snap)
                                 executiveQuotasGrid(snap)
                                 dailyEgressChartCard(snap)
                             }
@@ -328,17 +329,109 @@ public struct SupabaseAdminConsoleView: View {
 
     // MARK: - Quotas & Charts
 
+    private func billingCycleEgressCard(_ snap: SupabaseAdminSnapshot) -> some View {
+        let percent = snap.egressCycleQuotaPercent
+        let accent: Color = percent >= 95 ? ThemeColors.error : (percent >= 78 ? ThemeColors.warning : ThemeColors.accentCyan)
+        let formattedCycle = SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
+        let formattedQuota = SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
+        let formatted24h = SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes)
+        let formattedCached = SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)
+
+        return GlassCard(cornerRadius: 16, padding: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.up.arrow.down.circle.fill")
+                                .foregroundColor(accent)
+                                .font(.system(size: 13, weight: .bold))
+                            Text("Unified Egress · Billing Cycle")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        Text(snap.isExactBillingUsageAvailable ? "Current Billing Month · Invoiced Bandwidth" : "Rolling 30-Day Aggregation")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                    }
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text(String(format: "%.1f%%", percent))
+                            .font(.system(size: 12, weight: .heavy, design: .monospaced))
+                            .foregroundColor(accent)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(accent.opacity(0.16)))
+                }
+
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Text(formattedCycle)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("/ \(formattedQuota)")
+                        .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(ThemeColors.textMuted)
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.10))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent, accent.opacity(0.75)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(4, geo.size.width * CGFloat(min(1.0, percent / 100.0))))
+                    }
+                }
+                .frame(height: 7)
+
+                HStack {
+                    HStack(spacing: 4) {
+                        Text("Gateway 24h:")
+                            .foregroundColor(ThemeColors.fgMutedDark)
+                        Text(formatted24h)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                    Spacer()
+                    if snap.cachedEgressUsedBytes > 0 {
+                        HStack(spacing: 4) {
+                            Text("Cached CDN:")
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                            Text(formattedCached)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ThemeColors.accentCyan)
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Text("Requests:")
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                            Text("\(snap.totalHttpRequests24h)")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        }
+                    }
+                }
+                .font(.system(size: 11, design: .monospaced))
+            }
+        }
+    }
+
     private func executiveQuotasGrid(_ snap: SupabaseAdminSnapshot) -> some View {
         let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
         return LazyVGrid(columns: cols, spacing: 12) {
             quotaTile(
-                title: snap.isExactBillingUsageAvailable ? "Egress (Cycle)" : "Egress (24h)",
-                used: SupabaseAdminSnapshot.formatBytes(snap.egressUsedBytes),
-                quota: SupabaseAdminSnapshot.formatBytes(snap.egressQuotaBytes),
-                percent: snap.egressQuotaPercent
+                title: "Gateway Egress (24h)",
+                used: SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes),
+                quota: "\(snap.totalHttpRequests24h) reqs",
+                percent: snap.egress24hQuotaPercent
             )
             quotaTile(
-                title: "Database",
+                title: "Database Size",
                 used: SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes),
                 quota: SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes),
                 percent: snap.dbQuotaPercent
@@ -350,8 +443,8 @@ public struct SupabaseAdminConsoleView: View {
                 percent: snap.functionInvocationsQuota > 0 ? (Double(snap.functionInvocations) * 100.0 / Double(snap.functionInvocationsQuota)) : 0
             )
             quotaTile(
-                title: "Realtime Subs",
-                used: "\(snap.realtimeActiveSubscriptions)",
+                title: "Realtime & Fleet",
+                used: "\(snap.realtimeActiveSubscriptions) subs",
                 quota: "Peak \(snap.realtimePeakConnections)",
                 percent: snap.realtimePeakConnectionsQuota > 0 ? (Double(snap.realtimePeakConnections) * 100.0 / Double(snap.realtimePeakConnectionsQuota)) : 0
             )
@@ -360,6 +453,7 @@ public struct SupabaseAdminConsoleView: View {
 
     private func quotaTile(title: String, used: String, quota: String, percent: Double) -> some View {
         let accent: Color = percent >= 95 ? ThemeColors.error : (percent >= 78 ? ThemeColors.warning : ThemeColors.accentCyan)
+        let quotaText = (quota.hasPrefix("Peak") || quota.hasSuffix("reqs")) ? quota : "/ \(quota)"
         return GlassCard(cornerRadius: 14, padding: 12) {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
@@ -375,7 +469,7 @@ public struct SupabaseAdminConsoleView: View {
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .lineLimit(1)
-                Text("/ \(quota)")
+                Text(quotaText)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(ThemeColors.textMuted)
                 GeometryReader { geo in
