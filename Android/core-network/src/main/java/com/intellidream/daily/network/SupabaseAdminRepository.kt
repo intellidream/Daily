@@ -346,7 +346,7 @@ class SupabaseAdminRepository private constructor() {
         const val DEFAULT_PROJECT_REF = "akkfouifxztnfwwiclwg"
         private const val PREFS_NAME = "daily_supabase_admin_local_only"
         private const val KEY_CREDENTIALS = "admin_credentials_v1"
-        private const val KEY_SNAPSHOT_PREFIX = "admin_snapshot_v2_"
+        private const val KEY_SNAPSHOT_PREFIX = "admin_snapshot_v3_"
         private const val CACHE_TTL_MS = 10L * 60L * 1000L // 10 minutes
     }
 
@@ -416,7 +416,11 @@ class SupabaseAdminRepository private constructor() {
         val ctx = appContext ?: return null
         val raw = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_SNAPSHOT_PREFIX + projectRef, null) ?: return null
-        return runCatching { json.decodeFromString<SupabaseAdminSnapshot>(raw) }.getOrNull()
+        val snap = runCatching { json.decodeFromString<SupabaseAdminSnapshot>(raw) }.getOrNull() ?: return null
+        if (snap.egress24hBytes >= snap.egressUsedBytes && snap.egressUsedBytes > 500_000_000L) {
+            return null
+        }
+        return snap
     }
 
     private fun saveCachedSnapshot(snap: SupabaseAdminSnapshot) {
@@ -689,7 +693,7 @@ class SupabaseAdminRepository private constructor() {
 
                 var resolved24hEgress: Long = logs.totalEdgeBytes
                 if (resolved24hEgress == 0L) {
-                    if (todayDailyPointBytes > 0L) {
+                    if (todayDailyPointBytes > 0L && (bill.egressUsed == 0L || todayDailyPointBytes < bill.egressUsed)) {
                         resolved24hEgress = todayDailyPointBytes
                     } else if (apiCountEstimatedBytes > 0L) {
                         resolved24hEgress = apiCountEstimatedBytes
@@ -1108,7 +1112,7 @@ class SupabaseAdminRepository private constructor() {
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 400) AS ok_cnt,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx
-                FROM logs WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+                FROM logs WHERE source = 'edge_logs'
                 GROUP BY method, path ORDER BY resp_bytes DESC, req_count DESC LIMIT 25
                 """.trimIndent(),
                 startIso, endIso
@@ -1129,7 +1133,7 @@ class SupabaseAdminRepository private constructor() {
                     toInt64OrZero(log_attributes['response.bytes'])
                   )) AS resp_bytes,
                   countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx
-                FROM logs WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+                FROM logs WHERE source = 'edge_logs'
                 GROUP BY ua ORDER BY req_count DESC LIMIT 25
                 """.trimIndent(),
                 startIso, endIso
@@ -1145,7 +1149,7 @@ class SupabaseAdminRepository private constructor() {
                   log_attributes['request.path'] AS path,
                   log_attributes['request.headers.user_agent'] AS ua,
                   event_message
-                FROM logs WHERE (source = 'edge_logs' OR source_name = 'edge_logs') AND toInt32OrZero(log_attributes['response.status_code']) >= 400
+                FROM logs WHERE source = 'edge_logs' AND toInt32OrZero(log_attributes['response.status_code']) >= 400
                 ORDER BY timestamp DESC LIMIT 15
                 """.trimIndent(),
                 startIso, endIso
@@ -1652,10 +1656,6 @@ class SupabaseAdminRepository private constructor() {
                             "EGRESS_AUTH", "AUTH_EGRESS" -> if (bAuth == 0L) acc.auth += metricBytes
                             "EGRESS_STORAGE", "STORAGE_EGRESS" -> if (bStorage == 0L) acc.storage += metricBytes
                             "EGRESS_SUPAVISOR", "SUPAVISOR_EGRESS", "SHARED_POOLER_EGRESS" -> if (bSupa == 0L) acc.supavisor += metricBytes
-                            "EGRESS", "UNIFIED_EGRESS", "TOTAL_EGRESS" -> {
-                                val curSum = acc.rest + acc.fn + acc.rt + acc.auth + acc.storage + acc.supavisor
-                                if (curSum == 0L) acc.rest += metricBytes
-                            }
                         }
                     }
                 }

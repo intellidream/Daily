@@ -798,7 +798,8 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
 
     public var egress24hQuotaPercent: Double {
         guard egressQuotaBytes > 0 else { return 0 }
-        return min(999.0, (Double(egress24hBytes) / Double(egressQuotaBytes)) * 100.0)
+        let dailyBudget = Double(egressQuotaBytes) / 30.0
+        return min(999.0, (Double(egress24hBytes) * 100.0) / max(1.0, dailyBudget))
     }
 
     public var dbQuotaPercent: Double {

@@ -265,6 +265,22 @@ To ensure 100% mathematical and visual parity with the official Supabase Web Por
 - **Daily Bandwidth & Gateway Activity**: Upgraded the daily stacked egress visualization with service legends (REST Cyan, Edge Purple, Realtime Green, Auth & Storage Blue), rounded bar segments, and date labels.
 - **Navigation Bar Inset Padding**: Expanded bottom content padding to 96dp and bottom spacer to 80dp with `.navigationBarsPadding()`, ensuring the Console Security & Biometric Lock card scrolls completely clear of Android gesture and 3-button navigation bars.
 
+### 7.9 Strict Decoupling of 24h Gateway Egress vs Billing Cycle Unified Egress & ClickHouse Query Hygiene
+- **Independent 24h Gateway Egress (`egress24hBytes`) vs Unified Egress (`egressUsedBytes`)**:
+  - Unified Egress represents the total organization-wide billing cycle quota usage (`3.170 / 5 GB = 63%` over the current 30-day billing cycle).
+  - 24h Gateway Egress represents solely the payload delivered by the HTTP API gateway over the last 24 hours (`~38 MB`).
+  - Previously, when ClickHouse returned 0 bytes, a fallback attempted to pull from `todayDailyPointBytes`. However, `metric: "EGRESS"` from `/platform/organizations/{slug}/usage` was inadvertently accumulated into daily buckets, dumping the entire 3.17 GB monthly total into the 24h gateway tile!
+  - **Resolution**:
+    1. Removed `"EGRESS"`, `"UNIFIED_EGRESS"`, and `"TOTAL_EGRESS"` from `/usage/daily` accumulation.
+    2. Guarded `resolved24hEgress` across Swift, Kotlin, and C#: only accept `todayDailyPointBytes` if `todayDailyPointBytes < billingData.egressUsedBytes`, otherwise cleanly falling back to `apiCountEstimatedBytes` (~10-40 MB) from `usage.api-counts?interval=1day`.
+    3. Aligned `egress24hQuotaPercent` in `DailyCore` to compute against daily budget (`Double(egressQuotaBytes) / 30.0`), matching Android and WinUI 3.
+- **ClickHouse Analytics Query Hygiene (`source = 'edge_logs'`)**:
+  - ClickHouse's `logs` table in Supabase Analytics contains strictly the `source` column (`source = 'edge_logs'`), not `source_name`. Using `(source = 'edge_logs' OR source_name = 'edge_logs')` triggered `Code: 47. DB::Exception: Missing columns: 'source_name'` (HTTP 400).
+  - Reverted ClickHouse queries across all platforms back to strictly `WHERE source = 'edge_logs'`.
+- **Snapshot Cache Invalidation (`v3`)**:
+  - Bumped snapshot cache key prefix to `v3` (`admin_snapshot_v3_`, `supabase_admin_snapshot_v3.json`).
+  - Added proactive corrupt snapshot rejection in `loadCachedSnapshot`: if `cached.egress24hBytes >= cached.egressUsedBytes && cached.egressUsedBytes > 500_000_000`, the cache is rejected immediately to purge corrupted 3.17 GB values.
+
 ---
 
 ## 8. Verification & Physical Device Delivery Summary

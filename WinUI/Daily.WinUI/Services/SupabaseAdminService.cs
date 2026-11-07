@@ -32,7 +32,7 @@ public sealed class SupabaseAdminService
         "Daily.WinUI");
 
     private static readonly string CredentialsFilePath = Path.Combine(LocalDir, "supabase_admin_creds.dpapi");
-    private static readonly string SnapshotCachePath = Path.Combine(LocalDir, "supabase_admin_snapshot_v2.json");
+    private static readonly string SnapshotCachePath = Path.Combine(LocalDir, "supabase_admin_snapshot_v3.json");
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -94,7 +94,12 @@ public sealed class SupabaseAdminService
                 try
                 {
                     var json = await File.ReadAllTextAsync(SnapshotCachePath).ConfigureAwait(false);
-                    Snapshot = JsonSerializer.Deserialize<SupabaseAdminSnapshot>(json, JsonOpts);
+                    var snap = JsonSerializer.Deserialize<SupabaseAdminSnapshot>(json, JsonOpts);
+                    if (snap != null && snap.GatewayEgressBytes24h >= (snap.EgressUsedGb * 1_000_000_000L) && snap.EgressUsedGb > 0.5)
+                    {
+                        snap = null;
+                    }
+                    Snapshot = snap;
                 }
                 catch { }
             }
@@ -760,6 +765,14 @@ public sealed class SupabaseAdminService
                 ? platformDailySeries.TakeLast(14).ToList()
                 : ScaleDailySeriesWithGatewayBytes(dailySeriesFromCounts, gwBytes);
 
+            var lastPointBytes = (dailySeries.Count > 0) ? dailySeries[^1].TotalBytes : 0L;
+            long apiCountEstimatedBytes = (rest24h * 2048L) + (auth24h * 1024L) + (storage24h * 8192L) + (realtime24h * 768L);
+            long resolved24hEgress = gwBytes > 0
+                ? gwBytes
+                : ((lastPointBytes > 0 && lastPointBytes < (long)(billing.EgressUsedGb * 1_000_000_000.0))
+                    ? lastPointBytes
+                    : (apiCountEstimatedBytes > 0 ? apiCountEstimatedBytes : 0L));
+
             var built = new SupabaseAdminSnapshot
             {
                 FetchedAtEpochMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
@@ -804,7 +817,7 @@ public sealed class SupabaseAdminService
                 Gateway2xx24h = gw2xx,
                 Gateway4xx24h = gw4xx,
                 Gateway5xx24h = gw5xx,
-                GatewayEgressBytes24h = gwBytes,
+                GatewayEgressBytes24h = resolved24hEgress,
                 RestRequests24h = rest24h,
                 AuthRequests24h = auth24h,
                 StorageRequests24h = storage24h,
@@ -1062,7 +1075,7 @@ public sealed class SupabaseAdminService
                 toInt64OrZero(log_attributes['response.bytes'])
             )) AS resp_bytes
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
         """;
 
     private static string BuildTopRoutesClickHouseSql() => """
@@ -1079,7 +1092,7 @@ public sealed class SupabaseAdminService
                 toInt64OrZero(log_attributes['response.bytes'])
             )) AS resp_bytes
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
         GROUP BY method, path
         ORDER BY resp_bytes DESC, req_count DESC
         LIMIT 15
@@ -1105,7 +1118,7 @@ public sealed class SupabaseAdminService
                 toInt64OrZero(log_attributes['response.bytes'])
             )) AS resp_bytes
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
         GROUP BY platform_label
         ORDER BY req_count DESC
         """;
@@ -1119,7 +1132,7 @@ public sealed class SupabaseAdminService
             coalesce(log_attributes['request.headers.user_agent'], '') AS ua,
             coalesce(event_message, '') AS msg
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
           AND toInt32OrZero(log_attributes['response.status_code']) >= 400
         ORDER BY timestamp DESC
         LIMIT 15
@@ -2054,11 +2067,6 @@ public sealed class SupabaseAdminService
                             case "SUPAVISOR_EGRESS":
                             case "SHARED_POOLER_EGRESS":
                                 if (bSupa == 0) acc[5] += metricBytes;
-                                break;
-                            case "EGRESS":
-                            case "UNIFIED_EGRESS":
-                            case "TOTAL_EGRESS":
-                                if (acc[0] + acc[1] + acc[2] + acc[3] + acc[4] + acc[5] == 0) acc[0] += metricBytes;
                                 break;
                         }
                     }

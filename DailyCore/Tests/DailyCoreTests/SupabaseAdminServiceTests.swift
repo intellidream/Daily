@@ -123,12 +123,17 @@ final class SupabaseAdminServiceTests: XCTestCase {
             isExactBillingUsageAvailable: true,
             egressUsedBytes: 3_169_916_695,
             egressQuotaBytes: 5_000_000_000,
+            egress24hBytes: 38_400_000, // 38.4 MB 24h gateway payload
             dbSizeBytes: 43_580_213,
             dbQuotaBytes: 500_000_000
         )
         XCTAssertEqual(SupabaseAdminSnapshot.formatGigabytesPrecise(snap.egressUsedBytes, decimals: 3), "3.170 GB")
         XCTAssertEqual(snap.egressCycleQuotaPercent, 63.398, accuracy: 0.01)
         XCTAssertEqual(Int(snap.egressCycleQuotaPercent.rounded()), 63)
+        XCTAssertEqual(SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes), "38.4 MB")
+        XCTAssertNotEqual(snap.egress24hBytes, snap.egressUsedBytes)
+        // 24h budget is (5,000,000,000 / 30) = 166.66 MB -> 38.4 / 166.66 = ~23%
+        XCTAssertEqual(Int(snap.egress24hQuotaPercent.rounded()), 23)
         XCTAssertEqual(SupabaseAdminSnapshot.formatGigabytesPrecise(snap.dbSizeBytes, decimals: 3), "0.044 GB")
         XCTAssertEqual(Int(snap.dbQuotaPercent.rounded()), 9)
 

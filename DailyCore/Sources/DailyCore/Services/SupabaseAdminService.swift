@@ -19,7 +19,7 @@ public final class SupabaseAdminService: ObservableObject {
 
     public static let defaultProjectRef = "akkfouifxztnfwwiclwg"
     private static let credentialsStorageKey = "com.intellidream.daily.supabase.admin.credentials.v1"
-    private static let snapshotCacheKeyPrefix = "com.intellidream.daily.supabase.admin.snapshot.v2."
+    private static let snapshotCacheKeyPrefix = "com.intellidream.daily.supabase.admin.snapshot.v3."
     private static let cacheTtlSeconds: TimeInterval = 600 // 10 minutes
 
     @Published public private(set) var credentials: SupabaseAdminCredentials
@@ -124,10 +124,15 @@ public final class SupabaseAdminService: ObservableObject {
 
     private static func loadCachedSnapshot(projectRef: String) -> SupabaseAdminSnapshot? {
         guard let raw = GroupDefaults.shared.userDefaults.string(forKey: snapshotCacheKeyPrefix + projectRef),
-              let data = raw.data(using: .utf8) else {
+              let data = raw.data(using: .utf8),
+              let snap = try? JSONDecoder().decode(SupabaseAdminSnapshot.self, from: data) else {
             return nil
         }
-        return try? JSONDecoder().decode(SupabaseAdminSnapshot.self, from: data)
+        // Reject corrupted snapshots where 24h gateway egress mistakenly equaled the full billing cycle total
+        if snap.egress24hBytes >= snap.egressUsedBytes && snap.egressUsedBytes > 500_000_000 {
+            return nil
+        }
+        return snap
     }
 
     private static func saveCachedSnapshot(_ snap: SupabaseAdminSnapshot) {
@@ -610,7 +615,7 @@ public final class SupabaseAdminService: ObservableObject {
 
             var resolved24hEgress: Int64 = logsData.totalEdgeResponseBytes24h
             if resolved24hEgress == 0 {
-                if todayDailyPointBytes > 0 {
+                if todayDailyPointBytes > 0 && (billingData.egressUsedBytes == 0 || todayDailyPointBytes < billingData.egressUsedBytes) {
                     resolved24hEgress = todayDailyPointBytes
                 } else if apiCountEstimatedBytes > 0 {
                     resolved24hEgress = apiCountEstimatedBytes
@@ -1222,7 +1227,7 @@ public final class SupabaseAdminService: ObservableObject {
           countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
           countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
         GROUP BY method, path
         ORDER BY resp_bytes DESC, req_count DESC
         LIMIT 25
@@ -1242,7 +1247,7 @@ public final class SupabaseAdminService: ObservableObject {
           )) AS resp_bytes,
           countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
         GROUP BY ua
         ORDER BY req_count DESC
         LIMIT 25
@@ -1259,7 +1264,7 @@ public final class SupabaseAdminService: ObservableObject {
           log_attributes['request.headers.user_agent'] AS ua,
           event_message
         FROM logs
-        WHERE (source = 'edge_logs' OR source_name = 'edge_logs')
+        WHERE source = 'edge_logs'
           AND toInt32OrZero(log_attributes['response.status_code']) >= 400
         ORDER BY timestamp DESC
         LIMIT 15
@@ -1943,9 +1948,6 @@ public final class SupabaseAdminService: ObservableObject {
                             if bStorage == 0 { bucket.storage += metricBytes }
                         case "EGRESS_SUPAVISOR", "SUPAVISOR_EGRESS", "SHARED_POOLER_EGRESS":
                             if bSupa == 0 { bucket.supavisor += metricBytes }
-                        case "EGRESS", "UNIFIED_EGRESS", "TOTAL_EGRESS":
-                            let curSum = bucket.rest + bucket.fn + bucket.rt + bucket.auth + bucket.storage + bucket.supavisor
-                            if curSum == 0 { bucket.rest += metricBytes }
                         default:
                             break
                         }
