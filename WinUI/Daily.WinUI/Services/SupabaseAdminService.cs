@@ -503,7 +503,11 @@ public sealed class SupabaseAdminService
                 await PersistCredentialsAsync().ConfigureAwait(false);
             }
 
-            var (orgName, orgSlug) = ResolveOrgInfo(orgsTask.Result, activeProject.OrganizationId);
+            var (orgName, orgSlug, orgCreatedAt) = ResolveOrgInfo(orgsTask.Result, activeProject.OrganizationId);
+            if (string.IsNullOrWhiteSpace(orgSlug))
+            {
+                orgSlug = activeProject.OrganizationSlug;
+            }
 
             // Launch all read-only telemetry queries in parallel
             var diskTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/config/disk", pat);
@@ -521,14 +525,31 @@ public sealed class SupabaseAdminService
             var logsClientsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildClientFootprintClickHouseSql());
             var logsErrorsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildRecentErrorsClickHouseSql());
 
-            Task<string?> platformUsageTask = (Credentials.HasValidDashboardJwt && !string.IsNullOrWhiteSpace(orgSlug))
-                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage?project_ref={Uri.EscapeDataString(activeProject.Ref)}", Credentials.DashboardAccessToken!)
+            var platformBearer = Credentials.HasValidDashboardJwt ? Credentials.DashboardAccessToken! : pat;
+
+            // Subscription query for billing cycle dates
+            var subTask1 = !string.IsNullOrWhiteSpace(orgSlug)
+                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", platformBearer)
+                : Task.FromResult<string?>(null);
+            var subTask2 = !string.IsNullOrWhiteSpace(orgSlug)
+                ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", pat)
+                : Task.FromResult<string?>(null);
+
+            // Platform usage queries: org-level first, then project-level fallback
+            var usageOrgTask = !string.IsNullOrWhiteSpace(orgSlug)
+                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", platformBearer)
+                : Task.FromResult<string?>(null);
+            var usageProjTask = !string.IsNullOrWhiteSpace(orgSlug)
+                ? PerformGetStringOptionalAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage?project_ref={Uri.EscapeDataString(activeProject.Ref)}", platformBearer)
+                : Task.FromResult<string?>(null);
+            var usageV1Task = !string.IsNullOrWhiteSpace(orgSlug)
+                ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", pat)
                 : Task.FromResult<string?>(null);
 
             await Task.WhenAll(
                 diskTask, addonsTask, apiCountsTask, functionsTask, fnStatsTask, perfAdvTask, secAdvTask,
                 dbSqlTask, cronSqlTask, logsSummaryTask, logsRoutesTask, logsClientsTask, logsErrorsTask,
-                platformUsageTask).ConfigureAwait(false);
+                subTask1, subTask2, usageOrgTask, usageProjTask, usageV1Task).ConfigureAwait(false);
 
             var (diskSizeGb, diskType, diskIops, diskThroughput) = ParseDiskConfig(diskTask.Result);
             var (orgPlan, computeTier) = ParseAddonsAndPlan(addonsTask.Result);
@@ -543,6 +564,34 @@ public sealed class SupabaseAdminService
             var edgeFunctions = ParseEdgeFunctions(functionsTask.Result, fnStatsTask.Result);
             var advisors = ParseAdvisors(perfAdvTask.Result, secAdvTask.Result);
 
+            string? billingCyclePeriod = null;
+            var subRaw = subTask1.Result ?? subTask2.Result;
+            if (!string.IsNullOrWhiteSpace(subRaw))
+            {
+                try
+                {
+                    using var sdoc = JsonDocument.Parse(subRaw);
+                    var sroot = sdoc.RootElement;
+                    var startSec = Long(sroot, "current_period_start");
+                    var endSec = Long(sroot, "current_period_end");
+                    if (startSec > 0 && endSec > startSec)
+                    {
+                        billingCyclePeriod = SupabaseAdminFormatter.FormatBillingCyclePeriod(startSec, endSec);
+                    }
+                }
+                catch { }
+            }
+
+            var usageRaw = usageOrgTask.Result;
+            if (string.IsNullOrWhiteSpace(usageRaw) || !usageRaw.Contains("\"usages\""))
+            {
+                usageRaw = usageProjTask.Result;
+            }
+            if (string.IsNullOrWhiteSpace(usageRaw) || !usageRaw.Contains("\"usages\""))
+            {
+                usageRaw = usageV1Task.Result;
+            }
+
             bool isPro = orgPlan.Contains("pro", StringComparison.OrdinalIgnoreCase) ||
                          orgPlan.Contains("team", StringComparison.OrdinalIgnoreCase) ||
                          orgPlan.Contains("enterprise", StringComparison.OrdinalIgnoreCase);
@@ -553,7 +602,9 @@ public sealed class SupabaseAdminService
             int defaultMauQuota = isPro ? 100_000 : 50_000;
 
             var billing = ParsePlatformUsage(
-                platformUsageTask.Result,
+                usageRaw,
+                billingCyclePeriod,
+                orgCreatedAt ?? activeProject.CreatedAt,
                 defaultEgressQuotaGb,
                 defaultDbQuotaBytes,
                 defaultStorageQuotaBytes,
@@ -571,26 +622,37 @@ public sealed class SupabaseAdminService
                 OrgPlan = billing.DetectedPlan ?? orgPlan,
                 ComputeTier = computeTier,
                 HasExactBillingMetrics = billing.HasExact,
+                BillingCyclePeriod = billing.BillingCyclePeriod,
                 EgressUsedGb = billing.EgressUsedGb,
                 EgressQuotaGb = billing.EgressQuotaGb,
                 CachedEgressUsedGb = billing.CachedUsedGb,
                 CachedEgressQuotaGb = billing.CachedQuotaGb,
-                DbTotalBytes = dbForensics.DbTotalBytes,
-                DbQuotaBytes = billing.DbQuotaBytes,
+                DbTotalBytes = (billing.HasExact && billing.DbSizeBytes > 0) ? billing.DbSizeBytes : Math.Max(billing.DbSizeBytes, dbForensics.DbTotalBytes),
+                DbQuotaBytes = billing.DbQuotaBytes > 0 ? billing.DbQuotaBytes : defaultDbQuotaBytes,
                 DbHeapBytes = dbForensics.DbHeapBytes,
                 DbIndexBytes = dbForensics.DbIndexBytes,
                 DiskSizeGb = diskSizeGb,
                 DiskType = diskType,
                 DiskIops = diskIops,
                 DiskThroughputMbps = diskThroughput,
-                StorageTotalBytes = dbForensics.StorageBytes,
-                StorageQuotaBytes = billing.StorageQuotaBytes,
+                StorageTotalBytes = billing.StorageSizeBytes > 0 ? billing.StorageSizeBytes : dbForensics.StorageBytes,
+                StorageQuotaBytes = billing.StorageQuotaBytes > 0 ? billing.StorageQuotaBytes : defaultStorageQuotaBytes,
                 StorageObjectCount = dbForensics.StorageObjects,
                 StorageBucketCount = dbForensics.StorageBuckets,
                 MonthlyActiveUsers = billing.MauUsed > 0 ? billing.MauUsed : dbForensics.Mau30d,
-                MauQuota = billing.MauQuota,
+                MauQuota = billing.MauQuota > 0 ? billing.MauQuota : defaultMauQuota,
                 ActiveSessionsCount = dbForensics.ActiveSessions,
                 PairedWatchesCount = dbForensics.PairedWatches,
+                FunctionInvocations = billing.FunctionInvocations > 0 ? billing.FunctionInvocations : edgeFunctions.Sum(f => f.Invocations24h),
+                FunctionInvocationsQuota = billing.FunctionInvocationsQuota,
+                RealtimeMessages = billing.RealtimeMessages,
+                RealtimeMessagesQuota = billing.RealtimeMessagesQuota,
+                RealtimePeakConnections = billing.RealtimePeakConnections > 0 ? billing.RealtimePeakConnections : dbForensics.RealtimeTotal,
+                RealtimePeakConnectionsQuota = billing.RealtimePeakConnectionsQuota,
+                LogIngestionGb = billing.LogIngestionGb,
+                LogIngestionQuotaGb = billing.LogIngestionQuotaGb,
+                LogQueryGb = billing.LogQueryGb,
+                LogQueryQuotaGb = billing.LogQueryQuotaGb,
                 GatewayRequests24h = gwTotal > 0 ? gwTotal : (rest24h + auth24h + storage24h + realtime24h),
                 Gateway2xx24h = gw2xx,
                 Gateway4xx24h = gw4xx,
@@ -1065,6 +1127,7 @@ public sealed class SupabaseAdminService
             {
                 Ref = id,
                 OrganizationId = FirstNonEmpty(Str(item, "organization_id"), Str(item, "organization_slug")),
+                OrganizationSlug = FirstNonEmpty(Str(item, "organization_slug"), Str(item, "organization_id")),
                 Name = FirstNonEmpty(Str(item, "name"), id),
                 Region = FirstNonEmpty(Str(item, "region"), "eu-central-1"),
                 Status = FirstNonEmpty(Str(item, "status"), "ACTIVE_HEALTHY"),
@@ -1075,18 +1138,19 @@ public sealed class SupabaseAdminService
         return list;
     }
 
-    private static (string OrgName, string? OrgSlug) ResolveOrgInfo(string? json, string orgId)
+    private static (string OrgName, string? OrgSlug, string? OrgCreatedAt) ResolveOrgInfo(string? json, string orgId)
     {
-        if (string.IsNullOrWhiteSpace(json)) return ("Personal Organization", null);
+        if (string.IsNullOrWhiteSpace(json)) return ("Personal Organization", null, null);
         try
         {
             using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return ("Personal Organization", null);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return ("Personal Organization", null, null);
             JsonElement? matched = null;
             foreach (var el in doc.RootElement.EnumerateArray())
             {
                 var id = FirstNonEmpty(Str(el, "id"), Str(el, "slug"));
-                if (!string.IsNullOrEmpty(orgId) && id == orgId)
+                var slug = Str(el, "slug");
+                if (!string.IsNullOrEmpty(orgId) && (id == orgId || slug == orgId))
                 {
                     matched = el;
                     break;
@@ -1097,11 +1161,12 @@ public sealed class SupabaseAdminService
             {
                 var name = FirstNonEmpty(Str(m, "name"), "Organization");
                 var slug = FirstNonEmpty(Str(m, "slug"), Str(m, "id"));
-                return (name, string.IsNullOrWhiteSpace(slug) ? null : slug);
+                var createdAt = Str(m, "created_at");
+                return (name, string.IsNullOrWhiteSpace(slug) ? null : slug, createdAt);
             }
         }
         catch { }
-        return ("Personal Organization", null);
+        return ("Personal Organization", null, null);
     }
 
     private static (int SizeGb, string Type, int Iops, int Throughput) ParseDiskConfig(string? json)
@@ -1573,17 +1638,32 @@ public sealed class SupabaseAdminService
     private sealed record PlatformBillingParsed(
         bool HasExact,
         string? DetectedPlan,
+        string? BillingCyclePeriod,
         double EgressUsedGb,
         double EgressQuotaGb,
         double CachedUsedGb,
         double CachedQuotaGb,
+        long DbSizeBytes,
         long DbQuotaBytes,
+        long StorageSizeBytes,
         long StorageQuotaBytes,
+        long FunctionInvocations,
+        long FunctionInvocationsQuota,
+        long RealtimeMessages,
+        long RealtimeMessagesQuota,
+        long RealtimePeakConnections,
+        long RealtimePeakConnectionsQuota,
         int MauUsed,
-        int MauQuota);
+        int MauQuota,
+        double LogIngestionGb,
+        double LogIngestionQuotaGb,
+        double LogQueryGb,
+        double LogQueryQuotaGb);
 
     private static PlatformBillingParsed ParsePlatformUsage(
         string? json,
+        string? precomputedPeriod,
+        string? anchorCreationDate,
         double fallbackEgressQuotaGb,
         long fallbackDbQuota,
         long fallbackStorageQuota,
@@ -1591,11 +1671,14 @@ public sealed class SupabaseAdminService
         long gatewayBytes24h)
     {
         double estGb = Math.Max(0.0, gatewayBytes24h / (1024.0 * 1024.0 * 1024.0));
+        string? cyclePeriod = precomputedPeriod;
+
         if (string.IsNullOrWhiteSpace(json))
         {
+            cyclePeriod ??= SupabaseAdminFormatter.ComputeBillingCyclePeriodFromCreation(anchorCreationDate);
             return new PlatformBillingParsed(
-                false, null, estGb, fallbackEgressQuotaGb, 0.0, fallbackEgressQuotaGb,
-                fallbackDbQuota, fallbackStorageQuota, 0, fallbackMauQuota);
+                false, null, cyclePeriod, estGb, fallbackEgressQuotaGb, 0.0, fallbackEgressQuotaGb,
+                0L, fallbackDbQuota, 0L, fallbackStorageQuota, 0L, 500_000L, 0L, 2_000_000L, 0L, 200L, 0, fallbackMauQuota, 0.0, 1.0, 0.0, 100.0);
         }
 
         try
@@ -1605,9 +1688,34 @@ public sealed class SupabaseAdminService
             string? plan = StrOrNull(root, "plan");
             double egressUsed = estGb, egressQuota = fallbackEgressQuotaGb;
             double cachedUsed = 0.0, cachedQuota = fallbackEgressQuotaGb;
-            long dbQuota = fallbackDbQuota, stQuota = fallbackStorageQuota;
+            long dbSize = 0L, dbQuota = fallbackDbQuota;
+            long storageSize = 0L, stQuota = fallbackStorageQuota;
+            long fnInvocations = 0L, fnQuota = 500_000L;
+            long rtMessages = 0L, rtMsgQuota = 2_000_000L;
+            long rtPeak = 0L, rtPeakQuota = 200L;
             int mauUsed = 0, mauQuota = fallbackMauQuota;
+            double logIngestGb = 0.0, logIngestQuotaGb = 1.0;
+            double logQueryGb = 0.0, logQueryQuotaGb = 100.0;
             bool exact = false;
+
+            if (cyclePeriod == null)
+            {
+                var startSec = Long(root, "billing_cycle_start");
+                if (startSec <= 0) startSec = Long(root, "period_start");
+                var endSec = Long(root, "billing_cycle_end");
+                if (endSec <= 0) endSec = Long(root, "period_end");
+                if (startSec > 0 && endSec > startSec)
+                {
+                    cyclePeriod = SupabaseAdminFormatter.FormatBillingCyclePeriod(startSec, endSec);
+                }
+            }
+
+            static long ResolveBytes(double val, long orig)
+            {
+                if (orig > 0) return orig;
+                if (val > 0 && val < 100_000.0) return (long)(val * 1_073_741_824.0);
+                return (long)val;
+            }
 
             if (root.TryGetProperty("usages", out var usages) && usages.ValueKind == JsonValueKind.Array)
             {
@@ -1615,45 +1723,79 @@ public sealed class SupabaseAdminService
                 {
                     var metric = Str(u, "metric").ToLowerInvariant();
                     var usageVal = Double(u, "usage");
+                    var usageOrig = Long(u, "usage_original");
                     var limitVal = Double(u, "pricing_free_units");
                     if (limitVal <= 0) limitVal = Double(u, "capped_quota");
+                    if (limitVal <= 0) limitVal = Double(u, "available_in_plan");
 
                     if (metric == "egress")
                     {
-                        egressUsed = usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal;
+                        egressUsed = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
                         if (limitVal > 0) egressQuota = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
                         exact = true;
                     }
                     else if (metric.Contains("cached_egress"))
                     {
-                        cachedUsed = usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal;
+                        cachedUsed = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
                         if (limitVal > 0) cachedQuota = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
                     }
-                    else if (metric == "db_size" && limitVal > 0)
+                    else if (metric == "database_size" || metric == "db_size")
                     {
-                        dbQuota = limitVal > 10_000 ? (long)limitVal : (long)(limitVal * 1_073_741_824.0);
+                        dbSize = ResolveBytes(usageVal, usageOrig);
+                        if (limitVal > 0) dbQuota = ResolveBytes(limitVal, 0);
                     }
-                    else if (metric == "storage_size" && limitVal > 0)
+                    else if (metric == "storage_size")
                     {
-                        stQuota = limitVal > 10_000 ? (long)limitVal : (long)(limitVal * 1_073_741_824.0);
+                        storageSize = ResolveBytes(usageVal, usageOrig);
+                        if (limitVal > 0) stQuota = ResolveBytes(limitVal, 0);
+                    }
+                    else if (metric == "function_invocations")
+                    {
+                        fnInvocations = usageOrig > 0 ? usageOrig : (long)usageVal;
+                        if (limitVal > 0) fnQuota = (long)limitVal;
+                    }
+                    else if (metric == "realtime_message_count")
+                    {
+                        rtMessages = usageOrig > 0 ? usageOrig : (long)usageVal;
+                        if (limitVal > 0) rtMsgQuota = (long)limitVal;
+                    }
+                    else if (metric == "realtime_peak_connections")
+                    {
+                        rtPeak = usageOrig > 0 ? usageOrig : (long)usageVal;
+                        if (limitVal > 0) rtPeakQuota = (long)limitVal;
                     }
                     else if (metric == "monthly_active_users")
                     {
-                        mauUsed = (int)usageVal;
+                        mauUsed = (int)(usageOrig > 0 ? usageOrig : (long)usageVal);
                         if (limitVal > 0) mauQuota = (int)limitVal;
+                    }
+                    else if (metric == "log_ingestion" || metric == "log_drain_events")
+                    {
+                        logIngestGb = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
+                        if (limitVal > 0) logIngestQuotaGb = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
+                    }
+                    else if (metric == "log_query" || metric == "log_querying")
+                    {
+                        logQueryGb = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
+                        if (limitVal > 0) logQueryQuotaGb = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
                     }
                 }
             }
 
+            cyclePeriod ??= SupabaseAdminFormatter.ComputeBillingCyclePeriodFromCreation(anchorCreationDate);
+
             return new PlatformBillingParsed(
-                exact, plan, egressUsed, egressQuota, cachedUsed, cachedQuota,
-                dbQuota, stQuota, mauUsed, mauQuota);
+                exact, plan, cyclePeriod, egressUsed, egressQuota, cachedUsed, cachedQuota,
+                dbSize, dbQuota, storageSize, stQuota, fnInvocations, fnQuota,
+                rtMessages, rtMsgQuota, rtPeak, rtPeakQuota, mauUsed, mauQuota,
+                logIngestGb, logIngestQuotaGb, logQueryGb, logQueryQuotaGb);
         }
         catch
         {
+            cyclePeriod ??= SupabaseAdminFormatter.ComputeBillingCyclePeriodFromCreation(anchorCreationDate);
             return new PlatformBillingParsed(
-                false, null, estGb, fallbackEgressQuotaGb, 0.0, fallbackEgressQuotaGb,
-                fallbackDbQuota, fallbackStorageQuota, 0, fallbackMauQuota);
+                false, null, cyclePeriod, estGb, fallbackEgressQuotaGb, 0.0, fallbackEgressQuotaGb,
+                0L, fallbackDbQuota, 0L, fallbackStorageQuota, 0L, 500_000L, 0L, 2_000_000L, 0L, 200L, 0, fallbackMauQuota, 0.0, 1.0, 0.0, 100.0);
         }
     }
 

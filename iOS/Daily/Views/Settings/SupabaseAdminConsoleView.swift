@@ -332,10 +332,15 @@ public struct SupabaseAdminConsoleView: View {
     private func billingCycleEgressCard(_ snap: SupabaseAdminSnapshot) -> some View {
         let percent = snap.egressCycleQuotaPercent
         let accent: Color = percent >= 95 ? ThemeColors.error : (percent >= 78 ? ThemeColors.warning : ThemeColors.accentCyan)
-        let formattedCycle = SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
-        let formattedQuota = SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
+        let formattedCycle = snap.egressCycleUsedBytes >= 1_073_741_824
+            ? String(format: "%.3f GB", Double(snap.egressCycleUsedBytes) / 1_073_741_824.0)
+            : SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
+        let formattedQuota = snap.egressCycleQuotaBytes >= 1_073_741_824
+            ? String(format: "%.0f GB", Double(snap.egressCycleQuotaBytes) / 1_073_741_824.0)
+            : SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
         let formatted24h = SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes)
         let formattedCached = SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)
+        let cycleSubtitle = snap.billingCyclePeriod ?? (snap.isExactBillingUsageAvailable ? "Current Billing Cycle" : "Rolling 30-Day Aggregation")
 
         return GlassCard(cornerRadius: 16, padding: 14) {
             VStack(alignment: .leading, spacing: 10) {
@@ -349,9 +354,16 @@ public struct SupabaseAdminConsoleView: View {
                                 .font(.system(size: 13.5, weight: .bold))
                                 .foregroundColor(.white)
                         }
-                        Text(snap.isExactBillingUsageAvailable ? "Current Billing Month · Invoiced Bandwidth" : "Rolling 30-Day Aggregation")
-                            .font(.system(size: 10.5))
-                            .foregroundColor(ThemeColors.fgMutedDark)
+                        HStack(spacing: 4) {
+                            Text(cycleSubtitle)
+                                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                                .foregroundColor(accent.opacity(0.95))
+                            Text("•")
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                            Text(snap.isExactBillingUsageAvailable ? "Invoiced" : "Aggregated")
+                                .font(.system(size: 10.5))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                        }
                     }
                     Spacer()
                     HStack(spacing: 4) {
@@ -423,6 +435,18 @@ public struct SupabaseAdminConsoleView: View {
 
     private func executiveQuotasGrid(_ snap: SupabaseAdminSnapshot) -> some View {
         let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        let dbUsedFormatted = snap.dbSizeBytes > 0
+            ? String(format: "%.3f GB", Double(snap.dbSizeBytes) / 1_073_741_824.0)
+            : SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)
+        let dbQuotaFormatted = String(format: "%.1f GB", Double(snap.dbQuotaBytes) / 1_073_741_824.0)
+
+        let fnUsedFormatted = snap.functionInvocations >= 1000
+            ? String(format: "%,d", snap.functionInvocations)
+            : "\(snap.functionInvocations)"
+        let fnQuotaFormatted = snap.functionInvocationsQuota >= 1000
+            ? String(format: "%,d", snap.functionInvocationsQuota)
+            : "\(snap.functionInvocationsQuota)"
+
         return LazyVGrid(columns: cols, spacing: 12) {
             quotaTile(
                 title: "Gateway Egress (24h)",
@@ -432,20 +456,20 @@ public struct SupabaseAdminConsoleView: View {
             )
             quotaTile(
                 title: "Database Size",
-                used: SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes),
-                quota: SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes),
+                used: dbUsedFormatted,
+                quota: dbQuotaFormatted,
                 percent: snap.dbQuotaPercent
             )
             quotaTile(
                 title: "Edge Calls",
-                used: "\(snap.functionInvocations)",
-                quota: "\(snap.functionInvocationsQuota)",
+                used: fnUsedFormatted,
+                quota: fnQuotaFormatted,
                 percent: snap.functionInvocationsQuota > 0 ? (Double(snap.functionInvocations) * 100.0 / Double(snap.functionInvocationsQuota)) : 0
             )
             quotaTile(
-                title: "Realtime & Fleet",
-                used: "\(snap.realtimeActiveSubscriptions) subs",
-                quota: "Peak \(snap.realtimePeakConnections)",
+                title: "Realtime Peak",
+                used: "\(snap.realtimePeakConnections)",
+                quota: "\(snap.realtimePeakConnectionsQuota)",
                 percent: snap.realtimePeakConnectionsQuota > 0 ? (Double(snap.realtimePeakConnections) * 100.0 / Double(snap.realtimePeakConnectionsQuota)) : 0
             )
         }

@@ -108,4 +108,23 @@ final class SupabaseAdminServiceTests: XCTestCase {
         XCTAssertTrue(aiFallback.contains("Egress Quota Pressure"))
         XCTAssertTrue(aiFallback.contains("public.health_metrics"))
     }
+
+    func testBillingCyclePeriodFormattingAndCreationDateAnchorCalculation() {
+        // Direct timestamp formatting
+        let startEpoch: Int64 = 1760832000 // 2025-10-19 00:00:00 UTC
+        let endEpoch: Int64 = 1763510400   // 2025-11-19 00:00:00 UTC
+        let formatted = SupabaseAdminSnapshot.formatBillingCyclePeriod(startEpochSeconds: startEpoch, endEpochSeconds: endEpoch)
+        XCTAssertEqual(formatted, "19 Oct 2025 - 19 Nov 2025")
+
+        // Anchor day calculation from ISO creation string ("...-19...")
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let nov7_2026 = cal.date(from: DateComponents(year: 2026, month: 11, day: 7))!
+        let cycleNov7 = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: "2024-10-19T14:32:00Z", referenceDate: nov7_2026)
+        XCTAssertEqual(cycleNov7, "19 Oct 2026 - 19 Nov 2026")
+
+        let nov25_2026 = cal.date(from: DateComponents(year: 2026, month: 11, day: 25))!
+        let cycleNov25 = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: "2024-10-19T14:32:00Z", referenceDate: nov25_2026)
+        XCTAssertEqual(cycleNov25, "19 Nov 2026 - 19 Dec 2026")
+    }
 }

@@ -366,10 +366,15 @@ public sealed partial class SupabaseAdminPage : Page
         grid.Children.Add(c1);
 
         // Row 1, Col 1: Database Size
+        double dbTotalGb = snap.DbTotalBytes / (1024.0 * 1024.0 * 1024.0);
+        double dbQuotaGb = snap.DbQuotaBytes / (1024.0 * 1024.0 * 1024.0);
+        string dbUsedStr = (dbTotalGb > 0 && dbTotalGb < 10) ? $"{dbTotalGb:F3} GB" : SupabaseAdminFormatter.FormatBytes(snap.DbTotalBytes);
+        string dbQuotaStr = (dbQuotaGb > 0 && dbQuotaGb < 10) ? $"{dbQuotaGb:F1} GB" : SupabaseAdminFormatter.FormatBytes(snap.DbQuotaBytes);
+
         var c2 = BuildQuotaTile(
             "Database Size",
-            SupabaseAdminFormatter.FormatBytes(snap.DbTotalBytes),
-            $"of {SupabaseAdminFormatter.FormatBytes(snap.DbQuotaBytes)} ({snap.DbUsagePercent:F1}%)",
+            dbUsedStr,
+            $"of {dbQuotaStr} ({snap.DbUsagePercent:F1}%)",
             $"Heap {SupabaseAdminFormatter.FormatBytes(snap.DbHeapBytes)} · Indexes {SupabaseAdminFormatter.FormatBytes(snap.DbIndexBytes)}",
             snap.DbUsagePercent,
             EmeraldAccent);
@@ -437,9 +442,11 @@ public sealed partial class SupabaseAdminPage : Page
 
         headerStack.Children.Add(new TextBlock
         {
-            Text = snap.HasExactBillingMetrics
-                ? "Current Billing Month · Invoiced Bandwidth from /platform/organizations/{slug}/usage"
-                : "Aggregated from ClickHouse gateway edge logs & historical daily metrics",
+            Text = !string.IsNullOrWhiteSpace(snap.BillingCyclePeriod)
+                ? snap.BillingCyclePeriod
+                : (snap.HasExactBillingMetrics
+                    ? "Current Billing Month · Invoiced Bandwidth from /platform/organizations/{slug}/usage"
+                    : "Aggregated from ClickHouse gateway edge logs & historical daily metrics"),
             FontSize = 11,
             Opacity = 0.65
         });
@@ -467,7 +474,7 @@ public sealed partial class SupabaseAdminPage : Page
 
         var valRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Bottom };
         valRow.Children.Add(new TextBlock { Text = $"{snap.EgressUsedGb:F3} GB", FontSize = 28, FontWeight = FontWeights.Bold });
-        valRow.Children.Add(new TextBlock { Text = $"/ {snap.EgressQuotaGb:F1} GB", FontSize = 14, Opacity = 0.65, Margin = new Thickness(0, 0, 0, 4) });
+        valRow.Children.Add(new TextBlock { Text = $"/ {snap.EgressQuotaGb:F0} GB", FontSize = 14, Opacity = 0.65, Margin = new Thickness(0, 0, 0, 4) });
         stack.Children.Add(valRow);
 
         var pb = new ProgressBar

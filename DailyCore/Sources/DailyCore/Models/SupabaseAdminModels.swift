@@ -452,6 +452,7 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
 
     // Billing & Quotas
     public var isExactBillingUsageAvailable: Bool
+    public var billingCyclePeriod: String?
     public var egressUsedBytes: Int64
     public var egressQuotaBytes: Int64
     public var cachedEgressUsedBytes: Int64
@@ -468,6 +469,10 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
     public var realtimePeakConnectionsQuota: Int64
     public var mauCount: Int64
     public var mauQuota: Int64
+    public var logIngestionBytes: Int64
+    public var logIngestionQuotaBytes: Int64
+    public var logQueryBytes: Int64
+    public var logQueryQuotaBytes: Int64
     public var logIngestionEvents: Int64
 
     // Time-Series Charts
@@ -523,6 +528,7 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         serviceHealth: [SupabaseServiceHealthItem] = [],
         resourceWarnings: [String] = [],
         isExactBillingUsageAvailable: Bool = false,
+        billingCyclePeriod: String? = nil,
         egressUsedBytes: Int64 = 0,
         egressQuotaBytes: Int64 = 5_368_709_120, // 5 GB default Free
         cachedEgressUsedBytes: Int64 = 0,
@@ -539,6 +545,10 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         realtimePeakConnectionsQuota: Int64 = 200,
         mauCount: Int64 = 0,
         mauQuota: Int64 = 50_000,
+        logIngestionBytes: Int64 = 0,
+        logIngestionQuotaBytes: Int64 = 1_073_741_824, // 1 GB default Free
+        logQueryBytes: Int64 = 0,
+        logQueryQuotaBytes: Int64 = 107_374_182_400, // 100 GB default Free
         logIngestionEvents: Int64 = 0,
         dailyEgress: [SupabaseDailyEgressPoint] = [],
         apiCounts24h: [SupabaseApiCountPoint] = [],
@@ -581,6 +591,7 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         self.serviceHealth = serviceHealth
         self.resourceWarnings = resourceWarnings
         self.isExactBillingUsageAvailable = isExactBillingUsageAvailable
+        self.billingCyclePeriod = billingCyclePeriod
         self.egressUsedBytes = egressUsedBytes
         self.egressQuotaBytes = egressQuotaBytes
         self.cachedEgressUsedBytes = cachedEgressUsedBytes
@@ -597,6 +608,10 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         self.realtimePeakConnectionsQuota = realtimePeakConnectionsQuota
         self.mauCount = mauCount
         self.mauQuota = mauQuota
+        self.logIngestionBytes = logIngestionBytes
+        self.logIngestionQuotaBytes = logIngestionQuotaBytes
+        self.logQueryBytes = logQueryBytes
+        self.logQueryQuotaBytes = logQueryQuotaBytes
         self.logIngestionEvents = logIngestionEvents
         self.dailyEgress = dailyEgress
         self.apiCounts24h = apiCounts24h
@@ -644,6 +659,82 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         } else {
             return "\(Int(absBytes)) B"
         }
+    }
+
+    public static func formatGigabytesPrecise(_ bytes: Int64, decimals: Int = 3) -> String {
+        let gb = Double(max(0, bytes)) / 1_073_741_824.0
+        return String(format: "%.\(decimals)f GB", gb)
+    }
+
+    public static func formatBillingCyclePeriod(startEpochSeconds: Int64, endEpochSeconds: Int64) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "d MMM yyyy"
+        df.timeZone = TimeZone(secondsFromGMT: 0)
+        let startDate = Date(timeIntervalSince1970: TimeInterval(startEpochSeconds))
+        let endDate = Date(timeIntervalSince1970: TimeInterval(endEpochSeconds))
+        return "\(df.string(from: startDate)) - \(df.string(from: endDate))"
+    }
+
+    public static func computeBillingCyclePeriodFromCreation(dateString: String, referenceDate: Date = Date()) -> String {
+        var anchorDay = 19
+        let clean = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.count >= 10 {
+            let parts = clean.prefix(10).split(separator: "-")
+            if parts.count == 3, let day = Int(parts[2]), day >= 1 && day <= 31 {
+                anchorDay = day
+            }
+        }
+
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let now = referenceDate
+        let currentYear = cal.component(.year, from: now)
+        let currentMonth = cal.component(.month, from: now)
+        let currentDay = cal.component(.day, from: now)
+
+        var startYear = currentYear
+        var startMonth = currentMonth
+        if currentDay < anchorDay {
+            startMonth -= 1
+            if startMonth < 1 {
+                startMonth = 12
+                startYear -= 1
+            }
+        }
+
+        var endYear = startYear
+        var endMonth = startMonth + 1
+        if endMonth > 12 {
+            endMonth = 1
+            endYear += 1
+        }
+
+        var startComp = DateComponents()
+        startComp.year = startYear
+        startComp.month = startMonth
+        startComp.day = anchorDay
+        startComp.hour = 0
+        startComp.minute = 0
+        startComp.second = 0
+
+        var endComp = DateComponents()
+        endComp.year = endYear
+        endComp.month = endMonth
+        endComp.day = anchorDay
+        endComp.hour = 0
+        endComp.minute = 0
+        endComp.second = 0
+
+        let startDate = cal.date(from: startComp) ?? now
+        let endDate = cal.date(from: endComp) ?? now.addingTimeInterval(30 * 86400)
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "d MMM yyyy"
+        df.timeZone = TimeZone(secondsFromGMT: 0)
+        return "\(df.string(from: startDate)) - \(df.string(from: endDate))"
     }
 
     public var egressQuotaPercent: Double {

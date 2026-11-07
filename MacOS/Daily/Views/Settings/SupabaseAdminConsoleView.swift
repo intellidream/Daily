@@ -415,10 +415,15 @@ public struct SupabaseAdminConsoleView: View {
     private func billingCycleEgressCard(_ snap: SupabaseAdminSnapshot) -> some View {
         let percent = snap.egressCycleQuotaPercent
         let accent: Color = percent >= 95 ? ThemeColors.error : (percent >= 78 ? ThemeColors.warning : ThemeColors.accentCyan)
-        let formattedCycle = SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
-        let formattedQuota = SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
+        let formattedCycle = snap.egressCycleUsedBytes >= 1_073_741_824
+            ? String(format: "%.3f GB", Double(snap.egressCycleUsedBytes) / 1_073_741_824.0)
+            : SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)
+        let formattedQuota = snap.egressCycleQuotaBytes >= 1_073_741_824
+            ? String(format: "%.0f GB", Double(snap.egressCycleQuotaBytes) / 1_073_741_824.0)
+            : SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes)
         let formatted24h = SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes)
         let formattedCached = SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)
+        let cycleSubtitle = snap.billingCyclePeriod ?? (snap.isExactBillingUsageAvailable ? "Current Billing Month" : "Rolling 30-Day Aggregation")
 
         return GlassCard(cornerRadius: 16, padding: 18) {
             VStack(alignment: .leading, spacing: 14) {
@@ -431,6 +436,12 @@ public struct SupabaseAdminConsoleView: View {
                             Text("Unified Egress · Billing Cycle")
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.white)
+                            Text(cycleSubtitle)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(accent)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(accent.opacity(0.14)))
                             Text(snap.isExactBillingUsageAvailable ? "EXACT INVOICE" : "ROLLING 30-DAY")
                                 .font(.system(size: 9.5, weight: .heavy, design: .monospaced))
                                 .foregroundColor(snap.isExactBillingUsageAvailable ? ThemeColors.success : ThemeColors.accentCyan)
@@ -438,7 +449,7 @@ public struct SupabaseAdminConsoleView: View {
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill((snap.isExactBillingUsageAvailable ? ThemeColors.success : ThemeColors.accentCyan).opacity(0.14)))
                         }
-                        Text(snap.isExactBillingUsageAvailable ? "Current Billing Month · Invoiced Bandwidth from /platform/organizations/{slug}/usage" : "Aggregated from ClickHouse gateway edge logs & historical daily rolling metrics")
+                        Text(snap.isExactBillingUsageAvailable ? "Current Billing Cycle · Invoiced Bandwidth from /platform/organizations/{slug}/usage" : "Aggregated from ClickHouse gateway edge logs & historical daily rolling metrics")
                             .font(.system(size: 11))
                             .foregroundColor(ThemeColors.fgMutedDark)
                     }
@@ -532,6 +543,18 @@ public struct SupabaseAdminConsoleView: View {
             GridItem(.flexible(), spacing: 14),
             GridItem(.flexible(), spacing: 14)
         ]
+        let dbUsedFormatted = snap.dbSizeBytes > 0
+            ? String(format: "%.3f GB", Double(snap.dbSizeBytes) / 1_073_741_824.0)
+            : SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)
+        let dbQuotaFormatted = String(format: "%.1f GB", Double(snap.dbQuotaBytes) / 1_073_741_824.0)
+
+        let fnUsedFormatted = snap.functionInvocations >= 1000
+            ? String(format: "%,d", snap.functionInvocations)
+            : "\(snap.functionInvocations)"
+        let fnQuotaFormatted = snap.functionInvocationsQuota >= 1000
+            ? String(format: "%,d", snap.functionInvocationsQuota)
+            : "\(snap.functionInvocationsQuota)"
+
         return LazyVGrid(columns: cols, spacing: 14) {
             quotaGaugeTile(
                 title: "Gateway Egress (24h)",
@@ -546,26 +569,26 @@ public struct SupabaseAdminConsoleView: View {
             quotaGaugeTile(
                 title: "Database Size",
                 icon: "cylinder.split.1x2.fill",
-                usedLabel: SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes),
-                quotaLabel: SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes),
+                usedLabel: dbUsedFormatted,
+                quotaLabel: dbQuotaFormatted,
                 percent: snap.dbQuotaPercent,
                 subtitle: "Heap \(SupabaseAdminSnapshot.formatBytes(snap.heapDataBytes)) · Idx \(SupabaseAdminSnapshot.formatBytes(snap.indexTotalBytes))"
             )
             quotaGaugeTile(
                 title: "Edge Function Calls",
                 icon: "bolt.horizontal.circle.fill",
-                usedLabel: "\(snap.functionInvocations)",
-                quotaLabel: "\(snap.functionInvocationsQuota)",
+                usedLabel: fnUsedFormatted,
+                quotaLabel: fnQuotaFormatted,
                 percent: snap.functionInvocationsQuota > 0 ? (Double(snap.functionInvocations) * 100.0 / Double(snap.functionInvocationsQuota)) : 0,
                 subtitle: "\(snap.edgeFunctions.count) deployed functions"
             )
             quotaGaugeTile(
-                title: "Realtime & Fleet",
+                title: "Realtime Peak",
                 icon: "dot.radiowaves.left.and.right",
-                usedLabel: "\(snap.realtimeActiveSubscriptions) live subs",
-                quotaLabel: "Peak \(snap.realtimePeakConnections)/\(snap.realtimePeakConnectionsQuota)",
+                usedLabel: "\(snap.realtimePeakConnections) conns",
+                quotaLabel: "/ \(snap.realtimePeakConnectionsQuota)",
                 percent: snap.realtimePeakConnectionsQuota > 0 ? (Double(snap.realtimePeakConnections) * 100.0 / Double(snap.realtimePeakConnectionsQuota)) : 0,
-                subtitle: "MAU: \(snap.mauCount) · Logs: \(snap.logIngestionEvents)"
+                subtitle: "Msgs: \(snap.realtimeMessages) · MAU: \(snap.mauCount)"
             )
         }
     }

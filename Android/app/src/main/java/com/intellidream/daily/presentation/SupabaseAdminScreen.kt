@@ -551,8 +551,10 @@ private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
         percent >= 78.0 -> ThemeColors.warning
         else -> ThemeColors.accentCyan
     }
-    val cycleUsed = remember(snap.egressCycleUsedBytes) { SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes) }
-    val cycleQuota = remember(snap.egressCycleQuotaBytes) { SupabaseAdminSnapshot.formatBytes(snap.egressCycleQuotaBytes) }
+    val cycleUsedGb = snap.egressCycleUsedBytes.toDouble() / 1_073_741_824.0
+    val cycleQuotaGb = snap.egressCycleQuotaBytes.toDouble() / 1_073_741_824.0
+    val cycleUsed = remember(snap.egressCycleUsedBytes) { String.format(Locale.US, "%.3f GB", cycleUsedGb) }
+    val cycleQuota = remember(snap.egressCycleQuotaBytes) { String.format(Locale.US, "%.0f GB", cycleQuotaGb) }
     val egress24h = remember(snap.egress24hBytes) { SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes) }
     val cachedEgress = remember(snap.cachedEgressUsedBytes) { SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes) }
 
@@ -582,7 +584,7 @@ private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
                         )
                     }
                     Text(
-                        text = if (snap.isExactBillingUsageAvailable) "Current Billing Month · Invoiced Bandwidth" else "Rolling 30-Day Aggregation",
+                        text = snap.billingCyclePeriod ?: if (snap.isExactBillingUsageAvailable) "Current Billing Month · Invoiced Bandwidth" else "Rolling 30-Day Aggregation",
                         color = ThemeColors.fgMutedDark,
                         fontSize = 11.sp
                     )
@@ -669,8 +671,16 @@ private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
 @Composable
 private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) {
     val h24Used = remember(snap.egress24hBytes) { SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes) }
-    val dbUsed = remember(snap.dbSizeBytes) { SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes) }
-    val dbQuota = remember(snap.dbQuotaBytes) { SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes) }
+    val dbUsedGb = snap.dbSizeBytes.toDouble() / 1_073_741_824.0
+    val dbQuotaGb = snap.dbQuotaBytes.toDouble() / 1_073_741_824.0
+    val dbUsed = remember(snap.dbSizeBytes) {
+        if (dbUsedGb > 0 && dbUsedGb < 10) String.format(Locale.US, "%.3f GB", dbUsedGb)
+        else SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)
+    }
+    val dbQuota = remember(snap.dbQuotaBytes) {
+        if (dbQuotaGb > 0 && dbQuotaGb < 10) String.format(Locale.US, "%.1f GB", dbQuotaGb)
+        else SupabaseAdminSnapshot.formatBytes(snap.dbQuotaBytes)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BillingCycleEgressCard(snap = snap)

@@ -555,7 +555,8 @@ class SupabaseAdminRepository private constructor() {
         _isLoading.value = true
         _errorMessage.value = null
         try {
-            val projects = fetchProjectsList(mgmtBearer)
+            val knownOrgs = fetchOrganizations(mgmtBearer)
+            val projects = fetchProjectsList(mgmtBearer, knownOrgs)
             val activeProject = projects.firstOrNull { it.ref == creds.selectedProjectRef }
                 ?: projects.firstOrNull()
                 ?: SupabaseProjectSummary(
@@ -566,12 +567,16 @@ class SupabaseAdminRepository private constructor() {
                     status = "ACTIVE_HEALTHY"
                 )
             val ref = activeProject.ref
-            val orgSlug = activeProject.organizationSlug.ifEmpty { creds.selectedOrgSlug ?: "" }
+            val rawOrgSlug = activeProject.organizationSlug.ifEmpty { creds.selectedOrgSlug ?: "" }
+            val matchedOrg = knownOrgs.firstOrNull { it.slug == rawOrgSlug || it.id == rawOrgSlug } ?: knownOrgs.firstOrNull()
+            val orgSlug = if (matchedOrg != null && matchedOrg.slug.isNotEmpty()) matchedOrg.slug else rawOrgSlug
+            val orgCreatedAt = matchedOrg?.createdAt
+            val projectCreatedAt = activeProject.createdAt
             val platformBearer = creds.primaryPlatformBearer ?: mgmtBearer
             val hasDash = !creds.dashboardAccessToken.isNullOrBlank()
 
             coroutineScope {
-                val orgDef = async { fetchOrgDetails(mgmtBearer, orgSlug) }
+                val orgDef = async { fetchOrgDetails(mgmtBearer, orgSlug, matchedOrg) }
                 val tierDef = async { fetchComputeTier(mgmtBearer, ref) }
                 val healthDef = async { fetchServicesHealth(mgmtBearer, ref) }
                 val diskDef = async { fetchDiskInfo(mgmtBearer, ref) }
@@ -580,7 +585,7 @@ class SupabaseAdminRepository private constructor() {
                 val advDef = async { fetchAdvisors(mgmtBearer, ref) }
                 val logsDef = async { fetchClickHouseLogs(mgmtBearer, ref) }
                 val pgDef = async { fetchPostgresCatalog(mgmtBearer, ref) }
-                val billDef = async { fetchPlatformUsage(platformBearer, orgSlug, ref, hasDash) }
+                val billDef = async { fetchPlatformUsage(platformBearer, orgSlug, ref, orgCreatedAt, projectCreatedAt, hasDash) }
 
                 val (orgName, orgPlan) = orgDef.await()
                 val computeTier = tierDef.await()
@@ -628,7 +633,7 @@ class SupabaseAdminRepository private constructor() {
                     resolvedCycleEgress = maxOf(resolvedCycleEgress, resolved24hEgress)
                 }
 
-                val resolvedDb = maxOf(bill.dbSize, pg.dbSizeBytes)
+                val resolvedDb = if (bill.dbSize > 0L) bill.dbSize else pg.dbSizeBytes
 
                 val snap = SupabaseAdminSnapshot(
                     fetchedAtEpochMs = System.currentTimeMillis(),
@@ -640,6 +645,7 @@ class SupabaseAdminRepository private constructor() {
                     serviceHealth = health,
                     resourceWarnings = bill.warnings,
                     isExactBillingUsageAvailable = bill.isExact,
+                    billingCyclePeriod = bill.billingCyclePeriod,
                     egressUsedBytes = resolvedCycleEgress,
                     egressQuotaBytes = if (bill.egressQuota > 0L) bill.egressQuota else defEgressQuota,
                     cachedEgressUsedBytes = bill.cachedEgress,
@@ -652,10 +658,14 @@ class SupabaseAdminRepository private constructor() {
                     functionInvocationsQuota = if (bill.fnQuota > 0L) bill.fnQuota else if (isPro) 2_000_000L else 500_000L,
                     realtimeMessages = bill.rtMessages,
                     realtimeMessagesQuota = if (bill.rtMsgQuota > 0L) bill.rtMsgQuota else 2_000_000L,
-                    realtimePeakConnections = maxOf(bill.rtPeak, pg.rtActiveSubs.toLong()),
+                    realtimePeakConnections = if (bill.rtPeak > 0L) bill.rtPeak else pg.rtActiveSubs.toLong(),
                     realtimePeakConnectionsQuota = if (bill.rtPeakQuota > 0L) bill.rtPeakQuota else 200L,
                     mauCount = if (bill.mau > 0L) bill.mau else pg.usersCount,
                     mauQuota = if (bill.mauQuota > 0L) bill.mauQuota else 50_000L,
+                    logIngestionBytes = bill.logIngestionBytes,
+                    logIngestionQuotaBytes = if (bill.logIngestionQuotaBytes > 0L) bill.logIngestionQuotaBytes else 1_073_741_824L,
+                    logQueryBytes = bill.logQueryBytes,
+                    logQueryQuotaBytes = if (bill.logQueryQuotaBytes > 0L) bill.logQueryQuotaBytes else 107_374_182_400L,
                     logIngestionEvents = if (bill.logEvents > 0L) bill.logEvents else logs.sourceCounts.values.sum().toLong(),
                     dailyEgress = bill.dailyEgress,
                     apiCounts24h = apiCounts,
@@ -765,11 +775,33 @@ class SupabaseAdminRepository private constructor() {
 
     // MARK: - Internal API Helpers
 
+    private data class RemoteOrgSummary(
+        val id: String,
+        val slug: String,
+        val name: String,
+        val plan: String,
+        val createdAt: String?
+    )
+
+    private suspend fun fetchOrganizations(bearer: String): List<RemoteOrgSummary> {
+        val arr = getJsonArray("https://api.supabase.com/v1/organizations", bearer) ?: return emptyList()
+        return arr.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val id = o.str("id") ?: ""
+            val slug = o.str("slug") ?: id
+            val name = o.str("name") ?: slug
+            val plan = o.str("plan") ?: "free"
+            val createdAt = o.str("created_at")
+            if (slug.isEmpty()) null else RemoteOrgSummary(id, slug, name, plan, createdAt)
+        }
+    }
+
     private suspend fun verifyBearerAndFetchProjects(
         bearer: String,
         fallbackIdentity: String?
     ): Pair<List<SupabaseProjectSummary>, String?> {
-        val projects = fetchProjectsList(bearer)
+        val knownOrgs = fetchOrganizations(bearer)
+        val projects = fetchProjectsList(bearer, knownOrgs)
         var identity = fallbackIdentity
         if (identity == null) {
             runCatching {
@@ -780,7 +812,10 @@ class SupabaseAdminRepository private constructor() {
         return projects to identity
     }
 
-    private suspend fun fetchProjectsList(bearer: String): List<SupabaseProjectSummary> {
+    private suspend fun fetchProjectsList(
+        bearer: String,
+        knownOrgs: List<RemoteOrgSummary> = emptyList()
+    ): List<SupabaseProjectSummary> {
         val resp = httpClient.get("https://api.supabase.com/v1/projects") {
             header(HttpHeaders.Authorization, "Bearer $bearer")
             header(HttpHeaders.Accept, "application/json")
@@ -792,11 +827,15 @@ class SupabaseAdminRepository private constructor() {
         return arr.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val ref = o.str("id") ?: o.str("ref") ?: return@mapNotNull null
+            val rawOrgId = o.str("organization_id") ?: ""
+            val rawOrgSlug = o.str("organization_slug") ?: rawOrgId
+            val matchedOrg = knownOrgs.firstOrNull { it.id == rawOrgId || it.slug == rawOrgSlug }
+            val resolvedSlug = matchedOrg?.slug ?: rawOrgSlug.ifEmpty { rawOrgId }
             val pgVer = (o["database"] as? JsonObject)?.str("version") ?: "17"
             SupabaseProjectSummary(
                 ref = ref,
                 name = o.str("name") ?: ref,
-                organizationSlug = o.str("organization_slug") ?: o.str("organization_id") ?: "",
+                organizationSlug = resolvedSlug,
                 region = o.str("region") ?: "unknown",
                 status = o.str("status") ?: "ACTIVE_HEALTHY",
                 postgresVersion = pgVer,
@@ -805,7 +844,14 @@ class SupabaseAdminRepository private constructor() {
         }
     }
 
-    private suspend fun fetchOrgDetails(bearer: String, orgSlug: String): Pair<String, String> {
+    private suspend fun fetchOrgDetails(
+        bearer: String,
+        orgSlug: String,
+        matchedOrg: RemoteOrgSummary? = null
+    ): Pair<String, String> {
+        if (matchedOrg != null) {
+            return matchedOrg.name to matchedOrg.plan
+        }
         if (orgSlug.isNotEmpty()) {
             getJsonObject("https://api.supabase.com/v1/organizations/$orgSlug", bearer)?.let { o ->
                 return (o.str("name") ?: orgSlug) to (o.str("plan") ?: "free")
@@ -1297,6 +1343,7 @@ class SupabaseAdminRepository private constructor() {
 
     private class BillingData {
         var isExact = false
+        var billingCyclePeriod: String? = null
         var egressUsed = 0L
         var egressQuota = 0L
         var cachedEgress = 0L
@@ -1312,60 +1359,124 @@ class SupabaseAdminRepository private constructor() {
         var rtPeakQuota = 0L
         var mau = 0L
         var mauQuota = 0L
+        var logIngestionBytes = 0L
+        var logIngestionQuotaBytes = 0L
+        var logQueryBytes = 0L
+        var logQueryQuotaBytes = 0L
         var logEvents = 0L
         var dailyEgress: List<SupabaseDailyEgressPoint> = emptyList()
         var warnings: List<String> = emptyList()
     }
 
-    private suspend fun fetchPlatformUsage(bearer: String, orgSlug: String, ref: String, hasDash: Boolean): BillingData {
+    private suspend fun fetchPlatformUsage(
+        bearer: String,
+        orgSlug: String,
+        ref: String,
+        orgCreatedAt: String? = null,
+        projectCreatedAt: String? = null,
+        hasDash: Boolean = false
+    ): BillingData {
         val out = BillingData()
         if (orgSlug.isEmpty()) return out
-        getJsonObject("https://api.supabase.com/platform/organizations/$orgSlug/usage?project_ref=$ref", bearer)?.let { uObj ->
-            val usages = uObj["usages"] as? JsonArray ?: return@let
-            fun bytesVal(v: Double, orig: Long?): Long {
-                if (orig != null && orig > 0L) return orig
-                return if (v > 0.0 && v < 10_000.0) (v * 1_073_741_824.0).toLong() else v.toLong()
+
+        // 0. Query Organization Subscription for Billing Cycle Period & Plan
+        val subUrl1 = "https://api.supabase.com/platform/organizations/$orgSlug/billing/subscription"
+        val subUrl2 = "https://api.supabase.com/v1/organizations/$orgSlug/billing/subscription"
+        var subObj = getJsonObject(subUrl1, bearer) ?: getJsonObject(subUrl2, bearer)
+        if (subObj != null) {
+            val startSec = subObj.long("current_period_start")
+            val endSec = subObj.long("current_period_end")
+            if (startSec != null && endSec != null && startSec > 0 && endSec > startSec) {
+                out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startSec, endSec)
             }
-            usages.forEach { el ->
-                val u = el as? JsonObject ?: return@forEach
-                val metric = u.str("metric")?.uppercase(Locale.US) ?: return@forEach
-                val v = u.dbl("usage") ?: 0.0
-                val orig = u.long("usage_original")
-                val lim = u.dbl("pricing_free_units") ?: u.dbl("capped_quota") ?: u.dbl("available_in_plan") ?: 0.0
-                when (metric) {
-                    "EGRESS" -> {
-                        out.isExact = true
-                        out.egressUsed = bytesVal(v, orig)
-                        if (lim > 0) out.egressQuota = bytesVal(lim, null)
+        }
+
+        // 1. Organization / Project exact billing usage
+        // Note: Query org-level usage first (without project_ref) matching the Studio "All projects" scope.
+        val usageUrlOrg = "https://api.supabase.com/platform/organizations/$orgSlug/usage"
+        val usageUrlProj = "https://api.supabase.com/platform/organizations/$orgSlug/usage?project_ref=$ref"
+        val usageUrlV1 = "https://api.supabase.com/v1/organizations/$orgSlug/usage"
+
+        var uObj = getJsonObject(usageUrlOrg, bearer)
+        if (uObj == null || (uObj["usages"] as? JsonArray)?.isEmpty() != false) {
+            uObj = getJsonObject(usageUrlProj, bearer)
+        }
+        if (uObj == null || (uObj["usages"] as? JsonArray)?.isEmpty() != false) {
+            uObj = getJsonObject(usageUrlV1, bearer)
+        }
+
+        if (uObj != null) {
+            val usages = uObj["usages"] as? JsonArray
+            if (usages != null && usages.isNotEmpty()) {
+                out.isExact = true
+
+                if (out.billingCyclePeriod == null) {
+                    val startSec = uObj.long("billing_cycle_start") ?: uObj.long("period_start")
+                    val endSec = uObj.long("billing_cycle_end") ?: uObj.long("period_end")
+                    if (startSec != null && endSec != null && startSec > 0 && endSec > startSec) {
+                        out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startSec, endSec)
                     }
-                    "CACHED_EGRESS" -> out.cachedEgress = bytesVal(v, orig)
-                    "DATABASE_SIZE" -> {
-                        out.dbSize = bytesVal(v, orig)
-                        if (lim > 0) out.dbQuota = bytesVal(lim, null)
+                }
+
+                fun bytesVal(v: Double, orig: Long?): Long {
+                    if (orig != null && orig > 0L) return orig
+                    return if (v > 0.0 && v < 100_000.0) (v * 1_073_741_824.0).toLong() else v.toLong()
+                }
+
+                usages.forEach { el ->
+                    val u = el as? JsonObject ?: return@forEach
+                    val metric = u.str("metric")?.uppercase(Locale.US) ?: return@forEach
+                    val v = u.dbl("usage") ?: 0.0
+                    val orig = u.long("usage_original")
+                    val lim = u.dbl("pricing_free_units") ?: u.dbl("capped_quota") ?: u.dbl("available_in_plan") ?: 0.0
+                    when (metric) {
+                        "EGRESS" -> {
+                            out.egressUsed = bytesVal(v, orig)
+                            if (lim > 0) out.egressQuota = bytesVal(lim, null)
+                        }
+                        "CACHED_EGRESS" -> out.cachedEgress = bytesVal(v, orig)
+                        "DATABASE_SIZE" -> {
+                            out.dbSize = bytesVal(v, orig)
+                            if (lim > 0) out.dbQuota = bytesVal(lim, null)
+                        }
+                        "STORAGE_SIZE" -> {
+                            out.storageSize = bytesVal(v, orig)
+                            if (lim > 0) out.storageQuota = bytesVal(lim, null)
+                        }
+                        "FUNCTION_INVOCATIONS" -> {
+                            out.fnCalls = orig ?: v.toLong()
+                            if (lim > 0) out.fnQuota = lim.toLong()
+                        }
+                        "REALTIME_MESSAGE_COUNT" -> {
+                            out.rtMessages = orig ?: v.toLong()
+                            if (lim > 0) out.rtMsgQuota = lim.toLong()
+                        }
+                        "REALTIME_PEAK_CONNECTIONS" -> {
+                            out.rtPeak = orig ?: v.toLong()
+                            if (lim > 0) out.rtPeakQuota = lim.toLong()
+                        }
+                        "MONTHLY_ACTIVE_USERS" -> {
+                            out.mau = orig ?: v.toLong()
+                            if (lim > 0) out.mauQuota = lim.toLong()
+                        }
+                        "LOG_INGESTION", "LOG_DRAIN_EVENTS" -> {
+                            out.logIngestionBytes = bytesVal(v, orig)
+                            if (lim > 0) out.logIngestionQuotaBytes = bytesVal(lim, null)
+                            out.logEvents += (orig ?: v.toLong())
+                        }
+                        "LOG_QUERY", "LOG_QUERYING" -> {
+                            out.logQueryBytes = bytesVal(v, orig)
+                            if (lim > 0) out.logQueryQuotaBytes = bytesVal(lim, null)
+                        }
                     }
-                    "STORAGE_SIZE" -> {
-                        out.storageSize = bytesVal(v, orig)
-                        if (lim > 0) out.storageQuota = bytesVal(lim, null)
-                    }
-                    "FUNCTION_INVOCATIONS" -> {
-                        out.fnCalls = orig ?: v.toLong()
-                        if (lim > 0) out.fnQuota = lim.toLong()
-                    }
-                    "REALTIME_MESSAGE_COUNT" -> {
-                        out.rtMessages = orig ?: v.toLong()
-                        if (lim > 0) out.rtMsgQuota = lim.toLong()
-                    }
-                    "REALTIME_PEAK_CONNECTIONS" -> {
-                        out.rtPeak = orig ?: v.toLong()
-                        if (lim > 0) out.rtPeakQuota = lim.toLong()
-                    }
-                    "MONTHLY_ACTIVE_USERS" -> {
-                        out.mau = orig ?: v.toLong()
-                        if (lim > 0) out.mauQuota = lim.toLong()
-                    }
-                    "LOG_INGESTION", "LOG_DRAIN_EVENTS" -> out.logEvents += (orig ?: v.toLong())
                 }
             }
+        }
+
+        // Fallback for billing cycle period if not yet set: compute from org or project creation date
+        if (out.billingCyclePeriod == null) {
+            val anchorDate = orgCreatedAt ?: projectCreatedAt ?: "2024-10-19"
+            out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(anchorDate)
         }
 
         val endIso = DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS))

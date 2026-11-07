@@ -186,6 +186,7 @@ data class SupabaseAdminSnapshot(
     val serviceHealth: List<SupabaseServiceHealthItem> = emptyList(),
     val resourceWarnings: List<String> = emptyList(),
     val isExactBillingUsageAvailable: Boolean = false,
+    val billingCyclePeriod: String? = null,
     val egressUsedBytes: Long = 0L,
     val egressQuotaBytes: Long = 5_368_709_120L,
     val cachedEgressUsedBytes: Long = 0L,
@@ -202,6 +203,10 @@ data class SupabaseAdminSnapshot(
     val realtimePeakConnectionsQuota: Long = 200L,
     val mauCount: Long = 0L,
     val mauQuota: Long = 50_000L,
+    val logIngestionBytes: Long = 0L,
+    val logIngestionQuotaBytes: Long = 1_073_741_824L,
+    val logQueryBytes: Long = 0L,
+    val logQueryQuotaBytes: Long = 107_374_182_400L,
     val logIngestionEvents: Long = 0L,
     val dailyEgress: List<SupabaseDailyEgressPoint> = emptyList(),
     val apiCounts24h: List<SupabaseApiCountPoint> = emptyList(),
@@ -317,6 +322,53 @@ data class SupabaseAdminSnapshot(
                 b >= 1024.0 -> String.format(Locale.US, "%.1f KB", b / 1024.0)
                 else -> "${b.toLong()} B"
             }
+        }
+
+        fun formatBillingCyclePeriod(startEpochSeconds: Long, endEpochSeconds: Long): String {
+            val fmt = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US).withZone(java.time.ZoneOffset.UTC)
+            val s = fmt.format(java.time.Instant.ofEpochSecond(startEpochSeconds))
+            val e = fmt.format(java.time.Instant.ofEpochSecond(endEpochSeconds))
+            return "$s - $e"
+        }
+
+        fun computeBillingCyclePeriodFromCreation(dateString: String, referenceTimeMs: Long = System.currentTimeMillis()): String {
+            var anchorDay = 19
+            val clean = dateString.trim()
+            if (clean.length >= 10) {
+                val parts = clean.substring(0, 10).split("-")
+                if (parts.size == 3) {
+                    parts[2].toIntOrNull()?.let { d ->
+                        if (d in 1..31) anchorDay = d
+                    }
+                }
+            }
+
+            val now = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(referenceTimeMs), java.time.ZoneOffset.UTC)
+            val currentYear = now.year
+            val currentMonth = now.monthValue
+            val currentDay = now.dayOfMonth
+
+            var startYear = currentYear
+            var startMonth = currentMonth
+            if (currentDay < anchorDay) {
+                startMonth -= 1
+                if (startMonth < 1) {
+                    startMonth = 12
+                    startYear -= 1
+                }
+            }
+
+            var endYear = startYear
+            var endMonth = startMonth + 1
+            if (endMonth > 12) {
+                endMonth = 1
+                endYear += 1
+            }
+
+            val startDate = java.time.LocalDate.of(startYear, startMonth, minOf(anchorDay, java.time.YearMonth.of(startYear, startMonth).lengthOfMonth()))
+            val endDate = java.time.LocalDate.of(endYear, endMonth, minOf(anchorDay, java.time.YearMonth.of(endYear, endMonth).lengthOfMonth()))
+            val fmt = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+            return "${startDate.format(fmt)} - ${endDate.format(fmt)}"
         }
     }
 }

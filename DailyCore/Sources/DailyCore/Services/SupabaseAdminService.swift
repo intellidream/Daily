@@ -404,7 +404,8 @@ public final class SupabaseAdminService: ObservableObject {
         let hasDashboardToken = (credentials.dashboardAccessToken?.isEmpty == false)
 
         do {
-            let projects = try await fetchProjectsList(bearer: mgmtBearer)
+            let knownOrgs = await fetchOrganizations(bearer: mgmtBearer)
+            let projects = try await fetchProjectsList(bearer: mgmtBearer, knownOrgs: knownOrgs)
             let activeProject = projects.first(where: { $0.ref == targetRef })
                 ?? projects.first
                 ?? SupabaseProjectSummary(
@@ -417,12 +418,20 @@ public final class SupabaseAdminService: ObservableObject {
                 )
 
             let ref = activeProject.ref
-            let orgSlug = activeProject.organizationSlug.isEmpty
+            let rawOrgSlug = activeProject.organizationSlug.isEmpty
                 ? (credentials.selectedOrgSlug ?? "")
                 : activeProject.organizationSlug
 
+            let matchedOrg = knownOrgs.first(where: { $0.slug == rawOrgSlug || $0.id == rawOrgSlug }) ?? knownOrgs.first
+            let targetOrgSlug: String = (matchedOrg != nil && !matchedOrg!.slug.isEmpty)
+                ? matchedOrg!.slug
+                : rawOrgSlug
+
+            let orgCreatedAt = matchedOrg?.createdAt
+            let projectCreatedAt = activeProject.createdAt
+
             // Fire all read-only control-plane, ClickHouse, and Postgres telemetry requests concurrently
-            async let orgTask = fetchOrgDetails(bearer: mgmtBearer, orgSlug: orgSlug)
+            async let orgTask = fetchOrgDetails(bearer: mgmtBearer, orgSlug: targetOrgSlug, fallbackOrg: matchedOrg)
             async let addonsTask = fetchComputeTier(bearer: mgmtBearer, ref: ref)
             async let healthTask = fetchServicesHealth(bearer: mgmtBearer, ref: ref)
             async let diskTask = fetchDiskTelemetry(bearer: mgmtBearer, ref: ref)
@@ -433,8 +442,10 @@ public final class SupabaseAdminService: ObservableObject {
             async let pgCatalogTask = fetchPostgresCatalogForensics(bearer: mgmtBearer, ref: ref)
             async let platformUsageTask = fetchPlatformBillingUsage(
                 bearer: platformBearer,
-                orgSlug: orgSlug,
+                orgSlug: targetOrgSlug,
                 ref: ref,
+                orgCreatedAt: orgCreatedAt,
+                projectCreatedAt: projectCreatedAt,
                 preferDashboardEndpoint: hasDashboardToken
             )
 
@@ -500,7 +511,7 @@ public final class SupabaseAdminService: ObservableObject {
                 resolvedCycleEgress = max(resolvedCycleEgress, resolved24hEgress)
             }
 
-            let resolvedDbSize = max(billingData.dbSizeBytes, pgData.dbSizeBytes)
+            let resolvedDbSize = billingData.dbSizeBytes > 0 ? billingData.dbSizeBytes : pgData.dbSizeBytes
             let resolvedFnInvocations = billingData.functionInvocations > 0
                 ? billingData.functionInvocations
                 : Int64(edgeFunctions.reduce(0) { $0 + $1.invocations24h })
@@ -508,6 +519,9 @@ public final class SupabaseAdminService: ObservableObject {
             let resolvedLogEvents = billingData.logIngestionEvents > 0
                 ? billingData.logIngestionEvents
                 : Int64(logsData.logCountsBySource.values.reduce(0, +))
+            let resolvedRtPeak = billingData.realtimePeakConnections > 0
+                ? billingData.realtimePeakConnections
+                : Int64(pgData.realtimeActiveSubscriptions)
 
             // Merge registered health sources into Fleet devices
             let fleetDevices = buildFleetStats(
@@ -541,6 +555,7 @@ public final class SupabaseAdminService: ObservableObject {
                 serviceHealth: serviceHealth,
                 resourceWarnings: billingData.resourceWarnings,
                 isExactBillingUsageAvailable: billingData.isExact,
+                billingCyclePeriod: billingData.billingCyclePeriod,
                 egressUsedBytes: resolvedCycleEgress,
                 egressQuotaBytes: billingData.egressQuotaBytes > 0 ? billingData.egressQuotaBytes : defaultEgressQuota,
                 cachedEgressUsedBytes: billingData.cachedEgressUsedBytes,
@@ -553,10 +568,14 @@ public final class SupabaseAdminService: ObservableObject {
                 functionInvocationsQuota: billingData.functionInvocationsQuota > 0 ? billingData.functionInvocationsQuota : defaultFnQuota,
                 realtimeMessages: billingData.realtimeMessages,
                 realtimeMessagesQuota: billingData.realtimeMessagesQuota > 0 ? billingData.realtimeMessagesQuota : defaultRtMsgQuota,
-                realtimePeakConnections: max(billingData.realtimePeakConnections, Int64(pgData.realtimeActiveSubscriptions)),
+                realtimePeakConnections: resolvedRtPeak,
                 realtimePeakConnectionsQuota: billingData.realtimePeakConnectionsQuota > 0 ? billingData.realtimePeakConnectionsQuota : defaultRtPeakQuota,
                 mauCount: resolvedMau,
                 mauQuota: billingData.mauQuota > 0 ? billingData.mauQuota : defaultMauQuota,
+                logIngestionBytes: billingData.logIngestionBytes,
+                logIngestionQuotaBytes: billingData.logIngestionQuotaBytes > 0 ? billingData.logIngestionQuotaBytes : 1_073_741_824,
+                logQueryBytes: billingData.logQueryBytes,
+                logQueryQuotaBytes: billingData.logQueryQuotaBytes > 0 ? billingData.logQueryQuotaBytes : 107_374_182_400,
                 logIngestionEvents: resolvedLogEvents,
                 dailyEgress: dailySeries,
                 apiCounts24h: apiCounts,
@@ -594,9 +613,9 @@ public final class SupabaseAdminService: ObservableObject {
             self.snapshot = newSnapshot
             Self.saveCachedSnapshot(newSnapshot)
 
-            if credentials.selectedProjectRef != activeProject.ref || credentials.selectedOrgSlug != orgSlug {
+            if credentials.selectedProjectRef != activeProject.ref || credentials.selectedOrgSlug != targetOrgSlug {
                 credentials.selectedProjectRef = activeProject.ref
-                credentials.selectedOrgSlug = orgSlug
+                credentials.selectedOrgSlug = targetOrgSlug
                 Self.saveCredentialsToLocalStorage(credentials)
             }
         } catch {
@@ -712,11 +731,35 @@ public final class SupabaseAdminService: ObservableObject {
 
     // MARK: - Internal Control-Plane & SQL Fetchers
 
+    private struct ResolvedOrg: Sendable {
+        let id: String
+        let slug: String
+        let name: String
+        let plan: String
+        let createdAt: String?
+    }
+
+    private func fetchOrganizations(bearer: String) async -> [ResolvedOrg] {
+        guard let list = try? await performGetJson(url: "https://api.supabase.com/v1/organizations", bearer: bearer) as? [[String: Any]] else {
+            return []
+        }
+        return list.compactMap { item in
+            let slug = Self.str(item["slug"]) ?? Self.str(item["id"]) ?? ""
+            guard !slug.isEmpty else { return nil }
+            let id = Self.str(item["id"]) ?? slug
+            let name = Self.str(item["name"]) ?? slug
+            let plan = Self.str(item["plan"]) ?? "free"
+            let created = Self.str(item["created_at"])
+            return ResolvedOrg(id: id, slug: slug, name: name, plan: plan, createdAt: created)
+        }
+    }
+
     private func verifyBearerAndFetchProjects(
         bearer: String,
         fallbackIdentity: String?
     ) async throws -> ([SupabaseProjectSummary], String?) {
-        let projects = try await fetchProjectsList(bearer: bearer)
+        let knownOrgs = await fetchOrganizations(bearer: bearer)
+        let projects = try await fetchProjectsList(bearer: bearer, knownOrgs: knownOrgs)
         var identity = fallbackIdentity
         if identity == nil {
             if let profileJson = try? await performGetJson(url: "https://api.supabase.com/v1/profile", bearer: bearer) as? [String: Any] {
@@ -733,14 +776,16 @@ public final class SupabaseAdminService: ObservableObject {
         return (projects, identity)
     }
 
-    private func fetchProjectsList(bearer: String) async throws -> [SupabaseProjectSummary] {
+    private func fetchProjectsList(bearer: String, knownOrgs: [ResolvedOrg] = []) async throws -> [SupabaseProjectSummary] {
         let raw = try await performGetJson(url: "https://api.supabase.com/v1/projects", bearer: bearer)
         guard let arr = raw as? [[String: Any]] else { return [] }
         return arr.compactMap { item in
             let ref = Self.str(item["id"]) ?? Self.str(item["ref"]) ?? ""
             guard !ref.isEmpty else { return nil }
             let name = Self.str(item["name"]) ?? ref
-            let orgSlug = Self.str(item["organization_slug"]) ?? Self.str(item["organization_id"]) ?? ""
+            let orgId = Self.str(item["organization_id"]) ?? ""
+            let matchingOrg = knownOrgs.first(where: { $0.id == orgId || $0.slug == orgId })
+            let orgSlug = matchingOrg?.slug ?? Self.str(item["organization_slug"]) ?? orgId
             let region = Self.str(item["region"]) ?? "unknown"
             let status = Self.str(item["status"]) ?? "ACTIVE_HEALTHY"
             var pgVersion = "17"
@@ -759,12 +804,15 @@ public final class SupabaseAdminService: ObservableObject {
         }
     }
 
-    private func fetchOrgDetails(bearer: String, orgSlug: String) async -> (String, String) {
+    private func fetchOrgDetails(bearer: String, orgSlug: String, fallbackOrg: ResolvedOrg? = nil) async -> (String, String) {
         if !orgSlug.isEmpty,
            let detail = try? await performGetJson(url: "https://api.supabase.com/v1/organizations/\(orgSlug)", bearer: bearer) as? [String: Any] {
-            let name = Self.str(detail["name"]) ?? orgSlug
-            let plan = Self.str(detail["plan"]) ?? "free"
+            let name = Self.str(detail["name"]) ?? fallbackOrg?.name ?? orgSlug
+            let plan = Self.str(detail["plan"]) ?? fallbackOrg?.plan ?? "free"
             return (name, plan)
+        }
+        if let fallbackOrg {
+            return (fallbackOrg.name, fallbackOrg.plan)
         }
         if let list = try? await performGetJson(url: "https://api.supabase.com/v1/organizations", bearer: bearer) as? [[String: Any]],
            let match = list.first(where: { Self.str($0["id"]) == orgSlug || Self.str($0["slug"]) == orgSlug }) ?? list.first {
@@ -1519,6 +1567,7 @@ public final class SupabaseAdminService: ObservableObject {
 
     private struct PlatformBillingResult: Sendable {
         var isExact: Bool = false
+        var billingCyclePeriod: String? = nil
         var egressUsedBytes: Int64 = 0
         var egressQuotaBytes: Int64 = 0
         var cachedEgressUsedBytes: Int64 = 0
@@ -1534,6 +1583,10 @@ public final class SupabaseAdminService: ObservableObject {
         var realtimePeakConnectionsQuota: Int64 = 0
         var mauCount: Int64 = 0
         var mauQuota: Int64 = 0
+        var logIngestionBytes: Int64 = 0
+        var logIngestionQuotaBytes: Int64 = 0
+        var logQueryBytes: Int64 = 0
+        var logQueryQuotaBytes: Int64 = 0
         var logIngestionEvents: Int64 = 0
         var dailyEgress: [SupabaseDailyEgressPoint] = []
         var resourceWarnings: [String] = []
@@ -1543,25 +1596,66 @@ public final class SupabaseAdminService: ObservableObject {
         bearer: String,
         orgSlug: String,
         ref: String,
-        preferDashboardEndpoint: Bool
+        orgCreatedAt: String? = nil,
+        projectCreatedAt: String? = nil,
+        preferDashboardEndpoint: Bool = false
     ) async -> PlatformBillingResult {
         var out = PlatformBillingResult()
         guard !orgSlug.isEmpty else { return out }
 
+        // 0. Query Organization Subscription for Billing Cycle Period & Plan
+        let subUrl1 = "https://api.supabase.com/platform/organizations/\(orgSlug)/billing/subscription"
+        let subUrl2 = "https://api.supabase.com/v1/organizations/\(orgSlug)/billing/subscription"
+        var subJson = try? await performGetJson(url: subUrl1, bearer: bearer) as? [String: Any]
+        if subJson == nil {
+            subJson = try? await performGetJson(url: subUrl2, bearer: bearer) as? [String: Any]
+        }
+        if let subJson {
+            var startSec: Int64?
+            var endSec: Int64?
+            if let s = Self.int64(subJson["current_period_start"]) { startSec = s }
+            if let e = Self.int64(subJson["current_period_end"]) { endSec = e }
+            if let s = startSec, let e = endSec, s > 0, e > s {
+                out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startEpochSeconds: s, endEpochSeconds: e)
+            }
+        }
+
         // 1. Organization / Project exact billing usage
-        let usageUrl = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage?project_ref=\(ref)"
-        if let usageJson = try? await performGetJson(url: usageUrl, bearer: bearer) as? [String: Any],
-           let usages = usageJson["usages"] as? [[String: Any]] {
+        // Note: Query org-level usage first (without project_ref) matching the Studio "All projects" scope.
+        let usageUrlOrg = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage"
+        let usageUrlProj = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage?project_ref=\(ref)"
+        let usageUrlV1 = "https://api.supabase.com/v1/organizations/\(orgSlug)/usage"
+
+        var usageJson = try? await performGetJson(url: usageUrlOrg, bearer: bearer) as? [String: Any]
+        if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
+            usageJson = try? await performGetJson(url: usageUrlProj, bearer: bearer) as? [String: Any]
+        }
+        if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
+            usageJson = try? await performGetJson(url: usageUrlV1, bearer: bearer) as? [String: Any]
+        }
+
+        if let usageJson, let usages = usageJson["usages"] as? [[String: Any]], !usages.isEmpty {
+            out.isExact = true
+
+            // If billing cycle period not yet resolved, check usageJson
+            if out.billingCyclePeriod == nil {
+                if let s = Self.int64(usageJson["billing_cycle_start"]) ?? Self.int64(usageJson["period_start"]),
+                   let e = Self.int64(usageJson["billing_cycle_end"]) ?? Self.int64(usageJson["period_end"]),
+                   s > 0, e > s {
+                    out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startEpochSeconds: s, endEpochSeconds: e)
+                }
+            }
+
             for u in usages {
                 guard let metric = Self.str(u["metric"])?.uppercased() else { continue }
                 let usageVal = Self.double(u["usage"]) ?? 0
                 let usageOrig = Self.int64(u["usage_original"])
                 let limitVal = Self.double(u["pricing_free_units"]) ?? Self.double(u["capped_quota"]) ?? Self.double(u["available_in_plan"]) ?? 0
 
-                // Note: Supabase Studio returns byte metrics either in bytes (`usage_original`) or GB (`usage` when < 10000 and metric is bytes)
+                // Note: Supabase Studio returns byte metrics either in bytes (`usage_original`) or GB (`usage` when < 100,000 and metric is bytes)
                 func resolveBytes(_ val: Double, orig: Int64?) -> Int64 {
                     if let orig, orig > 0 { return orig }
-                    if val > 0 && val < 10_000 {
+                    if val > 0 && val < 100_000 {
                         return Int64(val * 1_073_741_824.0)
                     }
                     return Int64(val)
@@ -1569,7 +1663,6 @@ public final class SupabaseAdminService: ObservableObject {
 
                 switch metric {
                 case "EGRESS":
-                    out.isExact = true
                     out.egressUsedBytes = resolveBytes(usageVal, orig: usageOrig)
                     if limitVal > 0 { out.egressQuotaBytes = resolveBytes(limitVal, orig: nil) }
                 case "CACHED_EGRESS":
@@ -1593,10 +1686,24 @@ public final class SupabaseAdminService: ObservableObject {
                     out.mauCount = usageOrig ?? Int64(usageVal)
                     if limitVal > 0 { out.mauQuota = Int64(limitVal) }
                 case "LOG_INGESTION", "LOG_DRAIN_EVENTS":
+                    out.logIngestionBytes = resolveBytes(usageVal, orig: usageOrig)
+                    if limitVal > 0 { out.logIngestionQuotaBytes = resolveBytes(limitVal, orig: nil) }
                     out.logIngestionEvents += (usageOrig ?? Int64(usageVal))
+                case "LOG_QUERY", "LOG_QUERYING":
+                    out.logQueryBytes = resolveBytes(usageVal, orig: usageOrig)
+                    if limitVal > 0 { out.logQueryQuotaBytes = resolveBytes(limitVal, orig: nil) }
                 default:
                     break
                 }
+            }
+        }
+
+        // Fallback for billing cycle period if not yet set: compute from org or project creation date
+        if out.billingCyclePeriod == nil {
+            if let dateStr = orgCreatedAt ?? projectCreatedAt {
+                out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: dateStr)
+            } else {
+                out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: "2024-10-19")
             }
         }
 

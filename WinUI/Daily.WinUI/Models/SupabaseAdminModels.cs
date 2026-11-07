@@ -47,6 +47,7 @@ public sealed class SupabaseProjectSummary
 {
     public string Ref { get; init; } = SupabaseAdminSnapshot.DefaultProjectRef;
     public string OrganizationId { get; init; } = string.Empty;
+    public string OrganizationSlug { get; init; } = string.Empty;
     public string Name { get; init; } = "Daily";
     public string Region { get; init; } = "eu-central-1";
     public string Status { get; init; } = "ACTIVE_HEALTHY";
@@ -180,6 +181,7 @@ public sealed class SupabaseAdminSnapshot
 
     // Quotas & Billing / Estimated Usage
     public bool HasExactBillingMetrics { get; init; }
+    public string? BillingCyclePeriod { get; init; }
     public double EgressUsedGb { get; init; }
     public double EgressQuotaGb { get; init; } = 5.0;
     public double CachedEgressUsedGb { get; init; }
@@ -206,6 +208,18 @@ public sealed class SupabaseAdminSnapshot
     public int MauQuota { get; init; } = 50_000;
     public int ActiveSessionsCount { get; init; }
     public int PairedWatchesCount { get; init; }
+
+    // Function Invocations & Realtime Peak
+    public long FunctionInvocations { get; init; }
+    public long FunctionInvocationsQuota { get; init; } = 500_000;
+    public long RealtimeMessages { get; init; }
+    public long RealtimeMessagesQuota { get; init; } = 2_000_000;
+    public long RealtimePeakConnections { get; init; }
+    public long RealtimePeakConnectionsQuota { get; init; } = 200;
+    public double LogIngestionGb { get; init; }
+    public double LogIngestionQuotaGb { get; init; } = 1.0;
+    public double LogQueryGb { get; init; }
+    public double LogQueryQuotaGb { get; init; } = 100.0;
 
     // Gateway 24h
     public long GatewayRequests24h { get; init; }
@@ -323,5 +337,39 @@ public static class SupabaseAdminFormatter
             >= (long)kb => $"{bytes / kb:F1} KB",
             _ => $"{bytes} B"
         };
+    }
+
+    public static string FormatBillingCyclePeriod(long startEpochSeconds, long endEpochSeconds)
+    {
+        var start = DateTimeOffset.FromUnixTimeSeconds(startEpochSeconds).UtcDateTime;
+        var end = DateTimeOffset.FromUnixTimeSeconds(endEpochSeconds).UtcDateTime;
+        return $"{start:d MMM yyyy} - {end:d MMM yyyy}";
+    }
+
+    public static string ComputeBillingCyclePeriodFromCreation(string? dateString, DateTime? referenceDate = null)
+    {
+        var refDate = referenceDate ?? DateTime.UtcNow;
+        var anchorDay = 19;
+        if (!string.IsNullOrWhiteSpace(dateString))
+        {
+            if (DateTime.TryParse(dateString, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed))
+            {
+                anchorDay = parsed.Day;
+            }
+        }
+        anchorDay = Math.Clamp(anchorDay, 1, 28);
+
+        DateTime cycleStart;
+        if (refDate.Day >= anchorDay)
+        {
+            cycleStart = new DateTime(refDate.Year, refDate.Month, anchorDay, 0, 0, 0, DateTimeKind.Utc);
+        }
+        else
+        {
+            var prevMonth = refDate.AddMonths(-1);
+            cycleStart = new DateTime(prevMonth.Year, prevMonth.Month, Math.Min(anchorDay, DateTime.DaysInMonth(prevMonth.Year, prevMonth.Month)), 0, 0, 0, DateTimeKind.Utc);
+        }
+        var cycleEnd = cycleStart.AddMonths(1);
+        return $"{cycleStart:d MMM yyyy} - {cycleEnd:d MMM yyyy}";
     }
 }
