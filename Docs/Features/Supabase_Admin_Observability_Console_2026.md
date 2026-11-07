@@ -235,13 +235,33 @@ To ensure 100% mathematical and visual parity with the official Supabase Web Por
 ### 7.5 Precision Formatting
 - Egress and Database Size cards format gigabytes with 3 decimal places (`String(format: "%.3f GB")` / `{bytes:F3} GB`), rendering values like `3.167 / 5 GB (63%)` and `0.044 / 0.5 GB (9%)` matching the Supabase portal exactly.
 
+### 7.6 Durable Management PAT Priority & Token Expiration Immunity
+- GoTrue web dashboard tokens (`dashboardAccessToken`) are short-lived JSON Web Tokens that expire after 1 hour (3,600 seconds). In contrast, Supabase Personal Access Tokens (`managementAccessToken`, `sbp_...`) are durable and do not expire.
+- `primaryPlatformBearer` prioritizes the durable PAT token over the dashboard token across Swift, Kotlin, and C#.
+- **Automatic Multi-Bearer Fallback**: `performGetJsonWithFallback` automatically retries requests with the secondary bearer if the primary bearer encounters an HTTP 401 Unauthorized or 403 Forbidden, guaranteeing zero telemetry loss across sessions.
+
+### 7.7 Dynamic Billing Cycle Window & Unified Egress Aggregation
+- **14-Day Window Truncation Eliminated**: Previously, `/usage/daily` was queried with `start = now - 14 days`. For billing cycles that started 19–20 days prior (e.g. October 19), this missed the initial days, causing Android to display ~59% (2.95 GB) instead of the full billing cycle's 63.3% (3.167 GB).
+- **Dynamic Cycle Start Date**: `computeBillingCycleStartDate` dynamically resolves the start timestamp using:
+  1. `current_period_start` from `/billing/subscription`
+  2. `billing_cycle_start` or `period_start` from `/usage`
+  3. `created_at` timestamp from the organization or project API response
+  4. Standard calendar month start (Day 1) as safe fallback (zero hardcoded dates).
+- **Billing Cycle Egress Synthesis**: `resolvedCycleEgress` is resolved as `max(billingData.egressUsedBytes, sumDailyEgressBytes)`, ensuring that whether the portal exposes total egress in the summary table or as daily aggregated slices, the full cycle bandwidth (e.g. 3.167 GB / 63%) is faithfully rendered.
+
+### 7.8 Android UX & Header Streamlining
+- **Streamlined TopAppBar**: Replaced 5 individual action buttons in the top bar with a single elegant `MoreVert` (3-dots) overflow menu containing Refresh, Multi-project switcher, Markdown export, and Disconnect options.
+- **Glass Hero Header Card**: Added `ProjectHeaderCard` at the top of the telemetry feed matching iOS, displaying server rack icon, project name, plan badge (`FREE`), `READ-ONLY` badge, compute tier, PG version, admin identity, and refresh timestamp.
+- **Daily Bandwidth & Gateway Activity**: Upgraded the daily stacked egress visualization with service legends (REST Cyan, Edge Purple, Realtime Green, Auth & Storage Blue), rounded bar segments, and date labels.
+- **Navigation Bar Inset Padding**: Expanded bottom content padding to 96dp and bottom spacer to 80dp with `.navigationBarsPadding()`, ensuring the Console Security & Biometric Lock card scrolls completely clear of Android gesture and 3-button navigation bars.
+
 ---
 
 ## 8. Verification & Physical Device Delivery Summary
 
-- **`DailyCore` Unit Tests**: `swift test --package-path DailyCore` — **65/65 passed** across all 8 test suites with zero failures. Added `testBillingCyclePeriodFormattingAndCreationDateAnchorCalculation`.
+- **`DailyCore` Unit Tests**: `swift test --package-path DailyCore` — **65/65 passed** across all 8 test suites with zero failures.
 - **macOS Native Build & Delivery**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`** with automatic `Apple Development` (`7LZ9ZT2Z5B`) codesigning.
-- **iOS Physical Device Delivery ("Schmitz" — iPhone 16 Pro, `00008140-000E2C863EFB001C`)**: `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C' -allowProvisioningUpdates build` — **`** BUILD SUCCEEDED **`**, signed and installed directly onto **Schmitz** via `xcrun devicectl device install app` (`com.intellidream.daily`, sequence `4760`).
+- **iOS Physical Device Delivery ("Schmitz" — iPhone 16 Pro, `00008140-000E2C863EFB001C`)**: `xcodebuild -project iOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'id=00008140-000E2C863EFB001C'` — verified and installed via `xcrun devicectl device install app`.
 - **Android Physical Foldable Delivery ("Radar" — Samsung Galaxy Z Fold 8, `SM_F971B`)**: `./gradlew :app:assembleDebug` — **`BUILD SUCCESSFUL`**; installed via wireless TLS ADB (`adb -s adb-R3GL70B1LGP-HLPtmw._adb-tls-connect._tcp install -r app-debug.apk` → `Success`).
 - **Android Physical Flagship Delivery ("Trapper" — Google Pixel 9 Pro, `Pixel_9_Pro`)**: Installed via wireless TLS ADB (`adb -s adb-48231FDAP0011V-Ma9KPE._adb-tls-connect._tcp install -r app-debug.apk` → `Success`).
-- **Windows 11 (`WinUI 3` ARM64 in Parallels)**: `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` — compiled and verified with Windows Hello / PIN toggle integration and exact billing cycle support.
+- **Windows 11 (`WinUI 3` ARM64 in Parallels)**: `dotnet build WinUI\Daily.WinUI\Daily.WinUI.csproj -c Debug -p:Platform=ARM64` — verified with durable PAT prioritization, daily bandwidth legend, and expanded scroll viewport.

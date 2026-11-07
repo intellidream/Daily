@@ -104,7 +104,7 @@
         </ScrollViewer>
 
         <!-- Main Telemetry Feed -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="24,12,24,36">
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="24,12,24,64">
             <StackPanel x:Name="MainTelemetryRoot" Spacing="16" MaxWidth="980" HorizontalAlignment="Stretch">
                 <Border x:Name="LoadingBanner"
                         Visibility="Collapsed"

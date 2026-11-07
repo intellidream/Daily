@@ -52,13 +52,13 @@ public struct SupabaseAdminCredentials: Codable, Sendable, Equatable {
         return nil
     }
 
-    /// Primary bearer token for `/platform/` billing/usage endpoints (prefers GoTrue dashboard token, falls back to management token).
+    /// Primary bearer token for `/platform/` billing/usage endpoints (prefers durable management PAT token, falls back to dashboard token).
     public var primaryPlatformBearer: String? {
-        if let dash = dashboardAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !dash.isEmpty {
-            return dash
-        }
         if let mgmt = managementAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !mgmt.isEmpty {
             return mgmt
+        }
+        if let dash = dashboardAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !dash.isEmpty {
+            return dash
         }
         return nil
     }
@@ -676,8 +676,50 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         return "\(df.string(from: startDate)) - \(df.string(from: endDate))"
     }
 
+    public static func computeBillingCycleStartDate(
+        startEpochSeconds: Int64? = nil,
+        creationDateString: String? = nil,
+        referenceDate: Date = Date()
+    ) -> Date {
+        if let s = startEpochSeconds, s > 0 {
+            return Date(timeIntervalSince1970: TimeInterval(s))
+        }
+        var anchorDay = 1
+        if let clean = creationDateString?.trimmingCharacters(in: .whitespacesAndNewlines), clean.count >= 10 {
+            let parts = clean.prefix(10).split(separator: "-")
+            if parts.count == 3, let day = Int(parts[2]), day >= 1 && day <= 31 {
+                anchorDay = day
+            }
+        }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = referenceDate
+        let currentYear = cal.component(.year, from: now)
+        let currentMonth = cal.component(.month, from: now)
+        let currentDay = cal.component(.day, from: now)
+
+        var startYear = currentYear
+        var startMonth = currentMonth
+        if currentDay < anchorDay {
+            startMonth -= 1
+            if startMonth < 1 {
+                startMonth = 12
+                startYear -= 1
+            }
+        }
+        var startComp = DateComponents()
+        startComp.year = startYear
+        startComp.month = startMonth
+        startComp.day = anchorDay
+        startComp.hour = 0
+        startComp.minute = 0
+        startComp.second = 0
+
+        return cal.date(from: startComp) ?? now.addingTimeInterval(-30 * 86400)
+    }
+
     public static func computeBillingCyclePeriodFromCreation(dateString: String, referenceDate: Date = Date()) -> String {
-        var anchorDay = 19
+        var anchorDay = 1
         let clean = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
         if clean.count >= 10 {
             let parts = clean.prefix(10).split(separator: "-")

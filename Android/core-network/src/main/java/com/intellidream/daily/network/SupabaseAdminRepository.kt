@@ -622,13 +622,9 @@ class SupabaseAdminRepository private constructor() {
                 }
 
                 val sumDailyEgressBytes = bill.dailyEgress.sumOf { it.totalBytes }
-                var resolvedCycleEgress: Long = bill.egressUsed
+                var resolvedCycleEgress: Long = maxOf(bill.egressUsed, sumDailyEgressBytes)
                 if (resolvedCycleEgress == 0L) {
-                    if (sumDailyEgressBytes > 0L) {
-                        resolvedCycleEgress = sumDailyEgressBytes
-                    } else {
-                        resolvedCycleEgress = resolved24hEgress
-                    }
+                    resolvedCycleEgress = resolved24hEgress
                 } else if (resolved24hEgress > resolvedCycleEgress) {
                     resolvedCycleEgress = maxOf(resolvedCycleEgress, resolved24hEgress)
                 }
@@ -1380,6 +1376,7 @@ class SupabaseAdminRepository private constructor() {
         if (orgSlug.isEmpty()) return out
 
         // 0. Query Organization Subscription for Billing Cycle Period & Plan
+        var subscriptionStartSec: Long? = null
         val subUrl1 = "https://api.supabase.com/platform/organizations/$orgSlug/billing/subscription"
         val subUrl2 = "https://api.supabase.com/v1/organizations/$orgSlug/billing/subscription"
         var subObj = getJsonObject(subUrl1, bearer) ?: getJsonObject(subUrl2, bearer)
@@ -1387,6 +1384,7 @@ class SupabaseAdminRepository private constructor() {
             val startSec = subObj.long("current_period_start")
             val endSec = subObj.long("current_period_end")
             if (startSec != null && endSec != null && startSec > 0 && endSec > startSec) {
+                subscriptionStartSec = startSec
                 out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startSec, endSec)
             }
         }
@@ -1414,6 +1412,7 @@ class SupabaseAdminRepository private constructor() {
                     val startSec = uObj.long("billing_cycle_start") ?: uObj.long("period_start")
                     val endSec = uObj.long("billing_cycle_end") ?: uObj.long("period_end")
                     if (startSec != null && endSec != null && startSec > 0 && endSec > startSec) {
+                        subscriptionStartSec = startSec
                         out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startSec, endSec)
                     }
                 }
@@ -1430,12 +1429,13 @@ class SupabaseAdminRepository private constructor() {
                     val orig = u.long("usage_original")
                     val lim = u.dbl("pricing_free_units") ?: u.dbl("capped_quota") ?: u.dbl("available_in_plan") ?: 0.0
                     when (metric) {
-                        "EGRESS" -> {
-                            out.egressUsed = bytesVal(v, orig)
+                        "EGRESS", "UNIFIED_EGRESS", "NETWORK_EGRESS", "TOTAL_EGRESS" -> {
+                            val b = bytesVal(v, orig)
+                            out.egressUsed = maxOf(out.egressUsed, b)
                             if (lim > 0) out.egressQuota = bytesVal(lim, null)
                         }
                         "CACHED_EGRESS" -> out.cachedEgress = bytesVal(v, orig)
-                        "DATABASE_SIZE" -> {
+                        "DATABASE_SIZE", "DB_SIZE" -> {
                             out.dbSize = bytesVal(v, orig)
                             if (lim > 0) out.dbQuota = bytesVal(lim, null)
                         }
@@ -1475,14 +1475,31 @@ class SupabaseAdminRepository private constructor() {
 
         // Fallback for billing cycle period if not yet set: compute from org or project creation date
         if (out.billingCyclePeriod == null) {
-            val anchorDate = orgCreatedAt ?: projectCreatedAt ?: "2024-10-19"
-            out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(anchorDate)
+            val anchorDate = orgCreatedAt ?: projectCreatedAt
+            if (anchorDate != null) {
+                out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(anchorDate)
+            } else {
+                out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation("")
+            }
         }
 
+        // Compute start of current billing cycle for daily query
+        val cycleStartInstant = SupabaseAdminSnapshot.computeBillingCycleStartDate(
+            startEpochSeconds = subscriptionStartSec,
+            creationDateString = orgCreatedAt ?: projectCreatedAt
+        )
+        val minAllowedStart = Instant.now().minus(35, ChronoUnit.DAYS)
+        val effectiveStart = if (cycleStartInstant.isBefore(minAllowedStart)) minAllowedStart else cycleStartInstant
+        val startIso = DateTimeFormatter.ISO_INSTANT.format(effectiveStart.truncatedTo(ChronoUnit.SECONDS))
         val endIso = DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-        val startIso = DateTimeFormatter.ISO_INSTANT.format(Instant.now().minus(14, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-        getJsonObject("https://api.supabase.com/platform/organizations/$orgSlug/usage/daily?project_ref=$ref&start=$startIso&end=$endIso", bearer)?.let { dObj ->
-            val series = dObj["usages"] as? JsonArray ?: return@let
+
+        var dObj = getJsonObject("https://api.supabase.com/platform/organizations/$orgSlug/usage/daily?project_ref=$ref&start=$startIso&end=$endIso", bearer)
+        if (dObj == null || (dObj["usages"] as? JsonArray)?.isEmpty() == true) {
+            dObj = getJsonObject("https://api.supabase.com/platform/organizations/$orgSlug/usage/daily?start=$startIso&end=$endIso", bearer)
+        }
+
+        dObj?.let { resp ->
+            val series = resp["usages"] as? JsonArray ?: return@let
             out.dailyEgress = series.mapNotNull { el ->
                 val r = el as? JsonObject ?: return@mapNotNull null
                 val date = (r.str("date") ?: r.str("period_start") ?: "").take(10)

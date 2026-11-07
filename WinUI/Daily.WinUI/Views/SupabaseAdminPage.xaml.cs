@@ -550,7 +550,7 @@ public sealed partial class SupabaseAdminPage : Page
         var stack = new StackPanel { Spacing = 12 };
 
         stack.Children.Add(SectionHeader(
-            "14-Day Stacked Egress & Service Traffic",
+            "Daily Bandwidth & Gateway Activity",
             $"24h Requests — PostgREST: {snap.RestRequests24h:N0} · Auth: {snap.AuthRequests24h:N0} · Realtime: {snap.RealtimeRequests24h:N0} · Storage: {snap.StorageRequests24h:N0}"));
 
         if (snap.DailyEgressSeries.Count == 0)

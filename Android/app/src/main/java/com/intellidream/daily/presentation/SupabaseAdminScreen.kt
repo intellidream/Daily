@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storage
@@ -69,6 +71,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +79,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.model.SupabaseAdminCredentials
 import com.intellidream.daily.model.SupabaseAdminSnapshot
 import com.intellidream.daily.model.SupabaseDailyEgressPoint
 import com.intellidream.daily.network.SupabaseAdminRepository
@@ -142,13 +146,15 @@ fun SupabaseAdminScreen(
             decorFitsSystemWindows = false
         )
     ) {
+        var showOverflowMenu by remember { mutableStateOf(false) }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(ThemeColors.backgroundGradient)
                 .statusBarsPadding()
         ) {
-            // Top Bar
+            // Clean Top Bar with space to breathe
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -161,147 +167,109 @@ fun SupabaseAdminScreen(
                     imageVector = Icons.Rounded.Storage,
                     contentDescription = null,
                     tint = ThemeColors.accentCyan,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp)
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = snapshot?.project?.name ?: "Supabase Cloud Console",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        snapshot?.let { snap ->
-                            Text(
-                                text = snap.orgPlan.uppercase(Locale.US),
-                                color = Color.Black,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(ThemeColors.accentCyan)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                        Text(
-                            text = "READ-ONLY",
-                            color = ThemeColors.success,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(ThemeColors.success.copy(alpha = 0.14f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
+                Text(
+                    text = "Supabase Console",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                    val subText = remember(snapshot?.fetchedAtEpochMs, creds.adminIdentity, feedbackToast) {
-                        feedbackToast ?: buildString {
-                            creds.adminIdentity?.let { append("$it · ") }
-                            snapshot?.let { s ->
-                                val tf = SimpleDateFormat("HH:mm:ss", Locale.US)
-                                append("${s.computeTier} · ${s.project.region} · ${tf.format(Date(s.fetchedAtEpochMs))}")
-                            } ?: append("10-min cached cloud telemetry")
-                        }
-                    }
-                    Text(
-                        text = subText,
-                        color = if (feedbackToast != null) ThemeColors.success else ThemeColors.fgMutedDark,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = ThemeColors.accentCyan,
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
                     )
                 }
 
-                // Multi-project selector if > 1
-                val projects = snapshot?.availableProjects.orEmpty()
-                if (projects.size > 1) {
-                    Box {
-                        Text(
-                            text = "Projects",
-                            color = ThemeColors.accentCyan,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.08f))
-                                .clickable { showProjectMenu = true }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                // Single overflow 3-dots menu
+                Box {
+                    IconButton(onClick = { showOverflowMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "Console Options",
+                            tint = Color.White
                         )
-                        DropdownMenu(expanded = showProjectMenu, onDismissRequest = { showProjectMenu = false }) {
+                    }
+
+                    DropdownMenu(
+                        expanded = showOverflowMenu,
+                        onDismissRequest = { showOverflowMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Refresh Telemetry") },
+                            leadingIcon = { Icon(Icons.Rounded.Refresh, contentDescription = null, tint = ThemeColors.accentCyan) },
+                            onClick = {
+                                showOverflowMenu = false
+                                scope.launch { repo.refreshSnapshot(force = true) }
+                            }
+                        )
+                        val projects = snapshot?.availableProjects.orEmpty()
+                        if (projects.size > 1) {
+                            HorizontalDivider()
                             projects.forEach { p ->
+                                val isSelected = p.ref == snapshot?.project?.ref
                                 DropdownMenuItem(
-                                    text = { Text("${p.name} (${p.ref})") },
+                                    text = {
+                                        Text(
+                                            text = if (isSelected) "✓ ${p.name}" else p.name,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) ThemeColors.accentCyan else Color.White
+                                        )
+                                    },
                                     onClick = {
-                                        showProjectMenu = false
+                                        showOverflowMenu = false
                                         scope.launch { repo.selectProject(p.ref) }
                                     }
                                 )
                             }
+                            HorizontalDivider()
                         }
-                    }
-                }
-
-                // Copy Markdown
-                IconButton(
-                    enabled = snapshot != null,
-                    onClick = {
-                        snapshot?.toMarkdownReport()?.let { md ->
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("Supabase Forensic Report", md))
-                            feedbackToast = "Forensic Markdown copied!"
-                        }
-                    }
-                ) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy Markdown", tint = Color.White)
-                }
-
-                // Share Markdown
-                IconButton(
-                    enabled = snapshot != null,
-                    onClick = {
-                        snapshot?.toMarkdownReport()?.let { md ->
-                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/markdown"
-                                putExtra(Intent.EXTRA_SUBJECT, "Supabase Cloud Forensic Telemetry")
-                                putExtra(Intent.EXTRA_TEXT, md)
+                        DropdownMenuItem(
+                            text = { Text("Copy Forensic Markdown") },
+                            leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = Color.White) },
+                            enabled = snapshot != null,
+                            onClick = {
+                                showOverflowMenu = false
+                                snapshot?.toMarkdownReport()?.let { md ->
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("Supabase Forensic Report", md))
+                                    feedbackToast = "Forensic Markdown copied!"
+                                }
                             }
-                            context.startActivity(Intent.createChooser(sendIntent, "Export Telemetry Report"))
-                        }
-                    }
-                ) {
-                    Icon(Icons.Rounded.Share, contentDescription = "Share Report", tint = Color.White)
-                }
-
-                // Refresh
-                IconButton(
-                    enabled = !isLoading,
-                    onClick = { scope.launch { repo.refreshSnapshot(force = true) } }
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            color = ThemeColors.accentCyan,
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
                         )
-                    } else {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "Refresh", tint = ThemeColors.accentCyan)
+                        DropdownMenuItem(
+                            text = { Text("Share Telemetry Report") },
+                            leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null, tint = Color.White) },
+                            enabled = snapshot != null,
+                            onClick = {
+                                showOverflowMenu = false
+                                snapshot?.toMarkdownReport()?.let { md ->
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/markdown"
+                                        putExtra(Intent.EXTRA_SUBJECT, "Supabase Cloud Forensic Telemetry")
+                                        putExtra(Intent.EXTRA_TEXT, md)
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, "Export Telemetry Report"))
+                                }
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Disconnect Admin", color = ThemeColors.error) },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, tint = ThemeColors.error) },
+                            onClick = {
+                                showOverflowMenu = false
+                                repo.disconnect()
+                                onDismissWithLock()
+                            }
+                        )
                     }
-                }
-
-                // Disconnect
-                IconButton(
-                    onClick = {
-                        repo.disconnect()
-                        onDismissWithLock()
-                    }
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = "Disconnect", tint = ThemeColors.error)
                 }
 
                 IconButton(onClick = onDismissWithLock) {
@@ -313,7 +281,12 @@ fun SupabaseAdminScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = if (isWide) 24.dp else 16.dp, vertical = 16.dp),
+                contentPadding = PaddingValues(
+                    start = if (isWide) 24.dp else 16.dp,
+                    top = 16.dp,
+                    end = if (isWide) 24.dp else 16.dp,
+                    bottom = 96.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 if (!errorMsg.isNullOrBlank()) {
@@ -351,6 +324,16 @@ fun SupabaseAdminScreen(
                         }
                     }
                 } else {
+                    // 0. Project Hero Card
+                    item {
+                        ProjectHeaderCard(
+                            snap = snap,
+                            creds = creds,
+                            copyFeedback = feedbackToast,
+                            onSelectProject = { ref -> scope.launch { repo.selectProject(ref) } }
+                        )
+                    }
+
                     // Service Health Strip
                     if (snap.serviceHealth.isNotEmpty()) {
                         item {
@@ -474,7 +457,7 @@ fun SupabaseAdminScreen(
                         }
                         if (snap.dailyEgress.isNotEmpty()) {
                             item {
-                                DailyStackedEgressCard(points = snap.dailyEgress)
+                                DailyBandwidthActivityCard(snap = snap)
                             }
                         }
                     }
@@ -536,7 +519,7 @@ fun SupabaseAdminScreen(
                 }
 
                 item {
-                    Spacer(Modifier.height(24.dp).navigationBarsPadding())
+                    Spacer(Modifier.height(80.dp).navigationBarsPadding())
                 }
             }
         }
@@ -789,47 +772,261 @@ private fun QuotaGaugeTile(
 }
 
 @Composable
-private fun DailyStackedEgressCard(points: List<SupabaseDailyEgressPoint>) {
-    val recent = remember(points) { points.takeLast(14) }
-    val maxTotal = remember(recent) { maxOf(1L, recent.maxOfOrNull { it.totalBytes } ?: 1L) }
+private fun ProjectHeaderCard(
+    snap: SupabaseAdminSnapshot,
+    creds: SupabaseAdminCredentials,
+    copyFeedback: String?,
+    onSelectProject: (String) -> Unit
+) {
+    var showProjectMenu by remember { mutableStateOf(false) }
 
     GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 18.dp, padding = 16.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Daily Stacked Egress (PostgREST · Edge · Realtime · Storage)", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val count = recent.size
-                if (count == 0) return@Canvas
-                val slotW = size.width / count
-                val barW = (slotW * 0.62f).coerceAtLeast(6f)
+                Icon(
+                    imageVector = Icons.Rounded.Storage,
+                    contentDescription = null,
+                    tint = ThemeColors.accentCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = snap.project.name.ifEmpty { "Daily Cloud" },
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = snap.orgPlan.uppercase(Locale.US),
+                    color = Color.Black,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ThemeColors.accentCyan)
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                )
+                Text(
+                    text = "READ-ONLY",
+                    color = ThemeColors.success,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ThemeColors.success.copy(alpha = 0.14f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
 
-                recent.forEachIndexed { i, pt ->
-                    val x = i * slotW + (slotW - barW) / 2f
-                    var currentBottom = size.height
-                    val segments = listOf(
-                        pt.restBytes to ThemeColors.accentCyan,
-                        pt.functionBytes to ThemeColors.accentPurple,
-                        pt.realtimeBytes to ThemeColors.accentGreen,
-                        (pt.authBytes + pt.storageBytes + pt.supavisorBytes) to ThemeColors.accentBlue
+            Text(
+                text = "${snap.computeTier} · ${snap.project.region} · PG ${snap.project.postgresVersion}",
+                color = ThemeColors.fgMutedDark,
+                fontSize = 11.5.sp,
+                fontFamily = FontFamily.Monospace
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Admin: ${creds.adminIdentity ?: "PAT Admin"}",
+                    color = ThemeColors.fgMutedDark,
+                    fontSize = 11.5.sp
+                )
+                if (copyFeedback != null) {
+                    Text(
+                        text = copyFeedback,
+                        color = ThemeColors.success,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    segments.forEach { (bytes, col) ->
-                        if (bytes > 0L) {
-                            val h = (bytes.toFloat() / maxTotal.toFloat()) * (size.height - 8f)
-                            drawRoundRect(
-                                color = col,
-                                topLeft = Offset(x, currentBottom - h),
-                                size = Size(barW, h),
-                                cornerRadius = CornerRadius(4f, 4f)
+                } else {
+                    val tf = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
+                    Text(
+                        text = tf.format(Date(snap.fetchedAtEpochMs)),
+                        color = ThemeColors.fgMutedDark,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            if (snap.availableProjects.size > 1) {
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .clickable { showProjectMenu = true }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Switch Project",
+                            color = ThemeColors.accentCyan,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = ThemeColors.accentCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showProjectMenu,
+                        onDismissRequest = { showProjectMenu = false }
+                    ) {
+                        snap.availableProjects.forEach { p ->
+                            val isCurrent = p.ref == snap.project.ref
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isCurrent) "✓ ${p.name}" else p.name,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isCurrent) ThemeColors.accentCyan else Color.White
+                                    )
+                                },
+                                onClick = {
+                                    showProjectMenu = false
+                                    onSelectProject(p.ref)
+                                }
                             )
-                            currentBottom -= h
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DailyBandwidthActivityCard(snap: SupabaseAdminSnapshot) {
+    val points = snap.dailyEgress
+    val recent = remember(points) { points.takeLast(14) }
+    val maxTotal = remember(recent) { maxOf(1L, recent.maxOfOrNull { it.totalBytes } ?: 1L) }
+
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 18.dp, padding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "Daily Bandwidth & Gateway Activity",
+                color = Color.White,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "24h Gateway: ${SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes)} · Active Cycle: ${SupabaseAdminSnapshot.formatBytes(snap.egressCycleUsedBytes)}",
+                color = ThemeColors.fgMutedDark,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
+            )
+
+            // Legend Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LegendIndicator(color = ThemeColors.accentCyan, label = "REST")
+                LegendIndicator(color = ThemeColors.accentPurple, label = "Edge")
+                LegendIndicator(color = ThemeColors.accentGreen, label = "Realtime")
+                LegendIndicator(color = ThemeColors.accentBlue, label = "Auth & Storage")
+            }
+
+            if (recent.isEmpty()) {
+                Text(
+                    text = "No daily bandwidth points recorded for active window.",
+                    color = ThemeColors.fgMutedDark,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            } else {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                ) {
+                    val count = recent.size
+                    if (count == 0) return@Canvas
+                    val slotW = size.width / count
+                    val barW = (slotW * 0.62f).coerceAtLeast(6f)
+
+                    recent.forEachIndexed { i, pt ->
+                        val x = i * slotW + (slotW - barW) / 2f
+                        var currentBottom = size.height
+                        val segments = listOf(
+                            pt.restBytes to ThemeColors.accentCyan,
+                            pt.functionBytes to ThemeColors.accentPurple,
+                            pt.realtimeBytes to ThemeColors.accentGreen,
+                            (pt.authBytes + pt.storageBytes + pt.supavisorBytes) to ThemeColors.accentBlue
+                        )
+                        segments.forEach { (bytes, col) ->
+                            if (bytes > 0L) {
+                                val h = (bytes.toFloat() / maxTotal.toFloat()) * (size.height - 8f)
+                                drawRoundRect(
+                                    color = col,
+                                    topLeft = Offset(x, currentBottom - h),
+                                    size = Size(barW, h),
+                                    cornerRadius = CornerRadius(4f, 4f)
+                                )
+                                currentBottom -= h
+                            }
+                        }
+                    }
+                }
+
+                // Date labels under bars
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    recent.forEach { pt ->
+                        Text(
+                            text = pt.date.takeLast(5),
+                            color = ThemeColors.fgMutedDark,
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegendIndicator(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

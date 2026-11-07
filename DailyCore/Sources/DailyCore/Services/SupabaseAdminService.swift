@@ -400,7 +400,16 @@ public final class SupabaseAdminService: ObservableObject {
         defer { isLoading = false }
 
         let targetRef = credentials.selectedProjectRef
-        let platformBearer = credentials.primaryPlatformBearer ?? mgmtBearer
+        let primaryPlatform = credentials.primaryPlatformBearer ?? mgmtBearer
+        let fallbackPlatform: String? = {
+            if let pat = credentials.managementAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !pat.isEmpty, pat != primaryPlatform {
+                return pat
+            }
+            if let dash = credentials.dashboardAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines), !dash.isEmpty, dash != primaryPlatform {
+                return dash
+            }
+            return nil
+        }()
         let hasDashboardToken = (credentials.dashboardAccessToken?.isEmpty == false)
 
         do {
@@ -441,7 +450,8 @@ public final class SupabaseAdminService: ObservableObject {
             async let logsForensicsTask = fetchClickHouseLogsForensics(bearer: mgmtBearer, ref: ref)
             async let pgCatalogTask = fetchPostgresCatalogForensics(bearer: mgmtBearer, ref: ref)
             async let platformUsageTask = fetchPlatformBillingUsage(
-                bearer: platformBearer,
+                primaryBearer: primaryPlatform,
+                fallbackBearer: fallbackPlatform,
                 orgSlug: targetOrgSlug,
                 ref: ref,
                 orgCreatedAt: orgCreatedAt,
@@ -496,17 +506,12 @@ public final class SupabaseAdminService: ObservableObject {
             }
 
             // Billing Cycle / Monthly Egress resolution:
-            // 1. Direct billing usage (when exact or non-zero)
-            // 2. Sum of all points in dailyEgress series
-            // 3. Fallback to at least 24h burst
+            // 1. Max of exact billing usage & sum of daily points across the entire active billing period
+            // 2. Fallback to at least 24h burst if platform usage metrics are empty
             let sumDailyEgressBytes = billingData.dailyEgress.reduce(0) { $0 + $1.totalBytes }
-            var resolvedCycleEgress: Int64 = billingData.egressUsedBytes
+            var resolvedCycleEgress: Int64 = max(billingData.egressUsedBytes, sumDailyEgressBytes)
             if resolvedCycleEgress == 0 {
-                if sumDailyEgressBytes > 0 {
-                    resolvedCycleEgress = sumDailyEgressBytes
-                } else {
-                    resolvedCycleEgress = resolved24hEgress
-                }
+                resolvedCycleEgress = resolved24hEgress
             } else if resolved24hEgress > resolvedCycleEgress {
                 resolvedCycleEgress = max(resolvedCycleEgress, resolved24hEgress)
             }
@@ -1593,7 +1598,8 @@ public final class SupabaseAdminService: ObservableObject {
     }
 
     private func fetchPlatformBillingUsage(
-        bearer: String,
+        primaryBearer: String,
+        fallbackBearer: String? = nil,
         orgSlug: String,
         ref: String,
         orgCreatedAt: String? = nil,
@@ -1606,14 +1612,15 @@ public final class SupabaseAdminService: ObservableObject {
         // 0. Query Organization Subscription for Billing Cycle Period & Plan
         let subUrl1 = "https://api.supabase.com/platform/organizations/\(orgSlug)/billing/subscription"
         let subUrl2 = "https://api.supabase.com/v1/organizations/\(orgSlug)/billing/subscription"
-        var subJson = try? await performGetJson(url: subUrl1, bearer: bearer) as? [String: Any]
+        var subJson = await performGetJsonWithFallback(url: subUrl1, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
         if subJson == nil {
-            subJson = try? await performGetJson(url: subUrl2, bearer: bearer) as? [String: Any]
+            subJson = await performGetJsonWithFallback(url: subUrl2, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
         }
+        var subscriptionStartSec: Int64?
         if let subJson {
             var startSec: Int64?
             var endSec: Int64?
-            if let s = Self.int64(subJson["current_period_start"]) { startSec = s }
+            if let s = Self.int64(subJson["current_period_start"]) { startSec = s; subscriptionStartSec = s }
             if let e = Self.int64(subJson["current_period_end"]) { endSec = e }
             if let s = startSec, let e = endSec, s > 0, e > s {
                 out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startEpochSeconds: s, endEpochSeconds: e)
@@ -1626,12 +1633,12 @@ public final class SupabaseAdminService: ObservableObject {
         let usageUrlProj = "https://api.supabase.com/platform/organizations/\(orgSlug)/usage?project_ref=\(ref)"
         let usageUrlV1 = "https://api.supabase.com/v1/organizations/\(orgSlug)/usage"
 
-        var usageJson = try? await performGetJson(url: usageUrlOrg, bearer: bearer) as? [String: Any]
+        var usageJson = await performGetJsonWithFallback(url: usageUrlOrg, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
         if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
-            usageJson = try? await performGetJson(url: usageUrlProj, bearer: bearer) as? [String: Any]
+            usageJson = await performGetJsonWithFallback(url: usageUrlProj, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
         }
         if usageJson == nil || (usageJson?["usages"] as? [[String: Any]])?.isEmpty == true {
-            usageJson = try? await performGetJson(url: usageUrlV1, bearer: bearer) as? [String: Any]
+            usageJson = await performGetJsonWithFallback(url: usageUrlV1, primaryBearer: primaryBearer, fallbackBearer: fallbackBearer) as? [String: Any]
         }
 
         if let usageJson, let usages = usageJson["usages"] as? [[String: Any]], !usages.isEmpty {
@@ -1642,6 +1649,7 @@ public final class SupabaseAdminService: ObservableObject {
                 if let s = Self.int64(usageJson["billing_cycle_start"]) ?? Self.int64(usageJson["period_start"]),
                    let e = Self.int64(usageJson["billing_cycle_end"]) ?? Self.int64(usageJson["period_end"]),
                    s > 0, e > s {
+                    subscriptionStartSec = s
                     out.billingCyclePeriod = SupabaseAdminSnapshot.formatBillingCyclePeriod(startEpochSeconds: s, endEpochSeconds: e)
                 }
             }
@@ -1662,12 +1670,13 @@ public final class SupabaseAdminService: ObservableObject {
                 }
 
                 switch metric {
-                case "EGRESS":
-                    out.egressUsedBytes = resolveBytes(usageVal, orig: usageOrig)
+                case "EGRESS", "UNIFIED_EGRESS", "NETWORK_EGRESS", "TOTAL_EGRESS":
+                    let b = resolveBytes(usageVal, orig: usageOrig)
+                    out.egressUsedBytes = max(out.egressUsedBytes, b)
                     if limitVal > 0 { out.egressQuotaBytes = resolveBytes(limitVal, orig: nil) }
                 case "CACHED_EGRESS":
                     out.cachedEgressUsedBytes = resolveBytes(usageVal, orig: usageOrig)
-                case "DATABASE_SIZE":
+                case "DATABASE_SIZE", "DB_SIZE":
                     out.dbSizeBytes = resolveBytes(usageVal, orig: usageOrig)
                     if limitVal > 0 { out.dbQuotaBytes = resolveBytes(limitVal, orig: nil) }
                 case "STORAGE_SIZE":
@@ -1703,24 +1712,49 @@ public final class SupabaseAdminService: ObservableObject {
             if let dateStr = orgCreatedAt ?? projectCreatedAt {
                 out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: dateStr)
             } else {
-                out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: "2024-10-19")
+                out.billingCyclePeriod = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: "")
             }
         }
 
-        // 2. Daily Egress stacked breakdown (last 14 days)
+        // Compute start of current billing cycle for daily query
+        let cycleStartDate = SupabaseAdminSnapshot.computeBillingCycleStartDate(
+            startEpochSeconds: subscriptionStartSec,
+            creationDateString: orgCreatedAt ?? projectCreatedAt
+        )
+
+        // 2. Daily Egress stacked breakdown across the active billing cycle
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
         let endStr = iso.string(from: Date())
-        let startStr = iso.string(from: Date().addingTimeInterval(-14 * 86400))
+        let minAllowedStart = Date().addingTimeInterval(-35 * 86400)
+        let effectiveStart = max(cycleStartDate, minAllowedStart)
+        let startStr = iso.string(from: effectiveStart)
+
         var dailyComps = URLComponents(string: "https://api.supabase.com/platform/organizations/\(orgSlug)/usage/daily")!
         dailyComps.queryItems = [
             URLQueryItem(name: "project_ref", value: ref),
             URLQueryItem(name: "start", value: startStr),
             URLQueryItem(name: "end", value: endStr)
         ]
-        if let dailyUrl = dailyComps.url?.absoluteString,
-           let dailyJson = try? await performGetJson(url: dailyUrl, bearer: bearer) as? [String: Any],
-           let series = dailyJson["usages"] as? [[String: Any]] {
+        var dailyJson = await performGetJsonWithFallback(
+            url: dailyComps.url?.absoluteString ?? "",
+            primaryBearer: primaryBearer,
+            fallbackBearer: fallbackBearer
+        ) as? [String: Any]
+        if dailyJson == nil || (dailyJson?["usages"] as? [[String: Any]])?.isEmpty == true {
+            var dailyCompsNoProj = URLComponents(string: "https://api.supabase.com/platform/organizations/\(orgSlug)/usage/daily")!
+            dailyCompsNoProj.queryItems = [
+                URLQueryItem(name: "start", value: startStr),
+                URLQueryItem(name: "end", value: endStr)
+            ]
+            dailyJson = await performGetJsonWithFallback(
+                url: dailyCompsNoProj.url?.absoluteString ?? "",
+                primaryBearer: primaryBearer,
+                fallbackBearer: fallbackBearer
+            ) as? [String: Any]
+        }
+
+        if let dailyJson, let series = dailyJson["usages"] as? [[String: Any]] {
             var points: [SupabaseDailyEgressPoint] = []
             for row in series {
                 let dateRaw = Self.str(row["date"]) ?? Self.str(row["period_start"]) ?? ""
@@ -1750,9 +1784,10 @@ public final class SupabaseAdminService: ObservableObject {
 
         // 3. Resource warnings (disk/CPU/memory exhaustion banners)
         if preferDashboardEndpoint,
-           let warnArr = try? await performGetJson(
+           let warnArr = await performGetJsonWithFallback(
                url: "https://api.supabase.com/platform/projects-resource-warnings?ref=\(ref)",
-               bearer: bearer
+               primaryBearer: primaryBearer,
+               fallbackBearer: fallbackBearer
            ) as? [[String: Any]],
            let wObj = warnArr.first {
             let keys = [
@@ -1867,6 +1902,25 @@ public final class SupabaseAdminService: ObservableObject {
     private func performGetJson(url: String, bearer: String) async throws -> Any {
         let data = try await performGetData(url: url, bearer: bearer)
         return try JSONSerialization.jsonObject(with: data)
+    }
+
+    private func performGetJsonWithFallback(
+        url: String,
+        primaryBearer: String,
+        fallbackBearer: String? = nil
+    ) async -> Any? {
+        if !primaryBearer.isEmpty {
+            if let json = try? await performGetJson(url: url, bearer: primaryBearer) {
+                return json
+            }
+        }
+        if let fallback = fallbackBearer?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fallback.isEmpty, fallback != primaryBearer {
+            if let json = try? await performGetJson(url: url, bearer: fallback) {
+                return json
+            }
+        }
+        return nil
     }
 
     nonisolated private static func decodeResultArray(_ data: Data?) -> [[String: Any]] {

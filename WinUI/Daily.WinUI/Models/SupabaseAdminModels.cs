@@ -346,10 +346,38 @@ public static class SupabaseAdminFormatter
         return $"{start:d MMM yyyy} - {end:d MMM yyyy}";
     }
 
+    public static DateTime ComputeBillingCycleStartDate(long? startEpochSeconds, string? creationDateString, DateTime? referenceDate = null)
+    {
+        if (startEpochSeconds.HasValue && startEpochSeconds.Value > 0)
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(startEpochSeconds.Value).UtcDateTime;
+        }
+        var refDate = referenceDate ?? DateTime.UtcNow;
+        var anchorDay = 1;
+        if (!string.IsNullOrWhiteSpace(creationDateString))
+        {
+            if (DateTime.TryParse(creationDateString, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed))
+            {
+                anchorDay = parsed.Day;
+            }
+        }
+        anchorDay = Math.Clamp(anchorDay, 1, 28);
+
+        if (refDate.Day >= anchorDay)
+        {
+            return new DateTime(refDate.Year, refDate.Month, anchorDay, 0, 0, 0, DateTimeKind.Utc);
+        }
+        else
+        {
+            var prevMonth = refDate.AddMonths(-1);
+            return new DateTime(prevMonth.Year, prevMonth.Month, Math.Min(anchorDay, DateTime.DaysInMonth(prevMonth.Year, prevMonth.Month)), 0, 0, 0, DateTimeKind.Utc);
+        }
+    }
+
     public static string ComputeBillingCyclePeriodFromCreation(string? dateString, DateTime? referenceDate = null)
     {
         var refDate = referenceDate ?? DateTime.UtcNow;
-        var anchorDay = 19;
+        var anchorDay = 1;
         if (!string.IsNullOrWhiteSpace(dateString))
         {
             if (DateTime.TryParse(dateString, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed))

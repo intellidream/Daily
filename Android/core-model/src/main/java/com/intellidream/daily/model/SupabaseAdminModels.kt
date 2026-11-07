@@ -23,8 +23,8 @@ data class SupabaseAdminCredentials(
             ?: dashboardAccessToken?.trim()?.takeIf { it.isNotEmpty() }
 
     val primaryPlatformBearer: String?
-        get() = dashboardAccessToken?.trim()?.takeIf { it.isNotEmpty() }
-            ?: managementAccessToken?.trim()?.takeIf { it.isNotEmpty() }
+        get() = managementAccessToken?.trim()?.takeIf { it.isNotEmpty() }
+            ?: dashboardAccessToken?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 @Serializable
@@ -331,8 +331,46 @@ data class SupabaseAdminSnapshot(
             return "$s - $e"
         }
 
+        fun computeBillingCycleStartDate(
+            startEpochSeconds: Long? = null,
+            creationDateString: String? = null,
+            referenceTimeMs: Long = System.currentTimeMillis()
+        ): java.time.Instant {
+            if (startEpochSeconds != null && startEpochSeconds > 0) {
+                return java.time.Instant.ofEpochSecond(startEpochSeconds)
+            }
+            var anchorDay = 1
+            val clean = creationDateString?.trim().orEmpty()
+            if (clean.length >= 10) {
+                val parts = clean.substring(0, 10).split("-")
+                if (parts.size == 3) {
+                    parts[2].toIntOrNull()?.let { d ->
+                        if (d in 1..31) anchorDay = d
+                    }
+                }
+            }
+            val now = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(referenceTimeMs), java.time.ZoneOffset.UTC)
+            val currentYear = now.year
+            val currentMonth = now.monthValue
+            val currentDay = now.dayOfMonth
+
+            var startYear = currentYear
+            var startMonth = currentMonth
+            if (currentDay < anchorDay) {
+                startMonth -= 1
+                if (startMonth < 1) {
+                    startMonth = 12
+                    startYear -= 1
+                }
+            }
+            val daysInMonth = java.time.YearMonth.of(startYear, startMonth).lengthOfMonth()
+            val day = minOf(anchorDay, daysInMonth)
+            val ldt = java.time.LocalDate.of(startYear, startMonth, day).atStartOfDay(java.time.ZoneOffset.UTC)
+            return ldt.toInstant()
+        }
+
         fun computeBillingCyclePeriodFromCreation(dateString: String, referenceTimeMs: Long = System.currentTimeMillis()): String {
-            var anchorDay = 19
+            var anchorDay = 1
             val clean = dateString.trim()
             if (clean.length >= 10) {
                 val parts = clean.substring(0, 10).split("-")

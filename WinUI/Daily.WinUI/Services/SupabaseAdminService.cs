@@ -525,7 +525,7 @@ public sealed class SupabaseAdminService
             var logsClientsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildClientFootprintClickHouseSql());
             var logsErrorsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, pat, BuildRecentErrorsClickHouseSql());
 
-            var platformBearer = Credentials.HasValidDashboardJwt ? Credentials.DashboardAccessToken! : pat;
+            var platformBearer = !string.IsNullOrWhiteSpace(pat) ? pat : (Credentials.DashboardAccessToken ?? pat);
 
             // Subscription query for billing cycle dates
             var subTask1 = !string.IsNullOrWhiteSpace(orgSlug)
@@ -1728,9 +1728,10 @@ public sealed class SupabaseAdminService
                     if (limitVal <= 0) limitVal = Double(u, "capped_quota");
                     if (limitVal <= 0) limitVal = Double(u, "available_in_plan");
 
-                    if (metric == "egress")
+                    if (metric == "egress" || (metric.Contains("egress") && !metric.Contains("cached")))
                     {
-                        egressUsed = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
+                        var parsedEgress = (usageOrig > 0) ? (usageOrig / 1_073_741_824.0) : (usageVal > 1_000_000 ? usageVal / 1_073_741_824.0 : usageVal);
+                        egressUsed = Math.Max(egressUsed, parsedEgress);
                         if (limitVal > 0) egressQuota = limitVal > 1_000_000 ? limitVal / 1_073_741_824.0 : limitVal;
                         exact = true;
                     }
