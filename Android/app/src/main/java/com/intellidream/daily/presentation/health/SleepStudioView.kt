@@ -1,5 +1,6 @@
 package com.intellidream.daily.presentation.health
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,8 +33,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -151,6 +157,8 @@ private fun HeroSleepScoreCard(
                         )
 
                         // Source Device Origin Chip
+                        val src = DeviceSource.from(session.sourceDevice)
+                        val deviceIcon = getDeviceIcon(src.iconType)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -159,6 +167,12 @@ private fun HeroSleepScoreCard(
                                 .background(Color.White.copy(alpha = 0.1f))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
+                            Icon(
+                                imageVector = deviceIcon,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.85f),
+                                modifier = Modifier.size(11.dp)
+                            )
                             Text(
                                 text = session.sourceDevice,
                                 fontSize = 10.sp,
@@ -190,19 +204,46 @@ private fun HeroSleepScoreCard(
                         .size(76.dp)
                         .clickable { onScoreRingTapped() }
                 ) {
-                    CircularProgressIndicator(
-                        progress = { 1f },
-                        modifier = Modifier.size(76.dp),
-                        color = Color.White.copy(alpha = 0.08f),
-                        strokeWidth = 8.dp
-                    )
-                    CircularProgressIndicator(
-                        progress = { session.sleepScore.toFloat() / 100f },
-                        modifier = Modifier.size(76.dp),
-                        color = ThemeColors.accentCyan,
-                        strokeWidth = 8.dp,
-                        strokeCap = StrokeCap.Round
-                    )
+                    Canvas(modifier = Modifier.size(76.dp)) {
+                        val strokeWidth = 8.dp.toPx()
+                        val diameter = size.minDimension - strokeWidth
+                        val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+                        val arcSize = Size(diameter, diameter)
+
+                        // Track
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.08f),
+                            startAngle = 0f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth)
+                        )
+
+                        // Angular Gradient Active Arc
+                        val sweepGradient = Brush.sweepGradient(
+                            colors = listOf(
+                                ThemeColors.accentCyan,
+                                Color(0xFF2979FF),
+                                ThemeColors.accentPurple,
+                                ThemeColors.accentCyan
+                            ),
+                            center = center
+                        )
+                        val sweepAngle = (session.sleepScore.coerceIn(0, 100) / 100f) * 360f
+                        if (sweepAngle > 0f) {
+                            drawArc(
+                                brush = sweepGradient,
+                                startAngle = -90f,
+                                sweepAngle = sweepAngle,
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = arcSize,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -290,6 +331,8 @@ private fun HeroSleepScoreCard(
 
 @Composable
 private fun HypnogramContainerCard(session: SleepSession) {
+    val hasHypnogram = session.hasGranularHypnogram || session.stages.isNotEmpty()
+
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 20.dp,
@@ -305,13 +348,13 @@ private fun HypnogramContainerCard(session: SleepSession) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (session.hasGranularHypnogram) "SLEEP HYPNOGRAM" else "STAGE PROPORTIONS",
+                    text = if (hasHypnogram) "SLEEP HYPNOGRAM" else "STAGE PROPORTIONS",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = ThemeColors.accentCyan
                 )
 
-                if (session.hasGranularHypnogram) {
+                if (hasHypnogram) {
                     Text(
                         text = "Tap stage to inspect",
                         fontSize = 11.sp,
@@ -321,7 +364,7 @@ private fun HypnogramContainerCard(session: SleepSession) {
                 }
             }
 
-            if (session.hasGranularHypnogram) {
+            if (hasHypnogram) {
                 SleepHypnogramView(session = session)
             } else {
                 StageProportionBar(session = session)
@@ -466,6 +509,7 @@ private fun ArchitectureMetricsGrid(session: SleepSession) {
                 title = "Deep Sleep",
                 value = session.deepFormatted,
                 subtitle = "${session.deepPercent}% of sleep",
+                icon = Icons.Rounded.Nightlight,
                 tint = Color(android.graphics.Color.parseColor(SleepStageType.DEEP.hexColor))
             )
             MetricTile(
@@ -473,6 +517,7 @@ private fun ArchitectureMetricsGrid(session: SleepSession) {
                 title = "REM Sleep",
                 value = session.remFormatted,
                 subtitle = "${session.remPercent}% of sleep",
+                icon = Icons.Rounded.AutoAwesome,
                 tint = Color(android.graphics.Color.parseColor(SleepStageType.REM.hexColor))
             )
         }
@@ -485,6 +530,7 @@ private fun ArchitectureMetricsGrid(session: SleepSession) {
                 title = "Light / Core",
                 value = session.lightFormatted,
                 subtitle = "${session.lightPercent}% of sleep",
+                icon = Icons.Rounded.Bed,
                 tint = Color(android.graphics.Color.parseColor(SleepStageType.LIGHT.hexColor))
             )
             MetricTile(
@@ -492,6 +538,7 @@ private fun ArchitectureMetricsGrid(session: SleepSession) {
                 title = "Awakenings",
                 value = "${session.awakeCount} times",
                 subtitle = "${session.awakeFormatted} awake",
+                icon = Icons.Rounded.RemoveRedEye,
                 tint = Color(android.graphics.Color.parseColor(SleepStageType.AWAKE.hexColor))
             )
         }
@@ -504,6 +551,7 @@ private fun MetricTile(
     title: String,
     value: String,
     subtitle: String,
+    icon: ImageVector,
     tint: Color
 ) {
     GlassCard(
@@ -515,12 +563,24 @@ private fun MetricTile(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = title,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = ThemeColors.fgMutedDark
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(15.dp)
+                )
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ThemeColors.fgMutedDark
+                )
+            }
 
             Text(
                 text = value,

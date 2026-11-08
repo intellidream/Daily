@@ -13,6 +13,7 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -36,27 +37,20 @@ object FlexibleTimestampSerializer : KSerializer<Long> {
             if (element is JsonPrimitive) {
                 element.longOrNull ?: run {
                     val str = element.content
-                    try {
-                        java.time.OffsetDateTime.parse(str).toInstant().toEpochMilli()
-                    } catch (_: Exception) {
-                        try {
-                            java.time.Instant.parse(str).toEpochMilli()
-                        } catch (_: Exception) {
-                            try {
-                                SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).parse(str)?.time ?: 0L
-                            } catch (_: Exception) {
-                                try {
-                                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(str)?.time ?: 0L
-                                } catch (_: Exception) {
-                                    0L
-                                }
-                            }
-                        }
-                    }
+                    TimestampSerializer.parseIsoToEpoch(str)
                 }
             } else 0L
         } else {
-            decoder.decodeLong()
+            try {
+                decoder.decodeLong()
+            } catch (_: Exception) {
+                try {
+                    val str = decoder.decodeString()
+                    TimestampSerializer.parseIsoToEpoch(str)
+                } catch (_: Exception) {
+                    0L
+                }
+            }
         }
     }
 }
@@ -198,7 +192,7 @@ object NullableTimestampSerializer : KSerializer<Long?> {
             val element = jsonInput.decodeJsonElement()
             if (element is JsonNull) return null
             if (element is JsonPrimitive) {
-                return element.content.toLongOrNull() ?: parseIsoToEpoch(element.content)
+                return element.content.toLongOrNull() ?: TimestampSerializer.parseIsoToEpoch(element.content)
             }
             return null
         }
@@ -207,28 +201,9 @@ object NullableTimestampSerializer : KSerializer<Long?> {
         } catch (_: Exception) {
             try {
                 val str = decoder.decodeString()
-                parseIsoToEpoch(str)
+                TimestampSerializer.parseIsoToEpoch(str)
             } catch (_: Exception) {
                 null
-            }
-        }
-    }
-
-    private fun parseIsoToEpoch(raw: String): Long? {
-        return try {
-            java.time.Instant.parse(raw).toEpochMilli()
-        } catch (_: Exception) {
-            try {
-                java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli()
-            } catch (_: Exception) {
-                try {
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                        timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    }
-                    sdf.parse(raw)?.time
-                } catch (_: Exception) {
-                    null
-                }
             }
         }
     }
@@ -364,13 +339,48 @@ data class VitalMetricRecord(
 
 // MARK: - Sleep Stages & Sessions
 
-@Serializable
+object SleepStageTypeSerializer : KSerializer<SleepStageType> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("SleepStageType", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: SleepStageType) {
+        encoder.encodeString(value.rawValue)
+    }
+
+    override fun deserialize(decoder: Decoder): SleepStageType {
+        val str = try {
+            if (decoder is JsonDecoder) {
+                decoder.decodeJsonElement().jsonPrimitive.content
+            } else {
+                decoder.decodeString()
+            }
+        } catch (_: Exception) {
+            ""
+        }
+        return SleepStageType.from(str)
+    }
+}
+
+@Serializable(with = SleepStageTypeSerializer::class)
 enum class SleepStageType(val rawValue: String, val hexColor: String, val sortOrder: Int) {
     @SerialName("Awake") AWAKE("Awake", "#FF7043", 0), // Coral Orange
     @SerialName("REM") REM("REM", "#26C6DA", 1),       // Cyan Glow
     @SerialName("Light") LIGHT("Light", "#42A5F5", 2), // Sky Blue
     @SerialName("Deep") DEEP("Deep", "#3949AB", 3),    // Indigo Midnight
-    @SerialName("Unknown") UNKNOWN("Unknown", "#78909C", 4) // Muted Slate
+    @SerialName("Unknown") UNKNOWN("Unknown", "#78909C", 4); // Muted Slate
+
+    companion object {
+        fun from(raw: String?): SleepStageType {
+            val clean = raw?.trim()?.lowercase() ?: return UNKNOWN
+            return when {
+                clean == "awake" || clean == "wake" || clean == "out_of_bed" -> AWAKE
+                clean == "rem" -> REM
+                clean == "light" || clean == "core" -> LIGHT
+                clean == "deep" -> DEEP
+                else -> UNKNOWN
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalSerializationApi::class)

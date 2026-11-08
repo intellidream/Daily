@@ -110,22 +110,49 @@ object TimestampSerializer : KSerializer<Long> {
         }
     }
 
-    private fun parseIsoToEpoch(raw: String): Long {
+    fun parseIsoToEpoch(raw: String): Long {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return System.currentTimeMillis()
+
+        trimmed.toLongOrNull()?.let { num ->
+            return if (num < 100_000_000_000L) num * 1000L else num
+        }
+
+        val normalized = trimmed.replace(' ', 'T')
+
+        // 1. Instant (e.g. 2026-11-08T00:06:59.000Z or 2026-11-08T00:06:59Z)
+        try {
+            return java.time.Instant.parse(normalized).toEpochMilli()
+        } catch (_: Exception) {}
+
+        // 2. OffsetDateTime (e.g. 2026-11-08T00:06:59.000+00:00 or 2026-11-08T00:06:59+00:00)
+        try {
+            return java.time.OffsetDateTime.parse(normalized).toInstant().toEpochMilli()
+        } catch (_: Exception) {}
+
+        // 3. LocalDateTime (e.g. 2026-11-08T00:06:59.000 or 2026-11-08T00:06:59 - no offset -> treat as UTC)
+        try {
+            return java.time.LocalDateTime.parse(normalized).toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
+        } catch (_: Exception) {}
+
+        // 4. Try appending 'Z' if missing offset
+        try {
+            return java.time.Instant.parse(normalized + "Z").toEpochMilli()
+        } catch (_: Exception) {}
+
+        // 5. Date only (e.g. 2026-11-08)
+        try {
+            val dateStr = if (normalized.contains('T')) normalized.substringBefore('T') else normalized
+            return java.time.LocalDate.parse(dateStr).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        } catch (_: Exception) {}
+
         return try {
-            java.time.Instant.parse(raw).toEpochMilli()
-        } catch (_: Exception) {
-            try {
-                java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli()
-            } catch (_: Exception) {
-                try {
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                        timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    }
-                    sdf.parse(raw)?.time ?: System.currentTimeMillis()
-                } catch (_: Exception) {
-                    System.currentTimeMillis()
-                }
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
             }
+            sdf.parse(trimmed)?.time ?: System.currentTimeMillis()
+        } catch (_: Exception) {
+            System.currentTimeMillis()
         }
     }
 }

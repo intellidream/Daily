@@ -3042,7 +3042,7 @@ class HealthDataRepository(
     }
 
     companion object {
-        const val CURRENT_SUMMARY_CACHE_VERSION = 2
+        const val CURRENT_SUMMARY_CACHE_VERSION = 3
 
         data class ArbitratedActivityResult(
             val totalSteps: Int,
@@ -3098,25 +3098,7 @@ class HealthDataRepository(
 
         fun parseIsoToEpochMs(raw: String?): Long? {
             if (raw.isNullOrBlank()) return null
-            val trimmed = raw.trim()
-            trimmed.toLongOrNull()?.let { return it }
-            return try {
-                java.time.Instant.parse(trimmed).toEpochMilli()
-            } catch (_: Exception) {
-                try {
-                    java.time.OffsetDateTime.parse(trimmed).toInstant().toEpochMilli()
-                } catch (_: Exception) {
-                    try {
-                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).parse(trimmed)?.time
-                    } catch (_: Exception) {
-                        try {
-                            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(trimmed)?.time
-                        } catch (_: Exception) {
-                            null
-                        }
-                    }
-                }
-            }
+            return com.intellidream.daily.model.TimestampSerializer.parseIsoToEpoch(raw)
         }
 
         /**
