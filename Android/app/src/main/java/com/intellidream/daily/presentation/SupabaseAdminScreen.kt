@@ -111,11 +111,13 @@ fun SupabaseAdminScreen(
     val creds by repo.credentials.collectAsState()
     val snapshot by repo.snapshot.collectAsState()
     val isLoading by repo.isLoading.collectAsState()
+    val isScanningGatewayLogs by repo.isScanningGatewayLogs.collectAsState()
     val isAnalyzingAi by repo.isAnalyzingAi.collectAsState()
     val aiAnalysis by repo.aiAnalysis.collectAsState()
     val errorMsg by repo.errorMessage.collectAsState()
 
     var activeTab by remember { mutableStateOf(AdminFilterTab.ALL) }
+    var gatewayScanWindowHours by remember { mutableStateOf(1) }
     var feedbackToast by remember { mutableStateOf<String?>(null) }
     var showProjectMenu by remember { mutableStateOf(false) }
 
@@ -316,7 +318,7 @@ fun SupabaseAdminScreen(
                                 CircularProgressIndicator(color = ThemeColors.accentCyan)
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    text = "Fetching Supabase Quotas, ClickHouse Logs & pg_catalog...",
+                                    text = "Fetching Supabase Quotas, Billing Usage & pg_catalog (0 B Log Query)...",
                                     color = ThemeColors.fgMutedDark,
                                     fontSize = 13.sp
                                 )
@@ -469,10 +471,16 @@ fun SupabaseAdminScreen(
                         }
                     }
 
-                    // 3. ClickHouse Logs & Gateway Routes
+                    // 3. ClickHouse Logs & Gateway Routes (On-Demand Zero-Log-Query)
                     if (activeTab == AdminFilterTab.ALL || activeTab == AdminFilterTab.GATEWAY) {
                         item {
-                            GatewayRoutesCard(snap = snap)
+                            GatewayRoutesCard(
+                                snap = snap,
+                                isScanning = isScanningGatewayLogs,
+                                selectedWindowHours = gatewayScanWindowHours,
+                                onSelectWindowHours = { gatewayScanWindowHours = it },
+                                onScanLogs = { hrs -> scope.launch { repo.scanGatewayLogs(hrs) } }
+                            )
                         }
                     }
 
@@ -646,10 +654,15 @@ private fun BillingCycleEgressCard(snap: SupabaseAdminSnapshot) {
                         Text(text = "Cached CDN:", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                         Text(text = cachedEgress, color = ThemeColors.accentCyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
                     }
-                } else {
+                } else if (snap.hasScannedGatewayLogs) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(text = "Requests:", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                         Text(text = "${snap.totalHttpRequests24h}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(text = "Log Query:", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        Text(text = "0 B on refresh", color = ThemeColors.success, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
                     }
                 }
             }
@@ -692,15 +705,22 @@ private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BillingCycleEgressCard(snap = snap)
 
+        val gwQuotaText = if (snap.hasScannedGatewayLogs) "${snap.totalHttpRequests24h} reqs" else "Daily share"
+        val gwSubText = when {
+            snap.cachedEgressUsedBytes > 0L -> "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}"
+            snap.hasScannedGatewayLogs -> "${snap.gatewayScanWindowHours ?: 24}h HTTP: ${snap.totalHttpRequests24h}"
+            else -> "0 B Log Query"
+        }
+
         if (isWide) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 QuotaGaugeTile(
                     modifier = Modifier.weight(1f),
                     title = "Gateway Egress (24h)",
                     used = h24Used,
-                    quota = "${snap.totalHttpRequests24h} reqs",
+                    quota = gwQuotaText,
                     percent = snap.egress24hQuotaPercent,
-                    sub = if (snap.cachedEgressUsedBytes > 0) "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}" else "24h HTTP: ${snap.totalHttpRequests24h}"
+                    sub = gwSubText
                 )
                 QuotaGaugeTile(
                     modifier = Modifier.weight(1f),
@@ -742,7 +762,7 @@ private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) 
                     used = logQueryUsed,
                     quota = logQueryQuota,
                     percent = snap.logQueryQuotaPercent,
-                    sub = "Analytics queries"
+                    sub = "0 B on refresh · On-demand"
                 )
             }
         } else {
@@ -751,9 +771,9 @@ private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) 
                     modifier = Modifier.weight(1f),
                     title = "Gateway Egress (24h)",
                     used = h24Used,
-                    quota = "${snap.totalHttpRequests24h} reqs",
+                    quota = gwQuotaText,
                     percent = snap.egress24hQuotaPercent,
-                    sub = if (snap.cachedEgressUsedBytes > 0) "CDN: ${SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes)}" else "24h HTTP: ${snap.totalHttpRequests24h}"
+                    sub = gwSubText
                 )
                 QuotaGaugeTile(
                     modifier = Modifier.weight(1f),
@@ -797,7 +817,7 @@ private fun ExecutiveQuotaSection(snap: SupabaseAdminSnapshot, isWide: Boolean) 
                     used = logQueryUsed,
                     quota = logQueryQuota,
                     percent = snap.logQueryQuotaPercent,
-                    sub = "Analytics queries"
+                    sub = "0 B on refresh · On-demand"
                 )
             }
         }
@@ -1179,31 +1199,159 @@ private fun DatabaseForensicsCard(snap: SupabaseAdminSnapshot) {
 }
 
 @Composable
-private fun GatewayRoutesCard(snap: SupabaseAdminSnapshot) {
+private fun GatewayRoutesCard(
+    snap: SupabaseAdminSnapshot,
+    isScanning: Boolean,
+    selectedWindowHours: Int,
+    onSelectWindowHours: (Int) -> Unit,
+    onScanLogs: (Int) -> Unit
+) {
+    val activeWindowLabel = snap.gatewayScanWindowHours ?: selectedWindowHours
     GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 18.dp, padding = 16.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Top 24h HTTP Gateway Routes", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("2xx: ${snap.http2xxCount24h} · 4xx: ${snap.http4xxCount24h} · 5xx: ${snap.http5xxCount24h}", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
-            snap.topRoutes24h.take(10).forEach { r ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (snap.hasScannedGatewayLogs) "HTTP Gateway Routes (${activeWindowLabel}h)" else "HTTP Gateway Forensics",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                if (snap.hasScannedGatewayLogs) {
                     Text(
-                        text = "${r.method} ${r.path}",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "${r.requests24h} req · ${SupabaseAdminSnapshot.formatBytes(r.responseBytes24h)}",
+                        text = "2xx: ${snap.http2xxCount24h} · 4xx: ${snap.http4xxCount24h} · 5xx: ${snap.http5xxCount24h}",
                         color = ThemeColors.fgMutedDark,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace
                     )
+                } else {
+                    Text(
+                        text = "0 B Log Query",
+                        color = ThemeColors.success,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(ThemeColors.success.copy(alpha = 0.16f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            // On-Demand ClickHouse Single-Pass Scanner Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(1, 6, 24).forEach { hrs ->
+                        val selected = selectedWindowHours == hrs
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(if (selected) ThemeColors.accentCyan else Color.White.copy(alpha = 0.08f))
+                                .clickable(enabled = !isScanning) { onSelectWindowHours(hrs) }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${hrs}h",
+                                color = if (selected) Color.Black else Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ThemeColors.accentCyan.copy(alpha = if (isScanning) 0.5f else 1.0f))
+                        .clickable(enabled = !isScanning) { onScanLogs(selectedWindowHours) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (isScanning) {
+                            CircularProgressIndicator(
+                                color = Color.Black,
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.8.dp
+                            )
+                        }
+                        Text(
+                            text = if (isScanning) "Scanning..." else "Scan Logs",
+                            color = Color.Black,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            if (!snap.hasScannedGatewayLogs) {
+                Text(
+                    text = "Zero-Log-Query protection active: standard refreshes consume 0 B of ClickHouse Log Query quota. Select 1h (recommended), 6h, or 24h and tap Scan Logs for single-pass route & User-Agent forensics.",
+                    color = ThemeColors.fgMutedDark,
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.sp
+                )
+            } else {
+                snap.topRoutes24h.take(10).forEach { r ->
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            text = "${r.method} ${r.path}",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "${r.requests24h} req · ${SupabaseAdminSnapshot.formatBytes(r.responseBytes24h)}",
+                            color = ThemeColors.fgMutedDark,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+                if (snap.recentErrors24h.isNotEmpty()) {
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    Text(
+                        text = "Recent 4xx/5xx Gateway Statuses",
+                        color = ThemeColors.warning,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    snap.recentErrors24h.take(5).forEach { err ->
+                        Text(
+                            text = err.message.ifBlank { "${err.method} ${err.path} -> HTTP ${err.statusCode}" },
+                            color = ThemeColors.fgMutedDark,
+                            fontSize = 10.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -1224,7 +1372,12 @@ private fun RuntimeFunctionsRealtimeCard(snap: SupabaseAdminSnapshot) {
             snap.edgeFunctions.forEach { fn ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${fn.slug} (v${fn.version})", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
-                    Text("${fn.invocations24h} calls · ${String.format(Locale.US, "%.0f ms", fn.avgExecutionMs)}", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    val rightLabel = if (fn.invocations24h > 0) {
+                        "${fn.invocations24h} calls" + if (fn.avgExecutionMs > 0.0) " · ${String.format(Locale.US, "%.0f ms", fn.avgExecutionMs)}" else ""
+                    } else {
+                        "${fn.status} · JWT ${if (fn.verifyJwt) "On" else "Off"}"
+                    }
+                    Text(rightLabel, color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 }
             }
         }
@@ -1239,7 +1392,14 @@ private fun FleetAndAdvisorsCard(snap: SupabaseAdminSnapshot) {
             snap.fleetDevices.forEach { dev ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(dev.displayName, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    Text("${dev.requests24h} req (${String.format(Locale.US, "%.0f%%", dev.sharePercent)})", color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    val fleetMeta = if (dev.requests24h > 0) {
+                        "${dev.requests24h} req (${String.format(Locale.US, "%.0f%%", dev.sharePercent)})"
+                    } else if (dev.registeredSources.isNotEmpty()) {
+                        "${dev.registeredSources.size} registered"
+                    } else {
+                        "Idle"
+                    }
+                    Text(fleetMeta, color = ThemeColors.fgMutedDark, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 }
             }
             val lints = snap.securityLints + snap.performanceLints

@@ -168,4 +168,103 @@ final class SupabaseAdminServiceTests: XCTestCase {
         let cycleNov25 = SupabaseAdminSnapshot.computeBillingCyclePeriodFromCreation(dateString: "2024-10-19T14:32:00Z", referenceDate: nov25_2026)
         XCTAssertEqual(cycleNov25, "19 Nov 2026 - 19 Dec 2026")
     }
+
+    func testZeroLogQueryDefaultsSinglePassClickHouseScannerAndLegacySnapshotDecode() throws {
+        XCTAssertEqual(SupabaseAdminService.cacheTtlSeconds, 1800)
+
+        let sql = SupabaseAdminService.buildSinglePassGatewayClickHouseSql()
+        XCTAssertTrue(sql.contains("WHERE source = 'edge_logs'"))
+        XCTAssertFalse(sql.contains("event_message"), "Single-pass ClickHouse SQL must never scan event_message")
+        XCTAssertTrue(sql.contains("GROUP BY method, path, ua"))
+
+        let sampleRows: [[String: Any]] = [
+            [
+                "method": "GET",
+                "path": "/rest/v1/health_metrics",
+                "ua": "Daily/1.0 CFNetwork/1568 Darwin/24 (iPhone; iOS 18.2)",
+                "req_count": 40,
+                "resp_bytes": 120_000,
+                "avg_ms": 18.0,
+                "ok_cnt": 39,
+                "err_4xx": 1,
+                "err_5xx": 0,
+                "max_status": 401,
+                "last_ts": "2026-11-08T21:10:00Z"
+            ],
+            [
+                "method": "GET",
+                "path": "/rest/v1/health_metrics",
+                "ua": "Ktor client / OkHttp 4.12 Android 16",
+                "req_count": 10,
+                "resp_bytes": 30_000,
+                "avg_ms": 28.0,
+                "ok_cnt": 10,
+                "err_4xx": 0,
+                "err_5xx": 0,
+                "max_status": 200,
+                "last_ts": "2026-11-08T21:12:00Z"
+            ],
+            [
+                "method": "POST",
+                "path": "/functions/v1/gemini-proxy",
+                "ua": "Daily.WinUI/1.0 (.NET 10.0; Windows NT 10.0)",
+                "req_count": 4,
+                "resp_bytes": 0, // chunked-encoding fallback -> 4 * 1150 = 4600
+                "avg_ms": 420.0,
+                "ok_cnt": 3,
+                "err_4xx": 0,
+                "err_5xx": 1,
+                "max_status": 502,
+                "last_ts": "2026-11-08T21:14:00Z"
+            ]
+        ]
+
+        let parsed = SupabaseAdminService.parseSinglePassClickHouseRows(sampleRows, windowHours: 1)
+        XCTAssertEqual(parsed.http2xxCount, 52)
+        XCTAssertEqual(parsed.http4xxCount, 1)
+        XCTAssertEqual(parsed.http5xxCount, 1)
+        XCTAssertEqual(parsed.topRoutes.count, 2)
+        XCTAssertEqual(parsed.topRoutes.first?.path, "/rest/v1/health_metrics")
+        XCTAssertEqual(parsed.topRoutes.first?.requests24h, 50)
+        XCTAssertEqual(parsed.topRoutes.first?.responseBytes24h, 150_000)
+        // Weighted latency: (40*18 + 10*28) / 50 = (720 + 280) / 50 = 20.0 ms
+        XCTAssertEqual(parsed.topRoutes.first?.avgLatencyMs ?? 0, 20.0, accuracy: 0.01)
+        XCTAssertEqual(parsed.topRoutes.last?.responseBytes24h, 4600)
+        XCTAssertEqual(parsed.fleetBuckets.count, 3)
+        XCTAssertEqual(parsed.recentErrors.count, 2)
+        XCTAssertTrue(parsed.recentErrors.contains(where: { $0.statusCode == 502 && $0.message.contains("1h") }))
+
+        // Unscanned snapshot defaults to 0 B Log Query mode
+        let unscanned = SupabaseAdminSnapshot(
+            project: SupabaseProjectSummary(
+                ref: "akkfouifxztnfwwiclwg",
+                name: "Daily",
+                organizationSlug: "ysecyyonrhezcfmqfbhg",
+                region: "eu-central-1",
+                status: "ACTIVE_HEALTHY",
+                postgresVersion: "17"
+            ),
+            logQueryBytes: 98_500_000_000,
+            logQueryQuotaBytes: 100_000_000_000
+        )
+        XCTAssertFalse(unscanned.hasScannedGatewayLogs)
+        XCTAssertTrue(unscanned.toMarkdownReport().contains("On-Demand Zero-Log-Query Mode"))
+        let summary = SupabaseAdminService.buildDeterministicDiagnosticSummary(snapshot: unscanned)
+        XCTAssertTrue(summary.contains("ClickHouse Log Query Guard"))
+
+        // Backward-compatible decode when gatewayLogsScannedAt & gatewayScanWindowHours keys are absent in cached v3 JSON
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let rawData = try encoder.encode(unscanned)
+        var jsonObj = try XCTUnwrap(JSONSerialization.jsonObject(with: rawData) as? [String: Any])
+        jsonObj.removeValue(forKey: "gatewayLogsScannedAt")
+        jsonObj.removeValue(forKey: "gatewayScanWindowHours")
+        let legacyData = try JSONSerialization.data(withJSONObject: jsonObj)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(SupabaseAdminSnapshot.self, from: legacyData)
+        XCTAssertFalse(decoded.hasScannedGatewayLogs)
+        XCTAssertNil(decoded.gatewayLogsScannedAt)
+        XCTAssertNil(decoded.gatewayScanWindowHours)
+    }
 }

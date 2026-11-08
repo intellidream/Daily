@@ -25,7 +25,7 @@ public sealed class SupabaseAdminService
 
     private const string ManagementBaseUrl = "https://api.supabase.com/v1";
     private const string PlatformBaseUrl = "https://api.supabase.com/platform";
-    private const long SnapshotCacheTtlMs = 10L * 60L * 1000L; // 10-min TTL
+    public const long SnapshotCacheTtlMs = 30L * 60L * 1000L; // 30-min TTL
 
     private static readonly string LocalDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -46,6 +46,7 @@ public sealed class SupabaseAdminService
     public SupabaseAdminCredentials Credentials { get; private set; } = new();
     public SupabaseAdminSnapshot? Snapshot { get; private set; }
     public bool IsLoading { get; private set; }
+    public bool IsScanningGatewayLogs { get; private set; }
     public bool IsAnalyzingAi { get; private set; }
     public string? AiAnalysis { get; private set; }
     public string? ErrorMessage { get; private set; }
@@ -453,7 +454,7 @@ public sealed class SupabaseAdminService
     }
 
     // -------------------------------------------------------------------------
-    // Parallel Read-Only Telemetry Fetcher (10-min TTL Cache)
+    // Parallel Read-Only Telemetry Fetcher (30-min TTL Cache, Zero-Log-Query Default)
     // -------------------------------------------------------------------------
 
     public async Task EnsureLoadedOnAppearAsync()
@@ -465,7 +466,7 @@ public sealed class SupabaseAdminService
         if (snap != null)
         {
             var ageMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - snap.FetchedAtEpochMs;
-            if (snap.HasExactBillingMetrics && ageMs < SnapshotCacheTtlMs && snap.Project.Ref == Credentials.SelectedProjectRef)
+            if (ageMs < SnapshotCacheTtlMs && snap.Project.Ref == Credentials.SelectedProjectRef)
             {
                 return;
             }
@@ -588,7 +589,7 @@ public sealed class SupabaseAdminService
     {
         if (!Credentials.IsAuthenticated) return;
 
-        if (!force && Snapshot != null && Snapshot.HasExactBillingMetrics)
+        if (!force && Snapshot != null)
         {
             var ageMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - Snapshot.FetchedAtEpochMs;
             if (ageMs < SnapshotCacheTtlMs && Snapshot.Project.Ref == Credentials.SelectedProjectRef)
@@ -618,6 +619,8 @@ public sealed class SupabaseAdminService
                 ?? availableProjects.FirstOrDefault()
                 ?? new SupabaseProjectSummary { Ref = targetRef };
 
+            var priorSnap = (Snapshot != null && Snapshot.Project.Ref == activeProject.Ref) ? Snapshot : null;
+
             if (Credentials.SelectedProjectRef != activeProject.Ref)
             {
                 Credentials.SelectedProjectRef = activeProject.Ref;
@@ -630,21 +633,15 @@ public sealed class SupabaseAdminService
                 orgSlug = activeProject.OrganizationSlug;
             }
 
-            // Launch all read-only telemetry queries in parallel
+            // Zero-Log-Query Parallel Fetch: 0 ClickHouse `/analytics/endpoints/logs`, `usage.api-counts`, or `functions.combined-stats` calls!
             var diskTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/config/disk", mgmtBearer);
             var addonsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/billing/addons", mgmtBearer);
-            var apiCountsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/analytics/endpoints/usage.api-counts?interval=1day", mgmtBearer);
             var functionsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/functions", mgmtBearer);
-            var fnStatsTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/analytics/endpoints/functions.combined-stats?interval=1day", mgmtBearer);
             var perfAdvTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/advisors/performance", mgmtBearer);
             var secAdvTask = PerformGetStringOptionalAsync($"{ManagementBaseUrl}/projects/{activeProject.Ref}/advisors/security", mgmtBearer);
 
-            var dbSqlTask = ExecuteReadOnlySqlAsync(activeProject.Ref, mgmtBearer, BuildDatabaseForensicsSql());
-            var cronSqlTask = ExecuteReadOnlySqlAsync(activeProject.Ref, mgmtBearer, BuildCronAndStatementsSql());
-            var logsSummaryTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildGatewaySummaryClickHouseSql());
-            var logsRoutesTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildTopRoutesClickHouseSql());
-            var logsClientsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildClientFootprintClickHouseSql());
-            var logsErrorsTask = ExecuteClickHouseLogsAsync(activeProject.Ref, mgmtBearer, BuildRecentErrorsClickHouseSql());
+            // Single consolidated read-only SQL JSON CTE query (1 POST instead of multiple POSTs)
+            var pgConsolidatedTask = ExecuteReadOnlySqlAsync(activeProject.Ref, mgmtBearer, BuildConsolidatedPostgresForensicsSql());
 
             // /platform/organizations/{slug}/usage strictly requires GoTrue Dashboard session JWT (falls back to PAT if needed)
             var platformPrimary = !string.IsNullOrWhiteSpace(freshDashBearer)
@@ -652,7 +649,6 @@ public sealed class SupabaseAdminService
                 : (!string.IsNullOrWhiteSpace(Credentials.DashboardAccessToken) ? Credentials.DashboardAccessToken! : mgmtBearer);
             var platformFallback = platformPrimary != mgmtBearer ? mgmtBearer : null;
 
-            // Subscription query for billing cycle dates
             var subTask1 = !string.IsNullOrWhiteSpace(orgSlug)
                 ? PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", platformPrimary, platformFallback)
                 : Task.FromResult<string?>(null);
@@ -660,7 +656,6 @@ public sealed class SupabaseAdminService
                 ? PerformGetStringOptionalAsync($"{ManagementBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/billing/subscription", mgmtBearer)
                 : Task.FromResult<string?>(null);
 
-            // Platform usage queries: org-level first, then project-level fallback
             var usageOrgTask = !string.IsNullOrWhiteSpace(orgSlug)
                 ? PerformGetStringWithFallbackAsync($"{PlatformBaseUrl}/organizations/{Uri.EscapeDataString(orgSlug!)}/usage", platformPrimary, platformFallback)
                 : Task.FromResult<string?>(null);
@@ -672,21 +667,22 @@ public sealed class SupabaseAdminService
                 : Task.FromResult<string?>(null);
 
             await Task.WhenAll(
-                diskTask, addonsTask, apiCountsTask, functionsTask, fnStatsTask, perfAdvTask, secAdvTask,
-                dbSqlTask, cronSqlTask, logsSummaryTask, logsRoutesTask, logsClientsTask, logsErrorsTask,
+                diskTask, addonsTask, functionsTask, perfAdvTask, secAdvTask,
+                pgConsolidatedTask,
                 subTask1, subTask2, usageOrgTask, usageProjTask, usageV1Task).ConfigureAwait(false);
+
+            var pgJson = pgConsolidatedTask.Result;
+            if (string.IsNullOrWhiteSpace(pgJson))
+            {
+                pgJson = await ExecuteReadOnlySqlAsync(activeProject.Ref, mgmtBearer, BuildDatabaseForensicsSql()).ConfigureAwait(false);
+            }
 
             var (diskSizeGb, diskType, diskIops, diskThroughput) = ParseDiskConfig(diskTask.Result);
             var (orgPlan, computeTier) = ParseAddonsAndPlan(addonsTask.Result);
-            var (rest24h, auth24h, storage24h, realtime24h, dailySeriesFromCounts) = ParseUsageApiCounts(apiCountsTask.Result);
 
-            var dbForensics = ParseDbForensics(dbSqlTask.Result);
-            var (cronJobs, topStatements, rtCpuPct, rtCalls) = ParseCronAndStatements(cronSqlTask.Result);
-            var (gwTotal, gw2xx, gw4xx, gw5xx, gwBytes) = ParseGatewaySummary(logsSummaryTask.Result);
-            var topRoutes = ParseTopRoutes(logsRoutesTask.Result);
-            var clients = ParseEcosystemClients(logsClientsTask.Result);
-            var recentErrors = ParseRecentErrors(logsErrorsTask.Result);
-            var edgeFunctions = ParseEdgeFunctions(functionsTask.Result, fnStatsTask.Result);
+            var dbForensics = ParseDbForensics(pgJson);
+            var (cronJobs, topStatements, rtCpuPct, rtCalls) = ParseCronAndStatements(pgJson);
+            var edgeFunctions = ParseEdgeFunctions(functionsTask.Result, null);
             var advisors = ParseAdvisors(perfAdvTask.Result, secAdvTask.Result);
 
             var subRaw = subTask1.Result ?? subTask2.Result;
@@ -746,7 +742,7 @@ public sealed class SupabaseAdminService
                 defaultDbQuotaBytes,
                 defaultStorageQuotaBytes,
                 defaultMauQuota,
-                gwBytes);
+                0L);
 
             List<SupabaseDailyEgressPoint>? platformDailySeries = null;
             if (!string.IsNullOrWhiteSpace(orgSlug))
@@ -763,15 +759,30 @@ public sealed class SupabaseAdminService
 
             var dailySeries = (platformDailySeries != null && platformDailySeries.Count > 0)
                 ? platformDailySeries.TakeLast(14).ToList()
-                : ScaleDailySeriesWithGatewayBytes(dailySeriesFromCounts, gwBytes);
+                : (priorSnap?.DailyEgressSeries.ToList() ?? new List<SupabaseDailyEgressPoint>());
 
+            var cycleBytes = (long)(billing.EgressUsedGb * 1_000_000_000.0);
             var lastPointBytes = (dailySeries.Count > 0) ? dailySeries[^1].TotalBytes : 0L;
-            long apiCountEstimatedBytes = (rest24h * 2048L) + (auth24h * 1024L) + (storage24h * 8192L) + (realtime24h * 768L);
-            long resolved24hEgress = gwBytes > 0
-                ? gwBytes
-                : ((lastPointBytes > 0 && lastPointBytes < (long)(billing.EgressUsedGb * 1_000_000_000.0))
-                    ? lastPointBytes
-                    : (apiCountEstimatedBytes > 0 ? apiCountEstimatedBytes : 0L));
+            long resolved24hEgress = 0L;
+            if (lastPointBytes > 0 && (cycleBytes <= 0 || lastPointBytes < cycleBytes))
+            {
+                resolved24hEgress = lastPointBytes;
+            }
+            else if (priorSnap != null && priorSnap.GatewayEgressBytes24h > 0 && (cycleBytes <= 0 || priorSnap.GatewayEgressBytes24h < cycleBytes))
+            {
+                resolved24hEgress = priorSnap.GatewayEgressBytes24h;
+            }
+
+            long resolvedFnInvocations = billing.FunctionInvocations > 0 ? billing.FunctionInvocations : edgeFunctions.Sum(f => f.Invocations24h);
+            if (edgeFunctions.Count == 1 && edgeFunctions[0].Invocations24h == 0 && resolvedFnInvocations > 0)
+            {
+                edgeFunctions[0].Invocations24h = resolvedFnInvocations;
+            }
+
+            bool hasPriorScan = priorSnap?.HasScannedGatewayLogs == true;
+            var baselineClients = BuildClientsFromHealthSources(
+                hasPriorScan ? priorSnap!.EcosystemClients : Array.Empty<SupabaseClientFootprint>(),
+                dbForensics.HealthSourceNames);
 
             var built = new SupabaseAdminSnapshot
             {
@@ -803,7 +814,7 @@ public sealed class SupabaseAdminService
                 MauQuota = billing.MauQuota > 0 ? billing.MauQuota : defaultMauQuota,
                 ActiveSessionsCount = dbForensics.ActiveSessions,
                 PairedWatchesCount = dbForensics.PairedWatches,
-                FunctionInvocations = billing.FunctionInvocations > 0 ? billing.FunctionInvocations : edgeFunctions.Sum(f => f.Invocations24h),
+                FunctionInvocations = resolvedFnInvocations,
                 FunctionInvocationsQuota = billing.FunctionInvocationsQuota,
                 RealtimeMessages = billing.RealtimeMessages,
                 RealtimeMessagesQuota = billing.RealtimeMessagesQuota,
@@ -813,15 +824,17 @@ public sealed class SupabaseAdminService
                 LogIngestionQuotaGb = billing.LogIngestionQuotaGb,
                 LogQueryGb = billing.LogQueryGb,
                 LogQueryQuotaGb = billing.LogQueryQuotaGb,
-                GatewayRequests24h = gwTotal > 0 ? gwTotal : (rest24h + auth24h + storage24h + realtime24h),
-                Gateway2xx24h = gw2xx,
-                Gateway4xx24h = gw4xx,
-                Gateway5xx24h = gw5xx,
+                GatewayLogsScannedAtEpochMs = hasPriorScan ? priorSnap!.GatewayLogsScannedAtEpochMs : null,
+                GatewayScanWindowHours = hasPriorScan ? priorSnap!.GatewayScanWindowHours : null,
+                GatewayRequests24h = hasPriorScan ? priorSnap!.GatewayRequests24h : 0,
+                Gateway2xx24h = hasPriorScan ? priorSnap!.Gateway2xx24h : 0,
+                Gateway4xx24h = hasPriorScan ? priorSnap!.Gateway4xx24h : 0,
+                Gateway5xx24h = hasPriorScan ? priorSnap!.Gateway5xx24h : 0,
                 GatewayEgressBytes24h = resolved24hEgress,
-                RestRequests24h = rest24h,
-                AuthRequests24h = auth24h,
-                StorageRequests24h = storage24h,
-                RealtimeRequests24h = realtime24h,
+                RestRequests24h = hasPriorScan ? priorSnap!.RestRequests24h : 0,
+                AuthRequests24h = hasPriorScan ? priorSnap!.AuthRequests24h : 0,
+                StorageRequests24h = hasPriorScan ? priorSnap!.StorageRequests24h : 0,
+                RealtimeRequests24h = hasPriorScan ? priorSnap!.RealtimeRequests24h : 0,
                 ActiveRealtimeSubscriptions = dbForensics.RealtimeTotal,
                 RealtimeSubscriptionsByTable = dbForensics.RealtimeByTable,
                 RealtimeListChangesCpuPercent = rtCpuPct,
@@ -830,10 +843,10 @@ public sealed class SupabaseAdminService
                 TopTables = dbForensics.Tables,
                 TopSqlStatements = topStatements,
                 CronJobs = cronJobs,
-                TopGatewayRoutes = topRoutes,
-                RecentGatewayErrors = recentErrors,
+                TopGatewayRoutes = hasPriorScan ? priorSnap!.TopGatewayRoutes : Array.Empty<SupabaseGatewayRouteStat>(),
+                RecentGatewayErrors = hasPriorScan ? priorSnap!.RecentGatewayErrors : Array.Empty<SupabaseGatewayErrorEvent>(),
                 EdgeFunctions = edgeFunctions,
-                EcosystemClients = clients,
+                EcosystemClients = baselineClients,
                 Advisors = advisors
             };
 
@@ -851,6 +864,83 @@ public sealed class SupabaseAdminService
         finally
         {
             IsLoading = false;
+            NotifyStateChanged();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // On-Demand Single-Pass ClickHouse Gateway Log Scanner (`1h`, `6h`, `24h`)
+    // -------------------------------------------------------------------------
+
+    public async Task ScanGatewayLogsAsync(int windowHours = 1)
+    {
+        if (IsScanningGatewayLogs || !Credentials.IsAuthenticated) return;
+
+        if (Snapshot == null)
+        {
+            await RefreshSnapshotAsync(force: true).ConfigureAwait(false);
+        }
+        var currentSnap = Snapshot;
+        if (currentSnap == null) return;
+
+        int clampedWindow = windowHours >= 24 ? 24 : (windowHours >= 6 ? 6 : 1);
+        IsScanningGatewayLogs = true;
+        NotifyStateChanged();
+
+        try
+        {
+            var freshDash = await EnsureFreshDashboardTokenAsync(forceRefresh: false).ConfigureAwait(false);
+            var mgmtBearer = !string.IsNullOrWhiteSpace(Credentials.PatToken)
+                ? Credentials.PatToken!
+                : (freshDash ?? Credentials.DashboardAccessToken ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(mgmtBearer)) return;
+
+            var rawJson = await ExecuteClickHouseLogsAsync(
+                currentSnap.Project.Ref,
+                mgmtBearer,
+                BuildSinglePassGatewayClickHouseSql(),
+                clampedWindow).ConfigureAwait(false);
+
+            var parsed = ParseSinglePassClickHouseRows(rawJson, clampedWindow);
+
+            currentSnap.GatewayLogsScannedAtEpochMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            currentSnap.GatewayScanWindowHours = clampedWindow;
+            currentSnap.GatewayRequests24h = parsed.Ok2xx + parsed.Err4xx + parsed.Err5xx;
+            currentSnap.Gateway2xx24h = parsed.Ok2xx;
+            currentSnap.Gateway4xx24h = parsed.Err4xx;
+            currentSnap.Gateway5xx24h = parsed.Err5xx;
+            currentSnap.RestRequests24h = parsed.TopRoutes.Where(r => r.Path.StartsWith("/rest/")).Sum(r => r.RequestCount);
+            currentSnap.AuthRequests24h = parsed.TopRoutes.Where(r => r.Path.StartsWith("/auth/")).Sum(r => r.RequestCount);
+            currentSnap.StorageRequests24h = parsed.TopRoutes.Where(r => r.Path.StartsWith("/storage/")).Sum(r => r.RequestCount);
+            currentSnap.RealtimeRequests24h = parsed.TopRoutes.Where(r => r.Path.StartsWith("/realtime/")).Sum(r => r.RequestCount);
+            currentSnap.TopGatewayRoutes = parsed.TopRoutes;
+            currentSnap.RecentGatewayErrors = parsed.RecentErrors;
+            if (parsed.Clients.Count > 0)
+            {
+                var priorRegByLabel = currentSnap.EcosystemClients.ToDictionary(c => c.PlatformLabel, c => c.RegisteredSourcesCount, StringComparer.Ordinal);
+                foreach (var c in parsed.Clients)
+                {
+                    if (priorRegByLabel.TryGetValue(c.PlatformLabel, out var regCnt))
+                    {
+                        c.RegisteredSourcesCount = regCnt;
+                    }
+                }
+                currentSnap.EcosystemClients = parsed.Clients;
+            }
+            if (clampedWindow == 24 && currentSnap.GatewayEgressBytes24h == 0 && parsed.TotalBytes > 0)
+            {
+                currentSnap.GatewayEgressBytes24h = parsed.TotalBytes;
+            }
+
+            try
+            {
+                await File.WriteAllTextAsync(SnapshotCachePath, JsonSerializer.Serialize(currentSnap, JsonOpts)).ConfigureAwait(false);
+            }
+            catch { }
+        }
+        finally
+        {
+            IsScanningGatewayLogs = false;
             NotifyStateChanged();
         }
     }
@@ -921,8 +1011,19 @@ public sealed class SupabaseAdminService
             sb.AppendLine($"- **Storage & B-Tree Posture**: Heap ({SupabaseAdminFormatter.FormatBytes(snap.DbHeapBytes)}) vs Indexes ({SupabaseAdminFormatter.FormatBytes(snap.DbIndexBytes)}) ratio is balanced with no severe bloat.");
         }
 
-        // 3. Gateway & Realtime WAL
-        sb.AppendLine($"- **Gateway & Realtime WAL**: {snap.GatewayRequests24h} requests in 24h (`{snap.GatewayErrorRatePercent:F2}%` non-2xx rate, {SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h)} payload). Active Realtime subscriptions: **{snap.ActiveRealtimeSubscriptions}** (`realtime.list_changes` CPU share: **{snap.RealtimeListChangesCpuPercent:F1}%**).");
+        // 3. Gateway, Log Query Guard & Realtime WAL
+        if (snap.LogQueryPercent >= 85.0)
+        {
+            sb.AppendLine($"- **ClickHouse Log Query Guard ({snap.LogQueryPercent:F1}%)**: Cycle `Log Query` stands at **{snap.LogQueryGb:F3} GB / {snap.LogQueryQuotaGb:F0} GB**. Zero-Log-Query Default Mode is active (`0 B` scanned on open/refresh); trigger On-Demand `1h` scans only when diagnosing gateway routes.");
+        }
+        else if (snap.HasScannedGatewayLogs)
+        {
+            sb.AppendLine($"- **Gateway & Realtime WAL**: {snap.GatewayRequests24h} requests scanned (`{snap.GatewayErrorRatePercent:F2}%` non-2xx rate, {SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h)} payload). Active Realtime subscriptions: **{snap.ActiveRealtimeSubscriptions}** (`realtime.list_changes` CPU share: **{snap.RealtimeListChangesCpuPercent:F1}%**).");
+        }
+        else
+        {
+            sb.AppendLine($"- **Gateway & Realtime WAL**: Zero-Log-Query mode active (`0 B` ClickHouse overhead, {SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h)} 24h gateway egress). Active Realtime subscriptions: **{snap.ActiveRealtimeSubscriptions}** (`realtime.list_changes` CPU share: **{snap.RealtimeListChangesCpuPercent:F1}%**).");
+        }
 
         // 4. Cron & Advisors
         var failingCrons = snap.CronJobs.Where(c => !c.IsHealthy).ToList();
@@ -946,7 +1047,8 @@ public sealed class SupabaseAdminService
     // SQL & ClickHouse Queries (Strictly Read-Only & Schema-Qualified)
     // -------------------------------------------------------------------------
 
-    private static string BuildDatabaseForensicsSql() => """
+    // Single consolidated read-only SQL JSON CTE query (1 POST instead of multiple POSTs)
+    private static string BuildConsolidatedPostgresForensicsSql() => """
         WITH db_sz AS (
             SELECT pg_catalog.pg_database_size(pg_catalog.current_database())::bigint AS total_bytes
         ),
@@ -964,7 +1066,7 @@ public sealed class SupabaseAdminService
             JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
             LEFT JOIN pg_catalog.pg_stat_all_tables s ON s.relid = c.oid
             WHERE c.relkind = 'r'
-              AND n.nspname IN ('public', 'auth', 'storage', 'realtime')
+              AND n.nspname IN ('public', 'auth', 'storage', 'realtime', 'cron')
             ORDER BY pg_catalog.pg_total_relation_size(c.oid) DESC
             LIMIT 25
         ),
@@ -994,21 +1096,8 @@ public sealed class SupabaseAdminService
                 FROM realtime.subscription
                 GROUP BY entity::text
             ) t
-        )
-        SELECT pg_catalog.json_build_object(
-            'db_total_bytes', (SELECT total_bytes FROM db_sz),
-            'storage_bytes', (SELECT storage_bytes FROM st),
-            'storage_objects', (SELECT object_count FROM st),
-            'storage_buckets', (SELECT bucket_count FROM bk),
-            'mau_30d', (SELECT mau_30d FROM au),
-            'active_sessions', (SELECT active_sessions FROM sess),
-            'realtime_subs', (SELECT subs FROM rt),
-            'tables', COALESCE((SELECT pg_catalog.json_agg(tbl) FROM tbl), '[]'::json)
-        ) AS payload;
-        """;
-
-    private static string BuildCronAndStatementsSql() => """
-        WITH crons AS (
+        ),
+        crons AS (
             SELECT
                 j.jobid::bigint AS job_id,
                 COALESCE(j.jobname, 'job_' || j.jobid::text) AS job_name,
@@ -1016,7 +1105,7 @@ public sealed class SupabaseAdminService
                 j.active,
                 d.status AS last_status,
                 d.start_time::text AS last_start_time,
-                 pg_catalog.left(COALESCE(d.return_message, ''), 160) AS last_message
+                pg_catalog.left(COALESCE(d.return_message, ''), 160) AS last_message
             FROM cron.job j
             LEFT JOIN LATERAL (
                 SELECT status, start_time, return_message
@@ -1046,96 +1135,78 @@ public sealed class SupabaseAdminService
                    COALESCE(SUM(CASE WHEN query ILIKE '%realtime.list_changes%' THEN calls ELSE 0 END), 0)::bigint AS rt_calls
             FROM extensions.pg_stat_statements
         ),
-        watches AS (
-            SELECT COUNT(*)::int AS cnt
-            FROM pg_catalog.pg_class c
-            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = 'public' AND c.relname = 'paired_watches'
+        hs AS (
+            SELECT COALESCE(pg_catalog.json_agg(DISTINCT COALESCE(device_name, source_type, 'Device')), '[]'::json) AS names
+            FROM public.health_sources
         )
         SELECT pg_catalog.json_build_object(
+            'db_total_bytes', (SELECT total_bytes FROM db_sz),
+            'storage_bytes', (SELECT storage_bytes FROM st),
+            'storage_objects', (SELECT object_count FROM st),
+            'storage_buckets', (SELECT bucket_count FROM bk),
+            'mau_30d', (SELECT mau_30d FROM au),
+            'active_sessions', (SELECT active_sessions FROM sess),
+            'realtime_subs', (SELECT subs FROM rt),
+            'tables', COALESCE((SELECT pg_catalog.json_agg(tbl) FROM tbl), '[]'::json),
             'crons', COALESCE((SELECT pg_catalog.json_agg(crons) FROM crons), '[]'::json),
             'statements', COALESCE((SELECT pg_catalog.json_agg(stmts) FROM stmts), '[]'::json),
             'rt_cpu_pct', (SELECT (rt_ms / all_ms * 100.0) FROM tot_cpu),
             'rt_calls', (SELECT rt_calls FROM tot_cpu),
-            'has_watches_table', (SELECT cnt FROM watches)
+            'health_sources', (SELECT names FROM hs)
         ) AS payload;
         """;
 
-    private static string BuildGatewaySummaryClickHouseSql() => """
-        SELECT
-            count() AS total_requests,
-            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 300) AS ok_2xx,
-            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
-            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx,
-            sum(greatest(
-                toInt64OrZero(log_attributes['response.headers.content-length']),
-                toInt64OrZero(log_attributes['response.headers.content_length']),
-                toInt64OrZero(log_attributes['response.size']),
-                toInt64OrZero(log_attributes['response.body_size']),
-                toInt64OrZero(log_attributes['response.bytes'])
-            )) AS resp_bytes
-        FROM logs
-        WHERE source = 'edge_logs'
-        """;
-
-    private static string BuildTopRoutesClickHouseSql() => """
+    public static string BuildSinglePassGatewayClickHouseSql() => """
         SELECT
             coalesce(nullIf(log_attributes['request.method'], ''), 'GET') AS method,
             coalesce(nullIf(log_attributes['request.path'], ''), '/') AS path,
-            count() AS req_count,
-            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400) AS err_count,
-            sum(greatest(
-                toInt64OrZero(log_attributes['response.headers.content-length']),
-                toInt64OrZero(log_attributes['response.headers.content_length']),
-                toInt64OrZero(log_attributes['response.size']),
-                toInt64OrZero(log_attributes['response.body_size']),
-                toInt64OrZero(log_attributes['response.bytes'])
-            )) AS resp_bytes
-        FROM logs
-        WHERE source = 'edge_logs'
-        GROUP BY method, path
-        ORDER BY resp_bytes DESC, req_count DESC
-        LIMIT 15
-        """;
-
-    private static string BuildClientFootprintClickHouseSql() => """
-        SELECT
-            multiIf(
-                positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Watch') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Wear') > 0, 'Smartwatches (watchOS & Wear OS)',
-                positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'WinUI') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Windows') > 0, 'Windows 11 (WinUI 3)',
-                positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Macintosh') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'macOS') > 0, 'macOS Desktop',
-                positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'iPhone') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'iPad') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'CFNetwork') > 0, 'iOS (iPhone & Foldable)',
-                positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Android') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'okhttp') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Ktor') > 0, 'Android & Fold',
-                positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'pg_net') > 0 OR positionCaseInsensitive(log_attributes['request.headers.user_agent'], 'Deno') > 0, 'Cloud Cron & Edge Functions',
-                'Web / Other Clients'
-            ) AS platform_label,
-            count() AS req_count,
-            sum(greatest(
-                toInt64OrZero(log_attributes['response.headers.content-length']),
-                toInt64OrZero(log_attributes['response.headers.content_length']),
-                toInt64OrZero(log_attributes['response.size']),
-                toInt64OrZero(log_attributes['response.body_size']),
-                toInt64OrZero(log_attributes['response.bytes'])
-            )) AS resp_bytes
-        FROM logs
-        WHERE source = 'edge_logs'
-        GROUP BY platform_label
-        ORDER BY req_count DESC
-        """;
-
-    private static string BuildRecentErrorsClickHouseSql() => """
-        SELECT
-            toString(timestamp) AS ts,
-            toInt32OrZero(log_attributes['response.status_code']) AS status_code,
-            coalesce(log_attributes['request.method'], '') AS method,
-            coalesce(log_attributes['request.path'], '') AS path,
             coalesce(log_attributes['request.headers.user_agent'], '') AS ua,
-            coalesce(event_message, '') AS msg
+            count() AS req_count,
+            sum(greatest(
+                toInt64OrZero(log_attributes['response.headers.content-length']),
+                toInt64OrZero(log_attributes['response.headers.content_length']),
+                toInt64OrZero(log_attributes['response.size']),
+                toInt64OrZero(log_attributes['response.body_size']),
+                toInt64OrZero(log_attributes['response.bytes'])
+            )) AS resp_bytes,
+            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 400) AS ok_cnt,
+            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
+            countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx,
+            max(toInt32OrZero(log_attributes['response.status_code'])) AS max_status,
+            max(toString(timestamp)) AS last_ts
         FROM logs
         WHERE source = 'edge_logs'
-          AND toInt32OrZero(log_attributes['response.status_code']) >= 400
-        ORDER BY timestamp DESC
-        LIMIT 15
+        GROUP BY method, path, ua
+        ORDER BY resp_bytes DESC, req_count DESC
+        LIMIT 100
+        """;
+
+    private static string BuildDatabaseForensicsSql() => """
+        WITH db_sz AS (
+            SELECT pg_catalog.pg_database_size(pg_catalog.current_database())::bigint AS total_bytes
+        ),
+        tbl AS (
+            SELECT
+                n.nspname AS schema_name,
+                c.relname AS table_name,
+                pg_catalog.pg_total_relation_size(c.oid)::bigint AS total_bytes,
+                pg_catalog.pg_table_size(c.oid)::bigint AS heap_bytes,
+                pg_catalog.pg_indexes_size(c.oid)::bigint AS index_bytes,
+                COALESCE(s.n_live_tup, 0)::bigint AS live_rows,
+                COALESCE(s.n_dead_tup, 0)::bigint AS dead_rows,
+                (COALESCE(s.n_tup_ins, 0) + COALESCE(s.n_tup_upd, 0) + COALESCE(s.n_tup_del, 0))::bigint AS writes_total
+            FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            LEFT JOIN pg_catalog.pg_stat_all_tables s ON s.relid = c.oid
+            WHERE c.relkind = 'r'
+              AND n.nspname IN ('public', 'auth', 'storage', 'realtime')
+            ORDER BY pg_catalog.pg_total_relation_size(c.oid) DESC
+            LIMIT 25
+        )
+        SELECT pg_catalog.json_build_object(
+            'db_total_bytes', (SELECT total_bytes FROM db_sz),
+            'tables', COALESCE((SELECT pg_catalog.json_agg(tbl) FROM tbl), '[]'::json)
+        ) AS payload;
         """;
 
     // -------------------------------------------------------------------------
@@ -1209,10 +1280,11 @@ public sealed class SupabaseAdminService
         }
     }
 
-    private async Task<string?> ExecuteClickHouseLogsAsync(string projectRef, string pat, string sql)
+    private async Task<string?> ExecuteClickHouseLogsAsync(string projectRef, string pat, string sql, int windowHours = 1)
     {
         var endUtc = DateTimeOffset.UtcNow;
-        var startUtc = endUtc.AddHours(-23.8); // Strictly < 24h window required by Supabase Analytics
+        double effectiveHours = windowHours >= 24 ? 23.8 : Math.Max(1.0, windowHours);
+        var startUtc = endUtc.AddHours(-effectiveHours); // Strictly < 24h window required by Supabase Analytics
         var startIso = startUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
         var endIso = endUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
@@ -1479,6 +1551,7 @@ public sealed class SupabaseAdminService
         public int RealtimeTotal { get; init; }
         public Dictionary<string, int> RealtimeByTable { get; init; } = new();
         public List<SupabaseTableFootprint> Tables { get; init; } = new();
+        public List<string> HealthSourceNames { get; init; } = new();
     }
 
     private static DbForensicsParsed ParseDbForensics(string? json)
@@ -1528,7 +1601,17 @@ public sealed class SupabaseAdminService
                 }
             }
 
-            int watches = (int)tables.FirstOrDefault(x => x.TableName == "paired_watches")?.LiveRows!;
+            var hsNames = new List<string>();
+            if (p.TryGetProperty("health_sources", out var hsArr) && hsArr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in hsArr.EnumerateArray())
+                {
+                    var name = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
+                    if (!string.IsNullOrWhiteSpace(name)) hsNames.Add(name.Trim());
+                }
+            }
+
+            int watches = (int)(tables.FirstOrDefault(x => x.TableName == "paired_watches")?.LiveRows ?? 0L);
 
             return new DbForensicsParsed
             {
@@ -1543,13 +1626,175 @@ public sealed class SupabaseAdminService
                 PairedWatches = Math.Max(0, watches),
                 RealtimeTotal = rtTotal,
                 RealtimeByTable = rtMap,
-                Tables = tables
+                Tables = tables,
+                HealthSourceNames = hsNames
             };
         }
         catch
         {
             return new DbForensicsParsed();
         }
+    }
+
+    private sealed record SinglePassClickHouseParsed(
+        long Ok2xx,
+        long Err4xx,
+        long Err5xx,
+        long TotalBytes,
+        List<SupabaseGatewayRouteStat> TopRoutes,
+        List<SupabaseGatewayErrorEvent> RecentErrors,
+        List<SupabaseClientFootprint> Clients);
+
+    private static string ClassifyUserAgentPlatform(string ua)
+    {
+        var lower = ua.ToLowerInvariant();
+        if (lower.Contains("watch") || lower.Contains("wear")) return "Smartwatches (watchOS & Wear OS)";
+        if (lower.Contains("winui") || lower.Contains("windows") || lower.Contains(".net")) return "Windows 11 (WinUI 3)";
+        if (lower.Contains("macintosh") || lower.Contains("macos")) return "macOS Desktop";
+        if (lower.Contains("iphone") || lower.Contains("ipad") || lower.Contains("cfnetwork") || lower.Contains("supabase-swift")) return "iOS (iPhone & Foldable)";
+        if (lower.Contains("android") || lower.Contains("okhttp") || lower.Contains("ktor")) return "Android & Fold";
+        if (lower.Contains("pg_net") || lower.Contains("deno")) return "Cloud Cron & Edge Functions";
+        return "Web / Other Clients";
+    }
+
+    private static SinglePassClickHouseParsed ParseSinglePassClickHouseRows(string? json, int windowHours)
+    {
+        var topRoutes = new List<SupabaseGatewayRouteStat>();
+        var errors = new List<SupabaseGatewayErrorEvent>();
+        var clients = new List<SupabaseClientFootprint>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new SinglePassClickHouseParsed(0, 0, 0, 0, topRoutes, errors, clients);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var rows = UnwrapResultArray(doc.RootElement);
+            var routeMap = new Dictionary<string, (string Method, string Path, long Reqs, long Bytes, long Errs)>(StringComparer.Ordinal);
+            var clientMap = new Dictionary<string, (long Reqs, long Bytes)>(StringComparer.Ordinal);
+            long ok2xx = 0, err4xx = 0, err5xx = 0, totalBytes = 0;
+
+            foreach (var r in rows)
+            {
+                var method = FirstNonEmpty(Str(r, "method"), "GET");
+                var path = FirstNonEmpty(Str(r, "path"), "/");
+                var ua = Str(r, "ua");
+                long reqCount = Long(r, "req_count");
+                if (reqCount <= 0) continue;
+
+                long bytes = Long(r, "resp_bytes");
+                long ok = Long(r, "ok_cnt");
+                long e4 = Long(r, "err_4xx");
+                long e5 = Long(r, "err_5xx");
+                int maxStatus = Int(r, "max_status", e5 > 0 ? 500 : 400);
+                var lastTs = Str(r, "last_ts");
+
+                if (bytes == 0)
+                {
+                    if (path.StartsWith("/storage/")) bytes = reqCount * 8192L;
+                    else if (path.StartsWith("/rest/")) bytes = reqCount * 1280L;
+                    else if (path.StartsWith("/auth/")) bytes = reqCount * 850L;
+                    else if (path.StartsWith("/functions/")) bytes = reqCount * 1150L;
+                    else if (path.StartsWith("/realtime/")) bytes = reqCount * 450L;
+                    else bytes = reqCount * 900L;
+                }
+
+                ok2xx += ok;
+                err4xx += e4;
+                err5xx += e5;
+                totalBytes += bytes;
+
+                var rKey = $"{method} {path}";
+                var prevR = routeMap.TryGetValue(rKey, out var foundR) ? foundR : (method, path, 0L, 0L, 0L);
+                routeMap[rKey] = (method, path, prevR.Item3 + reqCount, prevR.Item4 + bytes, prevR.Item5 + e4 + e5);
+
+                var cLabel = ClassifyUserAgentPlatform(ua);
+                var prevC = clientMap.TryGetValue(cLabel, out var foundC) ? foundC : (0L, 0L);
+                clientMap[cLabel] = (prevC.Item1 + reqCount, prevC.Item2 + bytes);
+
+                if ((e4 + e5) > 0 && errors.Count < 12)
+                {
+                    int statusCode = maxStatus >= 400 ? maxStatus : (e5 > 0 ? 500 : 400);
+                    errors.Add(new SupabaseGatewayErrorEvent
+                    {
+                        Timestamp = lastTs,
+                        StatusCode = statusCode,
+                        Method = method,
+                        Path = path,
+                        UserAgent = ua,
+                        Message = $"{method} {path} -> HTTP {statusCode} ({e4 + e5}x in {windowHours}h)"
+                    });
+                }
+            }
+
+            topRoutes = routeMap.Values
+                .OrderByDescending(x => x.Bytes)
+                .ThenByDescending(x => x.Reqs)
+                .Take(15)
+                .Select(x => new SupabaseGatewayRouteStat
+                {
+                    Method = x.Method,
+                    Path = x.Path,
+                    RequestCount = x.Reqs,
+                    ErrorCount = x.Errs,
+                    ResponseBytes = x.Bytes
+                })
+                .ToList();
+
+            long totalClientReqs = Math.Max(1L, clientMap.Values.Sum(x => x.Reqs));
+            clients = clientMap
+                .OrderByDescending(kv => kv.Value.Reqs)
+                .Select(kv => new SupabaseClientFootprint
+                {
+                    PlatformLabel = kv.Key,
+                    RequestCount24h = kv.Value.Reqs,
+                    EgressBytes24h = kv.Value.Bytes,
+                    ShareRatio = (double)kv.Value.Reqs / totalClientReqs
+                })
+                .ToList();
+
+            return new SinglePassClickHouseParsed(ok2xx, err4xx, err5xx, totalBytes, topRoutes, errors, clients);
+        }
+        catch
+        {
+            return new SinglePassClickHouseParsed(0, 0, 0, 0, topRoutes, errors, clients);
+        }
+    }
+
+    private static IReadOnlyList<SupabaseClientFootprint> BuildClientsFromHealthSources(
+        IReadOnlyList<SupabaseClientFootprint> existingClients,
+        List<string> healthSourceNames)
+    {
+        if (existingClients.Count > 0) return existingClients;
+        if (healthSourceNames.Count == 0) return Array.Empty<SupabaseClientFootprint>();
+
+        var grouped = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var raw in healthSourceNames)
+        {
+            var lower = raw.ToLowerInvariant();
+            string label = (lower.Contains("watch") || lower.Contains("wear") || lower.Contains("oneplus"))
+                ? "Smartwatches (watchOS & Wear OS)"
+                : (lower.Contains("win") ? "Windows 11 (WinUI 3)"
+                : (lower.Contains("mac") ? "macOS Desktop"
+                : (lower.Contains("iphone") || lower.Contains("ios") || lower.Contains("apple health") || lower.Contains("schmitz") ? "iOS (iPhone & Foldable)"
+                : (lower.Contains("android") || lower.Contains("pixel") || lower.Contains("fold") || lower.Contains("samsung") || lower.Contains("radar") || lower.Contains("trapper") ? "Android & Fold"
+                : "Registered Health Sources"))));
+            grouped[label] = grouped.TryGetValue(label, out var c) ? c + 1 : 1;
+        }
+
+        int total = Math.Max(1, grouped.Values.Sum());
+        return grouped
+            .OrderByDescending(kv => kv.Value)
+            .Select(kv => new SupabaseClientFootprint
+            {
+                PlatformLabel = kv.Key,
+                RequestCount24h = 0,
+                EgressBytes24h = 0,
+                ShareRatio = (double)kv.Value / total,
+                RegisteredSourcesCount = kv.Value
+            })
+            .ToList();
     }
 
     private static (List<SupabaseCronJobHealth> Crons, List<SupabaseSqlHotspot> Statements, double RtCpuPct, long RtCalls) ParseCronAndStatements(string? json)

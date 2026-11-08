@@ -21,6 +21,7 @@ public sealed partial class SupabaseAdminPage : Page
 {
     private readonly SupabaseAdminService _admin = SupabaseAdminService.Shared;
     private string _activeFilter = "ALL";
+    private int _gatewayScanWindowHours = 1;
     private bool _suppressProjectComboEvent;
     private string? _transientToast;
 
@@ -353,13 +354,16 @@ public sealed partial class SupabaseAdminPage : Page
         // Row 1, Col 0: 24h Gateway Egress
         double gwDailyBudget = (snap.EgressQuotaGb * 1_000_000_000.0) / 30.0;
         double gwPct = gwDailyBudget > 0 ? Math.Min(100.0, (double)snap.GatewayEgressBytes24h / gwDailyBudget * 100.0) : 0.0;
+        int scanWin = snap.GatewayScanWindowHours ?? 24;
         var c1 = BuildQuotaTile(
             "Gateway Egress (24h)",
             SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h),
-            $"{snap.GatewayRequests24h:N0} requests",
+            snap.HasScannedGatewayLogs ? $"{snap.GatewayRequests24h:N0} requests" : "Daily share",
             snap.CachedEgressUsedGb > 0
                 ? $"Cached CDN: {snap.CachedEgressUsedGb:F3} GB · {gwPct:F1}% of daily share"
-                : $"24h HTTP: {snap.GatewayRequests24h:N0} reqs · {gwPct:F1}% daily budget",
+                : (snap.HasScannedGatewayLogs
+                    ? $"{scanWin}h HTTP: {snap.GatewayRequests24h:N0} reqs · {gwPct:F1}% daily budget"
+                    : $"0 B Log Query · {gwPct:F1}% daily budget"),
             gwPct,
             CyanAccent);
         Grid.SetRow(c1, 1);
@@ -413,7 +417,7 @@ public sealed partial class SupabaseAdminPage : Page
             "Log Ingestion",
             $"{snap.LogIngestionGb:F3} GB",
             $"of {snap.LogIngestionQuotaGb:F1} GB ({snap.LogIngestionPercent:F1}%)",
-            "Logs ingested into analytics storage",
+            "Logs ingested · consolidated pg_catalog",
             snap.LogIngestionPercent,
             PurpleAccent);
         Grid.SetRow(c5, 3);
@@ -425,7 +429,7 @@ public sealed partial class SupabaseAdminPage : Page
             "Log Query",
             $"{snap.LogQueryGb:F3} GB",
             $"of {snap.LogQueryQuotaGb:F0} GB ({snap.LogQueryPercent:F1}%)",
-            "ClickHouse log querying data processed",
+            "0 B on refresh · On-demand ClickHouse scan",
             snap.LogQueryPercent,
             CyanAccent);
         Grid.SetRow(c6, 3);
@@ -522,7 +526,9 @@ public sealed partial class SupabaseAdminPage : Page
         });
         footerRow.Children.Add(new TextBlock
         {
-            Text = $"24h Requests: {snap.GatewayRequests24h:N0}",
+            Text = snap.HasScannedGatewayLogs
+                ? $"{snap.GatewayScanWindowHours ?? 24}h Requests: {snap.GatewayRequests24h:N0}"
+                : "Log Scan: 0 B Query (On-Demand)",
             FontSize = 11.5,
             Opacity = 0.85
         });
@@ -576,7 +582,9 @@ public sealed partial class SupabaseAdminPage : Page
 
         stack.Children.Add(SectionHeader(
             "Daily Bandwidth & Gateway Activity",
-            $"24h Requests — PostgREST: {snap.RestRequests24h:N0} · Auth: {snap.AuthRequests24h:N0} · Realtime: {snap.RealtimeRequests24h:N0} · Storage: {snap.StorageRequests24h:N0}"));
+            snap.HasScannedGatewayLogs
+                ? $"{snap.GatewayScanWindowHours ?? 24}h Requests — PostgREST: {snap.RestRequests24h:N0} · Auth: {snap.AuthRequests24h:N0} · Realtime: {snap.RealtimeRequests24h:N0} · Storage: {snap.StorageRequests24h:N0}"
+                : "14-Day Invoiced Bandwidth Breakdown · 0 B ClickHouse Log Query on Refresh"));
 
         if (snap.DailyEgressSeries.Count == 0)
         {
@@ -790,52 +798,147 @@ public sealed partial class SupabaseAdminPage : Page
         var card = BuildCardContainer();
         var stack = new StackPanel { Spacing = 12 };
 
-        stack.Children.Add(SectionHeader(
-            "24h API Gateway & ClickHouse Log Forensics",
-            $"Total {snap.GatewayRequests24h:N0} reqs · 2xx: {snap.Gateway2xx24h:N0} · 4xx: {snap.Gateway4xx24h:N0} · 5xx: {snap.Gateway5xx24h:N0} ({snap.GatewayErrorRatePercent:F2}% errors) · {SupabaseAdminFormatter.FormatBytes(snap.GatewayEgressBytes24h)} payload"));
+        int scanWin = snap.GatewayScanWindowHours ?? _gatewayScanWindowHours;
+        var headerGrid = new Grid { ColumnSpacing = 12 };
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        foreach (var r in snap.TopGatewayRoutes.Take(8))
+        var hdrLeft = SectionHeader(
+            "API Gateway & ClickHouse Log Forensics",
+            snap.HasScannedGatewayLogs
+                ? $"Window {scanWin}h · Total {snap.GatewayRequests24h:N0} reqs · 2xx: {snap.Gateway2xx24h:N0} · 4xx: {snap.Gateway4xx24h:N0} · 5xx: {snap.Gateway5xx24h:N0} ({snap.GatewayErrorRatePercent:F2}% errors)"
+                : "Zero-Log-Query mode active · 0 B scanned on automatic open & refresh");
+        headerGrid.Children.Add(hdrLeft);
+
+        Border statusBadge;
+        if (snap.HasScannedGatewayLogs && snap.GatewayLogsScannedAtEpochMs is long scannedMs && scannedMs > 0)
         {
-            var g = new Grid { ColumnSpacing = 10 };
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var routeText = new TextBlock
-            {
-                Text = r.RouteLabel,
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 12,
-                TextTrimming = TextTrimming.CharacterEllipsis
-            };
-            g.Children.Add(routeText);
-
-            var statText = new TextBlock
-            {
-                Text = $"{r.RequestCount:N0} reqs · {r.ErrorCount} err · {r.EgressFormatted}",
-                FontSize = 11.5,
-                Opacity = 0.78
-            };
-            Grid.SetColumn(statText, 1);
-            g.Children.Add(statText);
-
-            stack.Children.Add(g);
+            var scannedLocal = DateTimeOffset.FromUnixTimeMilliseconds(scannedMs).ToLocalTime();
+            statusBadge = PillBadge($"SCANNED {scannedLocal:HH:mm:ss} ({scanWin}H)", CyanAccent);
         }
-
-        if (snap.RecentGatewayErrors.Count > 0)
+        else
         {
-            stack.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)), Margin = new Thickness(0, 4, 0, 4) });
-            stack.Children.Add(new TextBlock { Text = "Recent 4xx / 5xx Gateway Events", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(RedAccent) });
-            foreach (var err in snap.RecentGatewayErrors.Take(5))
+            statusBadge = PillBadge("0 B LOG QUERY", EmeraldAccent);
+        }
+        Grid.SetColumn(statusBadge, 1);
+        headerGrid.Children.Add(statusBadge);
+        stack.Children.Add(headerGrid);
+
+        // On-Demand Single-Pass ClickHouse Scanner Bar
+        var scanBar = new Grid
+        {
+            Padding = new Thickness(12, 10, 12, 10),
+            CornerRadius = new CornerRadius(8),
+            Background = new SolidColorBrush(Color.FromArgb(16, 56, 189, 248)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(55, 56, 189, 248)),
+            BorderThickness = new Thickness(1),
+            ColumnSpacing = 10
+        };
+        scanBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        scanBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        scanBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        Style? accentStyle = Application.Current.Resources.TryGetValue("AccentButtonStyle", out var ast) ? ast as Style : null;
+        Style? defaultStyle = Application.Current.Resources.TryGetValue("DefaultButtonStyle", out var dst) ? dst as Style : null;
+
+        var pillsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        foreach (int hrs in new[] { 1, 6, 24 })
+        {
+            int capturedHrs = hrs;
+            var pBtn = new Button
             {
-                stack.Children.Add(new TextBlock
+                Content = $"{hrs}h",
+                Padding = new Thickness(10, 4, 10, 4),
+                FontSize = 11.5,
+                IsEnabled = !_admin.IsScanningGatewayLogs,
+                Style = (_gatewayScanWindowHours == hrs) ? accentStyle : defaultStyle
+            };
+            pBtn.Click += (_, _) =>
+            {
+                _gatewayScanWindowHours = capturedHrs;
+                RenderFromState();
+            };
+            pillsRow.Children.Add(pBtn);
+        }
+        scanBar.Children.Add(pillsRow);
+
+        var barHint = new TextBlock
+        {
+            Text = $"Single-pass edge_logs aggregation (skips event_message column to protect 100 GB Log Query quota)",
+            FontSize = 11,
+            Opacity = 0.72,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = CharacterEllipsis
+        };
+        Grid.SetColumn(barHint, 1);
+        scanBar.Children.Add(barHint);
+
+        var scanBtn = new Button
+        {
+            Content = _admin.IsScanningGatewayLogs ? "Scanning..." : $"Scan {_gatewayScanWindowHours}h Logs",
+            Padding = new Thickness(12, 5, 12, 5),
+            FontSize = 12,
+            IsEnabled = !_admin.IsScanningGatewayLogs,
+            Style = accentStyle,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        scanBtn.Click += async (_, _) =>
+        {
+            await _admin.ScanGatewayLogsAsync(_gatewayScanWindowHours);
+        };
+        Grid.SetColumn(scanBtn, 2);
+        scanBar.Children.Add(scanBtn);
+        stack.Children.Add(scanBar);
+
+        if (!snap.HasScannedGatewayLogs)
+        {
+            stack.Children.Add(MutedLabel("Gateway ClickHouse logs have not been queried yet in this session (0 B Log Query consumed). Select a window (1h recommended) and click Scan Logs when you need per-endpoint HTTP status & latency forensics."));
+        }
+        else
+        {
+            foreach (var r in snap.TopGatewayRoutes.Take(8))
+            {
+                var g = new Grid { ColumnSpacing = 10 };
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var routeText = new TextBlock
                 {
-                    Text = $"[{err.StatusCode}] {err.Method} {err.Path} — {err.Message}",
+                    Text = r.RouteLabel,
                     FontFamily = new FontFamily("Consolas"),
-                    FontSize = 11,
-                    Opacity = 0.78,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    IsTextSelectionEnabled = true
-                });
+                    FontSize = 12,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                g.Children.Add(routeText);
+
+                var statText = new TextBlock
+                {
+                    Text = $"{r.RequestCount:N0} reqs · {r.ErrorCount} err · {r.EgressFormatted}",
+                    FontSize = 11.5,
+                    Opacity = 0.78
+                };
+                Grid.SetColumn(statText, 1);
+                g.Children.Add(statText);
+
+                stack.Children.Add(g);
+            }
+
+            if (snap.RecentGatewayErrors.Count > 0)
+            {
+                stack.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)), Margin = new Thickness(0, 4, 0, 4) });
+                stack.Children.Add(new TextBlock { Text = "Recent 4xx / 5xx Gateway Events", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(RedAccent) });
+                foreach (var err in snap.RecentGatewayErrors.Take(5))
+                {
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = $"[{err.StatusCode}] {err.Method} {err.Path} — {err.Message}",
+                        FontFamily = new FontFamily("Consolas"),
+                        FontSize = 11,
+                        Opacity = 0.78,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        IsTextSelectionEnabled = true
+                    });
+                }
             }
         }
 
@@ -850,7 +953,7 @@ public sealed partial class SupabaseAdminPage : Page
 
         stack.Children.Add(SectionHeader(
             "Edge Functions & Realtime WAL Telemetry",
-            $"Active Realtime Subscriptions: {snap.ActiveRealtimeSubscriptions} · realtime.list_changes CPU Share: {snap.RealtimeListChangesCpuPercent:F1}% ({snap.RealtimeListChangesCalls:N0} polls)"));
+            $"Billing Cycle Edge Calls: {snap.FunctionInvocations:N0} / {snap.FunctionInvocationsQuota:N0} · Active Realtime Subs: {snap.ActiveRealtimeSubscriptions} · realtime.list_changes CPU: {snap.RealtimeListChangesCpuPercent:F1}% ({snap.RealtimeListChangesCalls:N0} polls)"));
 
         if (snap.RealtimeSubscriptionsByTable.Count > 0)
         {
@@ -881,9 +984,14 @@ public sealed partial class SupabaseAdminPage : Page
                 if (fn.VerifyJwt) left.Children.Add(PillBadge("JWT", EmeraldAccent));
                 row.Children.Add(left);
 
+                string fnMetricText = (!snap.HasScannedGatewayLogs && fn.Invocations24h == 0)
+                    ? "Deployed · 0 B Log Query"
+                    : (fn.Errors24h > 0 || fn.AvgExecutionMs > 0
+                        ? $"{fn.Invocations24h:N0} calls · {fn.Errors24h} err · {fn.AvgExecutionMs:F0} ms"
+                        : $"{fn.Invocations24h:N0} cycle calls");
                 var right = new TextBlock
                 {
-                    Text = $"{fn.Invocations24h:N0} calls · {fn.Errors24h} err · {fn.AvgExecutionMs:F0} ms",
+                    Text = fnMetricText,
                     FontSize = 11.5,
                     Opacity = 0.78,
                     VerticalAlignment = VerticalAlignment.Center
@@ -906,7 +1014,9 @@ public sealed partial class SupabaseAdminPage : Page
 
         stack.Children.Add(SectionHeader(
             "DayOne Ecosystem Fleet Footprint & Advisors",
-            $"24h User-Agent distribution across iOS, macOS, Android, Windows 11, Smartwatches & Cloud Cron"));
+            snap.HasScannedGatewayLogs
+                ? $"{snap.GatewayScanWindowHours ?? 24}h User-Agent distribution across iOS, macOS, Android, Windows 11, Smartwatches & Cloud Cron"
+                : "Registered fleet devices from public.health_sources (0 B Log Query) & Supabase Advisors"));
 
         foreach (var client in snap.EcosystemClients)
         {
@@ -915,7 +1025,10 @@ public sealed partial class SupabaseAdminPage : Page
             hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             hdr.Children.Add(new TextBlock { Text = client.PlatformLabel, FontSize = 12, FontWeight = FontWeights.SemiBold });
-            var right = new TextBlock { Text = $"{client.RequestCount24h:N0} reqs ({client.SharePercentLabel}) · {client.EgressFormatted}", FontSize = 11.5, Opacity = 0.72 };
+            string clientStatText = (client.RequestCount24h == 0 && client.RegisteredSourcesCount > 0)
+                ? $"{client.RegisteredSourcesCount} registered ({client.SharePercentLabel})"
+                : $"{client.RequestCount24h:N0} reqs ({client.SharePercentLabel}) · {client.EgressFormatted}";
+            var right = new TextBlock { Text = clientStatText, FontSize = 11.5, Opacity = 0.72 };
             Grid.SetColumn(right, 1);
             hdr.Children.Add(right);
             cStack.Children.Add(hdr);

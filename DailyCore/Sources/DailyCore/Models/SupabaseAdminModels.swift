@@ -343,7 +343,7 @@ public struct SupabaseEdgeFunctionStat: Codable, Sendable, Equatable, Identifiab
     public let status: String
     public let version: Int
     public let verifyJwt: Bool
-    public let invocations24h: Int
+    public var invocations24h: Int
     public let errors24h: Int
     public let avgExecutionMs: Double
     public let maxExecutionMs: Double
@@ -413,7 +413,7 @@ public struct SupabaseFleetDeviceStat: Codable, Sendable, Equatable, Identifiabl
     public let sharePercent: Double
     public let responseBytes24h: Int64
     public let errors4xx24h: Int
-    public let registeredSources: [String]
+    public var registeredSources: [String]
 
     public init(
         platformKey: String,
@@ -479,7 +479,9 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
     public var dailyEgress: [SupabaseDailyEgressPoint]
     public var apiCounts24h: [SupabaseApiCountPoint]
 
-    // Gateway & Logs (24h ClickHouse)
+    // Gateway & Logs (On-Demand ClickHouse Edge Logs)
+    public var gatewayLogsScannedAt: Date?
+    public var gatewayScanWindowHours: Int?
     public var logCountsBySource: [String: Int]
     public var http2xxCount24h: Int
     public var http4xxCount24h: Int
@@ -552,6 +554,8 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         logIngestionEvents: Int64 = 0,
         dailyEgress: [SupabaseDailyEgressPoint] = [],
         apiCounts24h: [SupabaseApiCountPoint] = [],
+        gatewayLogsScannedAt: Date? = nil,
+        gatewayScanWindowHours: Int? = nil,
         logCountsBySource: [String: Int] = [:],
         http2xxCount24h: Int = 0,
         http4xxCount24h: Int = 0,
@@ -615,6 +619,8 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         self.logIngestionEvents = logIngestionEvents
         self.dailyEgress = dailyEgress
         self.apiCounts24h = apiCounts24h
+        self.gatewayLogsScannedAt = gatewayLogsScannedAt
+        self.gatewayScanWindowHours = gatewayScanWindowHours
         self.logCountsBySource = logCountsBySource
         self.http2xxCount24h = http2xxCount24h
         self.http4xxCount24h = http4xxCount24h
@@ -821,6 +827,10 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         http2xxCount24h + http4xxCount24h + http5xxCount24h
     }
 
+    public var hasScannedGatewayLogs: Bool {
+        gatewayLogsScannedAt != nil || !topRoutes24h.isEmpty || totalHttpRequests24h > 0
+    }
+
     public var errorRate24hPercent: Double {
         let total = totalHttpRequests24h
         guard total > 0 else { return 0 }
@@ -881,13 +891,19 @@ public struct SupabaseAdminSnapshot: Codable, Sendable, Equatable {
         lines.append("")
 
         if !topRoutes24h.isEmpty {
-            lines.append("## 4. Top HTTP Gateway Routes (Last 24h)")
+            let winLabel = "\(gatewayScanWindowHours ?? 24)h"
+            lines.append("## 4. Top HTTP Gateway Routes (Last \(winLabel) Scan)")
             lines.append("")
-            lines.append("| Method & Path | Requests (24h) | Content-Length Sum | Avg Latency | 4xx/5xx |")
+            lines.append("| Method & Path | Requests (\(winLabel)) | Content-Length Sum | Avg Latency | 4xx/5xx |")
             lines.append("| :--- | :--- | :--- | :--- | :--- |")
             for r in topRoutes24h.prefix(10) {
                 lines.append("| `\(r.method) \(r.path)` | \(r.requests24h) | \(Self.formatBytes(r.responseBytes24h)) | \(String(format: "%.1f ms", r.avgLatencyMs)) | \(r.errors4xx5xx) |")
             }
+            lines.append("")
+        } else {
+            lines.append("## 4. Top HTTP Gateway Routes (On-Demand Zero-Log-Query Mode)")
+            lines.append("")
+            lines.append("- *ClickHouse Gateway Logs not scanned in this session (`0 B` Log Query consumed).*")
             lines.append("")
         }
 

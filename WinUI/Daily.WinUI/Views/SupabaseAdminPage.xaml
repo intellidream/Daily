@@ -115,7 +115,7 @@
                         Padding="18">
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <ProgressRing IsActive="True" Width="22" Height="22" />
-                        <TextBlock Text="Querying Supabase Management API, ClickHouse Edge Logs, and Read-Only pg_catalog..."
+                        <TextBlock Text="Querying Supabase Management API, Platform Billing Usage, and Consolidated Read-Only pg_catalog (0 B Log Query)..."
                                    VerticalAlignment="Center" FontSize="12.5" Opacity="0.8" />
                     </StackPanel>
                 </Border>

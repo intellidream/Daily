@@ -210,6 +210,8 @@ data class SupabaseAdminSnapshot(
     val logIngestionEvents: Long = 0L,
     val dailyEgress: List<SupabaseDailyEgressPoint> = emptyList(),
     val apiCounts24h: List<SupabaseApiCountPoint> = emptyList(),
+    val gatewayLogsScannedAtEpochMs: Long? = null,
+    val gatewayScanWindowHours: Int? = null,
     val logCountsBySource: Map<String, Int> = emptyMap(),
     val http2xxCount24h: Int = 0,
     val http4xxCount24h: Int = 0,
@@ -267,6 +269,9 @@ data class SupabaseAdminSnapshot(
     val logQueryQuotaPercent: Double
         get() = if (logQueryQuotaBytes > 0L) minOf(999.0, logQueryBytes.toDouble() * 100.0 / logQueryQuotaBytes.toDouble()) else 0.0
 
+    val hasScannedGatewayLogs: Boolean
+        get() = gatewayLogsScannedAtEpochMs != null || topRoutes24h.isNotEmpty() || totalHttpRequests24h > 0
+
     val totalHttpRequests24h: Int
         get() = http2xxCount24h + http4xxCount24h + http5xxCount24h
 
@@ -290,7 +295,8 @@ data class SupabaseAdminSnapshot(
         sb.appendLine("| Resource Metric | Current Usage | Plan Quota | Utilization |")
         sb.appendLine("| :--- | :--- | :--- | :--- |")
         sb.appendLine("| **Unified Egress (Cycle)** | ${formatBytes(egressCycleUsedBytes)} | ${formatBytes(egressCycleQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", egressCycleQuotaPercent)}** |")
-        sb.appendLine("| **24h Gateway Egress** | ${formatBytes(egress24hBytes)} | ${totalHttpRequests24h} reqs | **${String.format(Locale.US, "%.1f%%", egress24hQuotaPercent)}** (vs daily share) |")
+        val gatewayReqCell = if (hasScannedGatewayLogs) "$totalHttpRequests24h reqs" else "0 B Log Query"
+        sb.appendLine("| **24h Gateway Egress** | ${formatBytes(egress24hBytes)} | $gatewayReqCell | **${String.format(Locale.US, "%.1f%%", egress24hQuotaPercent)}** (vs daily share) |")
         sb.appendLine("| **Database Size** | ${formatBytes(dbSizeBytes)} | ${formatBytes(dbQuotaBytes)} | **${String.format(Locale.US, "%.1f%%", dbQuotaPercent)}** |")
         sb.appendLine("| **Storage Size** | ${formatBytes(storageSizeBytes)} | ${formatBytes(storageQuotaBytes)} | ${if (storageQuotaBytes > 0) String.format(Locale.US, "%.1f%%", storageSizeBytes * 100.0 / storageQuotaBytes) else "—"} |")
         sb.appendLine("| **Edge Function Invocations** | $functionInvocations | $functionInvocationsQuota | — |")
@@ -308,14 +314,20 @@ data class SupabaseAdminSnapshot(
             sb.appendLine("| `${t.schema}.${t.tableName}` | ${formatBytes(t.dataBytes)} | ${formatBytes(t.indexBytes)} | **${formatBytes(t.totalBytes)}** | ${t.liveRows} | $status |")
         }
         sb.appendLine()
+        val windowLabel = gatewayScanWindowHours ?: 24
         if (topRoutes24h.isNotEmpty()) {
-            sb.appendLine("## 3. Top 24h HTTP Gateway Routes")
+            sb.appendLine("## 3. Top HTTP Gateway Routes (Last ${windowLabel}h Scan)")
             sb.appendLine()
             sb.appendLine("| Method & Path | Requests | Response Sum | Avg Latency | 4xx/5xx |")
             sb.appendLine("| :--- | :--- | :--- | :--- | :--- |")
             topRoutes24h.take(10).forEach { r ->
                 sb.appendLine("| `${r.method} ${r.path}` | ${r.requests24h} | ${formatBytes(r.responseBytes24h)} | ${String.format(Locale.US, "%.1f ms", r.avgLatencyMs)} | ${r.errors4xx5xx} |")
             }
+            sb.appendLine()
+        } else {
+            sb.appendLine("## 3. HTTP Gateway Routes (On-Demand Zero-Log-Query Mode)")
+            sb.appendLine()
+            sb.appendLine("- ClickHouse `edge_logs` scan skipped on standard refresh (`0 B` Log Query consumed). Trigger an on-demand `1h`, `6h`, or `24h` scan in Gateway Forensics when route-level breakdown is needed.")
             sb.appendLine()
         }
         return sb.toString()

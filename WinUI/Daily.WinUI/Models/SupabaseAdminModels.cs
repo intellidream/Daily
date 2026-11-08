@@ -129,17 +129,18 @@ public sealed class SupabaseEdgeFunctionStat
     public string Status { get; init; } = "ACTIVE";
     public int Version { get; init; } = 1;
     public bool VerifyJwt { get; init; }
-    public long Invocations24h { get; init; }
-    public long Errors24h { get; init; }
-    public double AvgExecutionMs { get; init; }
+    public long Invocations24h { get; set; }
+    public long Errors24h { get; set; }
+    public double AvgExecutionMs { get; set; }
 }
 
 public sealed class SupabaseClientFootprint
 {
     public string PlatformLabel { get; init; } = string.Empty;
-    public long RequestCount24h { get; init; }
-    public long EgressBytes24h { get; init; }
-    public double ShareRatio { get; init; }
+    public long RequestCount24h { get; set; }
+    public long EgressBytes24h { get; set; }
+    public double ShareRatio { get; set; }
+    public int RegisteredSourcesCount { get; set; }
 
     public string SharePercentLabel => $"{ShareRatio * 100.0:F1}%";
     public string EgressFormatted => SupabaseAdminFormatter.FormatBytes(EgressBytes24h);
@@ -222,16 +223,18 @@ public sealed class SupabaseAdminSnapshot
     public double LogQueryGb { get; init; }
     public double LogQueryQuotaGb { get; init; } = 100.0;
 
-    // Gateway 24h
-    public long GatewayRequests24h { get; init; }
-    public long Gateway2xx24h { get; init; }
-    public long Gateway4xx24h { get; init; }
-    public long Gateway5xx24h { get; init; }
-    public long GatewayEgressBytes24h { get; init; }
-    public long RestRequests24h { get; init; }
-    public long AuthRequests24h { get; init; }
-    public long StorageRequests24h { get; init; }
-    public long RealtimeRequests24h { get; init; }
+    // Gateway (On-Demand Zero-Log-Query by default)
+    public long? GatewayLogsScannedAtEpochMs { get; set; }
+    public int? GatewayScanWindowHours { get; set; }
+    public long GatewayRequests24h { get; set; }
+    public long Gateway2xx24h { get; set; }
+    public long Gateway4xx24h { get; set; }
+    public long Gateway5xx24h { get; set; }
+    public long GatewayEgressBytes24h { get; set; }
+    public long RestRequests24h { get; set; }
+    public long AuthRequests24h { get; set; }
+    public long StorageRequests24h { get; set; }
+    public long RealtimeRequests24h { get; set; }
 
     // Realtime & WAL
     public int ActiveRealtimeSubscriptions { get; init; }
@@ -244,12 +247,13 @@ public sealed class SupabaseAdminSnapshot
     public IReadOnlyList<SupabaseTableFootprint> TopTables { get; init; } = Array.Empty<SupabaseTableFootprint>();
     public IReadOnlyList<SupabaseSqlHotspot> TopSqlStatements { get; init; } = Array.Empty<SupabaseSqlHotspot>();
     public IReadOnlyList<SupabaseCronJobHealth> CronJobs { get; init; } = Array.Empty<SupabaseCronJobHealth>();
-    public IReadOnlyList<SupabaseGatewayRouteStat> TopGatewayRoutes { get; init; } = Array.Empty<SupabaseGatewayRouteStat>();
-    public IReadOnlyList<SupabaseGatewayErrorEvent> RecentGatewayErrors { get; init; } = Array.Empty<SupabaseGatewayErrorEvent>();
-    public IReadOnlyList<SupabaseEdgeFunctionStat> EdgeFunctions { get; init; } = Array.Empty<SupabaseEdgeFunctionStat>();
-    public IReadOnlyList<SupabaseClientFootprint> EcosystemClients { get; init; } = Array.Empty<SupabaseClientFootprint>();
+    public IReadOnlyList<SupabaseGatewayRouteStat> TopGatewayRoutes { get; set; } = Array.Empty<SupabaseGatewayRouteStat>();
+    public IReadOnlyList<SupabaseGatewayErrorEvent> RecentGatewayErrors { get; set; } = Array.Empty<SupabaseGatewayErrorEvent>();
+    public IReadOnlyList<SupabaseEdgeFunctionStat> EdgeFunctions { get; set; } = Array.Empty<SupabaseEdgeFunctionStat>();
+    public IReadOnlyList<SupabaseClientFootprint> EcosystemClients { get; set; } = Array.Empty<SupabaseClientFootprint>();
     public IReadOnlyList<SupabaseAdvisorNotice> Advisors { get; init; } = Array.Empty<SupabaseAdvisorNotice>();
 
+    public bool HasScannedGatewayLogs => GatewayLogsScannedAtEpochMs.HasValue || TopGatewayRoutes.Count > 0 || GatewayRequests24h > 0;
     public double DbUsagePercent => DbQuotaBytes > 0 ? Math.Min(100.0, (double)DbTotalBytes / DbQuotaBytes * 100.0) : 0.0;
     public double EgressUsagePercent => EgressQuotaGb > 0 ? Math.Min(100.0, EgressUsedGb / EgressQuotaGb * 100.0) : 0.0;
     public double StorageUsagePercent => StorageQuotaBytes > 0 ? Math.Min(100.0, (double)StorageTotalBytes / StorageQuotaBytes * 100.0) : 0.0;
@@ -275,7 +279,15 @@ public sealed class SupabaseAdminSnapshot
         sb.AppendLine($"- **Log Ingestion**: {LogIngestionGb:F3} GB / {LogIngestionQuotaGb:F1} GB ({LogIngestionPercent:F1}%)");
         sb.AppendLine($"- **Log Query**: {LogQueryGb:F3} GB / {LogQueryQuotaGb:F0} GB ({LogQueryPercent:F1}%)");
         sb.AppendLine($"- **Auth Footprint**: {MonthlyActiveUsers} MAU / {MauQuota} · {ActiveSessionsCount} active sessions · {PairedWatchesCount} paired watches");
-        sb.AppendLine($"- **24h Gateway Traffic**: {GatewayRequests24h} reqs (`2xx`: {Gateway2xx24h}, `4xx`: {Gateway4xx24h}, `5xx`: {Gateway5xx24h}) · {SupabaseAdminFormatter.FormatBytes(GatewayEgressBytes24h)} response payload");
+        if (HasScannedGatewayLogs)
+        {
+            var win = GatewayScanWindowHours ?? 24;
+            sb.AppendLine($"- **Gateway Traffic ({win}h Scan)**: {GatewayRequests24h} reqs (`2xx`: {Gateway2xx24h}, `4xx`: {Gateway4xx24h}, `5xx`: {Gateway5xx24h}) · {SupabaseAdminFormatter.FormatBytes(GatewayEgressBytes24h)} response payload");
+        }
+        else
+        {
+            sb.AppendLine($"- **24h Gateway Egress**: {SupabaseAdminFormatter.FormatBytes(GatewayEgressBytes24h)} (`0 B` Log Query consumed — On-Demand ClickHouse Mode)");
+        }
         sb.AppendLine($"- **Realtime**: {ActiveRealtimeSubscriptions} active subscriptions · `realtime.list_changes` CPU share {RealtimeListChangesCpuPercent:F1}% ({RealtimeListChangesCalls} calls)");
         sb.AppendLine();
 
@@ -294,13 +306,20 @@ public sealed class SupabaseAdminSnapshot
 
         if (TopGatewayRoutes.Count > 0)
         {
-            sb.AppendLine("## Top 24h Gateway Endpoints");
+            var win = GatewayScanWindowHours ?? 24;
+            sb.AppendLine($"## Top Gateway Endpoints ({win}h Scan)");
             sb.AppendLine("| Endpoint | Requests | Errors | Egress |");
             sb.AppendLine("|---|---:|---:|---:|");
             foreach (var r in TopGatewayRoutes.Take(10))
             {
                 sb.AppendLine($"| `{r.Method} {r.Path}` | {r.RequestCount} | {r.ErrorCount} | {r.EgressFormatted} |");
             }
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine("## HTTP Gateway Endpoints (On-Demand Zero-Log-Query Mode)");
+            sb.AppendLine("- ClickHouse `edge_logs` scan skipped on standard refresh (`0 B` Log Query consumed).");
             sb.AppendLine();
         }
 

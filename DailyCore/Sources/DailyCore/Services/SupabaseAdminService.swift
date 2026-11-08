@@ -10,21 +10,23 @@ import Security
 /// Centralized, strictly read-only Cloud Observability & Admin Telemetry service for Supabase.
 ///
 /// Architectural guarantees:
-/// 1. Zero idle background polling — network queries execute ONLY when the Admin Console is opened (10-min TTL) or explicitly refreshed.
-/// 2. Zero mutating API/SQL calls — strictly GET telemetry endpoints and `/database/query/read-only`.
-/// 3. Strict local credential isolation — `GroupDefaults` on macOS (zero Keychain prompts), `ThisDeviceOnly` Keychain on iOS; NEVER synced to cloud `user_settings`.
+/// 1. Zero idle background polling — network queries execute ONLY when the Admin Console is opened (30-min TTL) or explicitly refreshed.
+/// 2. Zero-Log-Query by default — opening or refreshing the console executes ZERO ClickHouse analytics queries (`0 B` Log Query); detailed `edge_logs` scanning runs strictly On-Demand via a single-pass query.
+/// 3. Zero mutating API/SQL calls — strictly GET telemetry endpoints and `/database/query/read-only`.
+/// 4. Strict local credential isolation — `GroupDefaults` on macOS (zero Keychain prompts), `ThisDeviceOnly` Keychain on iOS; NEVER synced to cloud `user_settings`.
 @MainActor
 public final class SupabaseAdminService: ObservableObject {
     public static let shared = SupabaseAdminService()
 
-    public static let defaultProjectRef = "akkfouifxztnfwwiclwg"
+    nonisolated public static let defaultProjectRef = "akkfouifxztnfwwiclwg"
     private static let credentialsStorageKey = "com.intellidream.daily.supabase.admin.credentials.v1"
     private static let snapshotCacheKeyPrefix = "com.intellidream.daily.supabase.admin.snapshot.v3."
-    private static let cacheTtlSeconds: TimeInterval = 600 // 10 minutes
+    nonisolated public static let cacheTtlSeconds: TimeInterval = 1800 // 30 minutes
 
     @Published public private(set) var credentials: SupabaseAdminCredentials
     @Published public private(set) var snapshot: SupabaseAdminSnapshot?
     @Published public private(set) var isLoading: Bool = false
+    @Published public private(set) var isScanningGatewayLogs: Bool = false
     @Published public private(set) var isAuthenticating: Bool = false
     @Published public private(set) var isAnalyzingAI: Bool = false
     @Published public private(set) var aiAnalysis: String?
@@ -365,8 +367,7 @@ public final class SupabaseAdminService: ObservableObject {
 
         if let cached = Self.loadCachedSnapshot(projectRef: ref) {
             self.snapshot = cached
-            if cached.isExactBillingUsageAvailable,
-               Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
+            if Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
                 return
             }
         }
@@ -480,20 +481,18 @@ public final class SupabaseAdminService: ObservableObject {
         return (acc, parsed.refreshToken, parsed.identity)
     }
 
-    // MARK: - Snapshot Refresh (10-Minute Local Cache + Parallel Aggregation)
+    // MARK: - Snapshot Refresh (30-Minute Local Cache + Zero-Log-Query Default Aggregation)
 
     public func ensureLoadedOnAppear() async {
         guard isConnected else { return }
         if let current = snapshot,
            current.project.ref == credentials.selectedProjectRef,
-           current.isExactBillingUsageAvailable,
            Date().timeIntervalSince(current.fetchedAt) < Self.cacheTtlSeconds {
             return
         }
         if let cached = Self.loadCachedSnapshot(projectRef: credentials.selectedProjectRef) {
             self.snapshot = cached
-            if cached.isExactBillingUsageAvailable,
-               Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
+            if Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTtlSeconds {
                 return
             }
         }
@@ -504,7 +503,7 @@ public final class SupabaseAdminService: ObservableObject {
         guard credentials.primaryManagementBearer != nil else { return }
         if !force,
            let snap = snapshot,
-           snap.isExactBillingUsageAvailable,
+           snap.project.ref == credentials.selectedProjectRef,
            Date().timeIntervalSince(snap.fetchedAt) < Self.cacheTtlSeconds {
             return
         }
@@ -556,15 +555,14 @@ public final class SupabaseAdminService: ObservableObject {
             let orgCreatedAt = matchedOrg?.createdAt
             let projectCreatedAt = activeProject.createdAt
 
-            // Fire all read-only control-plane, ClickHouse, and Postgres telemetry requests concurrently
+            // Fire strictly Zero-Log-Query control-plane, billing, and consolidated Postgres telemetry requests concurrently.
+            // ClickHouse `/analytics/endpoints/*` (`logs`, `usage.api-counts`, `functions.combined-stats`) are NEVER called here (`0 B` Log Query).
             async let orgTask = fetchOrgDetails(bearer: mgmtBearer, orgSlug: targetOrgSlug, fallbackOrg: matchedOrg)
             async let addonsTask = fetchComputeTier(bearer: mgmtBearer, ref: ref)
             async let healthTask = fetchServicesHealth(bearer: mgmtBearer, ref: ref)
             async let diskTask = fetchDiskTelemetry(bearer: mgmtBearer, ref: ref)
-            async let apiCountsTask = fetchApiCounts24h(bearer: mgmtBearer, ref: ref)
             async let functionsTask = fetchEdgeFunctionsTelemetry(bearer: mgmtBearer, ref: ref)
             async let advisorsTask = fetchAdvisors(bearer: mgmtBearer, ref: ref)
-            async let logsForensicsTask = fetchClickHouseLogsForensics(bearer: mgmtBearer, ref: ref)
             async let pgCatalogTask = fetchPostgresCatalogForensics(bearer: mgmtBearer, ref: ref)
             async let platformUsageTask = fetchPlatformBillingUsage(
                 primaryBearer: primaryPlatform,
@@ -580,12 +578,21 @@ public final class SupabaseAdminService: ObservableObject {
             let computeTier = await addonsTask
             let serviceHealth = await healthTask
             let diskInfo = await diskTask
-            let apiCounts = await apiCountsTask
-            let edgeFunctions = await functionsTask
+            let rawEdgeFunctions = await functionsTask
             let (perfLints, secLints) = await advisorsTask
-            let logsData = await logsForensicsTask
             let pgData = await pgCatalogTask
             let billingData = await platformUsageTask
+
+            // Preserve any previously scanned On-Demand ClickHouse Gateway Forensics for this project
+            let priorSnapshot: SupabaseAdminSnapshot? = {
+                if let current = self.snapshot, current.project.ref == ref {
+                    return current
+                }
+                return Self.loadCachedSnapshot(projectRef: ref)
+            }()
+            let preservedScannedAt = priorSnapshot?.gatewayLogsScannedAt
+            let preservedScanWindow = priorSnapshot?.gatewayScanWindowHours
+            let hasPriorGatewayScan = priorSnapshot?.hasScannedGatewayLogs == true
 
             // Plan-aware SI decimal default quotas when exact `/platform/organizations/{slug}/usage` isn't returned (e.g. PAT-only mode)
             let isProOrHigher = ["pro", "team", "enterprise"].contains(orgPlan.lowercased())
@@ -597,35 +604,25 @@ public final class SupabaseAdminService: ObservableObject {
             let defaultRtPeakQuota: Int64 = isProOrHigher ? 500 : 200
             let defaultMauQuota: Int64 = isProOrHigher ? 100_000 : 50_000
 
-            // Multi-tier 24h Egress resolution:
-            // 1. Direct ClickHouse edge logs bytes (with chunked encoding estimation fallback)
-            // 2. Today's point in the daily egress series
-            // 3. Fallback request count estimation from apiCounts
+            // Zero-Log-Query 24h Egress resolution from `/platform/organizations/{slug}/usage/daily`:
+            // 1. Today's UTC daily bucket (or latest bucket in `dailyEgress` right after UTC midnight)
+            // 2. Fallback to preserved 24h On-Demand ClickHouse scan if available
             let df = DateFormatter()
             df.dateFormat = "yyyy-MM-dd"
             df.timeZone = TimeZone(secondsFromGMT: 0)
             let todayStr = df.string(from: Date())
-            let todayDailyPointBytes = billingData.dailyEgress.first(where: { $0.date == todayStr })?.totalBytes ?? 0
-            let apiCountEstimatedBytes: Int64 = apiCounts.reduce(0) { acc, pt in
-                acc + Int64(pt.restRequests) * 1280
-                    + Int64(pt.authRequests) * 850
-                    + Int64(pt.storageRequests) * 8192
-                    + Int64(pt.realtimeRequests) * 450
-            }
+            let candidateDailyBytes = billingData.dailyEgress.first(where: { $0.date == todayStr })?.totalBytes
+                ?? billingData.dailyEgress.last?.totalBytes
+                ?? 0
 
-            var resolved24hEgress: Int64 = logsData.totalEdgeResponseBytes24h
-            if resolved24hEgress == 0 {
-                if todayDailyPointBytes > 0 && (billingData.egressUsedBytes == 0 || todayDailyPointBytes < billingData.egressUsedBytes) {
-                    resolved24hEgress = todayDailyPointBytes
-                } else if apiCountEstimatedBytes > 0 {
-                    resolved24hEgress = apiCountEstimatedBytes
-                }
+            var resolved24hEgress: Int64 = 0
+            if candidateDailyBytes > 0 && (billingData.egressUsedBytes == 0 || candidateDailyBytes < billingData.egressUsedBytes || billingData.dailyEgress.count == 1) {
+                resolved24hEgress = candidateDailyBytes
+            } else if let prior = priorSnapshot, prior.egress24hBytes > 0, (billingData.egressUsedBytes == 0 || prior.egress24hBytes < billingData.egressUsedBytes) {
+                resolved24hEgress = prior.egress24hBytes
             }
 
             // Billing Cycle / Monthly Egress resolution:
-            // 1. Authoritative `/platform/organizations/{slug}/usage` `EGRESS` (`usage_original`) when exact billing usage is available
-            // 2. Otherwise sum of daily egress points across the active billing cycle
-            // 3. Otherwise fallback to 24h gateway burst
             let sumDailyEgressBytes = billingData.dailyEgress.reduce(0) { $0 + $1.totalBytes }
             let resolvedCycleEgress: Int64
             if billingData.isExact && billingData.egressUsedBytes > 0 {
@@ -637,38 +634,33 @@ public final class SupabaseAdminService: ObservableObject {
             }
 
             let resolvedDbSize = billingData.dbSizeBytes > 0 ? billingData.dbSizeBytes : pgData.dbSizeBytes
-            let resolvedFnInvocations = billingData.functionInvocations > 0
-                ? billingData.functionInvocations
-                : Int64(edgeFunctions.reduce(0) { $0 + $1.invocations24h })
+            let resolvedFnInvocations = billingData.functionInvocations
             let resolvedMau = billingData.mauCount > 0 ? billingData.mauCount : pgData.totalUsersCount
-            let resolvedLogEvents = billingData.logIngestionEvents > 0
-                ? billingData.logIngestionEvents
-                : Int64(logsData.logCountsBySource.values.reduce(0, +))
+            let resolvedLogEvents = billingData.logIngestionEvents
             let resolvedRtPeak = billingData.realtimePeakConnections > 0
                 ? billingData.realtimePeakConnections
                 : Int64(pgData.realtimeActiveSubscriptions)
 
-            // Merge registered health sources into Fleet devices
-            let fleetDevices = buildFleetStats(
-                rawFleetBuckets: logsData.fleetBuckets,
-                registeredHealthSources: pgData.healthSourceNames
-            )
-
-            // Build daily egress fallback point from 24h logs if `/platform/.../usage/daily` wasn't available
-            var dailySeries = billingData.dailyEgress
-            if dailySeries.isEmpty && resolved24hEgress > 0 {
-                dailySeries = [
-                    SupabaseDailyEgressPoint(
-                        date: todayStr,
-                        restBytes: logsData.restBytes24h > 0 ? logsData.restBytes24h : resolved24hEgress,
-                        functionBytes: logsData.functionBytes24h,
-                        realtimeBytes: logsData.realtimeBytes24h,
-                        authBytes: logsData.authBytes24h,
-                        storageBytes: logsData.storageBytes24h,
-                        supavisorBytes: 0
-                    )
-                ]
+            // If there is exactly 1 deployed Edge Function and cycle invocations are known from billing, enrich its count cleanly
+            let edgeFunctions: [SupabaseEdgeFunctionStat] = rawEdgeFunctions.map { fn in
+                if rawEdgeFunctions.count == 1 && fn.invocations24h == 0 && resolvedFnInvocations > 0 {
+                    var enriched = fn
+                    enriched.invocations24h = Int(min(Int64(Int.max), resolvedFnInvocations))
+                    return enriched
+                }
+                return fn
             }
+
+            // Preserve scanned Fleet stats (enriching registered health sources), or build zero-ClickHouse Fleet from `public.health_sources`
+            let fleetDevices: [SupabaseFleetDeviceStat] = {
+                if hasPriorGatewayScan, let priorDevices = priorSnapshot?.fleetDevices, !priorDevices.isEmpty {
+                    return Self.mergeRegisteredSources(into: priorDevices, registeredHealthSources: pgData.healthSourceNames)
+                }
+                return buildFleetStats(
+                    rawFleetBuckets: [],
+                    registeredHealthSources: pgData.healthSourceNames
+                )
+            }()
 
             let newSnapshot = SupabaseAdminSnapshot(
                 fetchedAt: Date(),
@@ -702,14 +694,16 @@ public final class SupabaseAdminService: ObservableObject {
                 logQueryBytes: billingData.logQueryBytes,
                 logQueryQuotaBytes: billingData.logQueryQuotaBytes > 0 ? billingData.logQueryQuotaBytes : 100_000_000_000,
                 logIngestionEvents: resolvedLogEvents,
-                dailyEgress: dailySeries,
-                apiCounts24h: apiCounts,
-                logCountsBySource: logsData.logCountsBySource,
-                http2xxCount24h: logsData.http2xxCount,
-                http4xxCount24h: logsData.http4xxCount,
-                http5xxCount24h: logsData.http5xxCount,
-                topRoutes24h: logsData.topRoutes,
-                recentErrors24h: logsData.recentErrors,
+                dailyEgress: billingData.dailyEgress,
+                apiCounts24h: priorSnapshot?.apiCounts24h ?? [],
+                gatewayLogsScannedAt: preservedScannedAt,
+                gatewayScanWindowHours: preservedScanWindow,
+                logCountsBySource: hasPriorGatewayScan ? (priorSnapshot?.logCountsBySource ?? [:]) : [:],
+                http2xxCount24h: hasPriorGatewayScan ? (priorSnapshot?.http2xxCount24h ?? 0) : 0,
+                http4xxCount24h: hasPriorGatewayScan ? (priorSnapshot?.http4xxCount24h ?? 0) : 0,
+                http5xxCount24h: hasPriorGatewayScan ? (priorSnapshot?.http5xxCount24h ?? 0) : 0,
+                topRoutes24h: hasPriorGatewayScan ? (priorSnapshot?.topRoutes24h ?? []) : [],
+                recentErrors24h: hasPriorGatewayScan ? (priorSnapshot?.recentErrors24h ?? []) : [],
                 diskUsedBytes: diskInfo.usedBytes > 0 ? diskInfo.usedBytes : resolvedDbSize,
                 diskTotalBytes: diskInfo.totalBytes,
                 diskIops: diskInfo.iops,
@@ -746,6 +740,55 @@ public final class SupabaseAdminService: ObservableObject {
         } catch {
             self.errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: - On-Demand Single-Pass ClickHouse Gateway Log Scanner
+
+    /// Explicitly scans `edge_logs` in ClickHouse using a single consolidated SQL pass over `windowHours` (`1`, `6`, or `24`).
+    /// Never runs automatically on appear or standard refresh so `Log Query` consumption remains `0 B` unless requested.
+    public func scanGatewayLogs(windowHours: Int = 1) async {
+        guard !isScanningGatewayLogs else { return }
+        let freshDash = await ensureFreshDashboardBearer(forceRefresh: false)
+        guard let mgmtBearer = credentials.primaryManagementBearer ?? freshDash else { return }
+
+        if snapshot == nil {
+            await refreshSnapshot(force: true)
+        }
+        guard var currentSnap = snapshot else { return }
+
+        let clampedWindow: Int = (windowHours >= 24) ? 24 : (windowHours >= 6 ? 6 : 1)
+        isScanningGatewayLogs = true
+        defer { isScanningGatewayLogs = false }
+
+        let parsed = await fetchSinglePassClickHouseLogs(
+            bearer: mgmtBearer,
+            ref: currentSnap.project.ref,
+            windowHours: clampedWindow
+        )
+
+        let existingSources = currentSnap.fleetDevices.flatMap(\.registeredSources)
+        let updatedFleet = buildFleetStats(
+            rawFleetBuckets: parsed.fleetBuckets,
+            registeredHealthSources: existingSources
+        )
+
+        currentSnap.gatewayLogsScannedAt = Date()
+        currentSnap.gatewayScanWindowHours = clampedWindow
+        currentSnap.http2xxCount24h = parsed.http2xxCount
+        currentSnap.http4xxCount24h = parsed.http4xxCount
+        currentSnap.http5xxCount24h = parsed.http5xxCount
+        currentSnap.topRoutes24h = parsed.topRoutes
+        currentSnap.recentErrors24h = parsed.recentErrors
+        currentSnap.logCountsBySource = ["edge_logs": parsed.http2xxCount + parsed.http4xxCount + parsed.http5xxCount]
+        if !updatedFleet.isEmpty {
+            currentSnap.fleetDevices = updatedFleet
+        }
+        if clampedWindow == 24 && currentSnap.egress24hBytes == 0 && parsed.totalEdgeResponseBytes24h > 0 {
+            currentSnap.egress24hBytes = parsed.totalEdgeResponseBytes24h
+        }
+
+        self.snapshot = currentSnap
+        Self.saveCachedSnapshot(currentSnap)
     }
 
     // MARK: - AI Telemetry Co-Pilot (Gemini + Deterministic Fallback)
@@ -831,13 +874,18 @@ public final class SupabaseAdminService: ObservableObject {
             bullets.append("- **🗄️ PostgreSQL Storage Healthy:** Database uses **\(SupabaseAdminSnapshot.formatBytes(snapshot.dbSizeBytes))** (**\(String(format: "%.1f%%", snapshot.dbQuotaPercent))** of quota) with **\(String(format: "%.2f%%", snapshot.cacheHitRatioPercent))** buffer cache hit ratio and zero severe index bloat anomalies.")
         }
 
-        // 3. Gateway error rate & Realtime WAL
+        // 3. Gateway error rate, Log Query quota & Realtime WAL
         if snapshot.http4xxCount24h + snapshot.http5xxCount24h > 50 || snapshot.errorRate24hPercent > 3.0 {
-            bullets.append("- **🛡️ Gateway Error Watch:** Logged **\(snapshot.http4xxCount24h)** `4xx` and **\(snapshot.http5xxCount24h)** `5xx` responses in the last 24h (**\(String(format: "%.1f%%", snapshot.errorRate24hPercent))** error ratio). Inspect stale refresh-token retries or schema column mismatches in the Recent Errors panel.")
+            bullets.append("- **🛡️ Gateway Error Watch:** Logged **\(snapshot.http4xxCount24h)** `4xx` and **\(snapshot.http5xxCount24h)** `5xx` responses (**\(String(format: "%.1f%%", snapshot.errorRate24hPercent))** error ratio). Inspect stale refresh-token retries or schema column mismatches in the Recent Errors panel.")
+        } else if snapshot.logQueryQuotaPercent >= 85.0 {
+            bullets.append("- **📊 ClickHouse Log Query Guard (\(String(format: "%.1f%%", snapshot.logQueryQuotaPercent))):** Cycle `Log Query` is **\(SupabaseAdminSnapshot.formatBytes(snapshot.logQueryBytes)) / \(SupabaseAdminSnapshot.formatBytes(snapshot.logQueryQuotaBytes))**. Zero-Log-Query Default Mode is active (`0 B` scanned on open/refresh); trigger On-Demand `1h` scans only when debugging routes.")
         } else if snapshot.realtimeWalCpuSharePercent > 25.0 {
             bullets.append("- **⚡ Realtime WAL Load:** `realtime.list_changes` accounts for **\(String(format: "%.1f%%", snapshot.realtimeWalCpuSharePercent))** of tracked SQL execution across **\(snapshot.realtimeActiveSubscriptions)** active subscriptions. Keep dormant desktop/mobile background tabs unsubscribed.")
         } else {
-            bullets.append("- **⚡ Runtime & Realtime Nominal:** Gateway error rate is **\(String(format: "%.2f%%", snapshot.errorRate24hPercent))** over **\(snapshot.totalHttpRequests24h)** 24h requests, with **\(snapshot.realtimeActiveSubscriptions)** active Realtime subscriptions.")
+            let gwDetail = snapshot.hasScannedGatewayLogs
+                ? "Gateway error rate is **\(String(format: "%.2f%%", snapshot.errorRate24hPercent))** over **\(snapshot.totalHttpRequests24h)** scanned requests"
+                : "Zero-Log-Query mode active (`0 B` ClickHouse overhead)"
+            bullets.append("- **⚡ Runtime & Realtime Nominal:** \(gwDetail), with **\(snapshot.realtimeActiveSubscriptions)** active Realtime subscriptions.")
         }
 
         // 4. Advisors & Cron
@@ -1035,27 +1083,9 @@ public final class SupabaseAdminService: ObservableObject {
         return res
     }
 
-    private func fetchApiCounts24h(bearer: String, ref: String) async -> [SupabaseApiCountPoint] {
-        guard let json = try? await performGetJson(
-            url: "https://api.supabase.com/v1/projects/\(ref)/analytics/endpoints/usage.api-counts?interval=1day",
-            bearer: bearer
-        ) as? [String: Any],
-              let result = json["result"] as? [[String: Any]] else {
-            return []
-        }
-        return result.compactMap { row in
-            guard let ts = Self.str(row["timestamp"]) else { return nil }
-            return SupabaseApiCountPoint(
-                timestamp: ts,
-                restRequests: Self.int(row["total_rest_requests"]) ?? 0,
-                authRequests: Self.int(row["total_auth_requests"]) ?? 0,
-                realtimeRequests: Self.int(row["total_realtime_requests"]) ?? 0,
-                storageRequests: Self.int(row["total_storage_requests"]) ?? 0
-            )
-        }
-    }
-
     private func fetchEdgeFunctionsTelemetry(bearer: String, ref: String) async -> [SupabaseEdgeFunctionStat] {
+        // Strictly Control-Plane metadata (`0 B` ClickHouse Log Query).
+        // Avoids per-function `/analytics/endpoints/functions.combined-stats` ClickHouse scans.
         guard let list = try? await performGetJson(
             url: "https://api.supabase.com/v1/projects/\(ref)/functions",
             bearer: bearer
@@ -1063,70 +1093,25 @@ public final class SupabaseAdminService: ObservableObject {
             return []
         }
 
-        return await withTaskGroup(of: SupabaseEdgeFunctionStat?.self) { group in
-            for item in list {
-                guard let id = Self.str(item["id"]),
-                      let slug = Self.str(item["slug"]) else { continue }
-                let name = Self.str(item["name"]) ?? slug
-                let status = Self.str(item["status"]) ?? "ACTIVE"
-                let version = Self.int(item["version"]) ?? 1
-                let verifyJwt = (item["verify_jwt"] as? Bool) ?? true
-
-                group.addTask { [session] in
-                    var totalInv = 0
-                    var totalErr = 0
-                    var weightedExecSum = 0.0
-                    var maxExec = 0.0
-
-                    var comps = URLComponents(string: "https://api.supabase.com/v1/projects/\(ref)/analytics/endpoints/functions.combined-stats")!
-                    comps.queryItems = [
-                        URLQueryItem(name: "function_id", value: id),
-                        URLQueryItem(name: "interval", value: "1day")
-                    ]
-                    if let url = comps.url {
-                        var req = URLRequest(url: url)
-                        req.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
-                        if let (data, resp) = try? await session.data(for: req),
-                           let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode),
-                           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                           let rows = root["result"] as? [[String: Any]] {
-                            for r in rows {
-                                let count = Self.int(r["requests_count"]) ?? Self.int(r["count"]) ?? 0
-                                let errs = (Self.int(r["log_Functions_Error"]) ?? 0)
-                                    + (Self.int(r["status_4xx_count"]) ?? 0)
-                                    + (Self.int(r["status_5xx_count"]) ?? 0)
-                                    + (Self.int(r["errors_count"]) ?? 0)
-                                let avgMs = Self.double(r["avg_execution_time"]) ?? Self.double(r["execution_time_avg"]) ?? 0
-                                let mxMs = Self.double(r["max_execution_time"]) ?? avgMs
-                                totalInv += count
-                                totalErr += errs
-                                weightedExecSum += avgMs * Double(max(count, 1))
-                                if mxMs > maxExec { maxExec = mxMs }
-                            }
-                        }
-                    }
-
-                    let avgExec = totalInv > 0 ? (weightedExecSum / Double(totalInv)) : 0
-                    return SupabaseEdgeFunctionStat(
-                        id: id,
-                        slug: slug,
-                        name: name,
-                        status: status,
-                        version: version,
-                        verifyJwt: verifyJwt,
-                        invocations24h: totalInv,
-                        errors24h: min(totalErr, totalInv),
-                        avgExecutionMs: avgExec,
-                        maxExecutionMs: maxExec
-                    )
-                }
-            }
-
-            var out: [SupabaseEdgeFunctionStat] = []
-            for await stat in group {
-                if let stat { out.append(stat) }
-            }
-            return out.sorted { $0.invocations24h > $1.invocations24h }
+        return list.compactMap { item in
+            guard let id = Self.str(item["id"]),
+                  let slug = Self.str(item["slug"]) else { return nil }
+            let name = Self.str(item["name"]) ?? slug
+            let status = Self.str(item["status"]) ?? "ACTIVE"
+            let version = Self.int(item["version"]) ?? 1
+            let verifyJwt = (item["verify_jwt"] as? Bool) ?? true
+            return SupabaseEdgeFunctionStat(
+                id: id,
+                slug: slug,
+                name: name,
+                status: status,
+                version: version,
+                verifyJwt: verifyJwt,
+                invocations24h: 0,
+                errors24h: 0,
+                avgExecutionMs: 0,
+                maxExecutionMs: 0
+            )
         }
     }
 
@@ -1164,56 +1149,34 @@ public final class SupabaseAdminService: ObservableObject {
         }
     }
 
-    // MARK: - ClickHouse Unified Logs Forensics (24h Window)
+    // MARK: - On-Demand Single-Pass ClickHouse Edge Logs Scanner
 
-    private struct FleetRawBucket: Sendable {
+    internal struct FleetRawBucket: Sendable {
         let ua: String
         let count: Int
         let bytes: Int64
         let errors4xx: Int
     }
 
-    private struct LogsForensicsResult: Sendable {
+    internal struct LogsForensicsResult: Sendable {
         var logCountsBySource: [String: Int] = [:]
         var http2xxCount: Int = 0
         var http4xxCount: Int = 0
         var http5xxCount: Int = 0
         var totalEdgeResponseBytes24h: Int64 = 0
-        var restBytes24h: Int64 = 0
-        var functionBytes24h: Int64 = 0
-        var realtimeBytes24h: Int64 = 0
-        var authBytes24h: Int64 = 0
-        var storageBytes24h: Int64 = 0
         var topRoutes: [SupabaseTopRouteStat] = []
         var recentErrors: [SupabaseGatewayErrorItem] = []
         var fleetBuckets: [FleetRawBucket] = []
     }
 
-    private func fetchClickHouseLogsForensics(bearer: String, ref: String) async -> LogsForensicsResult {
-        var out = LogsForensicsResult()
-        let endDate = Date()
-        let startDate = endDate.addingTimeInterval(-23.8 * 3600) // Strictly < 24h per Supabase ClickHouse validation rule
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        let startIso = iso.string(from: startDate)
-        let endIso = iso.string(from: endDate)
-
-        // 1. Source volume distribution across unified `logs`
-        let sourceSql = """
-        SELECT source, count() AS cnt
-        FROM logs
-        GROUP BY source
-        ORDER BY cnt DESC
-        LIMIT 12
+    /// Single-pass ClickHouse SQL strictly scoped to `WHERE source = 'edge_logs'`, skipping `event_message`
+    /// and unfiltered `logs` scans so a single scan reads minimal columnar data.
+    nonisolated internal static func buildSinglePassGatewayClickHouseSql() -> String {
         """
-
-        // 2. Top HTTP routes + response content-length + status buckets from `edge_logs`
-        // Note: Unified ClickHouse tables may identify edge logs via `source = 'edge_logs'` or `source_name = 'edge_logs'`.
-        // Content-Length can also be logged under multiple response headers or body size fields.
-        let routesSql = """
         SELECT
-          log_attributes['request.method'] AS method,
-          log_attributes['request.path'] AS path,
+          coalesce(nullIf(log_attributes['request.method'], ''), 'GET') AS method,
+          coalesce(nullIf(log_attributes['request.path'], ''), '/') AS path,
+          coalesce(log_attributes['request.headers.user_agent'], '') AS ua,
           count() AS req_count,
           sum(greatest(
             toInt64OrZero(log_attributes['response.headers.content-length']),
@@ -1225,94 +1188,59 @@ public final class SupabaseAdminService: ObservableObject {
           avg(toFloat64OrZero(log_attributes['response.origin_time'])) AS avg_ms,
           countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 400) AS ok_cnt,
           countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
-          countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx
+          countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx,
+          max(toInt32OrZero(log_attributes['response.status_code'])) AS max_status,
+          max(toString(timestamp)) AS last_ts
         FROM logs
         WHERE source = 'edge_logs'
-        GROUP BY method, path
+        GROUP BY method, path, ua
         ORDER BY resp_bytes DESC, req_count DESC
-        LIMIT 25
+        LIMIT 100
         """
+    }
 
-        // 3. Ecosystem Fleet User-Agent footprint
-        let fleetSql = """
-        SELECT
-          log_attributes['request.headers.user_agent'] AS ua,
-          count() AS req_count,
-          sum(greatest(
-            toInt64OrZero(log_attributes['response.headers.content-length']),
-            toInt64OrZero(log_attributes['response.headers.content_length']),
-            toInt64OrZero(log_attributes['response.size']),
-            toInt64OrZero(log_attributes['response.body_size']),
-            toInt64OrZero(log_attributes['response.bytes'])
-          )) AS resp_bytes,
-          countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx
-        FROM logs
-        WHERE source = 'edge_logs'
-        GROUP BY ua
-        ORDER BY req_count DESC
-        LIMIT 25
-        """
+    nonisolated internal static func parseSinglePassClickHouseRows(
+        _ rows: [[String: Any]],
+        windowHours: Int
+    ) -> LogsForensicsResult {
+        var out = LogsForensicsResult()
 
-        // 4. Recent 4xx/5xx error events
-        let errorsSql = """
-        SELECT
-          id,
-          timestamp,
-          toInt32OrZero(log_attributes['response.status_code']) AS status,
-          log_attributes['request.method'] AS method,
-          log_attributes['request.path'] AS path,
-          log_attributes['request.headers.user_agent'] AS ua,
-          event_message
-        FROM logs
-        WHERE source = 'edge_logs'
-          AND toInt32OrZero(log_attributes['response.status_code']) >= 400
-        ORDER BY timestamp DESC
-        LIMIT 15
-        """
-
-        async let sourcesData = executeClickHouseLogsData(bearer: bearer, ref: ref, sql: sourceSql, startIso: startIso, endIso: endIso)
-        async let routesData = executeClickHouseLogsData(bearer: bearer, ref: ref, sql: routesSql, startIso: startIso, endIso: endIso)
-        async let fleetData = executeClickHouseLogsData(bearer: bearer, ref: ref, sql: fleetSql, startIso: startIso, endIso: endIso)
-        async let errorData = executeClickHouseLogsData(bearer: bearer, ref: ref, sql: errorsSql, startIso: startIso, endIso: endIso)
-
-        let sourcesRows = Self.decodeResultArray(await sourcesData)
-        let routesRows = Self.decodeResultArray(await routesData)
-        let fleetRows = Self.decodeResultArray(await fleetData)
-        let errorRows = Self.decodeResultArray(await errorData)
-
-        for row in sourcesRows {
-            if let src = Self.str(row["source"]), let cnt = Self.int(row["cnt"]) {
-                out.logCountsBySource[src] = cnt
-            }
+        struct RouteAcc {
+            var method: String
+            var path: String
+            var requests: Int = 0
+            var bytes: Int64 = 0
+            var weightedLatencySum: Double = 0
+            var errors: Int = 0
         }
 
-        var parsedRoutes: [SupabaseTopRouteStat] = []
-        for row in routesRows {
-            let method = Self.str(row["method"]) ?? "GET"
-            let path = Self.str(row["path"]) ?? "/"
-            let reqCount = Self.int(row["req_count"]) ?? 0
-            var respBytes = Self.int64(row["resp_bytes"]) ?? 0
-            let avgMs = Self.double(row["avg_ms"]) ?? 0
-            let okCnt = Self.int(row["ok_cnt"]) ?? 0
-            let e4 = Self.int(row["err_4xx"]) ?? 0
-            let e5 = Self.int(row["err_5xx"]) ?? 0
+        var routeMap: [String: RouteAcc] = [:]
+        var uaMap: [String: (count: Int, bytes: Int64, err4xx: Int)] = [:]
+        var synthesizedErrors: [SupabaseGatewayErrorItem] = []
 
-            // If response bytes are 0 because of HTTP chunked transfer encoding (no Content-Length header),
-            // estimate realistic payload sizes based on request volume and route classification.
-            if respBytes == 0 && reqCount > 0 {
-                if path.hasPrefix("/storage/") {
-                    respBytes = Int64(reqCount) * 8192
-                } else if path.hasPrefix("/rest/") {
-                    respBytes = Int64(reqCount) * 1280
-                } else if path.hasPrefix("/auth/") {
-                    respBytes = Int64(reqCount) * 850
-                } else if path.hasPrefix("/functions/") {
-                    respBytes = Int64(reqCount) * 1150
-                } else if path.hasPrefix("/realtime/") {
-                    respBytes = Int64(reqCount) * 450
-                } else {
-                    respBytes = Int64(reqCount) * 900
-                }
+        for (idx, row) in rows.enumerated() {
+            let method = str(row["method"]) ?? "GET"
+            let path = str(row["path"]) ?? "/"
+            let ua = str(row["ua"]) ?? "Unknown"
+            let reqCount = int(row["req_count"]) ?? 0
+            guard reqCount > 0 else { continue }
+
+            var respBytes = int64(row["resp_bytes"]) ?? 0
+            let avgMs = double(row["avg_ms"]) ?? 0
+            let okCnt = int(row["ok_cnt"]) ?? 0
+            let e4 = int(row["err_4xx"]) ?? 0
+            let e5 = int(row["err_5xx"]) ?? 0
+            let maxStatus = int(row["max_status"]) ?? (e5 > 0 ? 500 : 400)
+            let lastTs = str(row["last_ts"]) ?? ""
+
+            // Chunked transfer-encoding payload estimation when Content-Length is omitted
+            if respBytes == 0 {
+                if path.hasPrefix("/storage/") { respBytes = Int64(reqCount) * 8192 }
+                else if path.hasPrefix("/rest/") { respBytes = Int64(reqCount) * 1280 }
+                else if path.hasPrefix("/auth/") { respBytes = Int64(reqCount) * 850 }
+                else if path.hasPrefix("/functions/") { respBytes = Int64(reqCount) * 1150 }
+                else if path.hasPrefix("/realtime/") { respBytes = Int64(reqCount) * 450 }
+                else { respBytes = Int64(reqCount) * 900 }
             }
 
             out.http2xxCount += okCnt
@@ -1320,61 +1248,81 @@ public final class SupabaseAdminService: ObservableObject {
             out.http5xxCount += e5
             out.totalEdgeResponseBytes24h += respBytes
 
-            if path.hasPrefix("/rest/") { out.restBytes24h += respBytes }
-            else if path.hasPrefix("/functions/") { out.functionBytes24h += respBytes }
-            else if path.hasPrefix("/realtime/") { out.realtimeBytes24h += respBytes }
-            else if path.hasPrefix("/auth/") { out.authBytes24h += respBytes }
-            else if path.hasPrefix("/storage/") { out.storageBytes24h += respBytes }
-            else { out.restBytes24h += respBytes }
+            let routeKey = "\(method) \(path)"
+            var rAcc = routeMap[routeKey] ?? RouteAcc(method: method, path: path)
+            rAcc.requests += reqCount
+            rAcc.bytes += respBytes
+            rAcc.weightedLatencySum += avgMs * Double(reqCount)
+            rAcc.errors += (e4 + e5)
+            routeMap[routeKey] = rAcc
 
-            parsedRoutes.append(
+            let prevUa = uaMap[ua] ?? (0, 0, 0)
+            uaMap[ua] = (prevUa.count + reqCount, prevUa.bytes + respBytes, prevUa.err4xx + e4)
+
+            if e4 + e5 > 0 && synthesizedErrors.count < 12 {
+                let statusCode = maxStatus >= 400 ? maxStatus : (e5 > 0 ? 500 : 400)
+                let errTotal = e4 + e5
+                synthesizedErrors.append(
+                    SupabaseGatewayErrorItem(
+                        id: "err_\(idx)",
+                        timestamp: lastTs,
+                        statusCode: statusCode,
+                        method: method,
+                        path: path,
+                        userAgent: ua,
+                        message: "\(method) \(path) -> HTTP \(statusCode) (\(errTotal)× in \(windowHours)h)"
+                    )
+                )
+            }
+        }
+
+        out.topRoutes = routeMap.values
+            .sorted {
+                if $0.bytes != $1.bytes { return $0.bytes > $1.bytes }
+                return $0.requests > $1.requests
+            }
+            .prefix(12)
+            .map { acc in
                 SupabaseTopRouteStat(
-                    method: method,
-                    path: path,
-                    requests24h: reqCount,
-                    responseBytes24h: respBytes,
-                    avgLatencyMs: avgMs,
-                    errors4xx5xx: e4 + e5
+                    method: acc.method,
+                    path: acc.path,
+                    requests24h: acc.requests,
+                    responseBytes24h: acc.bytes,
+                    avgLatencyMs: acc.requests > 0 ? (acc.weightedLatencySum / Double(acc.requests)) : 0,
+                    errors4xx5xx: acc.errors
                 )
-            )
-        }
-        out.topRoutes = Array(parsedRoutes.prefix(12))
-
-        for row in fleetRows {
-            let ua = Self.str(row["ua"]) ?? "Unknown"
-            let cnt = Self.int(row["req_count"]) ?? 0
-            var bytes = Self.int64(row["resp_bytes"]) ?? 0
-            let e4 = Self.int(row["err_4xx"]) ?? 0
-            if bytes == 0 && cnt > 0 {
-                bytes = Int64(cnt) * 1280
             }
-            if cnt > 0 {
-                out.fleetBuckets.append(FleetRawBucket(ua: ua, count: cnt, bytes: bytes, errors4xx: e4))
-            }
-        }
 
-        for (idx, row) in errorRows.enumerated() {
-            let id = Self.str(row["id"]) ?? "err_\(idx)"
-            let ts = Self.str(row["timestamp"]) ?? ""
-            let status = Self.int(row["status"]) ?? 400
-            let method = Self.str(row["method"]) ?? "GET"
-            let path = Self.str(row["path"]) ?? "/"
-            let ua = Self.str(row["ua"]) ?? ""
-            let msg = Self.str(row["event_message"]) ?? "\(method) \(path) -> \(status)"
-            out.recentErrors.append(
-                SupabaseGatewayErrorItem(
-                    id: id,
-                    timestamp: ts,
-                    statusCode: status,
-                    method: method,
-                    path: path,
-                    userAgent: ua,
-                    message: msg
-                )
-            )
+        out.fleetBuckets = uaMap.map { ua, stats in
+            FleetRawBucket(ua: ua, count: stats.count, bytes: stats.bytes, errors4xx: stats.err4xx)
         }
-
+        out.recentErrors = synthesizedErrors
+        out.logCountsBySource = ["edge_logs": out.http2xxCount + out.http4xxCount + out.http5xxCount]
         return out
+    }
+
+    private func fetchSinglePassClickHouseLogs(
+        bearer: String,
+        ref: String,
+        windowHours: Int
+    ) async -> LogsForensicsResult {
+        let endDate = Date()
+        let effectiveHours: Double = windowHours >= 24 ? 23.8 : Double(max(1, windowHours))
+        let startDate = endDate.addingTimeInterval(-effectiveHours * 3600.0)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        let startIso = iso.string(from: startDate)
+        let endIso = iso.string(from: endDate)
+
+        let rawData = await executeClickHouseLogsData(
+            bearer: bearer,
+            ref: ref,
+            sql: Self.buildSinglePassGatewayClickHouseSql(),
+            startIso: startIso,
+            endIso: endIso
+        )
+        let rows = Self.decodeResultArray(rawData)
+        return Self.parseSinglePassClickHouseRows(rows, windowHours: windowHours)
     }
 
     private func executeClickHouseLogsData(
@@ -1405,7 +1353,7 @@ public final class SupabaseAdminService: ObservableObject {
         return data
     }
 
-    // MARK: - PostgreSQL Read-Only Catalog Forensics (`/database/query/read-only`)
+    // MARK: - PostgreSQL Read-Only Catalog Forensics (Single Consolidated POST to `/database/query/read-only`)
 
     private struct PostgresForensicsResult: Sendable {
         var dbSizeBytes: Int64 = 0
@@ -1431,8 +1379,8 @@ public final class SupabaseAdminService: ObservableObject {
     private func fetchPostgresCatalogForensics(bearer: String, ref: String) async -> PostgresForensicsResult {
         var out = PostgresForensicsResult()
 
-        // Query A: Universal `pg_catalog` database size, buffer cache hit ratio, active connections, and per-table heap/index bloat
-        let catalogSql = """
+        // Single consolidated JSON CTE query (1 HTTP POST instead of 5 parallel POSTs -> -80% Postgres/Kong log ingestion)
+        let combinedSql = """
         WITH db_meta AS (
           SELECT
             pg_catalog.pg_database_size(pg_catalog.current_database())::bigint AS db_bytes,
@@ -1457,18 +1405,9 @@ public final class SupabaseAdminService: ObservableObject {
           WHERE s.schemaname IN ('public', 'auth', 'realtime', 'storage', 'cron')
           ORDER BY pg_catalog.pg_total_relation_size(s.relid) DESC
           LIMIT 30
-        )
-        SELECT
-          (SELECT db_bytes FROM db_meta) AS db_bytes,
-          (SELECT active_conns FROM db_meta) AS active_conns,
-          (SELECT cache_hit FROM db_meta) AS cache_hit,
-          COALESCE((SELECT json_agg(t) FROM tbl_stats t), '[]'::json) AS tables_json;
-        """
-
-        // Query B: Top SQL statements + Realtime `list_changes` CPU share from `extensions.pg_stat_statements`
-        let statementsSql = """
-        WITH total_cpu AS (
-          SELECT GREATEST( COALESCE(sum(total_exec_time), 0.0), 0.001 ) AS all_ms
+        ),
+        total_cpu AS (
+          SELECT GREATEST(COALESCE(sum(total_exec_time), 0.0), 0.001) AS all_ms
           FROM extensions.pg_stat_statements
         ),
         rt_cpu AS (
@@ -1488,40 +1427,38 @@ public final class SupabaseAdminService: ObservableObject {
           FROM extensions.pg_stat_statements
           ORDER BY total_exec_time DESC
           LIMIT 10
+        ),
+        cron_rows AS (
+          SELECT
+            j.jobid::text AS id,
+            COALESCE(j.jobname, 'job_' || j.jobid::text) AS job_name,
+            j.schedule AS schedule,
+            COALESCE(d.status, CASE WHEN j.active THEN 'scheduled' ELSE 'paused' END) AS status,
+            COALESCE(d.start_time::text, '') AS start_time,
+            CASE WHEN d.end_time IS NOT NULL AND d.start_time IS NOT NULL
+                 THEN round((EXTRACT(EPOCH FROM (d.end_time - d.start_time)) * 1000.0)::numeric, 1)
+                 ELSE NULL END AS duration_ms,
+            COALESCE(left(d.return_message, 120), '') AS return_message
+          FROM cron.job j
+          LEFT JOIN LATERAL (
+            SELECT status, start_time, end_time, return_message
+            FROM cron.job_run_details r
+            WHERE r.jobid = j.jobid
+            ORDER BY r.start_time DESC
+            LIMIT 1
+          ) d ON true
+          ORDER BY j.jobid ASC
+          LIMIT 15
         )
         SELECT
+          (SELECT db_bytes FROM db_meta) AS db_bytes,
+          (SELECT active_conns FROM db_meta) AS active_conns,
+          (SELECT cache_hit FROM db_meta) AS cache_hit,
+          COALESCE((SELECT json_agg(t) FROM tbl_stats t), '[]'::json) AS tables_json,
           (SELECT rt_calls FROM rt_cpu) AS rt_calls,
           round(((SELECT rt_ms FROM rt_cpu) * 100.0 / (SELECT all_ms FROM total_cpu))::numeric, 2) AS rt_pct,
-          COALESCE((SELECT json_agg(q) FROM top_q q), '[]'::json) AS top_sql_json;
-        """
-
-        // Query C: `pg_cron` jobs & latest execution status
-        let cronSql = """
-        SELECT
-          j.jobid::text AS id,
-          COALESCE(j.jobname, 'job_' || j.jobid::text) AS job_name,
-          j.schedule AS schedule,
-          COALESCE(d.status, CASE WHEN j.active THEN 'scheduled' ELSE 'paused' END) AS status,
-          COALESCE(d.start_time::text, '') AS start_time,
-          CASE WHEN d.end_time IS NOT NULL AND d.start_time IS NOT NULL
-               THEN round((EXTRACT(EPOCH FROM (d.end_time - d.start_time)) * 1000.0)::numeric, 1)
-               ELSE NULL END AS duration_ms,
-          COALESCE(left(d.return_message, 120), '') AS return_message
-        FROM cron.job j
-        LEFT JOIN LATERAL (
-          SELECT status, start_time, end_time, return_message
-          FROM cron.job_run_details r
-          WHERE r.jobid = j.jobid
-          ORDER BY r.start_time DESC
-          LIMIT 1
-        ) d ON true
-        ORDER BY j.jobid ASC
-        LIMIT 15;
-        """
-
-        // Query D: Realtime active subscriptions + DayOne ecosystem tables (`paired_watches`, `health_sources`, `storage.objects`)
-        let ecosystemSql = """
-        SELECT
+          COALESCE((SELECT json_agg(q) FROM top_q q), '[]'::json) AS top_sql_json,
+          COALESCE((SELECT json_agg(c) FROM cron_rows c), '[]'::json) AS crons_json,
           (SELECT count(*)::int FROM realtime.subscription) AS rt_subs,
           COALESCE((
             SELECT json_object_agg(entity_name, cnt)
@@ -1533,11 +1470,7 @@ public final class SupabaseAdminService: ObservableObject {
               LIMIT 10
             ) sub_t
           ), '{}'::json) AS rt_by_table,
-          COALESCE((SELECT sum(COALESCE((metadata->>'size')::bigint, 0))::bigint FROM storage.objects), 0) AS storage_bytes;
-        """
-
-        let dayOneFleetSql = """
-        SELECT
+          COALESCE((SELECT sum(COALESCE((metadata->>'size')::bigint, 0))::bigint FROM storage.objects), 0) AS storage_bytes,
           (SELECT count(*)::int FROM public.paired_watches) AS watches_cnt,
           COALESCE((
             SELECT json_agg(DISTINCT COALESCE(device_name, source_type, 'Device'))
@@ -1545,19 +1478,46 @@ public final class SupabaseAdminService: ObservableObject {
           ), '[]'::json) AS health_sources_json;
         """
 
-        async let catData = executeReadOnlySqlData(bearer: bearer, ref: ref, query: catalogSql)
-        async let stmtData = executeReadOnlySqlData(bearer: bearer, ref: ref, query: statementsSql)
-        async let cronData = executeReadOnlySqlData(bearer: bearer, ref: ref, query: cronSql)
-        async let ecoData = executeReadOnlySqlData(bearer: bearer, ref: ref, query: ecosystemSql)
-        async let fleetDbData = executeReadOnlySqlData(bearer: bearer, ref: ref, query: dayOneFleetSql)
+        var rows = Self.decodeTopLevelArray(await executeReadOnlySqlData(bearer: bearer, ref: ref, query: combinedSql))
 
-        let catRows = Self.decodeTopLevelArray(await catData)
-        let stmtRows = Self.decodeTopLevelArray(await stmtData)
-        let cronRows = Self.decodeTopLevelArray(await cronData)
-        let ecoRows = Self.decodeTopLevelArray(await ecoData)
-        let fleetDbRows = Self.decodeTopLevelArray(await fleetDbData)
+        // Resilient fallback for non-DayOne projects where optional schemas (`cron`, `public.health_sources`) may be absent
+        if rows.isEmpty {
+            let coreFallbackSql = """
+            WITH db_meta AS (
+              SELECT
+                pg_catalog.pg_database_size(pg_catalog.current_database())::bigint AS db_bytes,
+                (SELECT count(*)::int FROM pg_catalog.pg_stat_activity WHERE datname = pg_catalog.current_database()) AS active_conns,
+                (SELECT CASE WHEN sum(blks_hit + blks_read) > 0
+                        THEN round((sum(blks_hit)::numeric * 100.0) / sum(blks_hit + blks_read), 2)
+                        ELSE 100.0 END
+                 FROM pg_catalog.pg_stat_database WHERE datname = pg_catalog.current_database()) AS cache_hit
+            ),
+            tbl_stats AS (
+              SELECT
+                s.schemaname AS schema_name,
+                s.relname AS table_name,
+                pg_catalog.pg_table_size(s.relid)::bigint AS data_bytes,
+                pg_catalog.pg_indexes_size(s.relid)::bigint AS index_bytes,
+                pg_catalog.pg_total_relation_size(s.relid)::bigint AS total_bytes,
+                COALESCE(s.n_live_tup, 0)::bigint AS live_rows,
+                COALESCE(s.n_dead_tup, 0)::bigint AS dead_rows,
+                (COALESCE(s.n_tup_ins, 0) + COALESCE(s.n_tup_upd, 0) + COALESCE(s.n_tup_del, 0))::bigint AS total_writes,
+                s.last_autovacuum::text AS last_autovacuum
+              FROM pg_catalog.pg_stat_all_tables s
+              WHERE s.schemaname IN ('public', 'auth', 'realtime', 'storage', 'cron')
+              ORDER BY pg_catalog.pg_total_relation_size(s.relid) DESC
+              LIMIT 30
+            )
+            SELECT
+              (SELECT db_bytes FROM db_meta) AS db_bytes,
+              (SELECT active_conns FROM db_meta) AS active_conns,
+              (SELECT cache_hit FROM db_meta) AS cache_hit,
+              COALESCE((SELECT json_agg(t) FROM tbl_stats t), '[]'::json) AS tables_json;
+            """
+            rows = Self.decodeTopLevelArray(await executeReadOnlySqlData(bearer: bearer, ref: ref, query: coreFallbackSql))
+        }
 
-        if let first = catRows.first {
+        if let first = rows.first {
             out.dbSizeBytes = Self.int64(first["db_bytes"]) ?? 0
             out.activeConnections = Self.int(first["active_conns"]) ?? 0
             out.cacheHitRatio = Self.double(first["cache_hit"]) ?? 99.0
@@ -1608,12 +1568,10 @@ public final class SupabaseAdminService: ObservableObject {
             out.heapDataBytes = heapSum
             out.indexTotalBytes = idxSum
             out.tables = parsedTables
-        }
 
-        if let sFirst = stmtRows.first {
-            out.realtimeListChangesCalls = Self.int64(sFirst["rt_calls"]) ?? 0
-            out.realtimeWalCpuPercent = Self.double(sFirst["rt_pct"]) ?? 0
-            let qArr = Self.jsonArray(sFirst["top_sql_json"])
+            out.realtimeListChangesCalls = Self.int64(first["rt_calls"]) ?? 0
+            out.realtimeWalCpuPercent = Self.double(first["rt_pct"]) ?? 0
+            let qArr = Self.jsonArray(first["top_sql_json"])
             out.topSql = qArr.enumerated().map { idx, q in
                 SupabaseSqlStatementStat(
                     id: "sql_\(idx)",
@@ -1624,11 +1582,9 @@ public final class SupabaseAdminService: ObservableObject {
                     rowsReturned: Self.int64(q["rows_ret"]) ?? 0
                 )
             }
-        }
 
-        let cRows = cronRows
-        if !cRows.isEmpty {
-            out.cronJobs = cRows.map { r in
+            let cArr = Self.jsonArray(first["crons_json"])
+            out.cronJobs = cArr.map { r in
                 SupabaseCronJobRun(
                     id: Self.str(r["id"]) ?? UUID().uuidString,
                     jobName: Self.str(r["job_name"]) ?? "job",
@@ -1639,27 +1595,23 @@ public final class SupabaseAdminService: ObservableObject {
                     returnMessage: Self.str(r["return_message"])
                 )
             }
-        }
 
-        if let eFirst = ecoRows.first {
-            out.realtimeActiveSubscriptions = Self.int(eFirst["rt_subs"]) ?? 0
-            out.storageObjectsBytes = Self.int64(eFirst["storage_bytes"]) ?? 0
-            if let dict = Self.jsonDict(eFirst["rt_by_table"]) {
+            out.realtimeActiveSubscriptions = Self.int(first["rt_subs"]) ?? 0
+            out.storageObjectsBytes = Self.int64(first["storage_bytes"]) ?? 0
+            if let dict = Self.jsonDict(first["rt_by_table"]) {
                 var mapped: [String: Int] = [:]
                 for (k, v) in dict {
                     mapped[k] = Self.int(v) ?? 0
                 }
                 out.realtimeByTable = mapped
             }
-        }
 
-        if let fFirst = fleetDbRows.first {
-            if let w = Self.int(fFirst["watches_cnt"]), w > 0 {
+            if let w = Self.int(first["watches_cnt"]), w > 0 {
                 out.pairedWatchesCount = w
             }
-            if let rawSources = fFirst["health_sources_json"] as? [Any] {
+            if let rawSources = first["health_sources_json"] as? [Any] {
                 out.healthSourceNames = rawSources.compactMap { Self.str($0) }
-            } else if let strJson = Self.str(fFirst["health_sources_json"]),
+            } else if let strJson = Self.str(first["health_sources_json"]),
                       let data = strJson.data(using: .utf8),
                       let arr = try? JSONSerialization.jsonObject(with: data) as? [Any] {
                 out.healthSourceNames = arr.compactMap { Self.str($0) }
@@ -1998,6 +1950,47 @@ public final class SupabaseAdminService: ObservableObject {
 
     // MARK: - Fleet Aggregator
 
+    nonisolated private static func defaultFleetDisplay(for key: String) -> (displayName: String, sfSymbol: String) {
+        switch key {
+        case "ios": return ("iOS (iPhone & Foldable)", "iphone")
+        case "macos": return ("macOS Desktop", "desktopcomputer")
+        case "android": return ("Android & Fold", "smartphone")
+        case "windows": return ("Windows 11 (WinUI 3)", "pc")
+        case "watchos": return ("Smartwatches (watchOS & Wear OS)", "applewatch")
+        case "cloud_cron": return ("Cloud Cron & Edge Functions", "cloud.bolt")
+        default: return ("Other Clients", "network")
+        }
+    }
+
+    nonisolated private static func mergeRegisteredSources(
+        into devices: [SupabaseFleetDeviceStat],
+        registeredHealthSources: [String]
+    ) -> [SupabaseFleetDeviceStat] {
+        guard !registeredHealthSources.isEmpty else { return devices }
+        var byKey: [String: SupabaseFleetDeviceStat] = Dictionary(uniqueKeysWithValues: devices.map { ($0.platformKey, $0) })
+        for src in registeredHealthSources {
+            let lower = src.lowercased()
+            let key: String
+            if lower.contains("iphone") || lower.contains("schmitz") || lower.contains("ios") { key = "ios" }
+            else if lower.contains("watch") { key = "watchos" }
+            else if lower.contains("pixel") || lower.contains("samsung") || lower.contains("fold") || lower.contains("radar") || lower.contains("trapper") || lower.contains("android") { key = "android" }
+            else if lower.contains("mac") { key = "macos" }
+            else if lower.contains("win") { key = "windows" }
+            else { continue }
+
+            if var existing = byKey[key] {
+                if !existing.registeredSources.contains(src) {
+                    existing.registeredSources.append(src)
+                    byKey[key] = existing
+                }
+            }
+        }
+        return byKey.values.sorted {
+            if $0.requests24h != $1.requests24h { return $0.requests24h > $1.requests24h }
+            return $0.displayName < $1.displayName
+        }
+    }
+
     private func buildFleetStats(
         rawFleetBuckets: [FleetRawBucket],
         registeredHealthSources: [String]
@@ -2027,16 +2020,16 @@ public final class SupabaseAdminService: ObservableObject {
             let lower = src.lowercased()
             let key: String
             if lower.contains("iphone") || lower.contains("schmitz") || lower.contains("ios") { key = "ios" }
-            else if lower.contains("watch") && lower.contains("apple") { key = "watchos" }
+            else if lower.contains("watch") { key = "watchos" }
             else if lower.contains("pixel") || lower.contains("samsung") || lower.contains("fold") || lower.contains("radar") || lower.contains("trapper") || lower.contains("android") { key = "android" }
             else if lower.contains("mac") { key = "macos" }
             else if lower.contains("win") { key = "windows" }
             else { continue }
 
-            if var existing = map[key] {
-                if !existing.sources.contains(src) { existing.sources.append(src) }
-                map[key] = existing
-            }
+            let meta = Self.defaultFleetDisplay(for: key)
+            var entry = map[key] ?? Acc(displayName: meta.displayName, sfSymbol: meta.sfSymbol)
+            if !entry.sources.contains(src) { entry.sources.append(src) }
+            map[key] = entry
         }
 
         return map.map { key, acc in
@@ -2045,13 +2038,16 @@ public final class SupabaseAdminService: ObservableObject {
                 displayName: acc.displayName,
                 sfSymbol: acc.sfSymbol,
                 requests24h: acc.requests,
-                sharePercent: (Double(acc.requests) * 100.0) / Double(totalReq),
+                sharePercent: rawFleetBuckets.isEmpty ? 0 : (Double(acc.requests) * 100.0) / Double(totalReq),
                 responseBytes24h: acc.bytes,
                 errors4xx24h: acc.errors4xx,
                 registeredSources: acc.sources
             )
         }
-        .sorted { $0.requests24h > $1.requests24h }
+        .sorted {
+            if $0.requests24h != $1.requests24h { return $0.requests24h > $1.requests24h }
+            return $0.displayName < $1.displayName
+        }
     }
 
     // MARK: - HTTP & Dynamic JSON Helpers

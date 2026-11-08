@@ -347,7 +347,223 @@ class SupabaseAdminRepository private constructor() {
         private const val PREFS_NAME = "daily_supabase_admin_local_only"
         private const val KEY_CREDENTIALS = "admin_credentials_v1"
         private const val KEY_SNAPSHOT_PREFIX = "admin_snapshot_v3_"
-        private const val CACHE_TTL_MS = 10L * 60L * 1000L // 10 minutes
+        internal const val CACHE_TTL_MS = 30L * 60L * 1000L // 30 minutes
+
+        internal data class SinglePassLogsResult(
+            val ok2xx: Int = 0,
+            val err4xx: Int = 0,
+            val err5xx: Int = 0,
+            val totalEdgeBytes: Long = 0L,
+            val topRoutes: List<SupabaseTopRouteStat> = emptyList(),
+            val recentErrors: List<SupabaseGatewayErrorItem> = emptyList(),
+            val fleetDevices: List<SupabaseFleetDeviceStat> = emptyList(),
+            val sourceCounts: Map<String, Int> = emptyMap()
+        )
+
+        internal fun buildSinglePassGatewayClickHouseSql(): String = """
+            SELECT
+              log_attributes['request.method'] AS method,
+              log_attributes['request.path'] AS path,
+              log_attributes['request.headers.user_agent'] AS ua,
+              count() AS req_count,
+              sum(greatest(
+                toInt64OrZero(log_attributes['response.headers.content-length']),
+                toInt64OrZero(log_attributes['response.headers.content_length']),
+                toInt64OrZero(log_attributes['response.size']),
+                toInt64OrZero(log_attributes['response.body_size']),
+                toInt64OrZero(log_attributes['response.bytes'])
+              )) AS resp_bytes,
+              avg(toFloat64OrZero(log_attributes['response.origin_time'])) AS avg_ms,
+              countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 400) AS ok_cnt,
+              countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
+              countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx,
+              max(toInt32OrZero(log_attributes['response.status_code'])) AS max_status,
+              max(toString(timestamp)) AS last_ts
+            FROM logs
+            WHERE source = 'edge_logs'
+            GROUP BY method, path, ua
+            ORDER BY resp_bytes DESC, req_count DESC
+            LIMIT 100
+        """.trimIndent()
+
+        internal fun parseSinglePassClickHouseRows(
+            rows: List<JsonObject>,
+            windowHours: Int,
+            registeredSources: List<String> = emptyList()
+        ): SinglePassLogsResult {
+            data class RouteAcc(
+                val method: String,
+                val path: String,
+                var requests: Int = 0,
+                var bytes: Long = 0L,
+                var weightedLatencySum: Double = 0.0,
+                var errors: Int = 0
+            )
+            data class FleetAcc(
+                val label: String,
+                var req: Int = 0,
+                var bytes: Long = 0L,
+                var e4: Int = 0
+            )
+
+            val routeMap = linkedMapOf<String, RouteAcc>()
+            val fleetMap = linkedMapOf<String, FleetAcc>()
+            val errors = mutableListOf<SupabaseGatewayErrorItem>()
+            var ok2xx = 0
+            var err4xx = 0
+            var err5xx = 0
+            var totalBytes = 0L
+
+            fun JsonObject.pStr(k: String): String? =
+                (this[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it != "null" }
+            fun JsonObject.pInt(k: String): Int? =
+                (this[k] as? JsonPrimitive)?.let { it.intOrNull ?: it.doubleOrNull?.toInt() }
+            fun JsonObject.pLong(k: String): Long? =
+                (this[k] as? JsonPrimitive)?.let { it.longOrNull ?: it.doubleOrNull?.toLong() }
+            fun JsonObject.pDbl(k: String): Double? =
+                (this[k] as? JsonPrimitive)?.doubleOrNull
+
+            rows.forEachIndexed { idx, row ->
+                val method = row.pStr("method") ?: "GET"
+                val path = row.pStr("path") ?: "/"
+                val ua = row.pStr("ua") ?: "Unknown"
+                val reqCount = row.pInt("req_count") ?: 0
+                if (reqCount <= 0) return@forEachIndexed
+
+                var respBytes = row.pLong("resp_bytes") ?: 0L
+                val avgMs = row.pDbl("avg_ms") ?: 0.0
+                val ok = row.pInt("ok_cnt") ?: 0
+                val e4 = row.pInt("err_4xx") ?: 0
+                val e5 = row.pInt("err_5xx") ?: 0
+                val maxStatus = row.pInt("max_status") ?: if (e5 > 0) 500 else 400
+                val lastTs = row.pStr("last_ts") ?: ""
+
+                if (respBytes == 0L) {
+                    respBytes = when {
+                        path.startsWith("/storage/") -> reqCount.toLong() * 8192L
+                        path.startsWith("/rest/") -> reqCount.toLong() * 1280L
+                        path.startsWith("/auth/") -> reqCount.toLong() * 850L
+                        path.startsWith("/functions/") -> reqCount.toLong() * 1150L
+                        path.startsWith("/realtime/") -> reqCount.toLong() * 450L
+                        else -> reqCount.toLong() * 900L
+                    }
+                }
+
+                ok2xx += ok
+                err4xx += e4
+                err5xx += e5
+                totalBytes += respBytes
+
+                val rKey = "$method $path"
+                val rAcc = routeMap.getOrPut(rKey) { RouteAcc(method, path) }
+                rAcc.requests += reqCount
+                rAcc.bytes += respBytes
+                rAcc.weightedLatencySum += avgMs * reqCount.toDouble()
+                rAcc.errors += (e4 + e5)
+
+                val (fKey, fLabel) = SupabaseAdminCrypto.classifyFleetUserAgent(ua)
+                val fAcc = fleetMap.getOrPut(fKey) { FleetAcc(fLabel) }
+                fAcc.req += reqCount
+                fAcc.bytes += respBytes
+                fAcc.e4 += e4
+
+                if (e4 + e5 > 0 && errors.size < 12) {
+                    val statusCode = if (maxStatus >= 400) maxStatus else if (e5 > 0) 500 else 400
+                    errors += SupabaseGatewayErrorItem(
+                        id = "err_$idx",
+                        timestamp = lastTs,
+                        statusCode = statusCode,
+                        method = method,
+                        path = path,
+                        userAgent = ua,
+                        message = "$method $path -> HTTP $statusCode (${e4 + e5}× in ${windowHours}h)"
+                    )
+                }
+            }
+
+            val topRoutes = routeMap.values
+                .sortedWith(compareByDescending<RouteAcc> { it.bytes }.thenByDescending { it.requests })
+                .take(12)
+                .map { acc ->
+                    SupabaseTopRouteStat(
+                        method = acc.method,
+                        path = acc.path,
+                        requests24h = acc.requests,
+                        responseBytes24h = acc.bytes,
+                        avgLatencyMs = if (acc.requests > 0) acc.weightedLatencySum / acc.requests.toDouble() else 0.0,
+                        errors4xx5xx = acc.errors
+                    )
+                }
+
+            val totFleetReq = maxOf(1, fleetMap.values.sumOf { it.req })
+            val scannedFleet = fleetMap.map { (k, a) ->
+                SupabaseFleetDeviceStat(
+                    platformKey = k,
+                    displayName = a.label,
+                    requests24h = a.req,
+                    sharePercent = a.req * 100.0 / totFleetReq,
+                    responseBytes24h = a.bytes,
+                    errors4xx24h = a.e4
+                )
+            }
+            val mergedFleet = mergeHealthSourcesIntoFleet(scannedFleet, registeredSources)
+
+            return SinglePassLogsResult(
+                ok2xx = ok2xx,
+                err4xx = err4xx,
+                err5xx = err5xx,
+                totalEdgeBytes = totalBytes,
+                topRoutes = topRoutes,
+                recentErrors = errors,
+                fleetDevices = mergedFleet,
+                sourceCounts = mapOf("edge_logs" to (ok2xx + err4xx + err5xx))
+            )
+        }
+
+        internal fun mergeHealthSourcesIntoFleet(
+            baseFleet: List<SupabaseFleetDeviceStat>,
+            registeredSources: List<String>
+        ): List<SupabaseFleetDeviceStat> {
+            val byKey = linkedMapOf<String, SupabaseFleetDeviceStat>()
+            baseFleet.forEach { byKey[it.platformKey] = it }
+
+            registeredSources.forEach { rawSrc ->
+                val src = rawSrc.trim()
+                if (src.isEmpty()) return@forEach
+                val lower = src.lowercase(Locale.US)
+                val (key, label) = when {
+                    lower.contains("apple watch") || lower.contains("watchos") -> "watchos" to "Apple Watch (watchOS)"
+                    lower.contains("pixel watch") || lower.contains("wear") || lower.contains("oneplus") -> "wearos" to "Pixel Watch (Wear OS)"
+                    lower.contains("iphone") || lower.contains("ios") || lower.contains("apple health") || lower.contains("schmitz") -> "ios" to "Apple · iOS / Swift SDK"
+                    lower.contains("pixel") || lower.contains("fold") || lower.contains("samsung") || lower.contains("android") || lower.contains("radar") || lower.contains("trapper") -> "android" to "Android · Radar / Trapper (Kotlin)"
+                    lower.contains("mac") -> "macos" to "Mac · DayOne Desktop (macOS)"
+                    lower.contains("win") -> "windows" to "Windows 11 · DayOne WinUI"
+                    else -> "other" to "Web & External Clients"
+                }
+                val existing = byKey[key]
+                if (existing != null) {
+                    if (!existing.registeredSources.contains(src)) {
+                        byKey[key] = existing.copy(registeredSources = existing.registeredSources + src)
+                    }
+                } else {
+                    byKey[key] = SupabaseFleetDeviceStat(
+                        platformKey = key,
+                        displayName = label,
+                        requests24h = 0,
+                        sharePercent = 0.0,
+                        responseBytes24h = 0L,
+                        errors4xx24h = 0,
+                        registeredSources = listOf(src)
+                    )
+                }
+            }
+
+            return byKey.values.sortedWith(
+                compareByDescending<SupabaseFleetDeviceStat> { it.requests24h }
+                    .thenByDescending { it.registeredSources.size }
+                    .thenBy { it.displayName }
+            )
+        }
     }
 
     private val json = Json {
@@ -376,6 +592,9 @@ class SupabaseAdminRepository private constructor() {
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _isScanningGatewayLogs = MutableStateFlow(false)
+    val isScanningGatewayLogs: StateFlow<Boolean> = _isScanningGatewayLogs.asStateFlow()
 
     private val _isAuthenticating = MutableStateFlow(false)
     val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
@@ -555,7 +774,7 @@ class SupabaseAdminRepository private constructor() {
         saveCredentials(current.copy(selectedProjectRef = ref, selectedOrgSlug = org))
         _aiAnalysis.value = null
         val cached = loadCachedSnapshot(ref)
-        if (cached != null && cached.isExactBillingUsageAvailable && System.currentTimeMillis() - cached.fetchedAtEpochMs < CACHE_TTL_MS) {
+        if (cached != null && System.currentTimeMillis() - cached.fetchedAtEpochMs < CACHE_TTL_MS) {
             _snapshot.value = cached
             return
         }
@@ -568,7 +787,6 @@ class SupabaseAdminRepository private constructor() {
         val cur = _snapshot.value
         if (cur != null &&
             cur.project.ref == creds.selectedProjectRef &&
-            cur.isExactBillingUsageAvailable &&
             System.currentTimeMillis() - cur.fetchedAtEpochMs < CACHE_TTL_MS
         ) {
             return
@@ -576,7 +794,7 @@ class SupabaseAdminRepository private constructor() {
         val cached = loadCachedSnapshot(creds.selectedProjectRef)
         if (cached != null) {
             _snapshot.value = cached
-            if (cached.isExactBillingUsageAvailable && System.currentTimeMillis() - cached.fetchedAtEpochMs < CACHE_TTL_MS) return
+            if (System.currentTimeMillis() - cached.fetchedAtEpochMs < CACHE_TTL_MS) return
         }
         refreshSnapshot(force = true)
     }
@@ -618,10 +836,15 @@ class SupabaseAdminRepository private constructor() {
         }.getOrNull()
     }
 
+    /**
+     * Zero-Log-Query Refresh (`0 B` ClickHouse scanned on open & standard refresh).
+     * Queries only control-plane metadata, `/platform/organizations/.../usage`, `/usage/daily`,
+     * and 1 consolidated read-only SQL CTE on `pg_catalog`.
+     */
     suspend fun refreshSnapshot(force: Boolean = true) = withContext(Dispatchers.IO) {
         if (!_credentials.value.hasValidToken) return@withContext
         val existing = _snapshot.value
-        if (!force && existing != null && existing.isExactBillingUsageAvailable && System.currentTimeMillis() - existing.fetchedAtEpochMs < CACHE_TTL_MS) {
+        if (!force && existing != null && System.currentTimeMillis() - existing.fetchedAtEpochMs < CACHE_TTL_MS) {
             return@withContext
         }
 
@@ -630,7 +853,7 @@ class SupabaseAdminRepository private constructor() {
         try {
             val freshDashBearer = ensureFreshDashboardBearer(forceRefresh = false)
             val creds = _credentials.value
-            val mgmtBearer = creds.primaryManagementBearer ?: return@withContext
+            val mgmtBearer = creds.primaryManagementBearer ?: freshDashBearer ?: return@withContext
 
             val knownOrgs = fetchOrganizations(mgmtBearer)
             val projects = fetchProjectsList(mgmtBearer, knownOrgs)
@@ -644,6 +867,7 @@ class SupabaseAdminRepository private constructor() {
                     status = "ACTIVE_HEALTHY"
                 )
             val ref = activeProject.ref
+            val priorSnap = existing?.takeIf { it.project.ref == ref } ?: loadCachedSnapshot(ref)
             val rawOrgSlug = activeProject.organizationSlug.ifEmpty { creds.selectedOrgSlug ?: "" }
             val matchedOrg = knownOrgs.firstOrNull { it.slug == rawOrgSlug || it.id == rawOrgSlug } ?: knownOrgs.firstOrNull()
             val orgSlug = if (matchedOrg != null && matchedOrg.slug.isNotEmpty()) matchedOrg.slug else rawOrgSlug
@@ -659,10 +883,8 @@ class SupabaseAdminRepository private constructor() {
                 val tierDef = async { fetchComputeTier(mgmtBearer, ref) }
                 val healthDef = async { fetchServicesHealth(mgmtBearer, ref) }
                 val diskDef = async { fetchDiskInfo(mgmtBearer, ref) }
-                val apiDef = async { fetchApiCounts(mgmtBearer, ref) }
                 val fnDef = async { fetchEdgeFunctions(mgmtBearer, ref) }
                 val advDef = async { fetchAdvisors(mgmtBearer, ref) }
-                val logsDef = async { fetchClickHouseLogs(mgmtBearer, ref) }
                 val pgDef = async { fetchPostgresCatalog(mgmtBearer, ref) }
                 val billDef = async { fetchPlatformUsage(platformBearer, fallbackPlatform, orgSlug, ref, orgCreatedAt, projectCreatedAt, hasDash) }
 
@@ -670,10 +892,8 @@ class SupabaseAdminRepository private constructor() {
                 val computeTier = tierDef.await()
                 val health = healthDef.await()
                 val disk = diskDef.await()
-                val apiCounts = apiDef.await()
-                val edgeFns = fnDef.await()
+                val rawEdgeFns = fnDef.await()
                 val (perfLints, secLints) = advDef.await()
-                val logs = logsDef.await()
                 val pg = pgDef.await()
                 val bill = billDef.await()
 
@@ -683,21 +903,15 @@ class SupabaseAdminRepository private constructor() {
                 val defStorageQuota = if (isPro) 100_000_000_000L else 1_000_000_000L
 
                 val todayStr = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString()
-                val todayDailyPointBytes = bill.dailyEgress.firstOrNull { it.date == todayStr }?.totalBytes ?: 0L
-                val apiCountEstimatedBytes: Long = apiCounts.sumOf { pt ->
-                    pt.restRequests.toLong() * 1280L +
-                    pt.authRequests.toLong() * 850L +
-                    pt.storageRequests.toLong() * 8192L +
-                    pt.realtimeRequests.toLong() * 450L
-                }
+                val todayDailyPointBytes = bill.dailyEgress.firstOrNull { it.date == todayStr }?.totalBytes
+                    ?: bill.dailyEgress.lastOrNull()?.totalBytes
+                    ?: 0L
 
-                var resolved24hEgress: Long = logs.totalEdgeBytes
-                if (resolved24hEgress == 0L) {
-                    if (todayDailyPointBytes > 0L && (bill.egressUsed == 0L || todayDailyPointBytes < bill.egressUsed)) {
-                        resolved24hEgress = todayDailyPointBytes
-                    } else if (apiCountEstimatedBytes > 0L) {
-                        resolved24hEgress = apiCountEstimatedBytes
-                    }
+                var resolved24hEgress = 0L
+                if (todayDailyPointBytes > 0L && (bill.egressUsed == 0L || todayDailyPointBytes < bill.egressUsed)) {
+                    resolved24hEgress = todayDailyPointBytes
+                } else if (priorSnap != null && priorSnap.egress24hBytes > 0L && (bill.egressUsed == 0L || priorSnap.egress24hBytes < bill.egressUsed)) {
+                    resolved24hEgress = priorSnap.egress24hBytes
                 }
 
                 val sumDailyEgressBytes = bill.dailyEgress.sumOf { it.totalBytes }
@@ -708,6 +922,16 @@ class SupabaseAdminRepository private constructor() {
                 }
 
                 val resolvedDb = if (bill.dbSize > 0L) bill.dbSize else pg.dbSizeBytes
+                val resolvedFnInvocations = if (bill.fnCalls > 0L) bill.fnCalls else rawEdgeFns.sumOf { it.invocations24h }.toLong()
+                val edgeFns = if (rawEdgeFns.size == 1 && rawEdgeFns[0].invocations24h == 0 && resolvedFnInvocations > 0L) {
+                    listOf(rawEdgeFns[0].copy(invocations24h = resolvedFnInvocations.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
+                } else {
+                    rawEdgeFns
+                }
+
+                val hasPriorGatewayScan = priorSnap?.hasScannedGatewayLogs == true
+                val baseFleet = if (hasPriorGatewayScan) priorSnap?.fleetDevices.orEmpty() else emptyList()
+                val mergedFleet = mergeHealthSourcesIntoFleet(baseFleet, pg.healthSourceNames)
 
                 val snap = SupabaseAdminSnapshot(
                     fetchedAtEpochMs = System.currentTimeMillis(),
@@ -728,7 +952,7 @@ class SupabaseAdminRepository private constructor() {
                     dbQuotaBytes = if (bill.dbQuota > 0L) bill.dbQuota else defDbQuota,
                     storageSizeBytes = maxOf(bill.storageSize, pg.storageBytes),
                     storageQuotaBytes = if (bill.storageQuota > 0L) bill.storageQuota else defStorageQuota,
-                    functionInvocations = if (bill.fnCalls > 0L) bill.fnCalls else edgeFns.sumOf { it.invocations24h }.toLong(),
+                    functionInvocations = resolvedFnInvocations,
                     functionInvocationsQuota = if (bill.fnQuota > 0L) bill.fnQuota else if (isPro) 2_000_000L else 500_000L,
                     realtimeMessages = bill.rtMessages,
                     realtimeMessagesQuota = if (bill.rtMsgQuota > 0L) bill.rtMsgQuota else 2_000_000L,
@@ -740,15 +964,17 @@ class SupabaseAdminRepository private constructor() {
                     logIngestionQuotaBytes = if (bill.logIngestionQuotaBytes > 0L) bill.logIngestionQuotaBytes else 1_000_000_000L,
                     logQueryBytes = bill.logQueryBytes,
                     logQueryQuotaBytes = if (bill.logQueryQuotaBytes > 0L) bill.logQueryQuotaBytes else 100_000_000_000L,
-                    logIngestionEvents = if (bill.logEvents > 0L) bill.logEvents else logs.sourceCounts.values.sum().toLong(),
+                    logIngestionEvents = if (bill.logEvents > 0L) bill.logEvents else (priorSnap?.logIngestionEvents ?: 0L),
                     dailyEgress = bill.dailyEgress,
-                    apiCounts24h = apiCounts,
-                    logCountsBySource = logs.sourceCounts,
-                    http2xxCount24h = logs.ok2xx,
-                    http4xxCount24h = logs.err4xx,
-                    http5xxCount24h = logs.err5xx,
-                    topRoutes24h = logs.topRoutes,
-                    recentErrors24h = logs.recentErrors,
+                    apiCounts24h = priorSnap?.apiCounts24h.orEmpty(),
+                    gatewayLogsScannedAtEpochMs = if (hasPriorGatewayScan) priorSnap?.gatewayLogsScannedAtEpochMs else null,
+                    gatewayScanWindowHours = if (hasPriorGatewayScan) priorSnap?.gatewayScanWindowHours else null,
+                    logCountsBySource = if (hasPriorGatewayScan) priorSnap?.logCountsBySource.orEmpty() else emptyMap(),
+                    http2xxCount24h = if (hasPriorGatewayScan) (priorSnap?.http2xxCount24h ?: 0) else 0,
+                    http4xxCount24h = if (hasPriorGatewayScan) (priorSnap?.http4xxCount24h ?: 0) else 0,
+                    http5xxCount24h = if (hasPriorGatewayScan) (priorSnap?.http5xxCount24h ?: 0) else 0,
+                    topRoutes24h = if (hasPriorGatewayScan) priorSnap?.topRoutes24h.orEmpty() else emptyList(),
+                    recentErrors24h = if (hasPriorGatewayScan) priorSnap?.recentErrors24h.orEmpty() else emptyList(),
                     diskUsedBytes = if (disk.first > 0L) disk.first else resolvedDb,
                     diskTotalBytes = disk.second,
                     diskIops = disk.third,
@@ -768,7 +994,7 @@ class SupabaseAdminRepository private constructor() {
                     activeAuthSessionsCount = pg.sessionsCount,
                     refreshTokenWritesCumulative = pg.refreshTokenWrites,
                     pairedWatchesCount = pg.watchesCount,
-                    fleetDevices = logs.fleetDevices,
+                    fleetDevices = mergedFleet,
                     performanceLints = perfLints,
                     securityLints = secLints
                 )
@@ -778,6 +1004,67 @@ class SupabaseAdminRepository private constructor() {
             _errorMessage.value = t.message ?: "Failed to load Supabase telemetry."
         } finally {
             _isLoading.value = false
+        }
+    }
+
+    /**
+     * On-Demand Single-Pass ClickHouse Gateway Log Scanner (`1h` default, `6h`, `24h`).
+     * Never executes automatically on open or standard refresh.
+     */
+    suspend fun scanGatewayLogs(windowHours: Int = 1) = withContext(Dispatchers.IO) {
+        if (_isScanningGatewayLogs.value) return@withContext
+        val freshDash = ensureFreshDashboardBearer(forceRefresh = false)
+        val mgmtBearer = _credentials.value.primaryManagementBearer ?: freshDash ?: return@withContext
+
+        if (_snapshot.value == null) {
+            refreshSnapshot(force = true)
+        }
+        val currentSnap = _snapshot.value ?: return@withContext
+        val clampedWindow = when {
+            windowHours >= 24 -> 24
+            windowHours >= 6 -> 6
+            else -> 1
+        }
+
+        _isScanningGatewayLogs.value = true
+        try {
+            val end = Instant.now().truncatedTo(ChronoUnit.SECONDS)
+            val minutes = if (clampedWindow >= 24) 1425L else clampedWindow.toLong() * 60L
+            val start = end.minus(minutes, ChronoUnit.MINUTES)
+            val startIso = DateTimeFormatter.ISO_INSTANT.format(start)
+            val endIso = DateTimeFormatter.ISO_INSTANT.format(end)
+
+            val rows = queryLogs(
+                bearer = mgmtBearer,
+                ref = currentSnap.project.ref,
+                sql = buildSinglePassGatewayClickHouseSql(),
+                startIso = startIso,
+                endIso = endIso
+            )
+            val existingSources = currentSnap.fleetDevices.flatMap { it.registeredSources }.distinct()
+            val parsed = parseSinglePassClickHouseRows(rows, clampedWindow, existingSources)
+
+            val updatedEgress24h = if (clampedWindow == 24 && currentSnap.egress24hBytes == 0L && parsed.totalEdgeBytes > 0L) {
+                parsed.totalEdgeBytes
+            } else {
+                currentSnap.egress24hBytes
+            }
+
+            val updatedSnap = currentSnap.copy(
+                gatewayLogsScannedAtEpochMs = System.currentTimeMillis(),
+                gatewayScanWindowHours = clampedWindow,
+                logCountsBySource = parsed.sourceCounts,
+                http2xxCount24h = parsed.ok2xx,
+                http4xxCount24h = parsed.err4xx,
+                http5xxCount24h = parsed.err5xx,
+                topRoutes24h = parsed.topRoutes,
+                recentErrors24h = parsed.recentErrors,
+                egress24hBytes = updatedEgress24h,
+                fleetDevices = if (parsed.fleetDevices.isNotEmpty()) parsed.fleetDevices else currentSnap.fleetDevices
+            )
+            saveCachedSnapshot(updatedSnap)
+        } finally {
+            _isScanningGatewayLogs.value = false
         }
     }
 
@@ -842,7 +1129,12 @@ class SupabaseAdminRepository private constructor() {
         } else {
             bullets += "• **PostgreSQL Storage Nominal:** ${SupabaseAdminSnapshot.formatBytes(snap.dbSizeBytes)} total (${String.format(Locale.US, "%.2f%%", snap.cacheHitRatioPercent)} buffer cache hit)."
         }
-        bullets += "• **Runtime & Realtime:** ${snap.http4xxCount24h} 4xx / ${snap.http5xxCount24h} 5xx over 24h; Realtime WAL CPU share ${String.format(Locale.US, "%.1f%%", snap.realtimeWalCpuSharePercent)} (${snap.realtimeActiveSubscriptions} subs)."
+        if (snap.logQueryQuotaPercent >= 85.0) {
+            bullets += "• **ClickHouse Log Query Guard (${String.format(Locale.US, "%.1f%%", snap.logQueryQuotaPercent)}):** Zero-Log-Query Default Mode active (`0 B` scanned on open/refresh); use On-Demand `1h` gateway scans only when diagnosing routes."
+        } else {
+            val gwInfo = if (snap.hasScannedGatewayLogs) "${snap.http4xxCount24h} 4xx / ${snap.http5xxCount24h} 5xx" else "Zero-Log-Query mode (`0 B` ClickHouse)"
+            bullets += "• **Runtime & Realtime:** $gwInfo; Realtime WAL CPU share ${String.format(Locale.US, "%.1f%%", snap.realtimeWalCpuSharePercent)} (${snap.realtimeActiveSubscriptions} subs)."
+        }
         bullets += "• **Advisors:** ${snap.securityLints.size} security and ${snap.performanceLints.size} performance lints detected."
         return bullets.joinToString("\n")
     }
@@ -990,64 +1282,26 @@ class SupabaseAdminRepository private constructor() {
         return Triple(used, total, iops)
     }
 
-    private suspend fun fetchApiCounts(bearer: String, ref: String): List<SupabaseApiCountPoint> {
-        val obj = getJsonObject("https://api.supabase.com/v1/projects/$ref/analytics/endpoints/usage.api-counts?interval=1day", bearer)
-            ?: return emptyList()
-        val res = obj["result"] as? JsonArray ?: return emptyList()
-        return res.mapNotNull { el ->
-            val r = el as? JsonObject ?: return@mapNotNull null
-            val ts = r.str("timestamp") ?: return@mapNotNull null
-            SupabaseApiCountPoint(
-                timestamp = ts,
-                restRequests = r.int("total_rest_requests") ?: 0,
-                authRequests = r.int("total_auth_requests") ?: 0,
-                realtimeRequests = r.int("total_realtime_requests") ?: 0,
-                storageRequests = r.int("total_storage_requests") ?: 0
-            )
-        }
-    }
-
-    private suspend fun fetchEdgeFunctions(bearer: String, ref: String): List<SupabaseEdgeFunctionStat> = coroutineScope {
-        val arr = getJsonArray("https://api.supabase.com/v1/projects/$ref/functions", bearer) ?: return@coroutineScope emptyList()
-        arr.mapNotNull { el ->
+    // Zero-Log-Query metadata fetch: avoids `/analytics/endpoints/functions.combined-stats` (ClickHouse scan)
+    private suspend fun fetchEdgeFunctions(bearer: String, ref: String): List<SupabaseEdgeFunctionStat> {
+        val arr = getJsonArray("https://api.supabase.com/v1/projects/$ref/functions", bearer) ?: return emptyList()
+        return arr.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val id = o.str("id") ?: return@mapNotNull null
             val slug = o.str("slug") ?: return@mapNotNull null
-            async {
-                var inv = 0
-                var err = 0
-                var weightedMs = 0.0
-                var maxMs = 0.0
-                val statsObj = getJsonObject(
-                    "https://api.supabase.com/v1/projects/$ref/analytics/endpoints/functions.combined-stats?function_id=$id&interval=1day",
-                    bearer
-                )
-                val rows = statsObj?.get("result") as? JsonArray
-                rows?.forEach { rEl ->
-                    val r = rEl as? JsonObject ?: return@forEach
-                    val c = r.int("requests_count") ?: r.int("count") ?: 0
-                    val e = (r.int("log_Functions_Error") ?: 0) + (r.int("status_4xx_count") ?: 0) + (r.int("status_5xx_count") ?: 0)
-                    val avg = r.dbl("avg_execution_time") ?: 0.0
-                    val mx = r.dbl("max_execution_time") ?: avg
-                    inv += c
-                    err += e
-                    weightedMs += avg * maxOf(1, c)
-                    if (mx > maxMs) maxMs = mx
-                }
-                SupabaseEdgeFunctionStat(
-                    id = id,
-                    slug = slug,
-                    name = o.str("name") ?: slug,
-                    status = o.str("status") ?: "ACTIVE",
-                    version = o.int("version") ?: 1,
-                    verifyJwt = o["verify_jwt"]?.jsonPrimitive?.booleanOrNull ?: true,
-                    invocations24h = inv,
-                    errors24h = minOf(inv, err),
-                    avgExecutionMs = if (inv > 0) weightedMs / inv else 0.0,
-                    maxExecutionMs = maxMs
-                )
-            }
-        }.awaitAll().sortedByDescending { it.invocations24h }
+            SupabaseEdgeFunctionStat(
+                id = id,
+                slug = slug,
+                name = o.str("name") ?: slug,
+                status = o.str("status") ?: "ACTIVE",
+                version = o.int("version") ?: 1,
+                verifyJwt = o["verify_jwt"]?.jsonPrimitive?.booleanOrNull ?: true,
+                invocations24h = 0,
+                errors24h = 0,
+                avgExecutionMs = 0.0,
+                maxExecutionMs = 0.0
+            )
+        }.sortedBy { it.name }
     }
 
     private suspend fun fetchAdvisors(bearer: String, ref: String): Pair<List<SupabaseAdvisorLint>, List<SupabaseAdvisorLint>> = coroutineScope {
@@ -1070,165 +1324,6 @@ class SupabaseAdminRepository private constructor() {
                 remediationUrl = o.str("remediation")
             )
         }
-    }
-
-    private class LogsData {
-        var sourceCounts: Map<String, Int> = emptyMap()
-        var ok2xx = 0
-        var err4xx = 0
-        var err5xx = 0
-        var totalEdgeBytes = 0L
-        var topRoutes: List<SupabaseTopRouteStat> = emptyList()
-        var recentErrors: List<SupabaseGatewayErrorItem> = emptyList()
-        var fleetDevices: List<SupabaseFleetDeviceStat> = emptyList()
-    }
-
-    private suspend fun fetchClickHouseLogs(bearer: String, ref: String): LogsData = coroutineScope {
-        val out = LogsData()
-        val end = Instant.now().truncatedTo(ChronoUnit.SECONDS)
-        val start = end.minus(1425, ChronoUnit.MINUTES) // < 24h
-        val startIso = DateTimeFormatter.ISO_INSTANT.format(start)
-        val endIso = DateTimeFormatter.ISO_INSTANT.format(end)
-
-        val srcDef = async {
-            queryLogs(bearer, ref, "SELECT source, count() AS cnt FROM logs GROUP BY source ORDER BY cnt DESC LIMIT 12", startIso, endIso)
-        }
-        val routeDef = async {
-            queryLogs(
-                bearer, ref,
-                """
-                SELECT
-                  log_attributes['request.method'] AS method,
-                  log_attributes['request.path'] AS path,
-                  count() AS req_count,
-                  sum(greatest(
-                    toInt64OrZero(log_attributes['response.headers.content-length']),
-                    toInt64OrZero(log_attributes['response.headers.content_length']),
-                    toInt64OrZero(log_attributes['response.size']),
-                    toInt64OrZero(log_attributes['response.body_size']),
-                    toInt64OrZero(log_attributes['response.bytes'])
-                  )) AS resp_bytes,
-                  avg(toFloat64OrZero(log_attributes['response.origin_time'])) AS avg_ms,
-                  countIf(toInt32OrZero(log_attributes['response.status_code']) >= 200 AND toInt32OrZero(log_attributes['response.status_code']) < 400) AS ok_cnt,
-                  countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx,
-                  countIf(toInt32OrZero(log_attributes['response.status_code']) >= 500) AS err_5xx
-                FROM logs WHERE source = 'edge_logs'
-                GROUP BY method, path ORDER BY resp_bytes DESC, req_count DESC LIMIT 25
-                """.trimIndent(),
-                startIso, endIso
-            )
-        }
-        val fleetDef = async {
-            queryLogs(
-                bearer, ref,
-                """
-                SELECT
-                  log_attributes['request.headers.user_agent'] AS ua,
-                  count() AS req_count,
-                  sum(greatest(
-                    toInt64OrZero(log_attributes['response.headers.content-length']),
-                    toInt64OrZero(log_attributes['response.headers.content_length']),
-                    toInt64OrZero(log_attributes['response.size']),
-                    toInt64OrZero(log_attributes['response.body_size']),
-                    toInt64OrZero(log_attributes['response.bytes'])
-                  )) AS resp_bytes,
-                  countIf(toInt32OrZero(log_attributes['response.status_code']) >= 400 AND toInt32OrZero(log_attributes['response.status_code']) < 500) AS err_4xx
-                FROM logs WHERE source = 'edge_logs'
-                GROUP BY ua ORDER BY req_count DESC LIMIT 25
-                """.trimIndent(),
-                startIso, endIso
-            )
-        }
-        val errDef = async {
-            queryLogs(
-                bearer, ref,
-                """
-                SELECT id, timestamp,
-                  toInt32OrZero(log_attributes['response.status_code']) AS status,
-                  log_attributes['request.method'] AS method,
-                  log_attributes['request.path'] AS path,
-                  log_attributes['request.headers.user_agent'] AS ua,
-                  event_message
-                FROM logs WHERE source = 'edge_logs' AND toInt32OrZero(log_attributes['response.status_code']) >= 400
-                ORDER BY timestamp DESC LIMIT 15
-                """.trimIndent(),
-                startIso, endIso
-            )
-        }
-
-        val srcMap = mutableMapOf<String, Int>()
-        srcDef.await().forEach { r ->
-            val s = r.str("source") ?: return@forEach
-            srcMap[s] = r.int("cnt") ?: 0
-        }
-        out.sourceCounts = srcMap
-
-        val routes = mutableListOf<SupabaseTopRouteStat>()
-        routeDef.await().forEach { r ->
-            val path = r.str("path") ?: "/"
-            val reqCount = r.int("req_count") ?: 0
-            var bytes = r.long("resp_bytes") ?: 0L
-
-            // Fallback for HTTP chunked encoding where Content-Length header is omitted by proxies/streaming
-            if (bytes == 0L && reqCount > 0) {
-                bytes = when {
-                    path.startsWith("/storage/") -> reqCount.toLong() * 8192L
-                    path.startsWith("/rest/") -> reqCount.toLong() * 1280L
-                    path.startsWith("/auth/") -> reqCount.toLong() * 850L
-                    path.startsWith("/functions/") -> reqCount.toLong() * 1150L
-                    path.startsWith("/realtime/") -> reqCount.toLong() * 450L
-                    else -> reqCount.toLong() * 900L
-                }
-            }
-
-            val ok = r.int("ok_cnt") ?: 0
-            val e4 = r.int("err_4xx") ?: 0
-            val e5 = r.int("err_5xx") ?: 0
-            out.ok2xx += ok
-            out.err4xx += e4
-            out.err5xx += e5
-            out.totalEdgeBytes += bytes
-            routes += SupabaseTopRouteStat(
-                method = r.str("method") ?: "GET",
-                path = path,
-                requests24h = reqCount,
-                responseBytes24h = bytes,
-                avgLatencyMs = r.dbl("avg_ms") ?: 0.0,
-                errors4xx5xx = e4 + e5
-            )
-        }
-        out.topRoutes = routes.take(12)
-
-        data class Acc(val name: String, var req: Int = 0, var bytes: Long = 0L, var e4: Int = 0)
-        val fleetMap = mutableMapOf<String, Acc>()
-        val fleetRows = fleetDef.await()
-        val totFleetReq = maxOf(1, fleetRows.sumOf { it.int("req_count") ?: 0 })
-        fleetRows.forEach { r ->
-            val (key, label) = SupabaseAdminCrypto.classifyFleetUserAgent(r.str("ua") ?: "")
-            val acc = fleetMap.getOrPut(key) { Acc(label) }
-            val c = r.int("req_count") ?: 0
-            var b = r.long("resp_bytes") ?: 0L
-            if (b == 0L && c > 0) b = c.toLong() * 1280L
-            acc.req += c
-            acc.bytes += b
-            acc.e4 += r.int("err_4xx") ?: 0
-        }
-        out.fleetDevices = fleetMap.map { (k, a) ->
-            SupabaseFleetDeviceStat(k, a.name, a.req, a.req * 100.0 / totFleetReq, a.bytes, a.e4)
-        }.sortedByDescending { it.requests24h }
-
-        out.recentErrors = errDef.await().mapIndexed { i, r ->
-            SupabaseGatewayErrorItem(
-                id = r.str("id") ?: "err_$i",
-                timestamp = r.str("timestamp") ?: "",
-                statusCode = r.int("status") ?: 400,
-                method = r.str("method") ?: "GET",
-                path = r.str("path") ?: "/",
-                userAgent = r.str("ua") ?: "",
-                message = r.str("event_message") ?: ""
-            )
-        }
-        out
     }
 
     private suspend fun queryLogs(
@@ -1269,11 +1364,13 @@ class SupabaseAdminRepository private constructor() {
         var sessionsCount = 0L
         var refreshTokenWrites = 0L
         var watchesCount = 0
+        var healthSourceNames: List<String> = emptyList()
     }
 
-    private suspend fun fetchPostgresCatalog(bearer: String, ref: String): PgData = coroutineScope {
+    // Single consolidated read-only SQL CTE query (1 HTTP POST instead of 4 parallel POSTs -> -75% Postgres/Kong log ingestion)
+    private suspend fun fetchPostgresCatalog(bearer: String, ref: String): PgData {
         val out = PgData()
-        val catalogSql = """
+        val combinedSql = """
             WITH db_meta AS (
               SELECT
                 pg_catalog.pg_database_size(pg_catalog.current_database())::bigint AS db_bytes,
@@ -1298,16 +1395,11 @@ class SupabaseAdminRepository private constructor() {
               WHERE s.schemaname IN ('public', 'auth', 'realtime', 'storage', 'cron')
               ORDER BY pg_catalog.pg_total_relation_size(s.relid) DESC
               LIMIT 30
-            )
-            SELECT
-              (SELECT db_bytes FROM db_meta) AS db_bytes,
-              (SELECT active_conns FROM db_meta) AS active_conns,
-              (SELECT cache_hit FROM db_meta) AS cache_hit,
-              COALESCE((SELECT json_agg(t) FROM tbl_stats t), '[]'::json) AS tables_json;
-        """.trimIndent()
-
-        val stmtSql = """
-            WITH total_cpu AS (SELECT GREATEST(COALESCE(sum(total_exec_time), 0.0), 0.001) AS all_ms FROM extensions.pg_stat_statements),
+            ),
+            total_cpu AS (
+              SELECT GREATEST(COALESCE(sum(total_exec_time), 0.0), 0.001) AS all_ms
+              FROM extensions.pg_stat_statements
+            ),
             rt_cpu AS (
               SELECT COALESCE(sum(calls), 0)::bigint AS rt_calls, COALESCE(sum(total_exec_time), 0.0) AS rt_ms
               FROM extensions.pg_stat_statements WHERE query ILIKE '%realtime.list_changes%'
@@ -1317,34 +1409,83 @@ class SupabaseAdminRepository private constructor() {
                 calls::bigint AS calls, round(total_exec_time::numeric, 2) AS total_ms,
                 round(mean_exec_time::numeric, 2) AS mean_ms, rows::bigint AS rows_ret
               FROM extensions.pg_stat_statements ORDER BY total_exec_time DESC LIMIT 8
+            ),
+            cron_rows AS (
+              SELECT j.jobid::text AS id, COALESCE(j.jobname, 'job_' || j.jobid::text) AS job_name,
+                j.schedule AS schedule,
+                COALESCE(d.status, CASE WHEN j.active THEN 'scheduled' ELSE 'paused' END) AS status,
+                COALESCE(d.start_time::text, '') AS start_time
+              FROM cron.job j
+              LEFT JOIN LATERAL (
+                SELECT status, start_time FROM cron.job_run_details r WHERE r.jobid = j.jobid ORDER BY r.start_time DESC LIMIT 1
+              ) d ON true ORDER BY j.jobid ASC LIMIT 12
             )
-            SELECT (SELECT rt_calls FROM rt_cpu) AS rt_calls,
+            SELECT
+              (SELECT db_bytes FROM db_meta) AS db_bytes,
+              (SELECT active_conns FROM db_meta) AS active_conns,
+              (SELECT cache_hit FROM db_meta) AS cache_hit,
+              COALESCE((SELECT json_agg(t) FROM tbl_stats t), '[]'::json) AS tables_json,
+              (SELECT rt_calls FROM rt_cpu) AS rt_calls,
               round(((SELECT rt_ms FROM rt_cpu) * 100.0 / (SELECT all_ms FROM total_cpu))::numeric, 2) AS rt_pct,
-              COALESCE((SELECT json_agg(q) FROM top_q q), '[]'::json) AS top_sql_json;
+              COALESCE((SELECT json_agg(q) FROM top_q q), '[]'::json) AS top_sql_json,
+              COALESCE((SELECT json_agg(c) FROM cron_rows c), '[]'::json) AS crons_json,
+              (SELECT count(*)::int FROM realtime.subscription) AS rt_subs,
+              COALESCE((
+                SELECT json_object_agg(entity_name, cnt)
+                FROM (
+                  SELECT entity::text AS entity_name, count(*)::int AS cnt
+                  FROM realtime.subscription
+                  GROUP BY entity::text
+                  ORDER BY cnt DESC
+                  LIMIT 10
+                ) sub_t
+              ), '{}'::json) AS rt_by_table,
+              COALESCE((SELECT sum(COALESCE((metadata->>'size')::bigint, 0))::bigint FROM storage.objects), 0) AS storage_bytes,
+              (SELECT count(*)::int FROM public.paired_watches) AS watches_cnt,
+              COALESCE((
+                SELECT json_agg(DISTINCT COALESCE(device_name, source_type, 'Device'))
+                FROM public.health_sources
+              ), '[]'::json) AS health_sources_json;
         """.trimIndent()
 
-        val cronSql = """
-            SELECT j.jobid::text AS id, COALESCE(j.jobname, 'job_' || j.jobid::text) AS job_name,
-              j.schedule AS schedule,
-              COALESCE(d.status, CASE WHEN j.active THEN 'scheduled' ELSE 'paused' END) AS status,
-              COALESCE(d.start_time::text, '') AS start_time
-            FROM cron.job j
-            LEFT JOIN LATERAL (
-              SELECT status, start_time FROM cron.job_run_details r WHERE r.jobid = j.jobid ORDER BY r.start_time DESC LIMIT 1
-            ) d ON true ORDER BY j.jobid ASC LIMIT 12;
-        """.trimIndent()
+        var rows = queryReadOnlySql(bearer, ref, combinedSql)
+        if (rows.isEmpty()) {
+            val fallbackSql = """
+                WITH db_meta AS (
+                  SELECT
+                    pg_catalog.pg_database_size(pg_catalog.current_database())::bigint AS db_bytes,
+                    (SELECT count(*)::int FROM pg_catalog.pg_stat_activity WHERE datname = pg_catalog.current_database()) AS active_conns,
+                    (SELECT CASE WHEN sum(blks_hit + blks_read) > 0
+                            THEN round((sum(blks_hit)::numeric * 100.0) / sum(blks_hit + blks_read), 2)
+                            ELSE 100.0 END
+                     FROM pg_catalog.pg_stat_database WHERE datname = pg_catalog.current_database()) AS cache_hit
+                ),
+                tbl_stats AS (
+                  SELECT
+                    s.schemaname AS schema_name,
+                    s.relname AS table_name,
+                    pg_catalog.pg_table_size(s.relid)::bigint AS data_bytes,
+                    pg_catalog.pg_indexes_size(s.relid)::bigint AS index_bytes,
+                    pg_catalog.pg_total_relation_size(s.relid)::bigint AS total_bytes,
+                    COALESCE(s.n_live_tup, 0)::bigint AS live_rows,
+                    COALESCE(s.n_dead_tup, 0)::bigint AS dead_rows,
+                    (COALESCE(s.n_tup_ins, 0) + COALESCE(s.n_tup_upd, 0) + COALESCE(s.n_tup_del, 0))::bigint AS total_writes,
+                    s.last_autovacuum::text AS last_autovacuum
+                  FROM pg_catalog.pg_stat_all_tables s
+                  WHERE s.schemaname IN ('public', 'auth', 'realtime', 'storage', 'cron')
+                  ORDER BY pg_catalog.pg_total_relation_size(s.relid) DESC
+                  LIMIT 30
+                )
+                SELECT
+                  (SELECT db_bytes FROM db_meta) AS db_bytes,
+                  (SELECT active_conns FROM db_meta) AS active_conns,
+                  (SELECT cache_hit FROM db_meta) AS cache_hit,
+                  COALESCE((SELECT json_agg(t) FROM tbl_stats t), '[]'::json) AS tables_json;
+            """.trimIndent()
+            rows = queryReadOnlySql(bearer, ref, fallbackSql)
+        }
 
-        val rtSql = """
-            SELECT (SELECT count(*)::int FROM realtime.subscription) AS rt_subs,
-              COALESCE((SELECT sum(COALESCE((metadata->>'size')::bigint, 0))::bigint FROM storage.objects), 0) AS storage_bytes;
-        """.trimIndent()
-
-        val catDef = async { queryReadOnlySql(bearer, ref, catalogSql) }
-        val stmtDef = async { queryReadOnlySql(bearer, ref, stmtSql) }
-        val cronDef = async { queryReadOnlySql(bearer, ref, cronSql) }
-        val rtDef = async { queryReadOnlySql(bearer, ref, rtSql) }
-
-        catDef.await().firstOrNull()?.let { row ->
+        rows.firstOrNull()?.let { row ->
             out.dbSizeBytes = row.long("db_bytes") ?: 0L
             out.activeConns = row.int("active_conns") ?: 0
             out.cacheHit = row.dbl("cache_hit") ?: 99.0
@@ -1361,16 +1502,14 @@ class SupabaseAdminRepository private constructor() {
                 val wr = t.long("total_writes") ?: 0L
                 out.heapBytes += d
                 out.indexBytes += ix
-                if (schema == "auth" && name == "users") out.usersCount = live
-                if (schema == "auth" && name == "sessions") out.sessionsCount = live
-                if (schema == "auth" && name == "refresh_tokens") out.refreshTokenWrites = wr
-                if (schema == "public" && name == "paired_watches") out.watchesCount = live.toInt()
+                if (schema == "auth" && name == "users") out.usersCount = maxOf(out.usersCount, live)
+                if (schema == "auth" && name == "sessions") out.sessionsCount = maxOf(out.sessionsCount, live)
+                if (schema == "auth" && name == "refresh_tokens") out.refreshTokenWrites = maxOf(out.refreshTokenWrites, wr)
+                if (schema == "public" && name == "paired_watches") out.watchesCount = maxOf(out.watchesCount, live.toInt())
                 parsed += SupabaseTableStat(schema, name, d, ix, tot, live, dead, wr, t.str("last_autovacuum"))
             }
             out.tables = parsed
-        }
 
-        stmtDef.await().firstOrNull()?.let { row ->
             out.rtListCalls = row.long("rt_calls") ?: 0L
             out.rtCpuPct = row.dbl("rt_pct") ?: 0.0
             out.topSql = row.jsonArr("top_sql_json").mapIndexed { i, q ->
@@ -1383,23 +1522,37 @@ class SupabaseAdminRepository private constructor() {
                     rowsReturned = q.long("rows_ret") ?: 0L
                 )
             }
+            out.cronJobs = row.jsonArr("crons_json").mapIndexed { i, r ->
+                SupabaseCronJobRun(
+                    id = r.str("id") ?: "$i",
+                    jobName = r.str("job_name") ?: "job",
+                    schedule = r.str("schedule") ?: "",
+                    status = r.str("status") ?: "scheduled",
+                    startTime = r.str("start_time") ?: ""
+                )
+            }
+            out.rtActiveSubs = row.int("rt_subs") ?: 0
+            out.storageBytes = row.long("storage_bytes") ?: 0L
+            val rtObj = (row["rt_by_table"] as? JsonObject)
+                ?: row.str("rt_by_table")?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            if (rtObj != null) {
+                out.rtByTable = rtObj.entries.associate { (k, v) ->
+                    k to ((v as? JsonPrimitive)?.intOrNull ?: 0)
+                }
+            }
+            row.int("watches_cnt")?.takeIf { it > 0 }?.let { out.watchesCount = it }
+            val hsEl = row["health_sources_json"]
+            out.healthSourceNames = when (hsEl) {
+                is JsonArray -> hsEl.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s != "null" && s.isNotBlank() } }
+                is JsonPrimitive -> hsEl.contentOrNull?.let { raw ->
+                    runCatching {
+                        json.parseToJsonElement(raw).jsonArray.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                    }.getOrNull()
+                }.orEmpty()
+                else -> emptyList()
+            }
         }
-
-        out.cronJobs = cronDef.await().mapIndexed { i, r ->
-            SupabaseCronJobRun(
-                id = r.str("id") ?: "$i",
-                jobName = r.str("job_name") ?: "job",
-                schedule = r.str("schedule") ?: "",
-                status = r.str("status") ?: "scheduled",
-                startTime = r.str("start_time") ?: ""
-            )
-        }
-
-        rtDef.await().firstOrNull()?.let { r ->
-            out.rtActiveSubs = r.int("rt_subs") ?: 0
-            out.storageBytes = r.long("storage_bytes") ?: 0L
-        }
-        out
+        return out
     }
 
     private suspend fun queryReadOnlySql(bearer: String, ref: String, query: String): List<JsonObject> {

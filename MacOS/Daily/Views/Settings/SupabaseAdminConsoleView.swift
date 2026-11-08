@@ -24,6 +24,7 @@ public struct SupabaseAdminConsoleView: View {
     @State private var copyFeedback: String?
     @State private var showDisconnectConfirm = false
     @State private var isTouchIdOn: Bool = false
+    @State private var gatewayScanWindowHours: Int = 1
 
     public init() {}
 
@@ -504,11 +505,11 @@ public struct SupabaseAdminConsoleView: View {
                             .foregroundColor(.white)
                     }
                     HStack(spacing: 6) {
-                        Text("24h Requests:")
+                        Text("Gateway Logs:")
                             .foregroundColor(ThemeColors.fgMutedDark)
-                        Text("\(snap.totalHttpRequests24h)")
+                        Text(snap.hasScannedGatewayLogs ? "\(snap.totalHttpRequests24h) reqs" : "0 B Query (On-Demand)")
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(snap.hasScannedGatewayLogs ? .white : ThemeColors.success)
                     }
                     if snap.cachedEgressUsedBytes > 0 {
                         HStack(spacing: 6) {
@@ -565,11 +566,11 @@ public struct SupabaseAdminConsoleView: View {
                 title: "Gateway Egress (24h)",
                 icon: "arrow.up.right.circle.fill",
                 usedLabel: SupabaseAdminSnapshot.formatBytes(snap.egress24hBytes),
-                quotaLabel: "\(snap.totalHttpRequests24h) reqs",
+                quotaLabel: snap.hasScannedGatewayLogs ? "\(snap.totalHttpRequests24h) reqs" : "Daily share",
                 percent: snap.egress24hQuotaPercent,
                 subtitle: snap.cachedEgressUsedBytes > 0
                     ? "Cached CDN: \(SupabaseAdminSnapshot.formatBytes(snap.cachedEgressUsedBytes))"
-                    : "24h HTTP: \(snap.totalHttpRequests24h) reqs"
+                    : (snap.hasScannedGatewayLogs ? "Scanned HTTP: \(snap.totalHttpRequests24h) reqs" : "Zero-Log-Query daily bucket")
             )
             quotaGaugeTile(
                 title: "Database Size",
@@ -609,7 +610,7 @@ public struct SupabaseAdminConsoleView: View {
                 usedLabel: logQueryUsedFormatted,
                 quotaLabel: logQueryQuotaFormatted,
                 percent: snap.logQueryQuotaPercent,
-                subtitle: "ClickHouse analytics query"
+                subtitle: "0 B on refresh · On-demand scan"
             )
         }
     }
@@ -877,62 +878,119 @@ public struct SupabaseAdminConsoleView: View {
     private func gatewayForensicsCard(_ snap: SupabaseAdminSnapshot) -> some View {
         GlassCard(cornerRadius: 18, padding: 18) {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Label("ClickHouse Unified Logs & Top HTTP Bandwidth Routes (24h)", systemImage: "network")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-                    Spacer()
-                    HStack(spacing: 12) {
-                        Text("2xx: \(snap.http2xxCount24h)")
-                            .foregroundColor(ThemeColors.success)
-                        Text("4xx: \(snap.http4xxCount24h)")
-                            .foregroundColor(snap.http4xxCount24h > 0 ? ThemeColors.warning : ThemeColors.fgMutedDark)
-                        Text("5xx: \(snap.http5xxCount24h)")
-                            .foregroundColor(snap.http5xxCount24h > 0 ? ThemeColors.error : ThemeColors.fgMutedDark)
-                    }
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                }
+                HStack(spacing: 12) {
+                    Label(
+                        snap.hasScannedGatewayLogs
+                            ? "ClickHouse Unified Logs & Top HTTP Routes (\(snap.gatewayScanWindowHours ?? 24)h Scan)"
+                            : "ClickHouse Unified Logs & HTTP Gateway Forensics (On-Demand)",
+                        systemImage: "network"
+                    )
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
 
-                if !snap.logCountsBySource.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(snap.logCountsBySource.sorted(by: { $0.value > $1.value }), id: \.key) { src, cnt in
-                                Text("\(src): \(cnt)")
-                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                    .foregroundColor(ThemeColors.accentCyan)
+                    Spacer()
+
+                    // Window Selector + On-Demand Single-Pass Scan Button
+                    HStack(spacing: 6) {
+                        ForEach([1, 6, 24], id: \.self) { hrs in
+                            Button {
+                                gatewayScanWindowHours = hrs
+                            } label: {
+                                Text("\(hrs)h")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(gatewayScanWindowHours == hrs ? .black : .white)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 4)
-                                    .background(Capsule().fill(ThemeColors.accentCyan.opacity(0.12)))
+                                    .background(
+                                        Capsule().fill(
+                                            gatewayScanWindowHours == hrs
+                                                ? ThemeColors.accentCyan
+                                                : Color.white.opacity(0.10)
+                                        )
+                                    )
                             }
+                            .buttonStyle(.plain)
                         }
+
+                        Button {
+                            Task { await adminService.scanGatewayLogs(windowHours: gatewayScanWindowHours) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if adminService.isScanningGatewayLogs {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 11, weight: .bold))
+                                }
+                                Text(adminService.isScanningGatewayLogs ? "Scanning..." : "Scan Gateway Logs")
+                                    .font(.system(size: 11.5, weight: .bold))
+                            }
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(ThemeColors.accentCyan))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(adminService.isScanningGatewayLogs)
                     }
                 }
 
-                ForEach(snap.topRoutes24h.prefix(10)) { route in
-                    HStack(spacing: 10) {
-                        Text(route.method)
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(ThemeColors.accentCyan)
-                            .frame(width: 46, alignment: .leading)
-                        Text(route.path)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("\(route.requests24h) req")
+                HStack {
+                    if let scannedAt = snap.gatewayLogsScannedAt {
+                        Text("Last single-pass edge_logs scan (\(snap.gatewayScanWindowHours ?? 1)h window): \(scannedAt.formatted(date: .omitted, time: .standard))")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(ThemeColors.fgMutedDark)
-                            .frame(width: 80, alignment: .trailing)
-                        Text(SupabaseAdminSnapshot.formatBytes(route.responseBytes24h))
-                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.white)
-                            .frame(width: 90, alignment: .trailing)
-                        Text(String(format: "%.0f ms", route.avgLatencyMs))
+                    } else {
+                        Text("Zero-Log-Query protection active: 0 B ClickHouse quota used on open & standard refresh.")
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(ThemeColors.fgMutedDark)
-                            .frame(width: 65, alignment: .trailing)
+                            .foregroundColor(ThemeColors.success)
                     }
-                    .padding(.vertical, 2)
+                    Spacer()
+                    if snap.hasScannedGatewayLogs {
+                        HStack(spacing: 12) {
+                            Text("2xx: \(snap.http2xxCount24h)")
+                                .foregroundColor(ThemeColors.success)
+                            Text("4xx: \(snap.http4xxCount24h)")
+                                .foregroundColor(snap.http4xxCount24h > 0 ? ThemeColors.warning : ThemeColors.fgMutedDark)
+                            Text("5xx: \(snap.http5xxCount24h)")
+                                .foregroundColor(snap.http5xxCount24h > 0 ? ThemeColors.error : ThemeColors.fgMutedDark)
+                        }
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    }
+                }
+
+                if snap.topRoutes24h.isEmpty {
+                    Text("Select a time window (1h recommended for minimal ClickHouse scan, 6h, or 24h) and click 'Scan Gateway Logs' when you want to inspect live HTTP routes, status codes, and User-Agent distribution.")
+                        .font(.system(size: 12))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                } else {
+                    ForEach(snap.topRoutes24h.prefix(10)) { route in
+                        HStack(spacing: 10) {
+                            Text(route.method)
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(ThemeColors.accentCyan)
+                                .frame(width: 46, alignment: .leading)
+                            Text(route.path)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text("\(route.requests24h) req")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .frame(width: 80, alignment: .trailing)
+                            Text(SupabaseAdminSnapshot.formatBytes(route.responseBytes24h))
+                                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.white)
+                                .frame(width: 90, alignment: .trailing)
+                            Text(String(format: "%.0f ms", route.avgLatencyMs))
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(ThemeColors.fgMutedDark)
+                                .frame(width: 65, alignment: .trailing)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
 
                 if !snap.recentErrors24h.isEmpty {
@@ -970,7 +1028,7 @@ public struct SupabaseAdminConsoleView: View {
         HStack(alignment: .top, spacing: 16) {
             GlassCard(cornerRadius: 16, padding: 16) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("Edge Functions (24h Combined Stats)", systemImage: "bolt.fill")
+                    Label("Edge Functions (Control-Plane Metadata)", systemImage: "bolt.fill")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.white)
 
@@ -990,18 +1048,18 @@ public struct SupabaseAdminConsoleView: View {
                                             .font(.system(size: 10, design: .monospaced))
                                             .foregroundColor(ThemeColors.accentCyan)
                                     }
-                                    Text("JWT: \(fn.verifyJwt ? "Enforced" : "Off") · Avg \(String(format: "%.0f ms", fn.avgExecutionMs))")
+                                    Text("JWT: \(fn.verifyJwt ? "Enforced" : "Off") · Status: \(fn.status)")
                                         .font(.system(size: 10.5))
                                         .foregroundColor(ThemeColors.fgMutedDark)
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 2) {
-                                    Text("\(fn.invocations24h) calls")
+                                    Text(fn.invocations24h > 0 ? "\(fn.invocations24h) calls" : "Active")
                                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                        .foregroundColor(.white)
-                                    Text(String(format: "%.1f%% OK", fn.successRatePercent))
-                                        .font(.system(size: 10.5, design: .monospaced))
-                                        .foregroundColor(fn.errors24h == 0 ? ThemeColors.success : ThemeColors.warning)
+                                        .foregroundColor(fn.invocations24h > 0 ? .white : ThemeColors.success)
+                                    Text("0 B Log Query")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(ThemeColors.textMuted)
                                 }
                             }
                             .padding(.vertical, 3)
@@ -1095,9 +1153,15 @@ public struct SupabaseAdminConsoleView: View {
                                     }
                                 }
                                 Spacer()
-                                Text("\(dev.requests24h) req (\(String(format: "%.0f%%", dev.sharePercent))) · \(SupabaseAdminSnapshot.formatBytes(dev.responseBytes24h))")
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(ThemeColors.fgMutedDark)
+                                if dev.requests24h > 0 {
+                                    Text("\(dev.requests24h) req (\(String(format: "%.0f%%", dev.sharePercent))) · \(SupabaseAdminSnapshot.formatBytes(dev.responseBytes24h))")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                } else {
+                                    Text("\(max(1, dev.registeredSources.count)) registered")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(ThemeColors.accentCyan)
+                                }
                             }
                             .padding(.vertical, 3)
                         }

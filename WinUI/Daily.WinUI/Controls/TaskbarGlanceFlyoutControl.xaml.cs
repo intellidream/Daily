@@ -120,19 +120,19 @@ namespace Daily_WinUI.Controls
             // 1. Instant UI update from local/memory cache (<5ms)
             _ = LoadTelemetryAsync(forceRemoteHealth: false);
 
-            // 2. Throttled background remote sync from Supabase so HR is always fresh on open
-            if ((DateTime.UtcNow - _lastRemoteSyncUtc) > TimeSpan.FromSeconds(20))
+            // 2. Throttled background remote sync from Supabase (2-min cooldown to protect Kong & PostgREST log ingestion)
+            if ((DateTime.UtcNow - _lastRemoteSyncUtc) > TimeSpan.FromSeconds(120))
             {
                 _lastRemoteSyncUtc = DateTime.UtcNow;
                 _ = RefreshRemoteHealthInBackgroundAsync();
             }
 
-            // 3. Keep telemetry live while the Glance flyout remains open
+            // 3. Keep telemetry live while the Glance flyout remains open (5-min interval)
             if (_liveRefreshTimer == null)
             {
                 _liveRefreshTimer = new DispatcherTimer
                 {
-                    Interval = TimeSpan.FromSeconds(45)
+                    Interval = TimeSpan.FromMinutes(5)
                 };
                 _liveRefreshTimer.Tick += (_, _) =>
                 {

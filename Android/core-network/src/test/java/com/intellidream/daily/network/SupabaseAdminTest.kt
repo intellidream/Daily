@@ -3,6 +3,9 @@ package com.intellidream.daily.network
 import com.intellidream.daily.model.SupabaseAdminSnapshot
 import com.intellidream.daily.model.SupabaseProjectSummary
 import com.intellidream.daily.model.SupabaseTableStat
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -96,5 +99,82 @@ class SupabaseAdminTest {
         assertEquals(1_999_999_999L, SupabaseAdminCrypto.jwtExpirationEpochSeconds(testJwt))
         assertFalse(SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(testJwt, nowEpochSeconds = 1_900_000_000L))
         assertTrue(SupabaseAdminCrypto.isJwtExpiredOrExpiringSoon(testJwt, nowEpochSeconds = 1_999_999_950L))
+    }
+
+    @Test
+    fun zeroLogQueryDefaultsAndSinglePassClickHouseAggregation() {
+        assertEquals(1_800_000L, SupabaseAdminRepository.CACHE_TTL_MS)
+
+        val sql = SupabaseAdminRepository.buildSinglePassGatewayClickHouseSql()
+        assertTrue(sql.contains("WHERE source = 'edge_logs'"))
+        assertFalse(sql.contains("event_message"))
+        assertTrue(sql.contains("GROUP BY method, path, ua"))
+
+        val rows = listOf(
+            buildJsonObject {
+                put("method", "GET")
+                put("path", "/rest/v1/health_metrics")
+                put("ua", "Ktor client / OkHttp 4.12 Android 16")
+                put("req_count", 30)
+                put("resp_bytes", 90_000L)
+                put("avg_ms", 20.0)
+                put("ok_cnt", 29)
+                put("err_4xx", 1)
+                put("err_5xx", 0)
+                put("max_status", 401)
+                put("last_ts", "2026-11-08T21:10:00Z")
+            },
+            buildJsonObject {
+                put("method", "GET")
+                put("path", "/rest/v1/health_metrics")
+                put("ua", "Daily/1.0 CFNetwork/1568 Darwin/24 (iPhone; iOS 18.2)")
+                put("req_count", 10)
+                put("resp_bytes", 30_000L)
+                put("avg_ms", 40.0)
+                put("ok_cnt", 10)
+                put("err_4xx", 0)
+                put("err_5xx", 0)
+                put("max_status", 200)
+                put("last_ts", "2026-11-08T21:11:00Z")
+            },
+            buildJsonObject {
+                put("method", "POST")
+                put("path", "/functions/v1/gemini-proxy")
+                put("ua", "Daily.WinUI/1.0 (.NET 10.0; Windows NT 10.0)")
+                put("req_count", 2)
+                put("resp_bytes", 0L) // fallback -> 2 * 1150 = 2300
+                put("avg_ms", 310.0)
+                put("ok_cnt", 1)
+                put("err_4xx", 0)
+                put("err_5xx", 1)
+                put("max_status", 502)
+                put("last_ts", "2026-11-08T21:12:00Z")
+            }
+        )
+
+        val parsed = SupabaseAdminRepository.parseSinglePassClickHouseRows(
+            rows = rows,
+            windowHours = 1,
+            registeredSources = listOf("Apple Watch Ultra 2", "Pixel 9 Pro")
+        )
+        assertEquals(40, parsed.ok2xx)
+        assertEquals(1, parsed.err4xx)
+        assertEquals(1, parsed.err5xx)
+        assertEquals(2, parsed.topRoutes.size)
+        assertEquals("/rest/v1/health_metrics", parsed.topRoutes[0].path)
+        assertEquals(40, parsed.topRoutes[0].requests24h)
+        assertEquals(120_000L, parsed.topRoutes[0].responseBytes24h)
+        // Weighted latency: (30*20 + 10*40)/40 = (600 + 400)/40 = 25.0 ms
+        assertEquals(25.0, parsed.topRoutes[0].avgLatencyMs, 0.01)
+        assertEquals(2_300L, parsed.topRoutes[1].responseBytes24h)
+        assertTrue(parsed.fleetDevices.any { it.platformKey == "watchos" && it.registeredSources.contains("Apple Watch Ultra 2") })
+        assertEquals(2, parsed.recentErrors.size)
+
+        val json = Json { ignoreUnknownKeys = true }
+        val legacyDecoded = json.decodeFromString<SupabaseAdminSnapshot>(
+            """{"project":{"ref":"akkfouifxztnfwwiclwg","name":"Daily","organizationSlug":"org","region":"eu-central-1","status":"ACTIVE_HEALTHY"}}"""
+        )
+        assertFalse(legacyDecoded.hasScannedGatewayLogs)
+        assertTrue(legacyDecoded.toMarkdownReport().contains("On-Demand Zero-Log-Query Mode"))
     }
 }

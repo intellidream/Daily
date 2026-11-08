@@ -293,6 +293,27 @@ To ensure 100% mathematical and visual parity with the official Supabase Web Por
     - **Windows 11 (WinUI 3)**: Added Row 3 to `BuildQuotaGrid` with purple and cyan accents, displaying SI decimal usage, percentage utilization, and quota limits.
     - **Markdown Exporters**: Added Log Ingestion and Log Query rows to `toMarkdownReport()` / `ToMarkdownReport()` across Swift, Kotlin, and C#.
 
+### 7.11 Zero-Log-Query Default Architecture, On-Demand Single-Pass ClickHouse Scanner & Log Ingestion Optimization
+- **Root-Cause Diagnosis of `Log Query` (~100% of 100 GB) & `Log Ingestion` (~43% of 1 GB)**:
+  - Supabase Analytics meters `Log Query` by **uncompressed columnar bytes scanned in ClickHouse** (not by returned JSON payload size).
+  - Previously, each automatic open or refresh of the Admin Console executed 6–8 parallel ClickHouse queries over a 24-hour window (`usage.api-counts`, `functions.combined-stats`, unfiltered `SELECT source, count() FROM logs` across all log tables, and 4–5 `edge_logs` scans including the wide `event_message` text column), combined with a cache bypass whenever `!isExactBillingUsageAvailable` (PAT-only sessions). Across multiple devices, each refresh burned ~1.5–3.5 GB of `Log Query`.
+  - Meanwhile, 4–5 parallel `POST /v1/projects/{ref}/database/query/read-only` calls per refresh and a 45-second background polling loop in Windows 11's `TaskbarGlanceFlyoutControl` contributed unnecessary Postgres and Kong `Log Ingestion`.
+- **Zero-Log-Query Default Architecture (`0 B` ClickHouse Scan on Open & Standard Refresh)**:
+  - `refreshSnapshot()` / `RefreshSnapshotAsync()` across `DailyCore` (iOS & macOS), `Android`, and `WinUI 3` now executes **zero ClickHouse Analytics queries** (`0 B` of `Log Query`).
+  - Removed automatic calls to `/v1/projects/{ref}/analytics/endpoints/logs`, `usage.api-counts`, and `functions.combined-stats` during standard open and refresh.
+  - All executive billing quotas (**Unified Egress**, **24h Gateway Egress** via `/usage/daily`, **Database Size**, **Edge Calls**, **Realtime Peak**, **Log Ingestion**, **Log Query**), the **14-Day Stacked Bandwidth Chart**, **PostgreSQL Table & Index Bloat**, **`pg_stat_statements`**, **`pg_cron`**, **Edge Functions**, **Realtime Subscriptions**, **Registered Fleet Devices** (`public.health_sources`), and **Supabase Advisors** continue loading automatically at **`0 B` Log Query cost**.
+  - Previously scanned gateway route/status telemetry is preserved across standard refreshes in the local `v3` snapshot cache.
+- **On-Demand Single-Pass `edge_logs` Scanner (`1h` default, `6h`, `24h`)**:
+  - Added an interactive **"Scan Logs" / "Scan Gateway Logs"** control bar with window selector pills (`1h` default, `6h`, `24h`) and a `"0 B Log Query"` status badge inside the Gateway Forensics card across **iOS**, **macOS**, **Android**, and **Windows 11 (`WinUI 3`)**.
+  - Clicking Scan executes **1 single-pass ClickHouse SQL query** strictly filtered by `WHERE source = 'edge_logs'` (`GROUP BY method, path, ua LIMIT 100`), completely eliminating unfiltered `FROM logs` scans and never touching the heavy `event_message` column (~98–99% fewer bytes scanned per manual inspection).
+  - Top endpoints, HTTP `2xx`/`4xx`/`5xx` counters, recent `4xx`/`5xx` events, and User-Agent fleet shares are derived client-side from that single result set.
+- **30-Minute PAT-Inclusive Snapshot Cache & Consolidated `pg_catalog` CTE**:
+  - Removed the `!isExactBillingUsageAvailable` / `!HasExactBillingMetrics` cache-bypass condition across Swift, Kotlin, and C#, honoring cached snapshots for both Browser Handshake and PAT-only sessions.
+  - Extended automatic snapshot cache TTL from `10 minutes` to **`30 minutes` (`1,800s`)** while keeping manual pull-to-refresh / Refresh instant.
+  - Consolidated the 4–5 parallel `POST /database/query/read-only` SQL queries (`pg_catalog` tables, `pg_stat_statements`, `cron.job`, `realtime.subscription`, `public.health_sources`) into **1 single JSON CTE read-only RPC** per refresh (with automatic core `pg_catalog` fallback if optional extensions are restricted), cutting Admin Console Postgres & Kong `Log Ingestion` by ~75–80%.
+- **Windows 11 Taskbar Flyout Throttling**:
+  - Relaxed `TaskbarGlanceFlyoutControl` live background polling from `45s` (`20s` open cooldown) to **`5 minutes` (`120s` open cooldown)**, eliminating idle desktop PostgREST log noise while keeping explicit user interactions immediate.
+
 ---
 
 ## 8. Verification & Physical Device Delivery Summary
