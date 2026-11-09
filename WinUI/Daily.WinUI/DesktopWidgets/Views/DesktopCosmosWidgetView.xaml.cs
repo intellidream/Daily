@@ -156,7 +156,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     var snapshot = weatherClient?.GetCachedSnapshot();
                     if (snapshot != null)
                     {
-                        cloudCover = (int)Math.Round(snapshot.CloudCover);
+                        cloudCover = snapshot.Clouds;
                     }
                 }
                 catch { }

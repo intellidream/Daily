@@ -259,7 +259,6 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                     try
                     {
-                        var now = DateTime.UtcNow;
                         double lat = 44.4323;
                         double lon = 26.1063;
                         try
@@ -286,7 +285,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                             var snapshot = weatherClient?.GetCachedSnapshot();
                             if (snapshot != null)
                             {
-                                cloudCover = (int)Math.Round(snapshot.CloudCover);
+                                cloudCover = snapshot.Clouds;
                             }
                         }
                         catch { }

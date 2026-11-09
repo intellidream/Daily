@@ -313,7 +313,7 @@ namespace Daily_WinUI.WidgetsHost.Services
                         ComputedAt = entity.ComputedAt,
                         EngineVersion = entity.EngineVersion,
                         Steps = entity.Steps ?? payload?.Activity?.TotalSteps,
-                        ActiveKcal = entity.ActiveKcal ?? payload?.Activity?.EffectiveActiveCalories,
+                        ActiveKcal = entity.ActiveKcal ?? payload?.Activity?.ActiveCaloriesKcal,
                         SleepAsleepS = sleepAsleep,
                         SleepScore = sleepScore,
                         StressAvg = stressScore,
