@@ -52,7 +52,7 @@ namespace Daily_WinUI.WidgetsHost.Services
                 .Select(l => new HabitLog
                 {
                     Id = Guid.TryParse(l.Id, out var g) ? g : Guid.NewGuid(),
-                    UserId = l.UserId,
+                    UserId = Guid.TryParse(l.UserId, out var uid) ? uid : Guid.Empty,
                     HabitType = l.HabitType,
                     Value = l.Value,
                     Unit = l.Unit,
