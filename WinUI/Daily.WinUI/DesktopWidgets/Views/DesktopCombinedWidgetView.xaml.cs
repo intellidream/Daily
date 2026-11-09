@@ -263,7 +263,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         double lon = 26.1063;
                         try
                         {
-                            var settings = SettingsService.Load();
+                            var settings = Daily_WinUI.Services.SettingsService.Load();
                             if (settings.LastLatitude.HasValue && settings.LastLatitude.Value != 0)
                             {
                                 lat = settings.LastLatitude.Value;
