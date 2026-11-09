@@ -50,9 +50,8 @@ La testarea pe termen lung și lăsarea aplicației `Daily.WinUI` peste noapte �
 ### C. Singleton Socket Pool (`WeatherClient.cs`)
 * Câmpul `_httpClient` a fost transformat în `private static readonly HttpClient _httpClient = new();`, reutilizând connection pool-ul nativ pe tot ciclul de viață al procesului și prevenind socket exhaustion.
 
-### D. Reducerea Consumului WebView2 și Plafonarea Logurilor
-* În `RssFeedWidgetControl.xaml.cs`, în blocul `finally` al procesării Medium/RSS, se trimite `CoreWebView2.MemoryUsageTarget = Low` pentru a elibera cache-urile V8 și texturile de randare.
-* În `LlmDebugLogger.cs`, lista de execuție a fost plafonată la ultimele 50 de rulări (`Logs.RemoveAt(0)`).
+### D. Plafonarea Logurilor și Eliberarea Resurselor
+* În `LlmDebugLogger.cs`, lista de execuție a fost plafonată la ultimele 50 de rulări (`Logs.RemoveAt(0)`), prevenind acumularea nelimitată a bufferelor de text în memorie.
 
 ---
 
