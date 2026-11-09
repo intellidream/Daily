@@ -1,0 +1,106 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.18362.0</TargetPlatformMinVersion>
+    <RootNamespace>Daily_WinUI</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <WindowsPackageType>None</WindowsPackageType>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);WINUI_NATIVE;WIDGETS_HOST;DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Platform configuration matching Daily.WinUI -->
+  <PropertyGroup Condition="'$(Platform)' == ''">
+    <Platform>AnyCPU</Platform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'Any CPU'">
+    <Platform>AnyCPU</Platform>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ActivePlatform>$(Platform)</ActivePlatform>
+    <ActivePlatform Condition="'$(ActivePlatform)' == 'AnyCPU'">$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</ActivePlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'Arm64' or '$(ActivePlatform)' == 'arm64'">
+    <ActivePlatform>ARM64</ActivePlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'X64' or '$(ActivePlatform)' == 'x64'">
+    <ActivePlatform>x64</ActivePlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ActivePlatform)' == 'ARM64'">
+    <PlatformTarget>ARM64</PlatformTarget>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13" />
+    <PackageReference Include="sqlite-net-base" Version="1.9.172" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <PackageReference Include="Supabase" Version="1.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Include="..\Daily.WinUI\DesktopWidgets\DesktopWidgetWindow.xaml" Link="DesktopWidgets\DesktopWidgetWindow.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopBubblesWidgetView.xaml" Link="DesktopWidgets\Views\DesktopBubblesWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopCombinedWidgetView.xaml" Link="DesktopWidgets\Views\DesktopCombinedWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopCosmosWidgetView.xaml" Link="DesktopWidgets\Views\DesktopCosmosWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopMoneyWidgetView.xaml" Link="DesktopWidgets\Views\DesktopMoneyWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopSleepWidgetView.xaml" Link="DesktopWidgets\Views\DesktopSleepWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopSmokesWidgetView.xaml" Link="DesktopWidgets\Views\DesktopSmokesWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopStressWidgetView.xaml" Link="DesktopWidgets\Views\DesktopStressWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopTagdosWidgetView.xaml" Link="DesktopWidgets\Views\DesktopTagdosWidgetView.xaml" />
+    <Page Include="..\Daily.WinUI\DesktopWidgets\Views\DesktopWeatherWidgetView.xaml" Link="DesktopWidgets\Views\DesktopWeatherWidgetView.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Daily.WinUI\DesktopWidgets\**\*.cs" Link="DesktopWidgets\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Daily.WinUI\Controls\LungsControl.cs" Link="Controls\LungsControl.cs" />
+    <Compile Include="..\Daily.WinUI\Services\SettingsService.cs" Link="Services\SettingsService.cs" />
+    <Compile Include="..\Daily.WinUI\Services\WeatherClient.cs" Link="Services\WeatherClient.cs" />
+    <Compile Include="..\Daily.WinUI\Services\LocationService.cs" Link="Services\LocationService.cs" />
+    <Compile Include="..\Daily.WinUI\Services\Cosmos\AstronomyService.cs" Link="Services\Cosmos\AstronomyService.cs" />
+    <Compile Include="..\Daily.WinUI\Services\Cosmos\AstronomyEngine.cs" Link="Services\Cosmos\AstronomyEngine.cs" />
+    <Compile Include="..\Daily.WinUI\Models\WeatherSnapshot.cs" Link="Models\WeatherSnapshot.cs" />
+    <Compile Include="..\..\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\Services\IDatabaseService.cs" Link="Services\IDatabaseService.cs" />
+    <Compile Include="..\..\Services\DatabaseService.cs" Link="Services\DatabaseService.cs" />
+    <Compile Include="..\..\Services\TagdosParser.cs" Link="Services\TagdosParser.cs" />
+    <Compile Include="..\..\Services\Finances\SmartLedgerParser.cs" Link="Services\Finances\SmartLedgerParser.cs" />
+    <Compile Include="..\..\Services\IHabitsService.cs" Link="Services\IHabitsService.cs" />
+    <Compile Include="..\..\Services\ISettingsService.cs" Link="Services\ISettingsService.cs" />
+    <Compile Include="..\..\Services\ITagdosService.cs" Link="Services\ITagdosService.cs" />
+    <Compile Include="..\..\Services\Finances\IFinancesService.cs" Link="Services\Finances\IFinancesService.cs" />
+    <Compile Include="..\Daily.WinUI\Services\IHealthHubService.cs" Link="Services\IHealthHubService.cs" />
+    <Compile Include="..\..\Services\Health\IHealthService.cs" Link="Services\Health\IHealthService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\Daily.WinUI\Assets\Fonts\tabler-icons.ttf" Link="Assets\Fonts\tabler-icons.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\Daily.WinUI\Assets\AppIcon.ico" Link="Assets\AppIcon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="CopyHostToWinUI" AfterTargets="Build">
+    <PropertyGroup>
+      <TargetWinUIDir>$(SolutionDir)Daily.WinUI\bin\$(Platform)\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\</TargetWinUIDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(TargetWinUIDir)" Condition="Exists('$(TargetWinUIDir)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)Daily.WidgetsHost.dll" DestinationFolder="$(TargetWinUIDir)" Condition="Exists('$(TargetWinUIDir)') and Exists('$(TargetDir)Daily.WidgetsHost.dll')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

@@ -6,7 +6,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Daily.Services.Finances;
 using Daily.Models.Finances;
+#if !WIDGETS_HOST
 using Daily_WinUI.Controls;
+#endif
 
 namespace Daily_WinUI.DesktopWidgets.Views
 {
@@ -122,11 +124,13 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     }
                 }
 
+#if !WIDGETS_HOST
                 var snapshot = FinancesWidgetControl.SharedSnapshot;
                 if (snapshot != null && snapshot.NetWorth > 0)
                 {
                     totalNet = snapshot.NetWorth;
                 }
+#endif
 
                 decimal eurEst = totalNet > 0 ? totalNet / 4.97m : 0;
 

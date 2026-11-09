@@ -117,6 +117,15 @@ public static class SettingsService
     private static AppSettings? _cachedSettings;
     private static readonly object _lock = new();
 
+    public static AppSettings Reload()
+    {
+        lock (_lock)
+        {
+            _cachedSettings = null;
+            return Load();
+        }
+    }
+
     public static AppSettings Load()
     {
         lock (_lock)

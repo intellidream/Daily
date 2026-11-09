@@ -7,7 +7,9 @@ using Daily.Services;
 using Daily.Services.Finances;
 using Daily.Services.Health;
 using Daily_WinUI.Services;
+#if !WIDGETS_HOST
 using Daily_WinUI.Controls;
+#endif
 
 namespace Daily_WinUI.DesktopWidgets.Views
 {
@@ -79,12 +81,14 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 // 3. Money
                 try
                 {
+#if !WIDGETS_HOST
                     var snapshot = FinancesWidgetControl.SharedSnapshot;
                     if (snapshot != null)
                     {
                         MoneyMetricText.Text = snapshot.SmartNetWorthDisplay;
                     }
                     else
+#endif
                     {
                         var finService = App.Current.Services?.GetService<IFinancesService>();
                         if (finService != null)

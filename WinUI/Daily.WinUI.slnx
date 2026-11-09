@@ -2,6 +2,6 @@
   <Project Path="Daily.WinUI/Daily.WinUI.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
-
+  <Project Path="Daily.WidgetsHost/Daily.WidgetsHost.csproj" />
 </Solution>
 

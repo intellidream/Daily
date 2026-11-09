@@ -724,29 +724,33 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void NavigateToAssociatedHub()
         {
+            int tabIndex = Model.Type switch
+            {
+                DesktopWidgetType.Combined => 1, // Executive Brief / Home
+                DesktopWidgetType.Money => 2,    // Finances Hub
+                DesktopWidgetType.TagDos => 3,   // TagDos Hub
+                DesktopWidgetType.Sleep => 4,    // Health Hub
+                DesktopWidgetType.Stress => 4,   // Health Hub
+                DesktopWidgetType.Bubbles => 5,  // Habits Hub (Hydration)
+                DesktopWidgetType.Smokes => 5,   // Habits Hub (Smokes)
+                DesktopWidgetType.Weather => 6,  // Weather Hub
+                DesktopWidgetType.Cosmos => 9,   // Cosmos Hub
+                _ => 1
+            };
+
+#if !WIDGETS_HOST
             if (App.Current?.MainWindow is MainWindow mw)
             {
                 mw.DispatcherQueue.TryEnqueue(() =>
                 {
                     mw.ShowAndActivate();
-
-                    int tabIndex = Model.Type switch
-                    {
-                        DesktopWidgetType.Combined => 1, // Executive Brief / Home
-                        DesktopWidgetType.Money => 2,    // Finances Hub
-                        DesktopWidgetType.TagDos => 3,   // TagDos Hub
-                        DesktopWidgetType.Sleep => 4,    // Health Hub
-                        DesktopWidgetType.Stress => 4,   // Health Hub
-                        DesktopWidgetType.Bubbles => 5,  // Habits Hub (Hydration)
-                        DesktopWidgetType.Smokes => 5,   // Habits Hub (Smokes)
-                        DesktopWidgetType.Weather => 6,  // Weather Hub
-                        DesktopWidgetType.Cosmos => 9,   // Cosmos Hub
-                        _ => 1
-                    };
-
                     mw.NavigateToTab(tabIndex);
                 });
+                return;
             }
+#endif
+
+            WidgetsHostIpc.ForwardNavigationToMainApp(tabIndex);
         }
 
         public void SendToBottom()
