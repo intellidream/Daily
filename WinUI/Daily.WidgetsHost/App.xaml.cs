@@ -170,6 +170,7 @@ public partial class App : Application
 
     private void HandleIpcCommand(string cmd)
     {
+        LogDiagnostic($"[IPC] Handling command: '{cmd}'");
         SettingsService.Reload();
 
         if (cmd.Equals("ping", StringComparison.OrdinalIgnoreCase))
