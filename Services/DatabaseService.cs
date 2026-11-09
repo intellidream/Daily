@@ -76,6 +76,10 @@ namespace Daily.Services
                 await _connection.CreateTableAsync<Daily.Models.LocalTagdoStream>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<Daily.Models.LocalTagdoQuickNote>().ConfigureAwait(false);
 
+                // Prism Assisted Web Studio Vault & Speed Dial
+                await _connection.CreateTableAsync<Daily.Models.LocalPrismClip>().ConfigureAwait(false);
+                await _connection.CreateTableAsync<Daily.Models.LocalPrismPinnedSite>().ConfigureAwait(false);
+
                 // Calendar Integration
                 await _connection.CreateTableAsync<LocalCalendarAccount>().ConfigureAwait(false);
                 await _connection.CreateTableAsync<LocalCalendarEvent>().ConfigureAwait(false);

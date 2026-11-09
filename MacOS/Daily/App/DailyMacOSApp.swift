@@ -111,6 +111,16 @@ struct DailyMacOSApp: App {
                     openWindow(id: "cosmos")
                 }
                 .keyboardShortcut("8", modifiers: [.command, .option])
+
+                Button("Prism & Web Studio") {
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .prism)
+                }
+                .keyboardShortcut("9", modifiers: .command)
+
+                Button("Open Prism Pop-Out Window...") {
+                    PrismWindowManager.shared.openPopOutWindow()
+                }
+                .keyboardShortcut("9", modifiers: [.command, .option])
                 
                 Divider()
                 
@@ -259,6 +269,13 @@ struct DailyMacOSApp: App {
             targetTab = .tagdos
         } else if host == "news" || path.contains("news") {
             targetTab = .news
+        } else if host == "prism" || path.contains("prism") {
+            if let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let targetUrl = comps.queryItems?.first(where: { $0.name == "url" })?.value,
+               !targetUrl.isEmpty {
+                PrismStore.shared.requestOpenInPrism(url: targetUrl)
+            }
+            targetTab = .prism
         } else {
             targetTab = .dashboard
         }

@@ -115,6 +115,7 @@ fun NewsFeedView(
     repository: NewsRepository,
     settings: AppSettings,
     onNavigateBack: () -> Unit,
+    onOpenInPrism: ((String, String?) -> Unit)? = null,
     horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp
 ) {
     val feeds by repository.feeds.collectAsState()
@@ -374,6 +375,7 @@ fun NewsFeedView(
             candidatePool = filteredArticles,
             repository = repository,
             isDark = settings.theme != com.intellidream.daily.model.AppTheme.Light,
+            onOpenInPrism = onOpenInPrism,
             onDismiss = { selectedArticleForReader = null }
         )
     }

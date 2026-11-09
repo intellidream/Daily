@@ -11,6 +11,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Sendable {
     case weather = "Weather"
     case cosmos = "Cosmos"
     case news = "News"
+    case prism = "Prism"
     case settings = "Settings"
     
     public var id: String { rawValue }
@@ -25,6 +26,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Sendable {
         case .weather: return "cloud.sun.fill"
         case .cosmos: return "moon.stars.fill"
         case .news: return "newspaper.fill"
+        case .prism: return "safari.fill"
         case .settings: return "gearshape.fill"
         }
     }
@@ -39,12 +41,13 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Sendable {
         case .weather: return "6"
         case .news: return "7"
         case .cosmos: return "8"
+        case .prism: return "9"
         case .settings: return ","
         }
     }
     
     public static let primaryTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits]
-    public static let allNavTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits, .weather, .cosmos, .news, .settings]
+    public static let allNavTabs: [NavigationTab] = [.dashboard, .finances, .tagdos, .health, .habits, .weather, .cosmos, .news, .prism, .settings]
 }
 
 /// Floating Liquid Glass navigation capsule anchored at the bottom of the viewport on macOS.

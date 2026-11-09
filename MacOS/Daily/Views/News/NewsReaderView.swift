@@ -191,6 +191,29 @@ public struct NewsReaderView: View {
             }
             
             Spacer(minLength: 4)
+
+            // Open Live Article in Prism Studio Button
+            Button {
+                PrismStore.shared.requestOpenInPrism(url: currentArticle.link, title: currentArticle.title)
+                if isInSeparateWindow {
+                    onDismiss()
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .prism)
+                } else {
+                    onDismiss()
+                    NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+                }
+            } label: {
+                Image(systemName: "safari.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle().fill(ThemeColors.accentCyan.opacity(0.14))
+                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.30), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Open Live Web in Prism Studio")
             
             // Open in Separate Window Button (shown in main window)
             if !isInSeparateWindow, let onOpenInSeparateWindow = onOpenInSeparateWindow {

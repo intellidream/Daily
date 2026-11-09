@@ -14,11 +14,16 @@ public struct ArticleWebView: NSViewRepresentable {
         self.fontSizeMultiplier = fontSizeMultiplier
     }
     
+    public func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     public func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground") // Transparent background
         return webView
     }
@@ -365,5 +370,25 @@ public struct ArticleWebView: NSViewRepresentable {
         </body>
         </html>
         """
+    }
+
+    @MainActor
+    public final class Coordinator: NSObject, WKNavigationDelegate {
+        public func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url,
+               let scheme = url.scheme?.lowercased(),
+               (scheme == "https" || scheme == "http") {
+                PrismStore.shared.requestOpenInPrism(url: url.absoluteString, openInNewTab: true)
+                NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
     }
 }

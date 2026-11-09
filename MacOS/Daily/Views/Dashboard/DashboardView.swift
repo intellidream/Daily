@@ -20,6 +20,7 @@ public struct DashboardView: View {
     private let onNavigateToFinances: () -> Void
     private let onNavigateToSettings: () -> Void
     private let onNavigateToTagdos: () -> Void
+    private let onNavigateToPrism: () -> Void
     
     public init(
         forceSingleColumn: Bool = false,
@@ -30,7 +31,8 @@ public struct DashboardView: View {
         onNavigateToHabits: @escaping () -> Void = {},
         onNavigateToFinances: @escaping () -> Void = {},
         onNavigateToSettings: @escaping () -> Void = {},
-        onNavigateToTagdos: @escaping () -> Void = {}
+        onNavigateToTagdos: @escaping () -> Void = {},
+        onNavigateToPrism: @escaping () -> Void = {}
     ) {
         self.forceSingleColumn = forceSingleColumn
         self.onNavigateToWeather = onNavigateToWeather
@@ -41,6 +43,7 @@ public struct DashboardView: View {
         self.onNavigateToFinances = onNavigateToFinances
         self.onNavigateToSettings = onNavigateToSettings
         self.onNavigateToTagdos = onNavigateToTagdos
+        self.onNavigateToPrism = onNavigateToPrism
     }
 
     private func triggerHaptic() {
@@ -212,6 +215,9 @@ public struct DashboardView: View {
                 .equatable()
         case DashboardWidgetType.tagdosNotes.rawValue:
             TagdosNotesDashboardCard(size: config.size, onTap: onNavigateToTagdos)
+                .equatable()
+        case DashboardWidgetType.prism.rawValue:
+            PrismDashboardCard(size: config.size, onTap: onNavigateToPrism)
                 .equatable()
         default:
             EmptyView()

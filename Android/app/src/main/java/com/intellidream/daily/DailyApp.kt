@@ -45,6 +45,10 @@ class DailyApp : Application() {
         private set
     lateinit var cosmosCatalogRepository: com.intellidream.daily.cosmos.CosmosCatalogRepository
         private set
+    lateinit var prismRemoteService: com.intellidream.daily.network.PrismRemoteService
+        private set
+    lateinit var prismRepository: com.intellidream.daily.database.PrismRepository
+        private set
 
     private val appScope = CoroutineScope(Dispatchers.IO)
 
@@ -124,6 +128,24 @@ class DailyApp : Application() {
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)
         cosmosCatalogRepository = com.intellidream.daily.cosmos.CosmosCatalogRepository.getInstance(this)
         cosmosLiveRepository = com.intellidream.daily.cosmos.CosmosLiveRepository.getInstance(this)
+        prismRemoteService = com.intellidream.daily.network.PrismRemoteService()
+        prismRepository = com.intellidream.daily.database.PrismRepository(this, dailyDatabase.prismDao())
+        prismRepository.syncHandler = object : com.intellidream.daily.database.PrismSyncHandler {
+            override suspend fun fetchClipsDelta(userId: String, watermarkIso: String?) =
+                prismRemoteService.fetchClipsDelta(userId, watermarkIso)
+            override suspend fun upsertClip(clip: com.intellidream.daily.model.PrismClip) =
+                prismRemoteService.upsertClip(clip)
+            override suspend fun fetchPinnedSitesDelta(userId: String, watermarkIso: String?) =
+                prismRemoteService.fetchPinnedSitesDelta(userId, watermarkIso)
+            override suspend fun upsertPinnedSite(pin: com.intellidream.daily.model.PrismPinnedSite) =
+                prismRemoteService.upsertPinnedSite(pin)
+            override suspend fun uploadClipImage(userId: String, clipId: String, jpegBytes: ByteArray) =
+                prismRemoteService.uploadClipImage(userId, clipId, jpegBytes)
+            override suspend fun downloadClipImage(storagePath: String?, fallbackUrl: String?) =
+                prismRemoteService.downloadClipImage(storagePath, fallbackUrl)
+            override suspend fun deleteRemoteClipImage(storagePath: String?) =
+                prismRemoteService.deleteRemoteClipImage(storagePath)
+        }
 
         habitsRepository.syncHandler = object : com.intellidream.daily.database.HabitSyncHandler {
             override suspend fun pushLog(log: com.intellidream.daily.model.HabitLogRecord): Boolean {
@@ -185,6 +207,8 @@ class DailyApp : Application() {
                         habitsRepository.syncLogs(uid)
                         newsRepository.currentUserId = uid
                         newsRepository.syncWithSupabase(uid)
+                        prismRepository.currentUserId = uid
+                        prismRepository.syncWithSupabase(uid)
                         healthRepository.currentUserId = uid
                         healthRepository.syncUnsyncedTelemetry()
                         healthRepository.syncUnsyncedVitals()

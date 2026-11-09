@@ -16,6 +16,7 @@ namespace Daily_WinUI.Controls
         public DataTemplate MediaTemplate { get; set; } = null!;
         public DataTemplate SystemInfoTemplate { get; set; } = null!;
         public DataTemplate CosmosTemplate { get; set; } = null!;
+        public DataTemplate PrismTemplate { get; set; } = null!;
 
         protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
         {
@@ -25,6 +26,7 @@ namespace Daily_WinUI.Controls
                 {
                     case "WeatherWidget": return WeatherTemplate;
                     case "CosmosWidget": return CosmosTemplate;
+                    case "PrismWidget": return PrismTemplate;
                     case "FinancesWidget": return FinancesTemplate;
                     case "HabitsWidget": return HabitsTemplate;
                     case "HealthWidget": return HealthTemplate;

@@ -6,11 +6,14 @@ public struct RootView: View {
     @ObservedObject private var authService = AuthService.shared
     @State private var selectedTab: NavigationTab = .dashboard
     @State private var isCosmosNavExpanded: Bool = false
+    @State private var isPrismFullResearchMode: Bool = false
     
     public init() {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-startTabCosmos") {
             self._selectedTab = State(initialValue: .cosmos)
+        } else if args.contains("-startTabPrism") {
+            self._selectedTab = State(initialValue: .prism)
         } else if args.contains("-startTabNews") {
             self._selectedTab = State(initialValue: .news)
         } else if args.contains("-startTabSettings") {
@@ -154,6 +157,8 @@ public struct RootView: View {
                         if isFoldable {
                             if selectedTab == .cosmos {
                                 fullSurfaceCosmosView
+                            } else if selectedTab == .prism && isPrismFullResearchMode {
+                                fullSurfacePrismView
                             } else {
                                 foldableDualPaneView
                             }
@@ -166,7 +171,29 @@ public struct RootView: View {
                     if newTab != .cosmos {
                         isCosmosNavExpanded = false
                     }
+                    if newTab != .prism {
+                        isPrismFullResearchMode = false
+                    }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .dailySelectTab)) { notification in
+                    if let tab = notification.object as? NavigationTab {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = tab
+                        }
+                    }
+                }
+                .environment(\.openURL, OpenURLAction { url in
+                    if selectedTab != .prism && selectedTab != .settings,
+                       let scheme = url.scheme?.lowercased(),
+                       (scheme == "https" || scheme == "http") {
+                        PrismStore.shared.requestOpenInPrism(url: url.absoluteString, openInNewTab: true)
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .prism
+                        }
+                        return .handled
+                    }
+                    return .systemAction
+                })
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 1.05)),
                     removal: .opacity.combined(with: .scale(scale: 0.95))
@@ -202,6 +229,35 @@ public struct RootView: View {
                     selectedTab = .tagdos
                 } else if fullPath.contains("cosmos") || fullPath.contains("sky") || fullPath.contains("astronomy") {
                     selectedTab = .cosmos
+                } else if fullPath.contains("prism") || fullPath.contains("web") {
+                    if let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                        let qMap = Dictionary(uniqueKeysWithValues: (comps.queryItems ?? []).compactMap { item in
+                            item.value.map { (item.name, $0) }
+                        })
+                        if let shareTypeRaw = qMap["share_type"], let clipType = PrismClipType(rawValue: shareTypeRaw) {
+                            let sUrl = qMap["url"] ?? "https://shared.local"
+                            let sTitle = qMap["title"] ?? ""
+                            let sText = qMap["text"] ?? ""
+                            switch clipType {
+                            case .quote:
+                                PrismStore.shared.saveQuoteClip(quoteText: sText, sourceUrl: sUrl, pageTitle: sTitle, tags: ["shared"])
+                            case .image:
+                                let imgData = UIPasteboard.general.image?.jpegData(compressionQuality: 0.85)
+                                Task {
+                                    _ = await PrismStore.shared.saveImageClip(rawImageData: imgData, sourceUrl: sUrl, title: sTitle, tags: ["shared"])
+                                }
+                            case .link, .aiSummary:
+                                PrismStore.shared.saveLinkClip(url: sUrl, title: sTitle, userNote: sText, tags: ["shared"])
+                                if qMap["open"] == "1" {
+                                    PrismStore.shared.requestOpenInPrism(url: sUrl, title: sTitle, openInNewTab: true)
+                                }
+                            }
+                        } else if let targetUrl = qMap["url"], !targetUrl.isEmpty {
+                            PrismStore.shared.requestOpenInPrism(url: targetUrl)
+                        }
+                    }
+                    PrismStore.shared.consumePendingSharedItems()
+                    selectedTab = .prism
                 } else if fullPath.contains("summary") || fullPath.contains("briefing") {
                     selectedTab = .dashboard
                     Task { @MainActor in
@@ -214,6 +270,7 @@ public struct RootView: View {
                     case "weather": selectedTab = .weather
                     case "cosmos": selectedTab = .cosmos
                     case "news": selectedTab = .news
+                    case "prism": selectedTab = .prism
                     case "health": selectedTab = .health
                     case "habits": selectedTab = .habits
                     case "finances": selectedTab = .finances
@@ -274,6 +331,11 @@ public struct RootView: View {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                 selectedTab = .tagdos
                             }
+                        },
+                        onNavigateToPrism: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                selectedTab = .prism
+                            }
                         }
                     )
                 case .weather:
@@ -296,6 +358,8 @@ public struct RootView: View {
                     )
                 case .news:
                     NewsFeedView(onNavigateBack: navigateToDashboard)
+                case .prism:
+                    PrismMainView(onNavigateBack: navigateToDashboard)
                 case .health:
                     HealthMainView(onNavigateBack: navigateToDashboard)
                 case .habits:
@@ -328,13 +392,32 @@ public struct RootView: View {
                 )
             }
             
-            // Floating Liquid Glass Navigation Capsule (auto-retracted into corner bubble in Cosmos Observatory)
+            // Floating Liquid Glass Navigation Capsule (auto-retracted in Cosmos Observatory; hidden in Prism where Bottom Thumb Omnibox leads)
             if selectedTab == .cosmos {
                 cosmosNavigationOverlay
-            } else {
+            } else if selectedTab != .prism {
                 FloatingGlassCapsule(selectedTab: $selectedTab)
                     .padding(.bottom, 24)
             }
+        }
+    }
+
+    // MARK: - Full-Surface Unfolded Foldable Research Split (65% Live Web / 35% Prism Studio)
+    @ViewBuilder
+    private var fullSurfacePrismView: some View {
+        ZStack(alignment: .bottom) {
+            PrismMainView(
+                isFullResearchModeExternal: true,
+                onToggleFullResearchMode: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isPrismFullResearchMode = false
+                    }
+                },
+                onNavigateBack: navigateToDashboard
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            cosmosNavigationOverlay
         }
     }
     
@@ -454,6 +537,11 @@ public struct RootView: View {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                             selectedTab = .tagdos
                         }
+                    },
+                    onNavigateToPrism: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedTab = .prism
+                        }
                     }
                 )
                 
@@ -514,6 +602,16 @@ public struct RootView: View {
                         )
                     case .news:
                         NewsFeedView(onNavigateBack: navigateToDashboard)
+                    case .prism:
+                        PrismMainView(
+                            isFullResearchModeExternal: isPrismFullResearchMode,
+                            onToggleFullResearchMode: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isPrismFullResearchMode.toggle()
+                                }
+                            },
+                            onNavigateBack: navigateToDashboard
+                        )
                     case .health:
                         HealthMainView(onNavigateBack: navigateToDashboard)
                     case .habits:

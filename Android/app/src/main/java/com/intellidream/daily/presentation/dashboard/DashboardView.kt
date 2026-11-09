@@ -89,6 +89,7 @@ fun DashboardView(
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository = com.intellidream.daily.DailyApp.instance.tagdosRepository,
     newsRepository: com.intellidream.daily.database.NewsRepository = com.intellidream.daily.DailyApp.instance.newsRepository,
+    prismRepository: com.intellidream.daily.database.PrismRepository = com.intellidream.daily.DailyApp.instance.prismRepository,
     smartBriefingRepository: com.intellidream.daily.briefing.SmartBriefingRepository,
     onRefreshWeather: () -> Unit,
     onOpenCustomize: () -> Unit,
@@ -101,6 +102,7 @@ fun DashboardView(
     onNavigateToNews: () -> Unit = {},
     onNavigateToWeather: () -> Unit = {},
     onNavigateToCosmos: () -> Unit = {},
+    onNavigateToPrism: () -> Unit = {},
     forceSingleColumn: Boolean = false,
     onBriefingClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -153,6 +155,7 @@ fun DashboardView(
                 healthRepository.loadDataForSelectedDate(forceRefresh = true)
                 tagdosRepository.syncWithSupabase()
                 newsRepository.loadAllNews(forceRefresh = true)
+                prismRepository.syncWithSupabase(prismRepository.currentUserId)
                 pullRefreshState.endRefresh()
             }
         }
@@ -199,6 +202,7 @@ fun DashboardView(
             financeDataRepository = financeDataRepository,
             tagdosRepository = tagdosRepository,
             newsRepository = newsRepository,
+            prismRepository = prismRepository,
             onRefreshWeather = onRefreshWeather,
             onNavigateToHabits = onNavigateToHabits,
             onNavigateToHealth = onNavigateToHealth,
@@ -207,6 +211,7 @@ fun DashboardView(
             onNavigateToNews = onNavigateToNews,
             onNavigateToWeather = onNavigateToWeather,
             onNavigateToCosmos = onNavigateToCosmos,
+            onNavigateToPrism = onNavigateToPrism,
             cosmosConditions = cosmosData.first,
             cosmosMoon = cosmosData.second,
             cosmosVisiblePlanets = cosmosData.third,
@@ -607,6 +612,7 @@ private fun DashboardWidgetRenderer(
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository,
     newsRepository: com.intellidream.daily.database.NewsRepository,
+    prismRepository: com.intellidream.daily.database.PrismRepository,
     onRefreshWeather: () -> Unit,
     onNavigateToHabits: () -> Unit,
     onNavigateToHealth: () -> Unit,
@@ -615,6 +621,7 @@ private fun DashboardWidgetRenderer(
     onNavigateToNews: () -> Unit,
     onNavigateToWeather: () -> Unit,
     onNavigateToCosmos: () -> Unit = {},
+    onNavigateToPrism: () -> Unit = {},
     cosmosConditions: com.intellidream.daily.model.StargazingConditions? = null,
     cosmosMoon: com.intellidream.daily.model.MoonPhaseInfo? = null,
     cosmosVisiblePlanets: List<com.intellidream.daily.model.CelestialBody> = emptyList(),
@@ -697,6 +704,14 @@ private fun DashboardWidgetRenderer(
                 latitude = weather?.coord?.lat ?: 44.4323,
                 longitude = weather?.coord?.lon ?: 26.1063,
                 onTap = onNavigateToCosmos,
+                onLongClick = onLongClick
+            )
+        }
+        DashboardWidgetType.Prism.id -> {
+            PrismDashboardCard(
+                size = config.size,
+                repository = prismRepository,
+                onOpenHub = onNavigateToPrism,
                 onLongClick = onLongClick
             )
         }

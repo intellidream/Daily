@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Feed
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.RestartAlt
@@ -271,6 +272,7 @@ private fun WidgetConfigItemCard(
         DashboardWidgetType.Habits.id -> DashboardWidgetType.Habits
         DashboardWidgetType.Finances.id -> DashboardWidgetType.Finances
         DashboardWidgetType.TagdosNotes.id -> DashboardWidgetType.TagdosNotes
+        DashboardWidgetType.Prism.id -> DashboardWidgetType.Prism
         else -> null
     }
 
@@ -423,6 +425,7 @@ private fun getWidgetIcon(id: String): ImageVector {
         DashboardWidgetType.Stress.id -> Icons.Rounded.SelfImprovement
         DashboardWidgetType.TagdosNotes.id -> Icons.Rounded.CheckCircle
         DashboardWidgetType.Cosmos.id -> Icons.Rounded.NightsStay
+        DashboardWidgetType.Prism.id -> Icons.Rounded.Language
         else -> Icons.Rounded.WbSunny
     }
 }

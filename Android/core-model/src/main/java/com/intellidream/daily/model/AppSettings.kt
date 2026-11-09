@@ -39,7 +39,8 @@ enum class DashboardWidgetType(val id: String, val title: String) {
     Habits("habits", "Habits & Cravings"),
     Finances("finances", "Finances & Markets"),
     TagdosNotes("tagdos_notes", "Tagdos & Notes"),
-    Cosmos("cosmos", "Cosmos & Observatory")
+    Cosmos("cosmos", "Cosmos & Observatory"),
+    Prism("prism", "Prism & Web Studio")
 }
 
 @Serializable
@@ -56,7 +57,8 @@ data class DashboardWidgetConfig(
             DashboardWidgetConfig(DashboardWidgetType.Health.id, DashboardWidgetSize.Wide, true),
             DashboardWidgetConfig(DashboardWidgetType.Habits.id, DashboardWidgetSize.Wide, true),
             DashboardWidgetConfig(DashboardWidgetType.Finances.id, DashboardWidgetSize.Wide, true),
-            DashboardWidgetConfig(DashboardWidgetType.TagdosNotes.id, DashboardWidgetSize.Wide, true)
+            DashboardWidgetConfig(DashboardWidgetType.TagdosNotes.id, DashboardWidgetSize.Wide, true),
+            DashboardWidgetConfig(DashboardWidgetType.Prism.id, DashboardWidgetSize.Wide, true)
         )
     }
 }
@@ -109,6 +111,12 @@ data class AppSettings(
     val cosmosNotifyIssPasses: Boolean = false,
     val cosmosNotifyAurora: Boolean = false,
     val cosmosNotifyPristineSky: Boolean = false,
+
+    // Prism Assisted Web Studio
+    val prismSearchEngine: String = "google",
+    val prismShieldEnabled: Boolean = true,
+    val prismShieldAllowlist: List<String> = emptyList(),
+    val prismClipboardDetectEnabled: Boolean = true,
 
     // Dashboard Layout
     val dashboardWidgets: List<DashboardWidgetConfig> = DashboardWidgetConfig.defaultLayout

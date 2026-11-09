@@ -92,6 +92,8 @@ class MainActivity : ComponentActivity() {
     private val financeDataRepository by lazy { DailyApp.instance.financeDataRepository }
     private val tagdosRepository by lazy { DailyApp.instance.tagdosRepository }
     private val newsRepository by lazy { DailyApp.instance.newsRepository }
+    private val prismRepository by lazy { DailyApp.instance.prismRepository }
+    private val prismRemoteService by lazy { DailyApp.instance.prismRemoteService }
     private val smartBriefingRepository by lazy { DailyApp.instance.smartBriefingRepository }
 
     private var selectedTab by mutableStateOf(NavigationTab.Dashboard)
@@ -216,6 +218,8 @@ class MainActivity : ComponentActivity() {
                             financeDataRepository = financeDataRepository,
                             tagdosRepository = tagdosRepository,
                             newsRepository = newsRepository,
+                            prismRepository = prismRepository,
+                            prismRemoteService = prismRemoteService,
                             smartBriefingRepository = smartBriefingRepository,
                             weatherRepository = weatherRepository,
                             onRefreshWeather = {
@@ -312,6 +316,8 @@ class MainActivity : ComponentActivity() {
                                         financeDataRepository = financeDataRepository,
                                         tagdosRepository = tagdosRepository,
                                         newsRepository = newsRepository,
+                                        prismRepository = prismRepository,
+                                        prismRemoteService = prismRemoteService,
                                         smartBriefingRepository = smartBriefingRepository,
                                         weatherRepository = weatherRepository,
                                         onRefreshWeather = {
@@ -393,7 +399,71 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 1. Deep Link URI Handling (e.g. daily://habits/water, daily://health/sleep, daily://health/stress)
+        // 0. Android Share Sheet Target (Intent.ACTION_SEND -> Prism Studio)
+        if (intent.action == Intent.ACTION_SEND) {
+            val mime = intent.type ?: ""
+            val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
+            when {
+                mime.startsWith("text/") -> {
+                    val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+                    if (sharedText.isNotEmpty()) {
+                        val extractedUrl = Regex("""https?://[^\s)\]>]+""").find(sharedText)?.value
+                        if (extractedUrl != null) {
+                            prismRepository.requestOpenUrlInPrism(extractedUrl, subject)
+                            val remainder = sharedText.replace(extractedUrl, "").trim()
+                            if (remainder.length > 24 && remainder != subject) {
+                                prismRepository.saveQuoteClip(
+                                    quoteText = remainder,
+                                    sourceUrl = extractedUrl,
+                                    pageTitle = subject ?: extractedUrl,
+                                    tags = listOf("shared")
+                                )
+                            }
+                        } else {
+                            prismRepository.saveQuoteClip(
+                                quoteText = sharedText,
+                                sourceUrl = "https://prism.daily.local/shared",
+                                pageTitle = subject ?: "Shared Quote",
+                                tags = listOf("shared")
+                            )
+                        }
+                        selectedTab = NavigationTab.Prism
+                    }
+                    intent.action = Intent.ACTION_MAIN
+                    return
+                }
+                mime.startsWith("image/") -> {
+                    @Suppress("DEPRECATION")
+                    val streamUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                    } else {
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM) as? android.net.Uri
+                    }
+                    if (streamUri != null) {
+                        lifecycleScope.launch {
+                            val rawBytes = try {
+                                contentResolver.openInputStream(streamUri)?.use { it.readBytes() }
+                            } catch (_: Exception) {
+                                null
+                            }
+                            if (rawBytes != null && rawBytes.isNotEmpty()) {
+                                prismRepository.saveImageClip(
+                                    rawBytes = rawBytes,
+                                    sourceUrl = "https://prism.daily.local/shared-image",
+                                    title = subject ?: "Shared Image",
+                                    tags = listOf("shared")
+                                )
+                            }
+                        }
+                        selectedTab = NavigationTab.Prism
+                    }
+                    intent.action = Intent.ACTION_MAIN
+                    return
+                }
+            }
+        }
+
+        // 1. Deep Link URI Handling (e.g. daily://prism, daily://habits/water, daily://health/sleep, daily://health/stress)
         intent.data?.let { uri ->
             if (uri.scheme == "daily") {
                 val host = uri.host?.lowercase(java.util.Locale.ROOT) ?: ""
@@ -430,6 +500,12 @@ class MainActivity : ComponentActivity() {
                     host.contains("cosmos") || host.contains("sky") || path.contains("cosmos") || path.contains("sky") -> {
                         selectedTab = NavigationTab.Cosmos
                     }
+                    host.contains("prism") || host.contains("web") || path.contains("prism") -> {
+                        uri.getQueryParameter("url")?.takeIf { it.isNotBlank() }?.let { targetUrl ->
+                            prismRepository.requestOpenUrlInPrism(targetUrl, uri.getQueryParameter("title"))
+                        }
+                        selectedTab = NavigationTab.Prism
+                    }
                     else -> {
                         selectedTab = NavigationTab.Dashboard
                     }
@@ -448,6 +524,7 @@ class MainActivity : ComponentActivity() {
                 TAB_WEATHER -> NavigationTab.Weather
                 TAB_NEWS -> NavigationTab.News
                 TAB_COSMOS -> NavigationTab.Cosmos
+                TAB_PRISM -> NavigationTab.Prism
                 else -> NavigationTab.Dashboard
             }
             selectedTab = target
@@ -497,6 +574,7 @@ class MainActivity : ComponentActivity() {
         const val TAB_WEATHER = "weather"
         const val TAB_NEWS = "news"
         const val TAB_COSMOS = "cosmos"
+        const val TAB_PRISM = "prism"
     }
 }
 
@@ -519,6 +597,8 @@ fun DailyRootScreen(
     financeDataRepository: com.intellidream.daily.database.FinanceDataRepository,
     tagdosRepository: com.intellidream.daily.database.TagdosRepository,
     newsRepository: com.intellidream.daily.database.NewsRepository,
+    prismRepository: com.intellidream.daily.database.PrismRepository,
+    prismRemoteService: com.intellidream.daily.network.PrismRemoteService,
     smartBriefingRepository: com.intellidream.daily.briefing.SmartBriefingRepository,
     weatherRepository: WeatherRepository,
     onRefreshWeather: () -> Unit,
@@ -539,12 +619,20 @@ fun DailyRootScreen(
     val isFoldable = configuration.screenWidthDp >= 600
 
     var showFoldableBriefing by remember { mutableStateOf(false) }
+    var showFullSurfacePrism by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != NavigationTab.Prism) {
+            showFullSurfacePrism = false
+        }
+    }
 
     // Intercept back gestures: on foldable, collapse the right pane back to Companion/Dashboard
-    BackHandler(enabled = isFoldable && (selectedTab != NavigationTab.Dashboard || showSettings || showCustomize || showFoldableBriefing)) {
+    BackHandler(enabled = isFoldable && (selectedTab != NavigationTab.Dashboard || showSettings || showCustomize || showFoldableBriefing || showFullSurfacePrism)) {
         if (showCustomize) onSetShowCustomize?.invoke(false)
         else if (showSettings) onSetShowSettings?.invoke(false)
         else if (showFoldableBriefing) showFoldableBriefing = false
+        else if (showFullSurfacePrism) showFullSurfacePrism = false
         else onSelectTab(NavigationTab.Dashboard)
     }
 
@@ -556,11 +644,13 @@ fun DailyRootScreen(
     LaunchedEffect(userProfile) {
         val uid = userProfile?.id ?: "guest"
         newsRepository.currentUserId = uid
+        prismRepository.currentUserId = uid
         habitsRepository.currentUserId = uid
         healthRepository.currentUserId = uid
         if (uid.isNotEmpty() && uid != "guest") {
             habitsRepository.syncLogs(uid)
             newsRepository.syncWithSupabase(uid)
+            prismRepository.syncWithSupabase(uid)
         }
     }
 
@@ -577,6 +667,27 @@ fun DailyRootScreen(
                 onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
                 onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
                 modifier = Modifier.fillMaxSize()
+            )
+        } else if (isFoldable && selectedTab == NavigationTab.Prism && showFullSurfacePrism && !showCustomize && !showSettings) {
+            // =========================================================================
+            // FULL-SURFACE RESEARCH SPLIT FOR PRISM ON UNFOLDED DISPLAYS (65% Web / 35% Co-Pilot & Vault)
+            // =========================================================================
+            com.intellidream.daily.presentation.prism.PrismMainView(
+                prismRepository = prismRepository,
+                prismRemoteService = prismRemoteService,
+                tagdosRepository = tagdosRepository,
+                newsRepository = newsRepository,
+                settings = settings,
+                onUpdateSettings = onUpdateSettings,
+                isFullResearchModeExternal = true,
+                onToggleFullResearchMode = { showFullSurfacePrism = false },
+                onNavigateBack = {
+                    showFullSurfacePrism = false
+                    onSelectTab(NavigationTab.Dashboard)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
             )
         } else if (isFoldable) {
             // =========================================================================
@@ -609,6 +720,7 @@ fun DailyRootScreen(
                         financeDataRepository = financeDataRepository,
                         tagdosRepository = tagdosRepository,
                         newsRepository = newsRepository,
+                        prismRepository = prismRepository,
                         smartBriefingRepository = smartBriefingRepository,
                         onRefreshWeather = onRefreshWeather,
                         onOpenCustomize = {
@@ -663,6 +775,12 @@ fun DailyRootScreen(
                             onSetShowSettings?.invoke(false)
                             onSetShowCustomize?.invoke(false)
                             onSelectTab(NavigationTab.Cosmos)
+                        },
+                        onNavigateToPrism = {
+                            showFoldableBriefing = false
+                            onSetShowSettings?.invoke(false)
+                            onSetShowCustomize?.invoke(false)
+                            onSelectTab(NavigationTab.Prism)
                         },
                         forceSingleColumn = true,
                         onBriefingClick = {
@@ -798,6 +916,10 @@ fun DailyRootScreen(
                                 com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
                                     repository = tagdosRepository,
                                     onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    onOpenUrlInPrism = { url ->
+                                        prismRepository.requestOpenUrlInPrism(url)
+                                        onSelectTab(NavigationTab.Prism)
+                                    },
                                     horizontalPadding = 0.dp,
                                     applyStatusBarsPadding = false
                                 )
@@ -810,6 +932,10 @@ fun DailyRootScreen(
                                     repository = newsRepository,
                                     settings = settings,
                                     onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    onOpenInPrism = { url, title ->
+                                        prismRepository.requestOpenUrlInPrism(url, title)
+                                        onSelectTab(NavigationTab.Prism)
+                                    },
                                     horizontalPadding = 0.dp
                                 )
                             }
@@ -845,6 +971,23 @@ fun DailyRootScreen(
                                 )
                             }
                         }
+                        selectedTab == NavigationTab.Prism -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                FoldableDragHandle(onDismiss = { onSelectTab(NavigationTab.Dashboard) })
+                                com.intellidream.daily.presentation.prism.PrismMainView(
+                                    prismRepository = prismRepository,
+                                    prismRemoteService = prismRemoteService,
+                                    tagdosRepository = tagdosRepository,
+                                    newsRepository = newsRepository,
+                                    settings = settings,
+                                    onUpdateSettings = onUpdateSettings,
+                                    isFullResearchModeExternal = false,
+                                    onToggleFullResearchMode = { showFullSurfacePrism = true },
+                                    onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -871,6 +1014,20 @@ fun DailyRootScreen(
                 onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
                 onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
                 modifier = Modifier.fillMaxSize()
+            )
+        } else if (selectedTab == NavigationTab.Prism) {
+            // Edge-to-edge Assisted Web Studio with Bottom Liquid Glass Thumb Omnibox on compact phones
+            com.intellidream.daily.presentation.prism.PrismMainView(
+                prismRepository = prismRepository,
+                prismRemoteService = prismRemoteService,
+                tagdosRepository = tagdosRepository,
+                newsRepository = newsRepository,
+                settings = settings,
+                onUpdateSettings = onUpdateSettings,
+                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
             )
         } else {
             // =========================================================================
@@ -904,6 +1061,7 @@ fun DailyRootScreen(
                                 financeDataRepository = financeDataRepository,
                                 tagdosRepository = tagdosRepository,
                                 newsRepository = newsRepository,
+                                prismRepository = prismRepository,
                                 smartBriefingRepository = smartBriefingRepository,
                                 onRefreshWeather = onRefreshWeather,
                                 onOpenCustomize = onOpenCustomize,
@@ -916,6 +1074,7 @@ fun DailyRootScreen(
                                 onNavigateToNews = { onSelectTab(NavigationTab.News) },
                                 onNavigateToWeather = { onSelectTab(NavigationTab.Weather) },
                                 onNavigateToCosmos = { onSelectTab(NavigationTab.Cosmos) },
+                                onNavigateToPrism = { onSelectTab(NavigationTab.Prism) },
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                             )
                         }
@@ -960,14 +1119,22 @@ fun DailyRootScreen(
                         NavigationTab.Tagdos -> {
                             com.intellidream.daily.presentation.tagdos.TagdosNotesHubView(
                                 repository = tagdosRepository,
-                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                onOpenUrlInPrism = { url ->
+                                    prismRepository.requestOpenUrlInPrism(url)
+                                    onSelectTab(NavigationTab.Prism)
+                                }
                             )
                         }
                         NavigationTab.News -> {
                             com.intellidream.daily.presentation.news.NewsFeedView(
                                 repository = newsRepository,
                                 settings = settings,
-                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) }
+                                onNavigateBack = { onSelectTab(NavigationTab.Dashboard) },
+                                onOpenInPrism = { url, title ->
+                                    prismRepository.requestOpenUrlInPrism(url, title)
+                                    onSelectTab(NavigationTab.Prism)
+                                }
                             )
                         }
                         NavigationTab.Cosmos -> {

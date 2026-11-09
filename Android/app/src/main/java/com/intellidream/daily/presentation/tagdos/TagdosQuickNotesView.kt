@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.DropdownMenu
@@ -56,7 +57,8 @@ import androidx.compose.foundation.clickable
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TagdosQuickNotesView(
-    repository: TagdosRepository
+    repository: TagdosRepository,
+    onOpenUrlInPrism: ((String) -> Unit)? = null
 ) {
     val quickNotes by repository.quickNotes.collectAsState()
     var searchText by remember { mutableStateOf("") }
@@ -216,7 +218,8 @@ fun TagdosQuickNotesView(
                                 isCreatingNewNote = false
                             },
                             onTogglePin = { repository.togglePinQuickNote(note.id) },
-                            onDelete = { repository.deleteQuickNote(note.id) }
+                            onDelete = { repository.deleteQuickNote(note.id) },
+                            onOpenUrlInPrism = onOpenUrlInPrism
                         )
                     }
                 }
@@ -256,7 +259,8 @@ fun TagdosQuickNotesView(
                                 isCreatingNewNote = false
                             },
                             onTogglePin = { repository.togglePinQuickNote(note.id) },
-                            onDelete = { repository.deleteQuickNote(note.id) }
+                            onDelete = { repository.deleteQuickNote(note.id) },
+                            onOpenUrlInPrism = onOpenUrlInPrism
                         )
                     }
                 }
@@ -292,11 +296,15 @@ private fun QuickNoteRowCard(
     note: TagDoQuickNote,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOpenUrlInPrism: ((String) -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val sdf = remember { SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()) }
     val formattedDate = remember(note.updatedAt) { sdf.format(Date(note.updatedAt)) }
+    val detectedUrl = remember(note.content) {
+        Regex("""https?://[^\s)\]>]+""").find(note.content)?.value
+    }
 
     Box {
         Column(
@@ -357,6 +365,31 @@ private fun QuickNoteRowCard(
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 16.sp
                 )
+            }
+
+            if (detectedUrl != null && onOpenUrlInPrism != null) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ThemeColors.accentCyan.copy(alpha = 0.14f))
+                        .clickable { onOpenUrlInPrism(detectedUrl) }
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Language,
+                        contentDescription = null,
+                        tint = ThemeColors.accentCyan,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "Open in Prism",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ThemeColors.accentCyan
+                    )
+                }
             }
         }
 

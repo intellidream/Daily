@@ -304,6 +304,7 @@
                 <KeyboardAccelerator Modifiers="Control" Key="Number7" Invoked="OnAcceleratorCtrl7" />
                 <KeyboardAccelerator Modifiers="Control" Key="Number8" Invoked="OnAcceleratorCtrl8" />
                 <KeyboardAccelerator Modifiers="Control" Key="Number9" Invoked="OnAcceleratorCtrl9" />
+                <KeyboardAccelerator Modifiers="Control" Key="Number0" Invoked="OnAcceleratorCtrl0" />
                 <KeyboardAccelerator Modifiers="Control" Key="S" Invoked="OnAcceleratorCtrlS" />
                 <KeyboardAccelerator Modifiers="Control" Key="R" Invoked="OnAcceleratorCtrlR" />
                 <KeyboardAccelerator Modifiers="Control" Key="N" Invoked="OnAcceleratorCtrlN" />

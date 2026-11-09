@@ -3,6 +3,7 @@ package com.intellidream.daily.presentation.news
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedVisibility
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.PersonAdd
@@ -105,6 +107,7 @@ fun NewsReaderSheet(
     candidatePool: List<NewsArticle>,
     repository: NewsRepository,
     isDark: Boolean = true,
+    onOpenInPrism: ((String, String?) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     var currentArticle by remember { mutableStateOf(article) }
@@ -281,6 +284,14 @@ fun NewsReaderSheet(
                                 }
                                 context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
                             },
+                            onOpenInPrism = if (onOpenInPrism != null && currentArticle.link.isNotBlank()) {
+                                {
+                                    val targetUrl = currentArticle.link
+                                    val targetTitle = currentArticle.title
+                                    onDismiss()
+                                    onOpenInPrism(targetUrl, targetTitle)
+                                }
+                            } else null,
                             onOpenInBrowser = {
                                 try {
                                     val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentArticle.link))
@@ -337,7 +348,26 @@ fun NewsReaderSheet(
                                         setBackgroundColor(0x00000000)
                                         settings.javaScriptEnabled = true
                                         settings.domStorageEnabled = true
-                                        webViewClient = WebViewClient()
+                                        webViewClient = object : WebViewClient() {
+                                            override fun shouldOverrideUrlLoading(
+                                                view: WebView?,
+                                                request: WebResourceRequest?
+                                            ): Boolean {
+                                                val clickedUrl = request?.url?.toString() ?: return false
+                                                if ((clickedUrl.startsWith("https://") || clickedUrl.startsWith("http://")) && request.hasGesture()) {
+                                                    if (onOpenInPrism != null) {
+                                                        onDismiss()
+                                                        onOpenInPrism(clickedUrl, null)
+                                                    } else {
+                                                        try {
+                                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(clickedUrl)))
+                                                        } catch (_: Exception) {}
+                                                    }
+                                                    return true
+                                                }
+                                                return false
+                                            }
+                                        }
                                         tag = "${currentArticle.link}_${readerHtml.hashCode()}"
                                         loadDataWithBaseURL(currentArticle.link, readerHtml, "text/html", "UTF-8", null)
 
@@ -452,6 +482,7 @@ private fun ReaderTopToolbar(
     onToggleFavorite: () -> Unit,
     onSelectFontSize: (Double) -> Unit,
     onShare: () -> Unit,
+    onOpenInPrism: (() -> Unit)? = null,
     onOpenInBrowser: () -> Unit,
     onFollowMedium: (String) -> Unit,
     onSubscribeSubstack: (String) -> Unit = {}
@@ -551,6 +582,17 @@ private fun ReaderTopToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (onOpenInPrism != null) {
+                ReaderActionButton(
+                    onClick = onOpenInPrism,
+                    icon = Icons.Rounded.Language,
+                    contentDescription = "Open in Prism",
+                    backgroundColor = ThemeColors.accentCyan.copy(alpha = 0.16f),
+                    iconTint = ThemeColors.accentCyan,
+                    iconSize = 16.dp
+                )
+            }
+
             // Read Later Toggle
             ReaderActionButton(
                 onClick = onToggleReadLater,
@@ -609,6 +651,24 @@ private fun ReaderTopToolbar(
                         onShare()
                     }
                 )
+
+                if (onOpenInPrism != null) {
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Rounded.Language,
+                                contentDescription = null,
+                                tint = ThemeColors.accentCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        text = { Text("Open in Prism Studio", color = ThemeColors.accentCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
+                        onClick = {
+                            showMenu = false
+                            onOpenInPrism()
+                        }
+                    )
+                }
 
                 DropdownMenuItem(
                     leadingIcon = {

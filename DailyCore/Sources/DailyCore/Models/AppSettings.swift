@@ -49,6 +49,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var cosmosNotifyAurora: Bool = false
     public var cosmosNotifyPristineSky: Bool = false
     public var macMenuBarShowNightSky: Bool = false
+
+    // MARK: - Prism Assisted Web Studio
+    public var prismSearchEngine: PrismSearchEngine = .google
+    public var prismShieldEnabled: Bool = true
+    public var prismShieldAllowlist: [String] = []
+    public var prismClipboardDetectEnabled: Bool = true
     
     // MARK: - Dashboard Layout
     public var dashboardWidgets: [DashboardWidgetConfig] = DashboardWidgetConfig.defaultLayout
@@ -65,6 +71,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case smartBriefingEnabled, smartBriefingAutoMorning, geminiApiKey
         case nasaApiKey, cosmosWeatherEndpoint, cosmosWeatherApiKey
         case cosmosNotifyIssPasses, cosmosNotifyAurora, cosmosNotifyPristineSky, macMenuBarShowNightSky
+        case prismSearchEngine, prismShieldEnabled, prismShieldAllowlist, prismClipboardDetectEnabled
         case dashboardWidgets
     }
     
@@ -101,6 +108,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.cosmosNotifyAurora = try c.decodeIfPresent(Bool.self, forKey: .cosmosNotifyAurora) ?? false
         self.cosmosNotifyPristineSky = try c.decodeIfPresent(Bool.self, forKey: .cosmosNotifyPristineSky) ?? false
         self.macMenuBarShowNightSky = try c.decodeIfPresent(Bool.self, forKey: .macMenuBarShowNightSky) ?? false
+        self.prismSearchEngine = try c.decodeIfPresent(PrismSearchEngine.self, forKey: .prismSearchEngine) ?? .google
+        self.prismShieldEnabled = try c.decodeIfPresent(Bool.self, forKey: .prismShieldEnabled) ?? true
+        self.prismShieldAllowlist = try c.decodeIfPresent([String].self, forKey: .prismShieldAllowlist) ?? []
+        self.prismClipboardDetectEnabled = try c.decodeIfPresent(Bool.self, forKey: .prismClipboardDetectEnabled) ?? true
         
         let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
         if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
@@ -149,6 +160,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encode(cosmosNotifyAurora, forKey: .cosmosNotifyAurora)
         try c.encode(cosmosNotifyPristineSky, forKey: .cosmosNotifyPristineSky)
         try c.encode(macMenuBarShowNightSky, forKey: .macMenuBarShowNightSky)
+        try c.encode(prismSearchEngine, forKey: .prismSearchEngine)
+        try c.encode(prismShieldEnabled, forKey: .prismShieldEnabled)
+        try c.encode(prismShieldAllowlist, forKey: .prismShieldAllowlist)
+        try c.encode(prismClipboardDetectEnabled, forKey: .prismClipboardDetectEnabled)
         try c.encode(dashboardWidgets, forKey: .dashboardWidgets)
     }
 }

@@ -55,12 +55,24 @@
                     android:scheme="com.intellidream.daily" />
             </intent-filter>
 
-            <!-- App deep links (daily://cosmos, daily://weather, daily://habits, daily://health) -->
+            <!-- App deep links (daily://prism, daily://cosmos, daily://weather, daily://habits, daily://health) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="daily" />
+            </intent-filter>
+
+            <!-- Prism Assisted Web Studio Share Target (URLs, Quotes & Images) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
 

@@ -90,6 +90,13 @@ public sealed class AppSettings
     public bool DesktopWidgetsEnabled { get; set; } = true;
     public bool DesktopWidgetsLocked { get; set; } = false;
     public string DesktopWidgetsConfigJson { get; set; } = string.Empty;
+
+    // ── Prism Assisted Web Studio Configurations ──
+    public string PrismSearchEngine { get; set; } = "google";
+    public bool PrismShieldEnabled { get; set; } = true;
+    public List<string> PrismShieldAllowlist { get; set; } = new();
+    public bool PrismClipboardDetectEnabled { get; set; } = true;
+    public string? PrismGeminiApiKey { get; set; }
 }
 
 public sealed class SavedLocation

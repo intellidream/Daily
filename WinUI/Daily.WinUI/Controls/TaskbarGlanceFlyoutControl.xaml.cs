@@ -386,6 +386,18 @@ namespace Daily_WinUI.Controls
                     CosmosScoreBadgeText.Text = $"{cond.Score}/100";
                 }
                 catch { }
+
+                try
+                {
+                    var prism = App.Current?.Services?.GetService<IPrismService>();
+                    if (prism != null)
+                    {
+                        await prism.EnsureLoadedAsync();
+                        int clipCount = prism.Clips.Count;
+                        PrismVaultBadgeText.Text = clipCount > 0 ? $"{clipCount} Saved" : "Ctrl+0";
+                    }
+                }
+                catch { }
             }
             catch (Exception ex)
             {
@@ -427,6 +439,11 @@ namespace Daily_WinUI.Controls
         private void CosmosCard_Click(object sender, RoutedEventArgs e)
         {
             NavigateToTab(9); // Cosmos Hub
+        }
+
+        private void PrismCard_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateToTab(10); // Prism Assisted Web Studio
         }
 
         private void HealthCard_Click(object sender, RoutedEventArgs e)

@@ -674,6 +674,9 @@ public sealed partial class MainPage : Page
                     case "CosmosWidget":
                         mw.NavigateToTab(9);
                         break;
+                    case "PrismWidget":
+                        mw.NavigateToTab(10);
+                        break;
                     case "RssFeedWidget":
                         mw.NavigateToTab(7);
                         break;
@@ -704,6 +707,9 @@ public sealed partial class MainPage : Page
                         break;
                     case "CosmosWidget":
                         OpenDetailWindow(typeof(CosmosDetailPage));
+                        break;
+                    case "PrismWidget":
+                        OpenDetailWindow(typeof(PrismDetailPage));
                         break;
                     case "RssFeedWidget":
                         OpenDetailWindow(typeof(RssFeedDetailPage));

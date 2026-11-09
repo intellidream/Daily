@@ -200,6 +200,23 @@
                             <TextBlock Grid.Column="2" Text="Ctrl+9" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" Opacity="0.7"/>
                         </Grid>
                     </Button>
+
+                    <!-- Tab 10: Prism Web Studio -->
+                    <Button x:Name="SidebarItem10" Click="SidebarItem_Click" Tag="10"
+                            AutomationProperties.Name="Prism Assisted Web Studio"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Background="Transparent" BorderThickness="0" CornerRadius="8" Padding="10,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon x:Name="SidebarIcon10" Grid.Column="0" Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgMutedColorBrush}" Margin="0,0,12,0"/>
+                            <TextBlock x:Name="SidebarText10" Grid.Column="1" Text="Prism" FontSize="13" FontWeight="Normal" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="Ctrl+0" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" Opacity="0.7"/>
+                        </Grid>
+                    </Button>
                 </StackPanel>
             </ScrollViewer>
 

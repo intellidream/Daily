@@ -101,6 +101,10 @@ public struct CustomizeDashboardSheet: View {
                     current.append(DashboardWidgetConfig(id: DashboardWidgetType.cosmos.rawValue, size: .wide, isVisible: true))
                     settingsService.update { $0.dashboardWidgets = current }
                 }
+                if !current.contains(where: { $0.id == DashboardWidgetType.prism.rawValue }) {
+                    current.append(DashboardWidgetConfig(id: DashboardWidgetType.prism.rawValue, size: .wide, isVisible: true))
+                    settingsService.update { $0.dashboardWidgets = current }
+                }
                 widgets = current
             }
         }

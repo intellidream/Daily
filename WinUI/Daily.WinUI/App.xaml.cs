@@ -649,6 +649,9 @@ public partial class App : Application
         
         // TagDoS Service
         services.AddSingleton<Daily.Services.ITagdosService, Daily.Services.TagdosService>();
+
+        // Prism Assisted Web Studio Service
+        services.AddSingleton<Daily_WinUI.Services.IPrismService, Daily_WinUI.Services.PrismService>();
         
         // Calendar Service
         services.AddHttpClient<Daily_WinUI.Services.ICalendarService, Daily_WinUI.Services.CalendarService>();
@@ -795,6 +798,19 @@ public partial class App : Application
 
                 try
                 {
+                    var prismService = Services.GetService<Daily_WinUI.Services.IPrismService>();
+                    if (prismService != null)
+                    {
+                        await prismService.SyncWithRemoteAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Initial Prism sync failed: {ex.Message}");
+                }
+
+                try
+                {
                     var calendarService = Services.GetRequiredService<Daily_WinUI.Services.ICalendarService>();
                     await calendarService.SyncAllCalendarsAsync();
                 }
@@ -821,7 +837,35 @@ public partial class App : Application
 
         LogDebug($"Parsing query/fragment: '{queryToParse}'");
 
-        // Check for deep-link tab navigation (e.g. com.intellidream.daily.desktop://navigate?tab=5)
+        // Check for deep-link tab navigation (e.g. com.intellidream.daily.desktop://navigate?tab=5 or daily://prism)
+        if (uri.Host.Equals("prism", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("prism", StringComparison.OrdinalIgnoreCase))
+        {
+            string? targetUrl = null;
+            foreach (var part in queryToParse.Split('&'))
+            {
+                var kv = part.Split('=');
+                if (kv.Length == 2 && kv[0].Equals("url", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetUrl = System.Net.WebUtility.UrlDecode(kv[1]);
+                    break;
+                }
+            }
+
+            if (App.Current?.MainWindow is MainWindow prismMw)
+            {
+                prismMw.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(targetUrl))
+                    {
+                        App.Current?.Services?.GetService<Daily_WinUI.Services.IPrismService>()?.RequestOpenUrlInPrism(targetUrl);
+                    }
+                    prismMw.ShowAndActivate();
+                    prismMw.NavigateToTab(10);
+                });
+                return;
+            }
+        }
+
         if (uri.Host.Equals("navigate", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("navigate"))
         {
             var tabVal = "";

@@ -155,6 +155,23 @@ public struct NewsReaderView: View {
             }
             
             Spacer(minLength: 4)
+
+            // Open Live Article in Prism Studio
+            Button {
+                PrismStore.shared.requestOpenInPrism(url: currentArticle.link, title: currentArticle.title)
+                onDismiss()
+                NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+            } label: {
+                Image(systemName: "safari.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle().fill(ThemeColors.accentCyan.opacity(0.15))
+                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.30), lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
             
             // Read Later Bookmark Button
             Button {

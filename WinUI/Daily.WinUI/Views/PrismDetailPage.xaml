@@ -1,0 +1,666 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Daily_WinUI.Views.PrismDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Daily.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    NavigationCacheMode="Required"
+    Background="Transparent"
+    AutomationProperties.Name="Prism Assisted Web Studio"
+    AutomationProperties.AutomationId="PrismDetailPageRoot">
+
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="2" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: Tab Strip + New Tab / InPrivate / Pop-Out -->
+        <Grid Grid.Row="0" Padding="18,10,18,4" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BackToDashboardButton"
+                    Grid.Column="0"
+                    AutomationProperties.Name="Back to Dashboard"
+                    AutomationProperties.AutomationId="PrismBackBtn"
+                    Click="BackToDashboardButton_Click"
+                    Width="34" Height="34" CornerRadius="17" Padding="0"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    ToolTipService.ToolTip="Back to Dashboard (Ctrl+1)">
+                <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+            </Button>
+
+            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled">
+                <StackPanel x:Name="TabPillsPanel" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" />
+            </ScrollViewer>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Button x:Name="NewTabButton"
+                        AutomationProperties.Name="New Tab"
+                        AutomationProperties.AutomationId="PrismNewTabBtn"
+                        Click="NewTabButton_Click"
+                        Height="32" Padding="10,0" CornerRadius="16"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Open New Tab">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FF00E5FF" />
+                        <TextBlock Text="Tab" FontSize="11.5" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="NewPrivateTabButton"
+                        AutomationProperties.Name="New Private Tab"
+                        AutomationProperties.AutomationId="PrismPrivateTabBtn"
+                        Click="NewPrivateTabButton_Click"
+                        Height="32" Padding="10,0" CornerRadius="16"
+                        Background="#1AA855F7"
+                        BorderBrush="#4DA855F7"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Open Ephemeral InPrivate Tab">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <FontIcon Glyph="&#xE727;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFA855F7" />
+                        <TextBlock Text="Private" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFA855F7" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="PopOutWindowButton"
+                        AutomationProperties.Name="Pop out Prism Studio Window"
+                        AutomationProperties.AutomationId="PrismPopOutBtn"
+                        Click="PopOutWindowButton_Click"
+                        Width="32" Height="32" CornerRadius="16" Padding="0"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Pop out to dedicated Research Window">
+                    <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Row 1: Omnibox & Capture Command Bar -->
+        <Grid Grid.Row="1" Padding="18,4,18,8" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Web Navigation Controls -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <Button x:Name="WebBackButton"
+                        AutomationProperties.Name="Navigate Back"
+                        Click="WebBackButton_Click"
+                        IsEnabled="False"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="Back">
+                    <FontIcon Glyph="&#xE72B;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+                <Button x:Name="WebForwardButton"
+                        AutomationProperties.Name="Navigate Forward"
+                        Click="WebForwardButton_Click"
+                        IsEnabled="False"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="Forward">
+                    <FontIcon Glyph="&#xE72A;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+                <Button x:Name="WebReloadButton"
+                        AutomationProperties.Name="Reload Page"
+                        Click="WebReloadButton_Click"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="Reload">
+                    <FontIcon x:Name="WebReloadIcon" Glyph="&#xE72C;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+            </StackPanel>
+
+            <!-- Liquid Glass Omnibox -->
+            <Border Grid.Column="1"
+                    Height="38"
+                    CornerRadius="19"
+                    Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Padding="8,0,8,0">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Prism Shield Toggle -->
+                    <Button x:Name="ShieldToggleButton"
+                            Grid.Column="0"
+                            AutomationProperties.Name="Toggle Prism Tracker Shield"
+                            Click="ShieldToggleButton_Click"
+                            Background="Transparent" BorderThickness="0" Padding="4" CornerRadius="12"
+                            ToolTipService.ToolTip="Prism Shield (Ad &amp; Tracker Blocker)">
+                        <FontIcon x:Name="ShieldIcon" Glyph="&#xEA18;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF10B981" />
+                    </Button>
+
+                    <!-- Search Engine Selector -->
+                    <Button x:Name="SearchEngineButton"
+                            Grid.Column="1"
+                            AutomationProperties.Name="Select Search Engine"
+                            Height="26" Padding="8,0" CornerRadius="13"
+                            Background="#18FFFFFF" BorderThickness="0"
+                            ToolTipService.ToolTip="Default Search Engine">
+                        <TextBlock x:Name="SearchEngineBadgeText" Text="G" FontSize="11" FontWeight="Bold" Foreground="#FF00E5FF" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Google" Tag="google" Click="SearchEngineItem_Click" />
+                                <MenuFlyoutItem Text="DuckDuckGo" Tag="duckduckgo" Click="SearchEngineItem_Click" />
+                                <MenuFlyoutItem Text="Brave Search" Tag="brave" Click="SearchEngineItem_Click" />
+                                <MenuFlyoutItem Text="Perplexity" Tag="perplexity" Click="SearchEngineItem_Click" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <TextBox x:Name="OmniboxTextBox"
+                             Grid.Column="2"
+                             AutomationProperties.Name="Search or Enter URL"
+                             AutomationProperties.AutomationId="PrismOmniboxInput"
+                             PlaceholderText="Search or enter website URL..."
+                             Background="Transparent"
+                             BorderThickness="0"
+                             VerticalAlignment="Center"
+                             FontSize="13"
+                             KeyDown="OmniboxTextBox_KeyDown" />
+
+                    <!-- Auto-detected RSS Subscribe Pill -->
+                    <Button x:Name="DetectedRssButton"
+                            Grid.Column="3"
+                            AutomationProperties.Name="Subscribe to RSS Feed in News"
+                            Click="DetectedRssButton_Click"
+                            Visibility="Collapsed"
+                            Height="26" Padding="10,0" CornerRadius="13"
+                            Background="#2810B981" BorderBrush="#6610B981" BorderThickness="1"
+                            ToolTipService.ToolTip="Subscribe to detected RSS feed in News">
+                        <TextBlock Text="+ Subscribe in News" FontSize="11" FontWeight="Bold" Foreground="#FF10B981" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Capture & Studio Tools -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Button x:Name="SaveLinkButton"
+                        AutomationProperties.Name="Save Link to Prism Vault"
+                        Click="SaveLinkButton_Click"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Save Link to Prism Vault">
+                    <FontIcon Glyph="&#xE8A4;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" />
+                </Button>
+
+                <Button x:Name="PinSiteButton"
+                        AutomationProperties.Name="Pin Site to Speed Dial"
+                        Click="PinSiteButton_Click"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Pin / Unpin Speed Dial">
+                    <FontIcon Glyph="&#xE718;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+
+                <Button x:Name="ReaderModeButton"
+                        AutomationProperties.Name="Toggle Distraction-Free Reader Mode"
+                        Click="ReaderModeButton_Click"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Distraction-Free Reader Mode">
+                    <FontIcon x:Name="ReaderModeIcon" Glyph="&#xE736;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+
+                <Button x:Name="RegionCropButton"
+                        AutomationProperties.Name="Capture Visual Region Snapshot"
+                        Click="RegionCropButton_Click"
+                        Width="34" Height="34" CornerRadius="17" Padding="0"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Capture Visual Region to Vault">
+                    <FontIcon Glyph="&#xE7A8;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}" />
+                </Button>
+
+                <Button x:Name="ToggleStudioPaneButton"
+                        AutomationProperties.Name="Toggle Co-Pilot and Vault Studio Pane"
+                        AutomationProperties.AutomationId="PrismStudioToggleBtn"
+                        Click="ToggleStudioPaneButton_Click"
+                        Height="34" Padding="12,0" CornerRadius="17"
+                        Background="#2800E5FF"
+                        BorderBrush="#6600E5FF"
+                        BorderThickness="1"
+                        ToolTipService.ToolTip="Toggle 65% / 35% Research Studio Split">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xF4A5;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                        <TextBlock x:Name="StudioButtonCountText" Text="Studio" FontSize="12" FontWeight="Bold" Foreground="#FF00E5FF" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Row 2: Thin Progress Indicator -->
+        <ProgressBar x:Name="WebLoadProgressBar"
+                     Grid.Row="2"
+                     Height="2"
+                     IsIndeterminate="True"
+                     Foreground="#FF00E5FF"
+                     Background="Transparent"
+                     Visibility="Collapsed" />
+
+        <!-- Row 3: 65% Live Web Canvas + 35% Prism Studio Split -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="WebCanvasColumn" Width="65*" />
+                <ColumnDefinition x:Name="StudioSplitterColumn" Width="1" />
+                <ColumnDefinition x:Name="StudioPaneColumn" Width="35*" MaxWidth="440" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left 65%: WebView2 + Start Page + Reader + Crop Overlay -->
+            <Grid Grid.Column="0" Background="Transparent">
+                <!-- Persistent WebView2 (shares %LocalAppData%\Daily.WinUI\WebView2 cookies with News!) -->
+                <WebView2 x:Name="PrismWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Opacity="0" IsHitTestVisible="False" />
+
+                <!-- Ephemeral InPrivate WebView2 -->
+                <WebView2 x:Name="PrivateWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Opacity="0" IsHitTestVisible="False" />
+
+                <!-- Distraction-Free Reader Overlay -->
+                <Border x:Name="ReaderModeOverlay" Visibility="Collapsed" Background="#FF0B1121" Padding="36,24">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel MaxWidth="740" Spacing="14" HorizontalAlignment="Center">
+                            <TextBlock x:Name="ReaderTitleText" FontSize="26" FontWeight="Bold" TextWrapping="Wrap" Foreground="White" />
+                            <TextBlock x:Name="ReaderMetaText" FontSize="12.5" Foreground="#99FFFFFF" />
+                            <Rectangle Height="1" Fill="#22FFFFFF" />
+                            <TextBlock x:Name="ReaderBodyText" FontSize="16" LineHeight="27" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="#EBFFFFFF" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Start Page (Speed Dial + Smart Clipboard + Recent Vault Clips) -->
+                <ScrollViewer x:Name="StartPageContainer" Visibility="Visible" VerticalScrollBarVisibility="Auto" Padding="32,22,32,36">
+                    <StackPanel MaxWidth="820" Spacing="22" HorizontalAlignment="Stretch">
+                        <!-- Smart Clipboard Banner -->
+                        <Border x:Name="ClipboardBanner"
+                                Visibility="Collapsed"
+                                Background="#1F00E5FF"
+                                BorderBrush="#5500E5FF"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="14,10">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE77F;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Link detected on Clipboard" FontSize="11.5" FontWeight="Bold" Foreground="#FF00E5FF" />
+                                    <TextBlock x:Name="ClipboardUrlText" FontSize="11.5" Foreground="{ThemeResource AppFgColorBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="Open" Click="ClipboardOpen_Click" CornerRadius="12" Padding="10,4" Background="#FF00E5FF" Foreground="Black" FontWeight="Bold" FontSize="11.5" />
+                                <Button Grid.Column="3" Content="Save Clip" Click="ClipboardSave_Click" CornerRadius="12" Padding="10,4" Background="#22FFFFFF" FontSize="11.5" />
+                                <Button Grid.Column="4" Click="ClipboardDismiss_Click" Background="Transparent" BorderThickness="0" Padding="6,4">
+                                    <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Pinned Speed Dial -->
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Pinned Speed Dial" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Click="AddSpeedDialSite_Click" Background="Transparent" BorderThickness="0" Padding="8,4" CornerRadius="10">
+                                    <TextBlock Text="+ Add Site" FontSize="12" FontWeight="SemiBold" Foreground="#FF00E5FF" />
+                                </Button>
+                            </Grid>
+
+                            <GridView x:Name="SpeedDialGridView"
+                                      SelectionMode="None"
+                                      IsItemClickEnabled="True"
+                                      ItemClick="SpeedDialGridView_ItemClick">
+                                <GridView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="3" />
+                                    </ItemsPanelTemplate>
+                                </GridView.ItemsPanel>
+                                <GridView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PrismPinnedSite">
+                                        <Border Width="220" Height="64" Margin="0,0,10,10" CornerRadius="14" Padding="12,10"
+                                                Background="{ThemeResource AppGlassColorBrush}"
+                                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                                BorderThickness="1">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="10" Background="#2000E5FF" VerticalAlignment="Center">
+                                                    <FontIcon Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                    <TextBlock Text="{x:Bind Title}" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{x:Bind Domain}" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Tag="{x:Bind Id}" Click="RemoveSpeedDialPin_Click" Background="Transparent" BorderThickness="0" Padding="4" VerticalAlignment="Center" ToolTipService.ToolTip="Unpin">
+                                                    <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </GridView.ItemTemplate>
+                            </GridView>
+                        </StackPanel>
+
+                        <!-- Recent Vault Captures -->
+                        <StackPanel x:Name="StartPageRecentPanel" Spacing="10" Visibility="Collapsed">
+                            <TextBlock Text="Recent Captures in Prism Vault" FontSize="15" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
+                            <ItemsControl x:Name="StartPageRecentItemsControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PrismClip">
+                                        <Button Click="RecentClipRow_Click"
+                                                Tag="{x:Bind SourceUrl}"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch"
+                                                Margin="0,0,0,8"
+                                                Padding="12,10"
+                                                CornerRadius="12"
+                                                Background="{ThemeResource AppGlassColorBrush}"
+                                                BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                                BorderThickness="1">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0" Glyph="{x:Bind TypeGlyph}" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="1" Spacing="2">
+                                                    <TextBlock Text="{x:Bind Title}" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{x:Bind Snippet}" FontSize="11.5" Foreground="{ThemeResource AppFgMutedColorBrush}" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2" Text="{x:Bind Domain}" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Floating Text Selection Action Pill -->
+                <Border x:Name="FloatingSelectionPill"
+                        Visibility="Collapsed"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Margin="0,18,0,0"
+                        CornerRadius="20"
+                        Padding="8,5"
+                        Background="#F00A1020"
+                        BorderBrush="#5500E5FF"
+                        BorderThickness="1"
+                        Translation="0,0,28">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Content="💎 Save Quote" Click="SelectionSaveQuote_Click" CornerRadius="14" Padding="10,4" Background="#FF00E5FF" Foreground="Black" FontWeight="Bold" FontSize="11.5" />
+                        <Button Content="→ TagDoS (#prism)" Click="SelectionSendTagdos_Click" CornerRadius="14" Padding="10,4" Background="#33FFB300" Foreground="#FFFFB300" FontWeight="SemiBold" FontSize="11.5" />
+                        <Button Content="✨ Explain" Click="SelectionExplain_Click" CornerRadius="14" Padding="10,4" Background="#33A855F7" Foreground="#FFA855F7" FontWeight="SemiBold" FontSize="11.5" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Interactive Viewport Region Crop Overlay -->
+                <Grid x:Name="RegionCropOverlay"
+                      Visibility="Collapsed"
+                      Background="#55000000"
+                      PointerPressed="RegionCropOverlay_PointerPressed"
+                      PointerMoved="RegionCropOverlay_PointerMoved"
+                      PointerReleased="RegionCropOverlay_PointerReleased">
+                    <Image x:Name="RegionCropPreviewImage" Stretch="Fill" Opacity="0.92" />
+                    <Canvas x:Name="RegionCropCanvas">
+                        <Rectangle x:Name="RegionCropRect"
+                                   Stroke="#FF00E5FF"
+                                   StrokeThickness="2"
+                                   Fill="#2600E5FF"
+                                   Visibility="Collapsed" />
+                    </Canvas>
+                    <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14,0,0" CornerRadius="18" Padding="14,7" Background="#E6080E1C" BorderBrush="#5500E5FF" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE7A8;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                            <TextBlock Text="Drag a rectangle to capture visual region into Prism Vault" FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+                            <Button Content="Cancel" Click="CancelRegionCrop_Click" Padding="8,2" CornerRadius="10" FontSize="11.5" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Toast Notification Pill -->
+                <Border x:Name="ToastBanner"
+                        Visibility="Collapsed"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,20"
+                        CornerRadius="18"
+                        Padding="14,8"
+                        Background="#EB091020"
+                        BorderBrush="#6600E5FF"
+                        BorderThickness="1">
+                    <TextBlock x:Name="ToastBannerText" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                </Border>
+            </Grid>
+
+            <!-- Subtle Divider -->
+            <Rectangle x:Name="StudioSplitterLine" Grid.Column="1" Fill="{ThemeResource SidebarBorderBrush}" />
+
+            <!-- Right 35%: Docked Prism Studio (Co-Pilot + Vault) -->
+            <Grid x:Name="StudioPaneRoot" Grid.Column="2" Background="{ThemeResource SidebarBackgroundBrush}" Padding="14,12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Studio Mode Switcher -->
+                <Grid Grid.Row="0" Margin="0,0,0,10" ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="StudioTabCoPilotBtn"
+                            Grid.Column="0"
+                            Click="StudioTabCoPilotBtn_Click"
+                            HorizontalAlignment="Stretch"
+                            CornerRadius="14" Padding="0,7"
+                            Background="#3300E5FF" BorderBrush="#7700E5FF" BorderThickness="1">
+                        <TextBlock Text="✨ Co-Pilot" FontSize="12" FontWeight="Bold" Foreground="#FF00E5FF" />
+                    </Button>
+                    <Button x:Name="StudioTabVaultBtn"
+                            Grid.Column="1"
+                            Click="StudioTabVaultBtn_Click"
+                            HorizontalAlignment="Stretch"
+                            CornerRadius="14" Padding="0,7"
+                            Background="Transparent" BorderThickness="1" BorderBrush="Transparent">
+                        <TextBlock x:Name="StudioVaultTabLabel" Text="💎 Vault (0)" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                    </Button>
+                </Grid>
+
+                <!-- Pane A: Co-Pilot -->
+                <Grid x:Name="CoPilotPaneGrid" Grid.Row="1" RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 4 Instant 1-Tap Action Chips -->
+                    <StackPanel Grid.Row="0" Spacing="6">
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="⚡ TL;DR Summary" Click="CoPilotTldr_Click" HorizontalAlignment="Stretch" CornerRadius="12" FontSize="11.5" Padding="8,6" />
+                            <Button Grid.Column="1" Content="🎯 Tasks → TagDoS" Click="CoPilotTasks_Click" HorizontalAlignment="Stretch" CornerRadius="12" FontSize="11.5" Padding="8,6" />
+                        </Grid>
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="📊 Key Facts &amp; Numbers" Click="CoPilotFacts_Click" HorizontalAlignment="Stretch" CornerRadius="12" FontSize="11.5" Padding="8,6" />
+                            <Button Grid.Column="1" Content="🔍 Explain Selection" Click="CoPilotExplain_Click" HorizontalAlignment="Stretch" CornerRadius="12" FontSize="11.5" Padding="8,6" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Co-Pilot Turns Feed -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="10">
+                            <ProgressRing x:Name="CoPilotSpinner" Width="26" Height="26" IsActive="False" Visibility="Collapsed" HorizontalAlignment="Center" Margin="0,8" />
+                            <TextBlock x:Name="CoPilotEmptyHint"
+                                       Text="Open any article, documentation page, or Substack essay and tap a 1-tap Co-Pilot chip — powered by Gemini 2.5 Flash or local Qualcomm Hexagon NPU."
+                                       FontSize="12"
+                                       LineHeight="18"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                            <StackPanel x:Name="CoPilotTurnsStack" Spacing="10" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Custom Contextual Question Input -->
+                    <Grid Grid.Row="2" ColumnSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="CoPilotQuestionBox"
+                                 Grid.Column="0"
+                                 AutomationProperties.Name="Ask Co-Pilot about current page"
+                                 PlaceholderText="Ask about this page..."
+                                 CornerRadius="14"
+                                 FontSize="12.5"
+                                 KeyDown="CoPilotQuestionBox_KeyDown" />
+                        <Button Grid.Column="1"
+                                AutomationProperties.Name="Send Co-Pilot Question"
+                                Click="CoPilotSendQuestion_Click"
+                                Width="36" Height="34" CornerRadius="17" Padding="0"
+                                Background="#FF00E5FF">
+                            <FontIcon Glyph="&#xE724;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="Black" />
+                        </Button>
+                    </Grid>
+                </Grid>
+
+                <!-- Pane B: Prism Vault -->
+                <Grid x:Name="VaultPaneGrid" Grid.Row="1" Visibility="Collapsed" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBox x:Name="VaultSearchBox"
+                             Grid.Row="0"
+                             AutomationProperties.Name="Search Prism Vault"
+                             PlaceholderText="Filter clips, #tags, or domains..."
+                             CornerRadius="12"
+                             FontSize="12"
+                             TextChanged="VaultSearchBox_TextChanged" />
+
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Button Content="All" Tag="all" Click="VaultFilterChip_Click" CornerRadius="11" Padding="9,3" FontSize="11" />
+                            <Button Content="Links" Tag="link" Click="VaultFilterChip_Click" CornerRadius="11" Padding="9,3" FontSize="11" />
+                            <Button Content="Quotes" Tag="quote" Click="VaultFilterChip_Click" CornerRadius="11" Padding="9,3" FontSize="11" />
+                            <Button Content="Images" Tag="image" Click="VaultFilterChip_Click" CornerRadius="11" Padding="9,3" FontSize="11" />
+                            <Button Content="AI Notes" Tag="ai_summary" Click="VaultFilterChip_Click" CornerRadius="11" Padding="9,3" FontSize="11" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <ListView x:Name="VaultClipsListView"
+                              Grid.Row="2"
+                              SelectionMode="None">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:PrismClip">
+                                <Border Margin="0,4" Padding="10" CornerRadius="12"
+                                        Background="#14FFFFFF" BorderBrush="#24FFFFFF" BorderThickness="1">
+                                    <StackPanel Spacing="6">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Grid.Column="0" Glyph="{x:Bind TypeGlyph}" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Title}" FontSize="12.5" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Text="{x:Bind TypeBadge}" FontSize="10" FontWeight="Bold" Foreground="#FF00E5FF" VerticalAlignment="Top" />
+                                        </Grid>
+
+                                        <TextBlock Text="{x:Bind Snippet}" FontSize="11.5" Foreground="{ThemeResource AppFgMutedColorBrush}" MaxLines="3" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+
+                                        <Grid ColumnSpacing="4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind Domain}" FontSize="10.5" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Button Grid.Column="1" Content="Open" Tag="{x:Bind SourceUrl}" Click="VaultClipOpen_Click" Padding="7,2" CornerRadius="8" FontSize="10.5" />
+                                            <Button Grid.Column="2" Content="→TagDoS" Tag="{x:Bind Id}" Click="VaultClipSendTagdos_Click" Padding="7,2" CornerRadius="8" FontSize="10.5" />
+                                            <Button Grid.Column="3" Content="ReadLater" Tag="{x:Bind Id}" Click="VaultClipReadLater_Click" Padding="7,2" CornerRadius="8" FontSize="10.5" />
+                                            <Button Grid.Column="4" Tag="{x:Bind Id}" Click="VaultClipDelete_Click" Padding="6,2" CornerRadius="8" Background="Transparent" BorderThickness="0">
+                                                <FontIcon Glyph="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFEF4444" />
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- OAuth Popup Modal Overlay (`NewWindowRequested`) -->
+        <Grid x:Name="OAuthPopupOverlay" Grid.RowSpan="4" Visibility="Collapsed" Background="#B3000000" Canvas.ZIndex="900">
+            <Border Width="620" Height="660" CornerRadius="18" Background="#FF0D1426" BorderBrush="#44FFFFFF" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="44" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Padding="14,0">
+                        <TextBlock Text="Secure Sign-In" FontSize="13.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                        <Button Content="Close" Click="CloseOAuthPopup_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="10,4" CornerRadius="10" />
+                    </Grid>
+                    <WebView2 x:Name="OAuthPopupWebView" Grid.Row="1" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

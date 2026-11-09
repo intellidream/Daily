@@ -611,6 +611,7 @@ public struct MenuBarCompanionView: View {
             quickNavButton(title: "TagDoS", icon: "checklist", color: ThemeColors.accentOrange, tab: .tagdos)
             quickNavButton(title: "News", icon: "newspaper.fill", color: ThemeColors.accentBlue, tab: .news)
             quickNavButton(title: "Cosmos", icon: "moon.stars.fill", color: Color(hex: "#B388FF"), tab: .cosmos)
+            quickNavButton(title: "Prism", icon: "safari.fill", color: ThemeColors.accentCyan, tab: .prism)
         }
         .padding(.top, 4)
     }

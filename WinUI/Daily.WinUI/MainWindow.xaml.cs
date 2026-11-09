@@ -300,7 +300,7 @@ public sealed partial class MainWindow : Window
         {
             AppTitleBar.Opacity = 1.0;
             AppTitleBar.IsHitTestVisible = true;
-            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible || _currentTabIndex == 9) ? Visibility.Collapsed : Visibility.Visible;
+            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible || _currentTabIndex == 9 || _currentTabIndex == 10) ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {
@@ -449,6 +449,7 @@ public sealed partial class MainWindow : Window
                 var t when t == typeof(Views.RssFeedDetailPage) => 7,
                 var t when t == typeof(Views.CalendarDetailPage) => 8,
                 var t when t == typeof(Views.CosmosDetailPage) => 9,
+                var t when t == typeof(Views.PrismDetailPage) => 10,
                 _ => 1
             };
 
@@ -456,8 +457,8 @@ public sealed partial class MainWindow : Window
             NavCapsule.SetSelectedTab(tab);
             AppSidebar.SetSelectedTab(tab);
 
-            // Capsule is visible when sidebar is collapsed (except on Cosmos page where HUD has full screen)
-            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible || tab == 9) ? Visibility.Collapsed : Visibility.Visible;
+            // Capsule is visible when sidebar is collapsed (except on Cosmos & Prism pages where full screen HUD/WebView owns the viewport)
+            NavCapsule.Visibility = (AppSidebar.Visibility == Visibility.Visible || tab == 9 || tab == 10) ? Visibility.Collapsed : Visibility.Visible;
         }
     }
 
@@ -465,7 +466,7 @@ public sealed partial class MainWindow : Window
 
     public void NavigateToTab(int tabIndex, object? parameter = null)
     {
-        if (tabIndex < 1 || tabIndex > 9) return;
+        if (tabIndex < 1 || tabIndex > 10) return;
         _currentTabIndex = tabIndex;
         NavCapsule.SetSelectedTab(tabIndex);
         AppSidebar.SetSelectedTab(tabIndex);
@@ -481,6 +482,7 @@ public sealed partial class MainWindow : Window
             7 => typeof(Views.RssFeedDetailPage),
             8 => typeof(Views.CalendarDetailPage),
             9 => typeof(Views.CosmosDetailPage),
+            10 => typeof(Views.PrismDetailPage),
             _ => typeof(MainPage)
         };
 
@@ -501,7 +503,7 @@ public sealed partial class MainWindow : Window
         if (AppSidebar.Visibility == Visibility.Visible)
         {
             AppSidebar.Visibility = Visibility.Collapsed;
-            NavCapsule.Visibility = (_currentTabIndex == 9) ? Visibility.Collapsed : Visibility.Visible;
+            NavCapsule.Visibility = (_currentTabIndex == 9 || _currentTabIndex == 10) ? Visibility.Collapsed : Visibility.Visible;
         }
         else
         {
@@ -549,6 +551,10 @@ public sealed partial class MainWindow : Window
             else if (RootFrame.Content is Views.CosmosDetailPage cosmosPage)
             {
                 await cosmosPage.RefreshFromTitleBarAsync();
+            }
+            else if (RootFrame.Content is Views.PrismDetailPage prismPage)
+            {
+                await prismPage.RefreshFromTitleBarAsync();
             }
             else
             {
@@ -623,6 +629,7 @@ public sealed partial class MainWindow : Window
     private void OnAcceleratorCtrl7(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(7); }
     private void OnAcceleratorCtrl8(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(8); }
     private void OnAcceleratorCtrl9(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(9); }
+    private void OnAcceleratorCtrl0(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(10); }
     private void OnAcceleratorCtrlS(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; ToggleSidebar(); }
     private void OnAcceleratorCtrlR(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; TriggerGlobalSync(); }
     private void OnAcceleratorCtrlN(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(3); }

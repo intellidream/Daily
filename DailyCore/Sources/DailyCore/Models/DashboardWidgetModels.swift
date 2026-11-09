@@ -54,6 +54,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
     case finances = "finances"
     case tagdosNotes = "tagdos_notes"
     case cosmos = "cosmos"
+    case prism = "prism"
     
     public var title: String {
         switch self {
@@ -65,6 +66,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .finances: return "Finances & Markets"
         case .tagdosNotes: return "Tagdos & Notes"
         case .cosmos: return "Cosmos & Night Sky"
+        case .prism:  return "Prism & Web Studio"
         }
     }
     
@@ -78,6 +80,7 @@ public enum DashboardWidgetType: String, Codable, CaseIterable, Sendable {
         case .finances: return "chart.line.uptrend.xyaxis"
         case .tagdosNotes: return "checklist"
         case .cosmos: return "moon.stars.fill"
+        case .prism:  return "safari.fill"
         }
     }
 }
@@ -107,7 +110,8 @@ public struct DashboardWidgetConfig: Codable, Identifiable, Equatable, Sendable 
             DashboardWidgetConfig(id: DashboardWidgetType.health.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.habits.rawValue, size: .wide, isVisible: true),
             DashboardWidgetConfig(id: DashboardWidgetType.finances.rawValue, size: .wide, isVisible: true),
-            DashboardWidgetConfig(id: DashboardWidgetType.tagdosNotes.rawValue, size: .wide, isVisible: true)
+            DashboardWidgetConfig(id: DashboardWidgetType.tagdosNotes.rawValue, size: .wide, isVisible: true),
+            DashboardWidgetConfig(id: DashboardWidgetType.prism.rawValue, size: .wide, isVisible: true)
         ]
     }
 }

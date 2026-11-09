@@ -132,6 +132,19 @@
                     <TextBlock x:Name="TabText9" Text="Cosmos" FontSize="12" FontWeight="SemiBold" Foreground="#B3FFFFFF" VerticalAlignment="Center" Visibility="Collapsed" />
                 </StackPanel>
             </Button>
+
+            <!-- Tab 10: Prism Web Studio -->
+            <Button x:Name="TabButton10" Click="TabButton_Click" Tag="10"
+                    AutomationProperties.Name="Prism Assisted Web Studio"
+                    Style="{ThemeResource DefaultButtonStyle}"
+                    Background="Transparent" BorderThickness="1" BorderBrush="Transparent"
+                    CornerRadius="20" Height="38" Padding="10,0"
+                    ToolTipService.ToolTip="Prism Studio (Ctrl+0)">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <FontIcon x:Name="TabIcon10" Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#B3FFFFFF" />
+                    <TextBlock x:Name="TabText10" Text="Prism" FontSize="12" FontWeight="SemiBold" Foreground="#B3FFFFFF" VerticalAlignment="Center" Visibility="Collapsed" />
+                </StackPanel>
+            </Button>
         </StackPanel>
     </Border>
 </UserControl>

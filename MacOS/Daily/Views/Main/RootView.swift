@@ -10,6 +10,7 @@ public struct RootView: View {
     @State private var isReadingArticleInNews: Bool = false
     @State private var isNavCapsuleExpandedWhileReading: Bool = false
     @State private var isHoveringNavBubble: Bool = false
+    @State private var isPrismFullResearchMode: Bool = false
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     
@@ -17,6 +18,8 @@ public struct RootView: View {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-startTabCosmos") {
             self._selectedTab = State(initialValue: .cosmos)
+        } else if args.contains("-startTabPrism") {
+            self._selectedTab = State(initialValue: .prism)
         } else if args.contains("-startTabNews") {
             self._selectedTab = State(initialValue: .news)
         } else if args.contains("-startTabSettings") {
@@ -66,8 +69,8 @@ public struct RootView: View {
                                 .transition(.move(edge: .leading).combined(with: .opacity))
                         }
                         
-                        // Main Workspace Area (Full-surface Observatory when Cosmos is active, otherwise Dual-Pane or Single-Column)
-                        if isDualPaneEnabled && selectedTab != .cosmos {
+                        // Main Workspace Area (Full-surface Observatory when Cosmos is active or Prism Full Research Split is toggled, otherwise Dual-Pane or Single-Column)
+                        if isDualPaneEnabled && selectedTab != .cosmos && !(selectedTab == .prism && isPrismFullResearchMode) {
                             dualPaneWorkspaceView
                         } else {
                             singleColumnView
@@ -119,6 +122,7 @@ public struct RootView: View {
                 Button("") { switchTab(.weather) }.keyboardShortcut("6", modifiers: .command)
                 Button("") { switchTab(.news) }.keyboardShortcut("7", modifiers: .command)
                 Button("") { switchTab(.cosmos) }.keyboardShortcut("8", modifiers: .command)
+                Button("") { switchTab(.prism) }.keyboardShortcut("9", modifiers: .command)
                 Button("") { MacOSWindowManager.shared.activateGlanceWindow() }.keyboardShortcut("0", modifiers: .command)
                 Button("") { switchTab(.settings) }.keyboardShortcut(",", modifiers: .command)
                 Button("") {
@@ -179,6 +183,13 @@ public struct RootView: View {
                     selectedTab = .tagdos
                 } else if fullPath.contains("cosmos") || fullPath.contains("sky") || fullPath.contains("astronomy") {
                     selectedTab = .cosmos
+                } else if fullPath.contains("prism") || fullPath.contains("web") {
+                    if let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                       let targetUrl = comps.queryItems?.first(where: { $0.name == "url" })?.value,
+                       !targetUrl.isEmpty {
+                        PrismStore.shared.requestOpenInPrism(url: targetUrl)
+                    }
+                    selectedTab = .prism
                 } else if fullPath.contains("summary") || fullPath.contains("briefing") {
                     selectedTab = .dashboard
                     Task { @MainActor in
@@ -191,6 +202,7 @@ public struct RootView: View {
                     case "weather": selectedTab = .weather
                     case "cosmos": selectedTab = .cosmos
                     case "news": selectedTab = .news
+                    case "prism": selectedTab = .prism
                     case "health": selectedTab = .health
                     case "habits": selectedTab = .habits
                     case "finances": selectedTab = .finances
@@ -223,7 +235,22 @@ public struct RootView: View {
             if newTab != .news {
                 isNavCapsuleExpandedWhileReading = false
             }
+            if newTab != .prism {
+                isPrismFullResearchMode = false
+            }
         }
+        .environment(\.openURL, OpenURLAction { url in
+            if selectedTab != .prism && selectedTab != .settings,
+               let scheme = url.scheme?.lowercased(),
+               (scheme == "https" || scheme == "http") {
+                PrismStore.shared.requestOpenInPrism(url: url.absoluteString, openInNewTab: true)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    selectedTab = .prism
+                }
+                return .handled
+            }
+            return .systemAction
+        })
     }
     
     // MARK: - Retracted Navigation Bubble (shown when reading news)
@@ -306,7 +333,8 @@ public struct RootView: View {
                     onNavigateToHabits: { switchTab(.habits) },
                     onNavigateToFinances: { switchTab(.finances) },
                     onNavigateToSettings: { switchTab(.settings) },
-                    onNavigateToTagdos: { switchTab(.tagdos) }
+                    onNavigateToTagdos: { switchTab(.tagdos) },
+                    onNavigateToPrism: { switchTab(.prism) }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
@@ -355,6 +383,16 @@ public struct RootView: View {
                         onNavigateBack: navigateToDashboard,
                         isReadingArticle: $isReadingArticleInNews
                     )
+                case .prism:
+                    PrismMainView(
+                        isFullResearchModeExternal: isPrismFullResearchMode,
+                        onToggleFullResearchMode: {
+                            withAnimation(.spring(response: 0.36, dampingFraction: 0.8)) {
+                                isPrismFullResearchMode.toggle()
+                            }
+                        },
+                        onNavigateBack: navigateToDashboard
+                    )
                 case .health:
                     HealthMainView(onNavigateBack: navigateToDashboard)
                 case .habits:
@@ -388,7 +426,8 @@ public struct RootView: View {
                         onNavigateToHabits: { switchTab(.habits) },
                         onNavigateToFinances: { switchTab(.finances) },
                         onNavigateToSettings: { switchTab(.settings) },
-                        onNavigateToTagdos: { switchTab(.tagdos) }
+                        onNavigateToTagdos: { switchTab(.tagdos) },
+                        onNavigateToPrism: { switchTab(.prism) }
                     )
                 case .weather:
                     WeatherDetailView(
@@ -404,6 +443,16 @@ public struct RootView: View {
                     NewsFeedView(
                         onNavigateBack: navigateToDashboard,
                         isReadingArticle: $isReadingArticleInNews
+                    )
+                case .prism:
+                    PrismMainView(
+                        isFullResearchModeExternal: isPrismFullResearchMode,
+                        onToggleFullResearchMode: {
+                            withAnimation(.spring(response: 0.36, dampingFraction: 0.8)) {
+                                isPrismFullResearchMode.toggle()
+                            }
+                        },
+                        onNavigateBack: navigateToDashboard
                     )
                 case .health:
                     HealthMainView(onNavigateBack: navigateToDashboard)
@@ -421,7 +470,7 @@ public struct RootView: View {
             
             // Floating Liquid Glass Navigation Capsule (Shown when sidebar is collapsed or preferred)
             if !isSidebarVisible {
-                if (selectedTab == .news && isReadingArticleInNews) || selectedTab == .cosmos {
+                if (selectedTab == .news && isReadingArticleInNews) || selectedTab == .cosmos || selectedTab == .prism {
                     if isNavCapsuleExpandedWhileReading {
                         HStack(spacing: 8) {
                             FloatingGlassCapsule(selectedTab: $selectedTab)

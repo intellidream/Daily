@@ -29,6 +29,7 @@ namespace Daily_WinUI.Services
                 new WidgetModel { Title = "Calendar", ComponentType = "CalendarWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "Cosmos", ComponentType = "CosmosWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "TagDoS & Notes", ComponentType = "NotesWidget", ColumnSpan = 1, RowSpan = 1 },
+                new WidgetModel { Title = "Prism & Web Studio", ComponentType = "PrismWidget", ColumnSpan = 1, RowSpan = 1 },
                 new WidgetModel { Title = "News", ComponentType = "RssFeedWidget", ColumnSpan = 1, RowSpan = 2 }
             };
         }
@@ -68,6 +69,12 @@ namespace Daily_WinUI.Services
             if (!widgets.Any(w => w.ComponentType == "CosmosWidget"))
             {
                 widgets.Add(new WidgetModel { Title = "Cosmos", ComponentType = "CosmosWidget", ColumnSpan = 1, RowSpan = 1 });
+            }
+
+            // Ensure PrismWidget is present in dashboard layout
+            if (!widgets.Any(w => w.ComponentType == "PrismWidget"))
+            {
+                widgets.Add(new WidgetModel { Title = "Prism & Web Studio", ComponentType = "PrismWidget", ColumnSpan = 1, RowSpan = 1 });
             }
 
             // Purge obsolete and orphaned widgets

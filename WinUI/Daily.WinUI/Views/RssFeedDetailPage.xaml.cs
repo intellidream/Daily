@@ -292,6 +292,24 @@ public sealed partial class RssFeedDetailPage : Page
             var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
             var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, userDataFolder, options);
             await ReaderWebView.EnsureCoreWebView2Async(env);
+            if (ReaderWebView.CoreWebView2 != null)
+            {
+                ReaderWebView.CoreWebView2.NavigationStarting += (_, navArgs) =>
+                {
+                    if (navArgs.IsUserInitiated &&
+                        !string.IsNullOrWhiteSpace(navArgs.Uri) &&
+                        (navArgs.Uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                         navArgs.Uri.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        navArgs.Cancel = true;
+                        App.Current?.Services?.GetService<IPrismService>()?.RequestOpenUrlInPrism(navArgs.Uri);
+                        if (App.Current?.MainWindow is MainWindow mw)
+                        {
+                            mw.NavigateToTab(10);
+                        }
+                    }
+                };
+            }
             await BackgroundWebView.EnsureCoreWebView2Async(env);
         }
         catch (Exception ex)
@@ -1558,6 +1576,21 @@ public sealed partial class RssFeedDetailPage : Page
         if (_selectedItem != null)
         {
             await _articleService.ToggleArticleAsync(_selectedItem, _selectedItem.PublicationName ?? "RSS", _selectedItem.PublicationIconUrl, SavedArticleType.Favorite);
+        }
+    }
+
+    private void ReaderOpenInPrismButton_Click(object sender, RoutedEventArgs e)
+    {
+        var target = _currentRenderedArticle ?? _selectedItem;
+        if (target == null || string.IsNullOrWhiteSpace(target.Link))
+        {
+            return;
+        }
+
+        App.Current?.Services?.GetService<IPrismService>()?.RequestOpenUrlInPrism(target.Link, target.Title);
+        if (App.Current?.MainWindow is MainWindow mw)
+        {
+            mw.NavigateToTab(10);
         }
     }
 

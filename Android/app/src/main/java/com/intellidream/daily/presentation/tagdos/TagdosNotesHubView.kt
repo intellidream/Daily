@@ -92,6 +92,7 @@ import java.util.Locale
 fun TagdosNotesHubView(
     repository: TagdosRepository,
     onNavigateBack: () -> Unit,
+    onOpenUrlInPrism: ((String) -> Unit)? = null,
     horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     applyStatusBarsPadding: Boolean = true
 ) {
@@ -376,7 +377,10 @@ fun TagdosNotesHubView(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (isNotesTab) {
-                    TagdosQuickNotesView(repository = repository)
+                    TagdosQuickNotesView(
+                        repository = repository,
+                        onOpenUrlInPrism = onOpenUrlInPrism
+                    )
                 } else {
                     if (currentStream != null) {
                         if (isRawEditMode) {

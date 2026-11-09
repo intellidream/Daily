@@ -489,6 +489,20 @@
                         </StackPanel>
                     </Button>
 
+                    <!-- Open in Prism Studio Button -->
+                    <Button x:Name="ReaderOpenInPrismButton"
+                            AutomationProperties.Name="Open Article in Prism Studio"
+                            Click="ReaderOpenInPrismButton_Click"
+                            Background="#2400E5FF"
+                            BorderBrush="#5500E5FF"
+                            BorderThickness="1"
+                            Translation="0,0,18"
+                            CornerRadius="18"
+                            Width="36" Height="36" Padding="0"
+                            ToolTipService.ToolTip="Open in Prism Studio (Ctrl+0)">
+                        <FontIcon Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF"/>
+                    </Button>
+
                     <!-- Reader Favorite Button -->
                     <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
                         <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
