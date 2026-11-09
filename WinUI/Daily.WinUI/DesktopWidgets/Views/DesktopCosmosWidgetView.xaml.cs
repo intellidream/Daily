@@ -181,7 +181,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         var omm = System.Text.Json.JsonSerializer.Deserialize<Daily.Models.CelesTrakOmmRecord>(rawJson);
                         if (omm != null)
                         {
-                            var passes = SGP4Propagator.PredictPasses(omm, lat, lon, now, hoursAhead: 24, minPeakAltitudeDeg: 15, requireSunlitAndDarkSky: true);
+                            var passes = SGP4Propagator.PredictVisiblePasses(omm, lat, lon, elevationMeters: 0.0, startUtc: now, hoursAhead: 24, minPeakAltitudeDeg: 15, requireSunlitAndDarkSky: true);
                             var nextPass = passes.FirstOrDefault();
                             if (nextPass != null)
                             {
