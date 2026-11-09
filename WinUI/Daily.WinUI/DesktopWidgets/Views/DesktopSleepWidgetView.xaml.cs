@@ -103,13 +103,24 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     }
 
                     int score = primarySession?.SleepScore > 0 ? primarySession.SleepScore : (summary?.SleepScore ?? 85);
-                    int durationMins = primarySession != null && primarySession.DurationSeconds > 0
-                        ? (int)(primarySession.DurationSeconds / 60.0) 
+
+                    // Real asleep minutes from Health Hub (excluding awakenings)
+                    int asleepMins = primarySession != null && primarySession.AsleepSeconds > 0
+                        ? (int)(primarySession.AsleepSeconds / 60.0) 
                         : ((summary?.SleepAsleepS ?? 0) / 60);
-                    if (durationMins <= 0) durationMins = 460;
-                    int hours = durationMins / 60;
-                    int mins = durationMins % 60;
-                    string durStr = $"{hours}h {mins:D2}m";
+
+                    // Total time in bed from start to end
+                    int inBedMins = primarySession != null && primarySession.DurationSeconds > 0
+                        ? (int)(primarySession.DurationSeconds / 60.0) 
+                        : (asleepMins > 0 ? (int)Math.Round(asleepMins / 0.92) : 486);
+
+                    if (asleepMins <= 0) asleepMins = 448; // fallback: 7h 28m
+                    if (inBedMins < asleepMins) inBedMins = (int)Math.Round(asleepMins / 0.92);
+
+                    int asleepHours = asleepMins / 60;
+                    int asleepRemainder = asleepMins % 60;
+                    string durStr = $"{asleepHours}h {asleepRemainder:D2}m"; // Real sleep duration in ring!
+                    string inBedStr = $"{inBedMins / 60}h {inBedMins % 60:D2}m";
 
                     SmallProgressRing.Value = score;
                     SmallScoreText.Text = score.ToString();
@@ -122,22 +133,22 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                     if (primarySession != null && primarySession.StartTime != default && primarySession.EndTime != default)
                     {
-                        MediumScheduleSubtitle.Text = $"{primarySession.StartTime:HH:mm} → {primarySession.EndTime:HH:mm} ({durStr})";
+                        MediumScheduleSubtitle.Text = $"{primarySession.StartTime:HH:mm} → {primarySession.EndTime:HH:mm} ({inBedStr})";
                     }
                     else
                     {
-                        MediumScheduleSubtitle.Text = $"Duration: {durStr}";
+                        MediumScheduleSubtitle.Text = $"Bedtime: {durStr} ({inBedStr})";
                     }
 
                     int deepMins = primarySession != null && primarySession.DeepSeconds > 0 
                         ? (int)(primarySession.DeepSeconds / 60.0) 
-                        : (int)(durationMins * 0.22);
+                        : (int)(asleepMins * 0.22);
                     int remMins = primarySession != null && primarySession.RemSeconds > 0 
                         ? (int)(primarySession.RemSeconds / 60.0) 
-                        : (int)(durationMins * 0.25);
+                        : (int)(asleepMins * 0.25);
                     int lightMins = primarySession != null && primarySession.LightSeconds > 0 
                         ? (int)(primarySession.LightSeconds / 60.0) 
-                        : (int)(durationMins * 0.45);
+                        : (int)(asleepMins * 0.45);
 
                     DeepStageText.Text = $"Deep {deepMins / 60}h {deepMins % 60}m";
                     RemStageText.Text = $"REM {remMins / 60}h {remMins % 60}m";
@@ -154,18 +165,18 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     LargeScoreText.Text = score.ToString();
                     if (primarySession != null && primarySession.StartTime != default && primarySession.EndTime != default)
                     {
-                        LargeScheduleSubtitle.Text = $"{primarySession.StartTime:HH:mm} → {primarySession.EndTime:HH:mm} · {durStr}";
+                        LargeScheduleSubtitle.Text = $"{primarySession.StartTime:HH:mm} → {primarySession.EndTime:HH:mm} · {durStr} ({inBedStr})";
                     }
                     else
                     {
-                        LargeScheduleSubtitle.Text = $"Tracked: {durStr}";
+                        LargeScheduleSubtitle.Text = $"Tracked: {durStr} ({inBedStr})";
                     }
 
                     LargeQualityHeader.Text = score >= 80 ? "Restorative Sleep Quality (High)" : (score >= 65 ? "Good Sleep Quality" : "Fair Sleep Quality");
                     
                     int efficiency = primarySession != null && primarySession.DurationSeconds > 0 && primarySession.AsleepSeconds > 0
                         ? Math.Clamp((int)Math.Round((double)primarySession.AsleepSeconds / primarySession.DurationSeconds * 100), 70, 99)
-                        : Math.Clamp((int)Math.Round((double)(deepMins + remMins + lightMins) / (durationMins > 0 ? durationMins : 1) * 100), 75, 98);
+                        : Math.Clamp((int)Math.Round((double)asleepMins / (inBedMins > 0 ? inBedMins : 1) * 100), 75, 98);
                     LargeEfficiencyText.Text = $"Efficiency: {efficiency}%";
 
                     LargeDeepStageText.Text = $"{deepMins / 60}h {deepMins % 60}m";

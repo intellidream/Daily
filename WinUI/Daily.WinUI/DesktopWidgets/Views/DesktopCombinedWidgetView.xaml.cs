@@ -261,6 +261,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     {
                         double lat = 44.4323;
                         double lon = 26.1063;
+                        int bortle = 5;
                         try
                         {
                             var settings = Daily_WinUI.Services.SettingsService.Load();
@@ -268,6 +269,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
                             {
                                 lat = settings.LastLatitude.Value;
                                 lon = settings.LastLongitude ?? 26.1063;
+                            }
+                            if (settings.BortleClass.HasValue)
+                            {
+                                bortle = settings.BortleClass.Value;
                             }
                         }
                         catch { }
@@ -278,19 +283,25 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         string phaseDesc = !string.IsNullOrWhiteSpace(moonPhase.Description) ? moonPhase.Description : "Moon";
                         LargeMoonIcon.Text = glyph;
 
-                        int? cloudCover = null;
+                        CosmosLiveBundle? bundle = null;
                         try
                         {
-                            var weatherClient = App.Current.Services?.GetService<WeatherClient>();
-                            var snapshot = weatherClient?.GetCachedSnapshot();
-                            if (snapshot != null)
-                            {
-                                cloudCover = snapshot.Clouds;
-                            }
+                            bundle = await CosmosLiveService.Shared.FetchLiveBundleAsync(lat, lon);
                         }
                         catch { }
 
-                        var conditions = astro.EvaluateStargazingConditions(lat, lon, now, cloudCoverTotal: cloudCover, bortleClass: 4);
+                        var w = bundle?.WeatherOverlay;
+                        var conditions = astro.EvaluateStargazingConditions(
+                            lat, lon, now,
+                            cloudCoverTotal: w?.CloudTotalPercent,
+                            cloudCoverLow: w?.CloudLowPercent,
+                            cloudCoverMid: w?.CloudMidPercent,
+                            cloudCoverHigh: w?.CloudHighPercent,
+                            bortleClass: bortle,
+                            seeingArcseconds: w?.SeeingArcseconds,
+                            transparencyLabel: w?.TransparencyLabel,
+                            temperatureCelsius: w?.TemperatureCelsius,
+                            dewPointCelsius: w?.DewPointCelsius);
                         int skyScore = conditions.Score;
 
                         LargeCosmosText.Text = $"{phaseDesc} · {skyScore} Sky";

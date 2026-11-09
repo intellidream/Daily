@@ -22,6 +22,7 @@ namespace Daily_WinUI;
 public partial class App : Application
 {
     public static new App Current => (App)Application.Current;
+    public static Supabase.Client? SupabaseClient => null;
     public IServiceProvider? Services { get; private set; }
     public DispatcherQueue DispatcherQueue { get; private set; } = null!;
     public object? MainWindow => null;

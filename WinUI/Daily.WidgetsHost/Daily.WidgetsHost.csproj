@@ -74,6 +74,7 @@
     <Compile Include="..\Daily.WinUI\Services\Cosmos\AstronomyService.cs" Link="Services\Cosmos\AstronomyService.cs" />
     <Compile Include="..\Daily.WinUI\Services\Cosmos\AstronomyEngine.cs" Link="Services\Cosmos\AstronomyEngine.cs" />
     <Compile Include="..\Daily.WinUI\Services\Cosmos\SGP4Propagator.cs" Link="Services\Cosmos\SGP4Propagator.cs" />
+    <Compile Include="..\Daily.WinUI\Services\Cosmos\CosmosLiveService.cs" Link="Services\Cosmos\CosmosLiveService.cs" />
     <Compile Include="..\Daily.WinUI\Models\WeatherSnapshot.cs" Link="Models\WeatherSnapshot.cs" />
     <Compile Include="..\Daily.WinUI\Models\LocationSuggestion.cs" Link="Models\LocationSuggestion.cs" />
     <Compile Include="..\Daily.WinUI\Models\ForecastDaySnapshot.cs" Link="Models\ForecastDaySnapshot.cs" />

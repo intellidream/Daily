@@ -58,7 +58,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
         {
         }
 
-        public void RefreshData()
+        public async void RefreshData()
         {
             try
             {
@@ -67,6 +67,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 // 1. Observer Location (from user settings or default Bucharest)
                 double lat = 44.4323;
                 double lon = 26.1063;
+                int bortle = 5;
                 try
                 {
                     var settings = Daily_WinUI.Services.SettingsService.Load();
@@ -74,6 +75,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     {
                         lat = settings.LastLatitude.Value;
                         lon = settings.LastLongitude ?? 26.1063;
+                    }
+                    if (settings.BortleClass.HasValue)
+                    {
+                        bortle = settings.BortleClass.Value;
                     }
                 }
                 catch { }
@@ -148,48 +153,57 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     largePlanetSummary = "✨ Deep Sky / Messier";
                 }
 
-                // 6. Real Deterministic Stargazing Score (combining cloud cover + moon illumination + moon altitude)
-                int? cloudCover = null;
+                // 6. Live Atmospheric Seeing & Multi-Layer Clouds via CosmosLiveService (Open-Meteo + 7Timer)
+                CosmosLiveBundle? liveBundle = null;
                 try
                 {
-                    var weatherClient = App.Current.Services?.GetService<WeatherClient>();
-                    var snapshot = weatherClient?.GetCachedSnapshot();
-                    if (snapshot != null)
-                    {
-                        cloudCover = snapshot.Clouds;
-                    }
+                    liveBundle = await CosmosLiveService.Shared.FetchLiveBundleAsync(lat, lon);
                 }
                 catch { }
 
+                var w = liveBundle?.WeatherOverlay;
                 var conditions = _astronomyService.EvaluateStargazingConditions(
                     lat, lon, now,
-                    cloudCoverTotal: cloudCover,
-                    bortleClass: 4);
+                    cloudCoverTotal: w?.CloudTotalPercent,
+                    cloudCoverLow: w?.CloudLowPercent,
+                    cloudCoverMid: w?.CloudMidPercent,
+                    cloudCoverHigh: w?.CloudHighPercent,
+                    bortleClass: bortle,
+                    seeingArcseconds: w?.SeeingArcseconds,
+                    transparencyLabel: w?.TransparencyLabel,
+                    temperatureCelsius: w?.TemperatureCelsius,
+                    dewPointCelsius: w?.DewPointCelsius,
+                    provenance: w?.Provenance ?? TelemetryProvenance.OfflineCalculated("Offline Ephemeris"));
 
                 int skyScore = conditions.Score;
 
-                // 7. Real ISS Pass (calculated via SGP4Propagator if cached OMM exists)
+                // 7. Real ISS Pass (calculated via SGP4Propagator on CelesTrak OMM in CosmosLiveBundle)
                 string issPassText = "🛰️ Next Pass: Orbit Daylight";
                 string largeIssPassText = "🛰️ Daylight Pass Only";
                 try
                 {
-                    string cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp", "Cache");
-                    string issFile = Path.Combine(cacheDir, "iss_omm.json");
-                    if (File.Exists(issFile))
+                    var passes = liveBundle?.IssPasses;
+                    if (passes == null || passes.Count == 0)
                     {
-                        var rawJson = File.ReadAllText(issFile);
-                        var omm = System.Text.Json.JsonSerializer.Deserialize<Daily.Models.CelesTrakOmmRecord>(rawJson);
-                        if (omm != null)
+                        string cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Daily", "CosmosCache");
+                        string issFile = Path.Combine(cacheDir, "iss_omm.json");
+                        if (File.Exists(issFile))
                         {
-                            var passes = SGP4Propagator.PredictVisiblePasses(omm, lat, lon, elevationMeters: 0.0, startUtc: now, hoursAhead: 24, minPeakAltitudeDeg: 15, requireSunlitAndDarkSky: true);
-                            var nextPass = passes.FirstOrDefault();
-                            if (nextPass != null)
+                            var rawJson = File.ReadAllText(issFile);
+                            var omm = System.Text.Json.JsonSerializer.Deserialize<Daily.Models.CelesTrakOmmRecord>(rawJson);
+                            if (omm != null)
                             {
-                                var passLocal = nextPass.StartTimeUtc.ToLocalTime();
-                                issPassText = $"🛰️ Next Pass: {passLocal:HH:mm}";
-                                largeIssPassText = $"🛰️ {passLocal:HH:mm} ({nextPass.StartCompass} · Mag {nextPass.PeakMagnitude:F1})";
+                                passes = SGP4Propagator.PredictVisiblePasses(omm, lat, lon, elevationMeters: 0.0, startUtc: now, hoursAhead: 48, minPeakAltitudeDeg: 10, requireSunlitAndDarkSky: true);
                             }
                         }
+                    }
+
+                    var nextPass = passes?.FirstOrDefault(p => p.EndTimeUtc >= now || p.StartTimeUtc >= now);
+                    if (nextPass != null)
+                    {
+                        var passLocal = nextPass.StartTimeUtc.ToLocalTime();
+                        issPassText = $"🛰️ Next Pass: {passLocal:HH:mm} ({nextPass.MaxAltitudeDegrees:F0}°)";
+                        largeIssPassText = $"🛰️ {passLocal:HH:mm} ({nextPass.StartCompass} · Mag {nextPass.PeakMagnitude:F1})";
                     }
                 }
                 catch { }
@@ -225,11 +239,13 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 LargePlanetsText.Text = largePlanetSummary;
                 LargeIssPassText.Text = largeIssPassText;
                 LargeGoldenHourText.Text = goldenHourStr;
-                LargeTransparencyText.Text = skyScore >= 80 ? "🌌 Bortle Class 4" : "🌌 Bortle Class 5";
+                LargeTransparencyText.Text = !string.IsNullOrWhiteSpace(w?.TransparencyLabel)
+                    ? $"🌌 {w.TransparencyLabel} · Bortle {bortle}"
+                    : (skyScore >= 80 ? $"🌌 Bortle Class {bortle}" : $"🌌 Bortle Class {bortle}");
                 LargeEphemerisText.Text = $"Moonrise: {riseStr} · Moonset: {setStr} · Transit: {transitStr}";
 
                 LargeBottomStargazingText.Text = $"Stargazing Index: {skyScore}/100";
-                LargeBottomQualityText.Text = skyScore >= 80 ? "Optimal Night Sky ✨" : (skyScore >= 60 ? "Good Observing 🌟" : "Fair Seeing Conditions");
+                LargeBottomQualityText.Text = $"{conditions.Quality} Observing" + (w?.SeeingArcseconds.HasValue == true ? $" · Seeing {w.SeeingArcseconds.Value:F1}\"" : "");
             }
             catch (Exception ex)
             {

@@ -768,9 +768,11 @@ namespace Daily_WinUI.Services.Cosmos
                 if (settings?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(settings.CurrentUserId) && settings.CurrentUserId != "guest")
                     return settings.CurrentUserId;
 
+#if !WIDGETS_HOST
                 var auth = App.Current?.Services?.GetService<Daily_WinUI.Services.WinUIAuthService>();
                 if (auth?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(auth.CurrentUserId) && auth.CurrentUserId != "guest")
                     return auth.CurrentUserId;
+#endif
 
                 var userUid = App.SupabaseClient?.Auth?.CurrentUser?.Id;
                 if (!string.IsNullOrWhiteSpace(userUid) && userUid != "guest")
