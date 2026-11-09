@@ -876,6 +876,14 @@ public sealed partial class RssFeedWidgetControl : UserControl
         {
             _isWidgetLoadingCustomFeed = false;
             UpdateWidgetArticles();
+            try
+            {
+                if (BackgroundWebView?.CoreWebView2 != null)
+                {
+                    BackgroundWebView.CoreWebView2.MemoryUsageTarget = Microsoft.Web.WebView2.Core.CoreWebView2MemoryUsageTarget.Low;
+                }
+            }
+            catch { }
         }
     }
 
@@ -907,6 +915,14 @@ public sealed partial class RssFeedWidgetControl : UserControl
         {
             _isWidgetLoadingCustomFeed = false;
             UpdateWidgetArticles();
+            try
+            {
+                if (BackgroundWebView?.CoreWebView2 != null)
+                {
+                    BackgroundWebView.CoreWebView2.MemoryUsageTarget = Microsoft.Web.WebView2.Core.CoreWebView2MemoryUsageTarget.Low;
+                }
+            }
+            catch { }
         }
     }
 
@@ -967,6 +983,14 @@ public sealed partial class RssFeedWidgetControl : UserControl
         {
             _isWidgetLoadingCustomFeed = false;
             UpdateWidgetArticles();
+            try
+            {
+                if (BackgroundWebView?.CoreWebView2 != null)
+                {
+                    BackgroundWebView.CoreWebView2.MemoryUsageTarget = Microsoft.Web.WebView2.Core.CoreWebView2MemoryUsageTarget.Low;
+                }
+            }
+            catch { }
         }
     }
 

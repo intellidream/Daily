@@ -9,7 +9,7 @@ public sealed class WeatherClient
 {
     private const string BaseUrl = "https://api.openweathermap.org/data/2.5";
     private const string GeoUrl = "https://api.openweathermap.org/geo/1.0";
-    private readonly HttpClient _httpClient = new();
+    private static readonly HttpClient _httpClient = new();
 
     private sealed record CacheEntry<T>(T Data, DateTime TimestampUtc, double Latitude, double Longitude, string UnitSystem);
 

@@ -58,6 +58,14 @@ namespace Daily_WinUI.DesktopWidgets.Views
             DispatcherQueue.TryEnqueue(RefreshData);
         }
 
+        public void Detach()
+        {
+            if (_healthHubService != null)
+            {
+                _healthHubService.OnDailySummaryChanged -= HealthHubService_OnDailySummaryChanged;
+            }
+        }
+
         public async void RefreshData()
         {
             if (_healthHubService == null)

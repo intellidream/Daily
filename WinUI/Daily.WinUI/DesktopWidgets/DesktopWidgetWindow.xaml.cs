@@ -331,6 +331,21 @@ namespace Daily_WinUI.DesktopWidgets
 
         private void DesktopWidgetWindow_Closed(object sender, WindowEventArgs args)
         {
+            try
+            {
+                if (RootCard?.Child is IDesktopWidgetView view)
+                {
+                    view.Detach();
+                }
+                if (RootCard != null)
+                {
+                    RootCard.Child = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DesktopWidgetWindow] Closed cleanup warning: {ex.Message}");
+            }
         }
 
         public void ApplyBackdrop()
@@ -746,5 +761,6 @@ namespace Daily_WinUI.DesktopWidgets
     public interface IDesktopWidgetView
     {
         void RefreshData();
+        void Detach();
     }
 }

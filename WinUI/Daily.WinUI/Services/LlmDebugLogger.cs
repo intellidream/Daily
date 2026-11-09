@@ -52,6 +52,10 @@ namespace Daily_WinUI.Services
             lock (_lock)
             {
                 Logs.Add(log);
+                if (Logs.Count > 50)
+                {
+                    Logs.RemoveAt(0);
+                }
                 _activeEngine = log.ActiveEngine;
                 _lastExecutionTime = log.Timestamp;
             }

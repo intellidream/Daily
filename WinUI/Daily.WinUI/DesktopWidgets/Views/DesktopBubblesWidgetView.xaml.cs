@@ -53,6 +53,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
         {
+            Detach();
+        }
+
+        public void Detach()
+        {
             if (_habitsService != null)
             {
                 _habitsService.OnHabitsUpdated -= HabitsService_OnHabitsUpdated;

@@ -33,6 +33,72 @@ public sealed class GlassWidgetContainer : ContentControl
     private static readonly double MaxDirtOpacity = 0.75;
     private static readonly double MaxNoiseOpacity = 0.55;
 
+    private static readonly System.Collections.Generic.List<WeakReference<GlassWidgetContainer>> _activeContainers = new();
+    private static readonly object _containersLock = new();
+
+    private static void RegisterContainer(GlassWidgetContainer container)
+    {
+        lock (_containersLock)
+        {
+            _activeContainers.RemoveAll(wr => !wr.TryGetTarget(out _));
+            _activeContainers.Add(new WeakReference<GlassWidgetContainer>(container));
+        }
+    }
+
+    private static void UnregisterContainer(GlassWidgetContainer container)
+    {
+        lock (_containersLock)
+        {
+            _activeContainers.RemoveAll(wr => !wr.TryGetTarget(out var target) || ReferenceEquals(target, container));
+        }
+    }
+
+    public static void PauseAll()
+    {
+        lock (_containersLock)
+        {
+            foreach (var wr in _activeContainers)
+            {
+                if (wr.TryGetTarget(out var container))
+                {
+                    if (container._agingTimer != null && container._agingTimer.IsEnabled)
+                    {
+                        container._agingTimer.Stop();
+                    }
+                }
+            }
+        }
+    }
+
+    public static void ResumeAll()
+    {
+        lock (_containersLock)
+        {
+            var settings = SettingsService.Load();
+            if (!settings.WidgetAgingEnabled) return;
+
+            foreach (var wr in _activeContainers)
+            {
+                if (wr.TryGetTarget(out var container))
+                {
+                    var elapsed = DateTime.Now - container._lastRefreshedTime;
+                    int duration = settings.WidgetAgingDurationSeconds > 0 ? settings.WidgetAgingDurationSeconds : 30;
+                    if (elapsed.TotalSeconds < duration)
+                    {
+                        if (container._agingTimer != null && !container._agingTimer.IsEnabled)
+                        {
+                            container._agingTimer.Start();
+                        }
+                    }
+                    else
+                    {
+                        container.ApplyStaticAging(settings);
+                    }
+                }
+            }
+        }
+    }
+
     [System.Diagnostics.Conditional("DEBUG_GLASS_VERBOSE")]
     private static void LogToFile(string message)
     {
@@ -84,15 +150,26 @@ public sealed class GlassWidgetContainer : ContentControl
 
         this.Loaded += (s, e) =>
         {
+            RegisterContainer(this);
             var settings = SettingsService.Load();
-            if (settings.WidgetAgingEnabled && !_agingTimer.IsEnabled)
+            if (settings.WidgetAgingEnabled)
             {
-                _agingTimer.Start();
+                var elapsed = DateTime.Now - _lastRefreshedTime;
+                int durationSeconds = settings.WidgetAgingDurationSeconds > 0 ? settings.WidgetAgingDurationSeconds : 30;
+                if (elapsed.TotalSeconds < durationSeconds && !_agingTimer.IsEnabled)
+                {
+                    _agingTimer.Start();
+                }
+                else
+                {
+                    ApplyStaticAging(settings);
+                }
             }
         };
 
         this.Unloaded += (s, e) =>
         {
+            UnregisterContainer(this);
             if (_agingTimer.IsEnabled)
             {
                 _agingTimer.Stop();
@@ -164,6 +241,27 @@ public sealed class GlassWidgetContainer : ContentControl
         }
     }
 
+    private void ApplyStaticAging(AppSettings settings)
+    {
+        if (_dirtOverlay == null) return;
+        if (!settings.WidgetAgingEnabled)
+        {
+            _dirtOverlay.Opacity = 0.0;
+            if (_noiseOverlay != null) _noiseOverlay.Opacity = 0.0;
+            return;
+        }
+
+        int durationSeconds = settings.WidgetAgingDurationSeconds > 0 ? settings.WidgetAgingDurationSeconds : 30;
+        var elapsed = DateTime.Now - _lastRefreshedTime;
+        double ratio = Math.Min(1.0, elapsed.TotalSeconds / durationSeconds);
+        double dirtiness = Math.Pow(ratio, 1.5);
+        _dirtOverlay.Opacity = dirtiness * MaxDirtOpacity;
+        if (_noiseOverlay != null)
+        {
+            _noiseOverlay.Opacity = dirtiness * MaxNoiseOpacity * (settings.WidgetAgingGrainIntensity / 100.0);
+        }
+    }
+
     private void AgingTimer_Tick(object? sender, object e)
     {
         if (this.Visibility != Visibility.Visible || _dirtOverlay == null)
@@ -198,6 +296,13 @@ public sealed class GlassWidgetContainer : ContentControl
         if (_noiseOverlay != null)
         {
             _noiseOverlay.Opacity = dirtiness * MaxNoiseOpacity * (grainIntensity / 100.0);
+        }
+
+        // CRITICAL: Stop the timer once aging reaches maximum!
+        // Do not spin the UI thread at 1 Hz indefinitely.
+        if (ratio >= 1.0)
+        {
+            _agingTimer.Stop();
         }
 
         LogToFile($"Timer tick. Elapsed: {elapsed.TotalSeconds:F1}s / {durationSeconds}s. Ratio: {ratio:F2}. Opacity: {_dirtOverlay.Opacity:F3}. GrainOpacity: {_noiseOverlay?.Opacity ?? 0.0:F3}. Container Size: {ActualWidth}x{ActualHeight}. DirtOverlay Size: {_dirtOverlay.ActualWidth}x{_dirtOverlay.ActualHeight}");
@@ -350,6 +455,13 @@ public sealed class GlassWidgetContainer : ContentControl
             }
 
             sb.Stop();
+
+            // Restart aging timer now that the surface was wiped clean
+            var settings = SettingsService.Load();
+            if (settings.WidgetAgingEnabled && !_agingTimer.IsEnabled)
+            {
+                _agingTimer.Start();
+            }
         };
 
         sb.Begin();

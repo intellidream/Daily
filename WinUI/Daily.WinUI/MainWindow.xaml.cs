@@ -728,6 +728,18 @@ public sealed partial class MainWindow : Window
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
     {
+        if (sender.Presenter is OverlappedPresenter op)
+        {
+            if (op.State == OverlappedPresenterState.Minimized)
+            {
+                Daily_WinUI.Controls.GlassWidgetContainer.PauseAll();
+            }
+            else if (sender.IsVisible)
+            {
+                Daily_WinUI.Controls.GlassWidgetContainer.ResumeAll();
+            }
+        }
+
         if (!args.DidPositionChange && !args.DidSizeChange) return;
 
         // Enforce minimum window size (400×400 logical px, converted to physical)
@@ -842,6 +854,7 @@ public sealed partial class MainWindow : Window
         {
             args.Cancel = true;
             sender.Hide();
+            Daily_WinUI.Controls.GlassWidgetContainer.PauseAll();
         }
     }
 
@@ -1329,6 +1342,7 @@ public sealed partial class MainWindow : Window
     {
         AppWindow.Show();
         this.Activate();
+        Daily_WinUI.Controls.GlassWidgetContainer.ResumeAll();
 
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         if (hwnd != IntPtr.Zero)

@@ -28,6 +28,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
             RefreshData();
         }
 
+        public void Detach()
+        {
+        }
+
         public async void RefreshData()
         {
             try

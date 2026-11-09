@@ -60,6 +60,15 @@ namespace Daily_WinUI.DesktopWidgets.Views
             DispatcherQueue.TryEnqueue(RefreshData);
         }
 
+        public void Detach()
+        {
+            if (_financesService != null)
+            {
+                _financesService.OnSmartLedgerUpdated -= FinancesService_OnSmartLedgerUpdated;
+                _financesService.OnQuotesUpdated -= FinancesService_OnSmartLedgerUpdated;
+            }
+        }
+
         public async void RefreshData()
         {
             if (_financesService == null)
