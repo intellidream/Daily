@@ -285,13 +285,13 @@ namespace Daily_WinUI.WidgetsHost.Services
                         : (primarySleep?.SleepScore > 0 ? primarySleep.SleepScore : payload?.Sleep?.Guidance?.Verdict?.ReadinessScore);
                     int? stressScore = entity.StressAvg > 0 
                         ? entity.StressAvg 
-                        : (payload?.Stress?.EffectiveScore > 0 ? payload.Stress.EffectiveScore : (payload?.Stress?.Score > 0 ? payload.Stress.Score : (int?)null));
+                        : (payload?.Stress?.DailyAverageScore > 0 ? payload.Stress.DailyAverageScore : (payload?.Stress?.CurrentScore > 0 ? payload.Stress.CurrentScore : (int?)null));
                     double? rhr = entity.Rhr > 0 
                         ? entity.Rhr 
-                        : (payload?.Cardiovascular?.RestingHeartRate > 0 ? payload.Cardiovascular.RestingHeartRate : (double?)null);
+                        : (payload?.Cardiovascular?.RestingHeartRateBpm > 0 ? payload.Cardiovascular.RestingHeartRateBpm : (double?)null);
                     double? hrv = entity.HrvRmssd > 0 
                         ? entity.HrvRmssd 
-                        : (payload?.Stress?.RestingHrvRmssd > 0 ? payload.Stress.RestingHrvRmssd : (double?)null);
+                        : (payload?.Stress?.BiometricDrivers?.CurrentHrvMs > 0 ? payload.Stress.BiometricDrivers.CurrentHrvMs : (payload?.Stress?.BiometricDrivers?.BaselineHrvMs > 0 ? payload.Stress.BiometricDrivers.BaselineHrvMs : (double?)null));
 
                     // If stress score is not explicitly in summary, estimate dynamically from HRV RMSSD
                     if (stressScore == null && hrv.HasValue && hrv.Value > 0)
