@@ -184,7 +184,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     LargeLightStageText.Text = $"{lightMins / 60}h {lightMins % 60}m";
                     int awakeMins = primarySession != null && primarySession.AwakeSeconds > 0 
                         ? (int)(primarySession.AwakeSeconds / 60.0) 
-                        : Math.Max(15, durationMins - (deepMins + remMins + lightMins));
+                        : Math.Max(15, inBedMins - (deepMins + remMins + lightMins));
                     LargeAwakeStageText.Text = $"{awakeMins}m";
 
                     LargeRestingHrText.Text = $"{restingHr} bpm";

@@ -270,10 +270,6 @@ namespace Daily_WinUI.DesktopWidgets.Views
                                 lat = settings.LastLatitude.Value;
                                 lon = settings.LastLongitude ?? 26.1063;
                             }
-                            if (settings.BortleClass.HasValue)
-                            {
-                                bortle = settings.BortleClass.Value;
-                            }
                         }
                         catch { }
 
