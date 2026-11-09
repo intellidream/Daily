@@ -53,39 +53,70 @@ When running the independent micro-process `Daily.WidgetsHost.exe` for Windows 1
   - $\text{RMSSD} \ge 40\text{ ms} \implies 38\text{ (Balanced)}$
   - $\text{RMSSD} \ge 25\text{ ms} \implies 58\text{ (Elevated)}$
   - $\text{RMSSD} < 25\text{ ms} \implies 76\text{ (High Strain)}$
-- **Sleep Session Extraction with Granular Hypnogram**:
+- **Sleep Session Extraction with Granular Hypnogram & Real Asleep Time**:
   Extracts the real `StartTime`, `EndTime`, `DeepSeconds`, `RemSeconds`, `LightSeconds`, `AwakeSeconds`, and stages telemetry from `primary.Stages` (e.g. Oura Ring / Wearable Hub).
+  - Inside the Progress Ring (`SmallDurationText`, `MediumCenterDurationText`), the widget strictly displays the **actual asleep time** (`asleepMins`), e.g. `7h 28m`, matching the Health Hub and Executive Combined Brief.
+  - In the subtitle under the title (`MediumScheduleSubtitle`, `LargeScheduleSubtitle`), the total time in bed is displayed in parentheses alongside the bedtime/wakeup schedule: `00:04 → 08:11 (8h 06m in bed)`.
 - **Multi-Day Lookback**:
   If today's date has no sleep session or 0 sleep score, queries `date.AddDays(-1)` and the most recent valid summary.
 
-### B. Cosmos Ephemeris & Stargazing Parity (`DesktopCosmosWidgetView.xaml.cs`)
-- **Real Observer Coordinates**:
-  Queries `Daily_WinUI.Services.SettingsService.Load()` for `LastLatitude` and `LastLongitude` (defaulting to Bucharest 44.4323, 26.1063 if unconfigured).
+### B. Cosmos Ephemeris, Live Atmospheric Seeing & ISS Passes (`DesktopCosmosWidgetView.xaml.cs`)
+- **Real Observer Coordinates & Bortle Class**:
+  Queries `Daily_WinUI.Services.SettingsService.Load()` for `LastLatitude` and `LastLongitude` (defaulting to Bucharest 44.4323, 26.1063 if unconfigured), and `BortleClass` (defaulting to 5).
+- **Live Atmospheric Seeing & Multi-Layer Clouds**:
+  Integrated `CosmosLiveService.Shared.FetchLiveBundleAsync(lat, lon)` which asynchronously fetches:
+  - Open-Meteo UTC forecast with multi-layer cloud cover (`cloud_cover`, `cloud_cover_low`, `cloud_cover_mid`, `cloud_cover_high`), visibility, temperature, and dew point.
+  - 7Timer astronomical seeing (`seeingArcsec` e.g. 1.4", transparency label e.g. "Crystal (<0.4 mag)").
+  - Evaluates live deterministic stargazing score using `_astronomyService.EvaluateStargazingConditions(...)` with live cloud layers and seeing instead of mocked/fallback values.
 - **Real Moon Phase & Rise/Set**:
   Calculates real moon phase, illumination fraction, moon glyph, and rise/set times via `_astronomyService.GetRiseTransitSet(CelestialBody.Moon, now, lat, lon)`.
 - **Real Twilight / Golden Hour**:
   Calculates sunset and golden hour window using `_astronomyService.GetSunTimes(now, lat, lon)`.
 - **Real Visible Planets**:
   Queries `_astronomyService.GetAllVisibleBodies(now, lat, lon)`. If daytime, queries tonight's astronomical dusk window to identify planets above the horizon (Venus, Mars, Jupiter, Saturn, Mercury).
-- **Real Stargazing Quality Score**:
-  Queries `WeatherClient.GetCachedSnapshot().Clouds` and executes `_astronomyService.EvaluateStargazingConditions(lat, lon, now, cloudCoverTotal, bortleClass: 4)`.
-- **Real ISS Satellite Passes**:
-  Links `SGP4Propagator.cs` in `Daily.WidgetsHost.csproj`. When `iss_omm.json` is cached, executes `SGP4Propagator.PredictVisiblePasses(omm, lat, lon, ...)` to find the next visible pass with start time, compass direction, and peak magnitude.
+- **Live ISS Satellite Passes**:
+  `CosmosLiveService` queries and caches CelesTrak OMM records for ISS (NORAD 25544) in `%LOCALAPPDATA%\Daily\CosmosCache\iss_omm.json`. Executes `SGP4Propagator.PredictVisiblePasses(omm, lat, lon, ...)` to find the next visible pass with start time, compass direction, max altitude, and peak magnitude.
 
 ### C. Executive Combined Brief Parity (`DesktopCombinedWidgetView.xaml.cs`)
-- Connected real sleep score and duration with multi-day lookback.
+- Connected real sleep score and duration (`summary.SleepAsleepS` = `7h 28m`) with multi-day lookback.
 - Connected real stress score and pulse.
-- Replaced static `"84 Sky"` with dynamic calculated `{skyScore} Sky`.
+- Replaced static `"84 Sky"` with dynamic calculated `{skyScore} Sky` powered by `CosmosLiveService.Shared.FetchLiveBundleAsync(lat, lon)`.
 
 ---
 
-## 4. Verification and Cross-Platform Stability
+## 4. Desktop Widgets Auto-Refresh Architecture
+
+The Windows 11 desktop widgets employ a multi-tiered refresh strategy designed for maximum responsiveness with near-zero idle CPU and power consumption:
+
+1. **Periodic Background Maintenance Timer (15 Minutes)**:
+   - In `Daily.WidgetsHost/App.xaml.cs`, a `DispatcherTimer` set to `TimeSpan.FromMinutes(15)` periodically triggers `DesktopWidgetManager.Instance.RefreshAllWidgets()`.
+   - This ensures ephemeris, weather forecasts, and background data remain fresh even if the main application is closed.
+
+2. **Instant Event-Driven Named Pipe IPC (`Daily_WidgetsHost_IpcPipe`)**:
+   - Whenever the main app (`Daily.WinUI.exe`) syncs with Supabase, completes a cloud pull, or registers user changes (habits logged, TagDoS pills edited, smart ledger entries added), it sends the command `"refresh"` through the named pipe `Daily_WidgetsHost_IpcPipe`.
+   - `Daily.WidgetsHost.exe` listens asynchronously on a dedicated thread. When `"refresh"` arrives, it instantly dispatches `RefreshAllWidgets()` on the UI thread without any polling delay.
+
+3. **Window Initialization & Startup**:
+   - Each widget window triggers `RefreshData()` upon its XAML `Loaded` event.
+   - When `Daily.WidgetsHost.exe` is started on boot or user login, all widgets instantly render the latest cached telemetry.
+
+4. **System Resume & Wake from Sleep (`SessionGuardian`)**:
+   - `SessionGuardian` in `Daily.WinUI` monitors system time jumps. When the machine wakes from sleep or standby, it automatically triggers a Supabase synchronization and sends an IPC `"refresh"` to the widget host.
+
+5. **User Manual Refresh**:
+   - Right-clicking any widget brings up the context menu where clicking "Refresh Data" immediately triggers `RefreshData()` for all widgets.
+   - Clicking Refresh in the Windows System Tray companion or Glance popover also dispatches an IPC refresh.
+
+---
+
+## 5. Verification and Cross-Platform Stability
 
 1. **Compilation Matrix**:
    - `Daily.WidgetsHost.csproj` (ARM64 & x64): **0 Error(s)**, 0 Warning(s) on new code.
    - `Daily.WinUI.csproj` (ARM64 & x64): **0 Error(s)**, 0 Warning(s) on new code.
 2. **Process Integrity**:
-   - Terminated existing instances and launched `Daily.WidgetsHost.exe` (PID 4708) and `Daily.WinUI.exe` (PID 12216) in interactive Console Session 1 via Task Scheduler.
+   - Terminated existing instances and launched `Daily.WidgetsHost.exe` (PID 13056) and `Daily.WinUI.exe` (PID 17096) in interactive Console Session 1 via Task Scheduler.
+   - Verified that `sky_weather.json` and `iss_omm.json` in `%LOCALAPPDATA%\Daily\CosmosCache` are populated with live Open-Meteo UTC cloud layers and CelesTrak orbital records.
    - Sent IPC `refresh` command via named pipe `Daily_WidgetsHost_IpcPipe` and verified execution in `daily_widgetshost_debug.log`.
 3. **Target Scope Adherence**:
    - Strictly modified files within `WinUI/` and `Docs/Features/`.
