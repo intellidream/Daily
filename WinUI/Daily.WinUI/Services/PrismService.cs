@@ -1199,16 +1199,16 @@ public sealed class PrismService : IPrismService
 
             // 2. Pull incremental clip deltas since `updated_at` watermark
             var clipQuery = _supabaseClient.From<RemotePrismClip>()
-                .Filter("user_id", Constants.Operator.Equals, userId);
+                .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userId);
 
             if (watermarks.ClipsWatermarkByUser.TryGetValue(userId, out var clipWm))
             {
                 string iso = clipWm.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-                clipQuery = clipQuery.Filter("updated_at", Constants.Operator.GreaterThan, iso);
+                clipQuery = clipQuery.Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, iso);
             }
 
             var remoteClipsResp = await clipQuery
-                .Order("updated_at", Constants.Ordering.Descending)
+                .Order("updated_at", Supabase.Postgrest.Constants.Ordering.Descending)
                 .Limit(200)
                 .Get()
                 .ConfigureAwait(false);
@@ -1263,16 +1263,16 @@ public sealed class PrismService : IPrismService
 
             // 4. Pull incremental pinned sites deltas
             var pinQuery = _supabaseClient.From<RemotePrismPinnedSite>()
-                .Filter("user_id", Constants.Operator.Equals, userId);
+                .Filter("user_id", Supabase.Postgrest.Constants.Operator.Equals, userId);
 
             if (watermarks.PinsWatermarkByUser.TryGetValue(userId, out var pinWm))
             {
                 string iso = pinWm.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-                pinQuery = pinQuery.Filter("updated_at", Constants.Operator.GreaterThan, iso);
+                pinQuery = pinQuery.Filter("updated_at", Supabase.Postgrest.Constants.Operator.GreaterThan, iso);
             }
 
             var remotePinsResp = await pinQuery
-                .Order("display_order", Constants.Ordering.Ascending)
+                .Order("display_order", Supabase.Postgrest.Constants.Ordering.Ascending)
                 .Get()
                 .ConfigureAwait(false);
 
