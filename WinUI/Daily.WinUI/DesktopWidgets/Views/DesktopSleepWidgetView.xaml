@@ -39,8 +39,8 @@
             </Border>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -112,6 +112,140 @@
                 <Grid>
                     <TextBlock x:Name="RestingHrText" Text="Resting HR: 58 bpm" FontSize="10" Foreground="#E0E7FF" HorizontalAlignment="Left"/>
                     <TextBlock x:Name="HrvBalanceText" Text="HRV Balance: 62 ms" FontSize="10" Foreground="#34D399" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#25818CF8">
+                        <FontIcon Glyph="&#xE708;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#818CF8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Sleep &amp; Neural Recovery" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeScheduleSubtitle" Text="23:30 → 07:15 · 7h 45m" FontSize="11" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="LargeScoreText" Text="88" FontSize="22" FontWeight="Bold" Foreground="#818CF8"/>
+                    <TextBlock Text="/100" FontSize="12" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- 2. Hypnogram Stage Breakdown Cards -->
+            <Border Grid.Row="1" Background="#10FFFFFF" CornerRadius="10" Padding="12,10,12,10" Margin="0,0,0,10">
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <TextBlock x:Name="LargeQualityHeader" Text="Restorative Sleep Quality (High)" FontSize="12" FontWeight="SemiBold" Foreground="#A5B4FC"/>
+                        <TextBlock x:Name="LargeEfficiencyText" Text="Efficiency: 92%" FontSize="11" Foreground="#34D399" HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <!-- Proportional Stages Bar -->
+                    <Grid Height="10" CornerRadius="5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22*" />
+                            <ColumnDefinition Width="25*" />
+                            <ColumnDefinition Width="45*" />
+                            <ColumnDefinition Width="8*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="#4F46E5" CornerRadius="5,0,0,5" ToolTipService.ToolTip="Deep Sleep (22%)"/>
+                        <Border Grid.Column="1" Background="#818CF8" ToolTipService.ToolTip="REM Sleep (25%)"/>
+                        <Border Grid.Column="2" Background="#A5B4FC" ToolTipService.ToolTip="Light Sleep (45%)"/>
+                        <Border Grid.Column="3" Background="#F43F5E" CornerRadius="0,5,5,0" ToolTipService.ToolTip="Awake (8%)"/>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Spacing="1">
+                            <TextBlock Text="DEEP" FontSize="9" Foreground="#80FFFFFF"/>
+                            <TextBlock x:Name="LargeDeepStageText" Text="1h 40m" FontSize="11" FontWeight="SemiBold" Foreground="#C7D2FE"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="1">
+                            <TextBlock Text="REM" FontSize="9" Foreground="#80FFFFFF"/>
+                            <TextBlock x:Name="LargeRemStageText" Text="2h 10m" FontSize="11" FontWeight="SemiBold" Foreground="#A5B4FC"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="1">
+                            <TextBlock Text="LIGHT" FontSize="9" Foreground="#80FFFFFF"/>
+                            <TextBlock x:Name="LargeLightStageText" Text="3h 25m" FontSize="11" FontWeight="SemiBold" Foreground="#818CF8"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="1">
+                            <TextBlock Text="AWAKE" FontSize="9" Foreground="#80FFFFFF"/>
+                            <TextBlock x:Name="LargeAwakeStageText" Text="30m" FontSize="11" FontWeight="SemiBold" Foreground="#FDA4AF"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 3. Vitals During Sleep 4-Grid -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="RESTING PULSE" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeRestingHrText" Text="58 bpm" FontSize="13" FontWeight="Bold" Foreground="#E0E7FF"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="HRV RMSSD" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeHrvBalanceText" Text="62 ms" FontSize="13" FontWeight="Bold" Foreground="#34D399"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="BLOOD OXYGEN" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeSpo2Text" Text="98% SpO2" FontSize="13" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="CIRCADIAN DEBT" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeSleepDebtText" Text="+15m Surplus" FontSize="13" FontWeight="Bold" Foreground="#818CF8"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 4. Rhythm & Recommendation Card -->
+            <Border Grid.Row="3" Background="#10818CF8" CornerRadius="8" Padding="10,6,10,6" Margin="0,0,0,8">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Circadian Alignment" FontSize="10" FontWeight="SemiBold" Foreground="#C7D2FE"/>
+                    <TextBlock x:Name="LargeRecommendationText" Text="Target bedtime tonight: 23:15 · Sleep consistency is optimal." FontSize="10" Foreground="#E2E8F0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 5. Bottom Device Sync Pill -->
+            <Border Grid.Row="4" Background="#15818CF8" CornerRadius="8" Padding="10,5,10,5">
+                <Grid>
+                    <TextBlock x:Name="LargeDeviceSourceText" Text="Multi-Device Hub Sync" FontSize="10" Foreground="#C7D2FE" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Active Telemetry ✨" FontSize="10" Foreground="#818CF8" HorizontalAlignment="Right"/>
                 </Grid>
             </Border>
         </Grid>

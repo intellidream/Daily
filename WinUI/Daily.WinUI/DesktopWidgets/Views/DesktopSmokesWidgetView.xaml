@@ -85,8 +85,8 @@
             </Grid>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -162,6 +162,136 @@
                     </StackPanel>
                 </Button>
             </Grid>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#25FB7185">
+                        <FontIcon Glyph="&#xEC2C;" FontFamily="{StaticResource TablerIconsFont}" FontSize="16" Foreground="#FB7185" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Respiratory &amp; Smoke-Free" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeCravingBadge" Text="Smoke-Free Today! 🌟" FontSize="11" Foreground="#34D399"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="LargeTotalCountText" Text="0" FontSize="20" FontWeight="Bold" Foreground="#FB7185"/>
+                    <TextBlock x:Name="LargeBaselineText" Text="of 40" FontSize="12" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- 2. Anatomical Lungs Control & Recovery Status -->
+            <Border Grid.Row="1" Background="#10FFFFFF" CornerRadius="10" Padding="12,10,12,10" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <controls:LungsControl x:Name="LargeLungsControl" Width="80" Height="85" Margin="4,0,14,0" VerticalAlignment="Center"/>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock x:Name="LargeHealthStatusText" Text="Optimal lung capacity (100%)" FontSize="12" FontWeight="SemiBold" Foreground="#34D399"/>
+                        <TextBlock x:Name="LargeRecoveryDetail" Text="Cilia regeneration active · Alveolar oxygen exchange normalized." FontSize="10" Foreground="#A0FFFFFF" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 3. 4-Card Breakdown Grid (Cigarettes, Heated, Money Saved, Nicotine Load) -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="CIGARETTES" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeCigarettesText" Text="🚬 0 logged" FontSize="13" FontWeight="Bold" Foreground="#FB7185"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="HEATED TOBACCO" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeHeatedText" Text="🔥 0 logged" FontSize="13" FontWeight="Bold" Foreground="#FBBF24"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="FINANCIAL BENEFIT" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeMoneySavedText" Text="+25.0 Lei saved" FontSize="13" FontWeight="Bold" Foreground="#34D399"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="LIFE REGAINED" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeLifeRegainedText" Text="+4h 20m life" FontSize="13" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 4. Quick Action Logging Chips (Cigarette, Heated, Undo) -->
+            <Grid Grid.Row="3" Margin="0,0,0,8" ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20EF4444" BorderBrush="#35EF4444" BorderThickness="1" CornerRadius="8"
+                        Click="LogCigarette_Click" ToolTipService.ToolTip="Log 1 Cigarette">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xECC4;" FontFamily="{StaticResource TablerIconsFont}" FontSize="11" Foreground="#FFEF4444"/>
+                        <TextBlock Text="+1 Cig" FontSize="11" FontWeight="Bold" Foreground="#FFEF4444"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="1" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#203B82F6" BorderBrush="#353B82F6" BorderThickness="1" CornerRadius="8"
+                        Click="LogHeated_Click" ToolTipService.ToolTip="Log 1 Heated Tobacco Stick">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE945;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#FF3B82F6"/>
+                        <TextBlock Text="+1 Heat" FontSize="11" FontWeight="Bold" Foreground="#FF3B82F6"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="2" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#15FFFFFF" BorderBrush="#25FFFFFF" BorderThickness="1" CornerRadius="8"
+                        Click="UndoLastSmoke_Click" ToolTipService.ToolTip="Undo Last Smoke">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE7A7;" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="#A0FFFFFF"/>
+                        <TextBlock Text="Undo" FontSize="11" FontWeight="SemiBold" Foreground="#A0FFFFFF"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- 5. Bottom Status Pill -->
+            <Border Grid.Row="4" Background="#15FB7185" CornerRadius="8" Padding="10,5,10,5">
+                <Grid>
+                    <TextBlock x:Name="LargeBottomStreakText" Text="Continuous Habit Parity" FontSize="10" Foreground="#FDA4AF" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Daily Smartwatch Sync" FontSize="10" Foreground="#FB7185" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

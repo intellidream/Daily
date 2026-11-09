@@ -25,7 +25,7 @@
 
             <!-- Active Task Count & Stream -->
             <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                <TextBlock x:Name="SmallTaskCountText" Text="4" FontSize="28" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="SmallTaskCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
                 <TextBlock Text="active tasks" FontSize="10" Foreground="#A0FFFFFF" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="SmallActiveStreamText" Text="Focus: Work ⚡" FontSize="9" Foreground="#F472B6" HorizontalAlignment="Center"/>
             </StackPanel>
@@ -36,8 +36,8 @@
             </Border>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -73,7 +73,7 @@
                         </Grid.ColumnDefinitions>
                         <Ellipse Width="8" Height="8" Fill="#EC4899" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="1" x:Name="Task1Title" Text="Complete weekly finance review" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" Text="Today" FontSize="10" Foreground="#90FFFFFF"/>
+                        <TextBlock Grid.Column="2" x:Name="Task1Tag" Text="Today" FontSize="10" Foreground="#90FFFFFF"/>
                     </Grid>
                 </Border>
 
@@ -87,17 +87,133 @@
                         </Grid.ColumnDefinitions>
                         <Ellipse Width="8" Height="8" Fill="#38BDF8" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="1" x:Name="Task2Title" Text="Hydration &amp; evening breathwork" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" Text="Evening" FontSize="10" Foreground="#90FFFFFF"/>
+                        <TextBlock Grid.Column="2" x:Name="Task2Tag" Text="Evening" FontSize="10" Foreground="#90FFFFFF"/>
                     </Grid>
                 </Border>
             </StackPanel>
 
-            <!-- Bottom Stream Pipeline Status -->
+            <!-- Bottom Stream Pipeline Status (Clean, no overlap) -->
             <Border Grid.Row="2" Background="#15EC4899" CornerRadius="8" Padding="10,4,10,4">
+                <TextBlock x:Name="StreamNamesStatusText" Text="Work · Health · Personal · Tech" FontSize="10" Foreground="#FBCFE8" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Width="28" Height="28" CornerRadius="14" Background="#25EC4899">
+                        <FontIcon Glyph="&#xE82D;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#EC4899" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="TagDoS Task Pipeline" FontSize="14" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeStreamsSubtitle" Text="5 streams · 12 tasks pending" FontSize="10.5" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Border Background="#20EC4899" CornerRadius="6" Padding="8,3,8,3" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="LargeFocusBadge" Text="Stream: Work" FontSize="10" FontWeight="SemiBold" Foreground="#F472B6"/>
+                </Border>
+            </Grid>
+
+            <!-- 5 Priority Tasks -->
+            <StackPanel Grid.Row="1" Margin="0,10,0,10" VerticalAlignment="Center" Spacing="6">
+                <!-- Large Task 1 -->
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Width="8" Height="8" Fill="#EC4899" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask1Title" Text="Complete weekly finance review" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask1Tag" Text="Priority 1" FontSize="10" Foreground="#F472B6"/>
+                    </Grid>
+                </Border>
+
+                <!-- Large Task 2 -->
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Width="8" Height="8" Fill="#38BDF8" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask2Title" Text="Hydration &amp; evening breathwork" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask2Tag" Text="Habits" FontSize="10" Foreground="#38BDF8"/>
+                    </Grid>
+                </Border>
+
+                <!-- Large Task 3 -->
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Width="8" Height="8" Fill="#10B981" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask3Title" Text="Review Supabase sync telemetry" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask3Tag" Text="Tech" FontSize="10" Foreground="#34D399"/>
+                    </Grid>
+                </Border>
+
+                <!-- Large Task 4 -->
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Width="8" Height="8" Fill="#F59E0B" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask4Title" Text="Plan weekend schedule &amp; tasks" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask4Tag" Text="Personal" FontSize="10" Foreground="#FBBF24"/>
+                    </Grid>
+                </Border>
+
+                <!-- Large Task 5 -->
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Width="8" Height="8" Fill="#A78BFA" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask5Title" Text="Read Cosmos ephemeris logs" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask5Tag" Text="Cosmos" FontSize="10" Foreground="#C4B5FD"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- Quick Notes Box -->
+            <Border Grid.Row="2" Margin="0,0,0,8" Background="#12FFFFFF" CornerRadius="8" Padding="10,6,10,6">
                 <Grid>
-                    <TextBlock x:Name="StreamNamesStatusText" Text="Work · Health · Personal · Tech" FontSize="10" Foreground="#FBCFE8" HorizontalAlignment="Left"/>
-                    <TextBlock Text="Sync Ready ⚡" FontSize="10" Foreground="#34D399" HorizontalAlignment="Right"/>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#F472B6" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" x:Name="LargeQuickNotePreview" Text="Latest: Check portfolio rebalancing" FontSize="10.5" Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" x:Name="LargeQuickNotesCount" Text="4 notes" FontSize="10" Foreground="#A0FFFFFF" VerticalAlignment="Center"/>
                 </Grid>
+            </Border>
+
+            <!-- Bottom Streams Summary -->
+            <Border Grid.Row="3" Background="#15EC4899" CornerRadius="8" Padding="10,5,10,5">
+                <TextBlock x:Name="LargeStreamsSummary" Text="Streams: Work · Health · Finances · Tech · Personal" FontSize="10" Foreground="#FBCFE8" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
             </Border>
         </Grid>
     </Grid>

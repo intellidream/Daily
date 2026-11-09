@@ -45,7 +45,7 @@ namespace Daily_WinUI.DesktopWidgets
         public int X { get; set; } = 100;
         public int Y { get; set; } = 100;
         public bool IsLocked { get; set; } = false;
-        public double Opacity { get; set; } = 0.95;
+        public double Opacity { get; set; } = 1.0;
         public string? MonitorId { get; set; }
     }
 }

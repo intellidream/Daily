@@ -36,8 +36,8 @@
             </Border>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -93,6 +93,111 @@
                 <Grid>
                     <TextBlock x:Name="MoonTimesText" Text="Moonrise: 17:20 · Moonset: 05:40" FontSize="10" Foreground="#DDD6FE" HorizontalAlignment="Left"/>
                     <TextBlock Text="Optimal Stargazing ✨" FontSize="10" Foreground="#FBBF24" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#25A78BFA">
+                        <FontIcon Glyph="&#xE706;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#A78BFA" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Cosmos &amp; Deep Sky Observatory" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeMoonSubtitle" Text="Waxing Gibbous · 78% illumination" FontSize="11" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="LargeScoreText" Text="84" FontSize="22" FontWeight="Bold" Foreground="#A78BFA"/>
+                    <TextBlock Text="/100" FontSize="12" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- 2. Central Moon Phase Card -->
+            <Border Grid.Row="1" Background="#10FFFFFF" CornerRadius="10" Padding="12,10,12,10" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="60" Height="60" CornerRadius="30" Background="#15A78BFA" Margin="4,0,14,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="LargeMoonGlyph" Text="🌖" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock x:Name="LargeMoonPhaseName" Text="Waxing Gibbous (Illuminated 78%)" FontSize="12" FontWeight="SemiBold" Foreground="#E0E7FF"/>
+                        <TextBlock x:Name="LargeSkyQualityText" Text="Optimal clear sky for astronomical observation tonight." FontSize="10" Foreground="#C4B5FD" TextWrapping="Wrap"/>
+                        <TextBlock Text="Distance: ~384,400 km · Sub-solar Latitude: +1.4°" FontSize="9" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 3. 4-Card Celestial Grid (Planets, ISS, Golden Hour, Bortle Scale) -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="VISIBLE PLANETS" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargePlanetsText" Text="🪐 Jupiter &amp; Saturn" FontSize="12" FontWeight="Bold" Foreground="#C4B5FD"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="ISS SATELLITE PASS" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeIssPassText" Text="🛰️ 21:42 (Mag -2.8)" FontSize="12" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="TWILIGHT / GOLDEN HR" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeGoldenHourText" Text="🌅 18:45 – 19:25" FontSize="12" FontWeight="Bold" Foreground="#FBBF24"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="SKY TRANSPARENCY" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeTransparencyText" Text="🌌 Bortle Class 4" FontSize="12" FontWeight="Bold" Foreground="#A78BFA"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 4. Ephemeris Summary Bar -->
+            <Border Grid.Row="3" Background="#10A78BFA" CornerRadius="8" Padding="10,6,10,6" Margin="0,0,0,8">
+                <Grid>
+                    <TextBlock x:Name="LargeEphemerisText" Text="Moonrise: 17:20 · Moonset: 05:40 · Zenith: 23:30" FontSize="10" Foreground="#DDD6FE" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Zenith Alignment" FontSize="10" Foreground="#FBBF24" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
+
+            <!-- 5. Bottom Stargazing Status Pill -->
+            <Border Grid.Row="4" Background="#15A78BFA" CornerRadius="8" Padding="10,5,10,5">
+                <Grid>
+                    <TextBlock Text="Stargazing Index: 84/100" FontSize="10" Foreground="#DDD6FE" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Optimal Night Sky ✨" FontSize="10" Foreground="#FBBF24" HorizontalAlignment="Right"/>
                 </Grid>
             </Border>
         </Grid>

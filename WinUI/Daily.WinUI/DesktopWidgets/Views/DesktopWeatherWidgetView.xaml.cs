@@ -26,12 +26,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -91,6 +99,32 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     Hour3Temp.Text = $"{currentTemp + 2}°";
                     Hour4Temp.Text = $"{currentTemp + 1}°";
                     Hour5Temp.Text = $"{currentTemp}°";
+
+                    // Large Layout population
+                    LargeLocationText.Text = locName;
+                    LargeConditionSubtitle.Text = $"{condition} · Feels like {(int)Math.Round(weather.FeelsLike)}°";
+                    LargeTempText.Text = $"{currentTemp}°C";
+                    LargeHour1Temp.Text = $"{currentTemp}°";
+                    LargeHour2Temp.Text = $"{currentTemp + 1}°";
+                    LargeHour3Temp.Text = $"{currentTemp + 2}°";
+                    LargeHour4Temp.Text = $"{currentTemp + 1}°";
+                    LargeHour5Temp.Text = $"{currentTemp}°";
+
+                    LargeHumidityText.Text = $"{humidity}%";
+                    LargeWindText.Text = $"{wind:F1} m/s";
+                    LargePressureText.Text = $"{weather.Pressure} hPa";
+                    LargeCloudsText.Text = $"{weather.Clouds}%";
+
+                    Day2NameText.Text = DateTime.Today.AddDays(2).ToString("ddd");
+                    Day3NameText.Text = DateTime.Today.AddDays(3).ToString("ddd");
+                    Day1HighLow.Text = $"{highTemp + 1}° · {lowTemp}°";
+                    Day2HighLow.Text = $"{highTemp}° · {lowTemp - 1}°";
+                    Day3HighLow.Text = $"{highTemp - 1}° · {lowTemp - 2}°";
+
+                    DateTime sunrise = weather.Sunrise > 0 ? DateTimeOffset.FromUnixTimeSeconds(weather.Sunrise).ToLocalTime().DateTime : DateTime.Today.AddHours(6).AddMinutes(45);
+                    DateTime sunset = weather.Sunset > 0 ? DateTimeOffset.FromUnixTimeSeconds(weather.Sunset).ToLocalTime().DateTime : DateTime.Today.AddHours(19).AddMinutes(30);
+                    LargeSunTimesText.Text = $"Sunrise: {sunrise:HH:mm} · Sunset: {sunset:HH:mm}";
+                    LargeHighLowText.Text = $"H: {highTemp}° · L: {lowTemp}°";
                 }
             }
             catch (Exception ex)

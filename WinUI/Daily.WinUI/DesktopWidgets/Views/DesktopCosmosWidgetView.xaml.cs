@@ -25,12 +25,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -73,6 +81,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 PlanetsText.Text = "🪐 Jupiter & Saturn visible";
                 IssPassText.Text = "🛰️ Next ISS Pass: 21:42";
                 MoonTimesText.Text = "Moonrise: 17:15 · Moonset: 05:40";
+
+                // Large Layout Population
+                LargeScoreText.Text = skyScore.ToString();
+                LargeMoonGlyph.Text = glyph;
+                LargeMoonSubtitle.Text = $"{phaseName} · {illumination:F0}% illumination";
+                LargeMoonPhaseName.Text = $"{phaseName} ({illumination:F0}% Illuminated)";
+                LargeSkyQualityText.Text = skyScore >= 80 
+                    ? "Optimal clear dark sky for deep-sky and planetary observation tonight."
+                    : "Moderate sky brightness from lunar illumination. Focus on bright planets.";
+                LargePlanetsText.Text = "🪐 Jupiter & Saturn";
+                LargeIssPassText.Text = "🛰️ 21:42 (Mag -2.8)";
+                LargeGoldenHourText.Text = "🌅 18:45 – 19:25";
+                LargeTransparencyText.Text = skyScore >= 80 ? "🌌 Bortle Class 4" : "🌌 Bortle Class 5";
+                LargeEphemerisText.Text = "Moonrise: 17:15 · Moonset: 05:40 · Zenith: 23:30";
             }
             catch (Exception ex)
             {

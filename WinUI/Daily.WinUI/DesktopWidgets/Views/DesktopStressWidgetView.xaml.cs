@@ -29,12 +29,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -91,19 +99,44 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     MediumLevelLabel.Text = "Low";
                     MediumStatusSubtitle.Text = "Autonomic State: Relaxed & Focused";
                     MediumRecommendationText.Text = "Optimal autonomic nervous system balance.";
+
+                    LargeLevelLabel.Text = "Low";
+                    LargeStatusSubtitle.Text = "State: Relaxed & Focused · Calm";
+                    LargeRecommendationText.Text = "Optimal autonomic balance. Parasympathetic tone dominant.";
+                    LargeToneText.Text = "Parasympathetic";
+                    LargeResilienceText.Text = "94% Optimal";
                 }
                 else if (stressScore < 60)
                 {
                     MediumLevelLabel.Text = "Balanced";
                     MediumStatusSubtitle.Text = "Autonomic State: Productive & Active";
                     MediumRecommendationText.Text = "Healthy daytime arousal. Keep hydrated.";
+
+                    LargeLevelLabel.Text = "Balanced";
+                    LargeStatusSubtitle.Text = "State: Productive & Active";
+                    LargeRecommendationText.Text = "Balanced sympathetic tone. Moderate cognitive load.";
+                    LargeToneText.Text = "Homeostatic";
+                    LargeResilienceText.Text = "82% Strong";
                 }
                 else
                 {
                     MediumLevelLabel.Text = "Elevated";
                     MediumStatusSubtitle.Text = "Autonomic State: High Strain";
                     MediumRecommendationText.Text = "Consider taking a short pause or walk.";
+
+                    LargeLevelLabel.Text = "Elevated";
+                    LargeStatusSubtitle.Text = "State: Sympathetic Dominant";
+                    LargeRecommendationText.Text = "Elevated autonomic arousal. High cognitive or physical demand.";
+                    LargeToneText.Text = "Sympathetic";
+                    LargeResilienceText.Text = "68% Recovering";
                 }
+
+                // Large Layout Population
+                LargeProgressRing.Value = stressScore;
+                LargeScoreText.Text = stressScore.ToString();
+                LargeHrvText.Text = $"{hrv:F0} ms ({(hrv >= 55 ? "High" : "Normal")})";
+                LargePulseText.Text = $"{pulse} bpm (RHR)";
+                LargeBottomSyncText.Text = $"Pulse: {pulse} bpm · HRV: {hrv:F0} ms";
             }
             catch (Exception ex)
             {
@@ -115,20 +148,26 @@ namespace Daily_WinUI.DesktopWidgets.Views
         {
             if (_isBreathing) return;
             _isBreathing = true;
-            BreatheButtonText.Text = "Inhale deeply (4s)...";
+            UpdateBreatheText("Inhale deeply (4s)...");
 
             await Task.Delay(3000);
-            BreatheButtonText.Text = "Hold gently (4s)...";
+            UpdateBreatheText("Hold gently (4s)...");
 
             await Task.Delay(3000);
-            BreatheButtonText.Text = "Exhale slowly (4s)...";
+            UpdateBreatheText("Exhale slowly (4s)...");
 
             await Task.Delay(3000);
-            BreatheButtonText.Text = "Relaxed! Well done ✨";
+            UpdateBreatheText("Relaxed! Well done ✨");
 
             await Task.Delay(2500);
-            BreatheButtonText.Text = "1-Minute Mindful Breathing";
+            UpdateBreatheText("1-Minute Mindful Breathing");
             _isBreathing = false;
+        }
+
+        private void UpdateBreatheText(string text)
+        {
+            BreatheButtonText.Text = text;
+            LargeBreatheButtonText.Text = text;
         }
     }
 }

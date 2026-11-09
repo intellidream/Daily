@@ -108,6 +108,14 @@ namespace Daily_WinUI.DesktopWidgets
                     model.Backdrop = DesktopBackdropType.MicaAlt;
                     migrated = true;
                 }
+
+                // Auto-migrate legacy 0.95 opacity to 1.0 default so 100% Solid Glass checkmark is always clean
+                if (model.Opacity >= 0.93 && model.Opacity <= 0.99)
+                {
+                    model.Opacity = 1.0;
+                    migrated = true;
+                }
+
                 SpawnWidgetWindow(model);
             }
 

@@ -35,8 +35,8 @@
             </Border>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -123,6 +123,143 @@
                     </StackPanel>
                 </Button>
             </Grid>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#2510B981">
+                        <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#10B981" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="SmartLedger &amp; Wealth" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeEurSubtitle" Text="~0 € Net Balance · Synced" FontSize="11" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
+                    <TextBlock x:Name="LargeNetWorthText" Text="0 Lei" FontSize="20" FontWeight="Bold" Foreground="#10B981"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- 2. Account Grid (Card, Cash, Reserve, Incoming) -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Card Account -->
+                <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,8,10,8">
+                    <StackPanel Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <FontIcon Glyph="&#xE8C7;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#38BDF8"/>
+                            <TextBlock Text="Card Account" FontSize="10" Foreground="#A0FFFFFF"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LargeCardBalanceText" Text="0 Lei" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Cash Account -->
+                <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,8,10,8">
+                    <StackPanel Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <FontIcon Glyph="&#xE825;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FBBF24"/>
+                            <TextBlock Text="Cash Balance" FontSize="10" Foreground="#A0FFFFFF"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LargeCashBalanceText" Text="0 Lei" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Savings / Reserve -->
+                <Border Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,8,10,8">
+                    <StackPanel Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <FontIcon Glyph="&#xE8B9;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#A78BFA"/>
+                            <TextBlock Text="Savings Reserve" FontSize="10" Foreground="#A0FFFFFF"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LargeReserveText" Text="Available" FontSize="12" FontWeight="SemiBold" Foreground="#DDD6FE"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Monthly Runway / Cashflow -->
+                <Border Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,8,10,8">
+                    <StackPanel Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <FontIcon Glyph="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#34D399"/>
+                            <TextBlock Text="Cashflow Status" FontSize="10" Foreground="#A0FFFFFF"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LargeRunwayText" Text="Healthy Positive" FontSize="12" FontWeight="SemiBold" Foreground="#34D399"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 3. SmartLedger Active Structure Preview -->
+            <Border Grid.Row="2" Background="#10FFFFFF" CornerRadius="10" Padding="10,8,10,8" Margin="0,0,0,10">
+                <StackPanel Spacing="4">
+                    <Grid>
+                        <TextBlock Text="SmartLedger Breakdown" FontSize="11" FontWeight="SemiBold" Foreground="#A0FFFFFF"/>
+                        <TextBlock x:Name="LargeLedgerUpdatedText" Text="Live Sync" FontSize="10" Foreground="#34D399" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <TextBlock x:Name="LargeLedgerSummaryText" Text="Incoming: Card + Cash active · Budget tracking enabled" FontSize="11" Foreground="#E2E8F0" TextWrapping="Wrap" MaxLines="2"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 4. Quick Adjustment 4-Grid -->
+            <Grid Grid.Row="3" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Margin="0,0,3,0" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#2010B981" BorderBrush="#3510B981" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCardPlus100_Click" ToolTipService.ToolTip="Add 100 Lei to Card">
+                    <TextBlock Text="+100 Crd" FontSize="11" FontWeight="SemiBold" Foreground="#10B981" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button Grid.Column="1" Margin="2,0,2,0" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20EF4444" BorderBrush="#35EF4444" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCardMinus100_Click" ToolTipService.ToolTip="Deduct 100 Lei from Card">
+                    <TextBlock Text="-100 Crd" FontSize="11" FontWeight="SemiBold" Foreground="#EF4444" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button Grid.Column="2" Margin="2,0,2,0" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20F59E0B" BorderBrush="#35F59E0B" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCashPlus100_Click" ToolTipService.ToolTip="Add 100 Lei to Cash">
+                    <TextBlock Text="+100 Csh" FontSize="11" FontWeight="SemiBold" Foreground="#FBBF24" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button Grid.Column="3" Margin="3,0,0,0" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#20EF4444" BorderBrush="#35EF4444" BorderThickness="1" CornerRadius="8"
+                        Click="AdjustCashMinus100_Click" ToolTipService.ToolTip="Deduct 100 Lei from Cash">
+                    <TextBlock Text="-100 Csh" FontSize="11" FontWeight="SemiBold" Foreground="#EF4444" HorizontalAlignment="Center"/>
+                </Button>
+            </Grid>
+
+            <!-- 5. Bottom Health Pill -->
+            <Border Grid.Row="4" Background="#1510B981" CornerRadius="8" Padding="10,5,10,5">
+                <Grid>
+                    <TextBlock x:Name="LargeBottomLeftText" Text="Daily Budget Control" FontSize="10" Foreground="#34D399" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="LargeBottomRightText" Text="Auto-Balancing Active" FontSize="10" Foreground="#6EE7B7" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

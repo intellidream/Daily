@@ -28,12 +28,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -95,6 +103,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                 SmallLungsControl.FillFraction = fillFraction;
                 MediumLungsControl.FillFraction = fillFraction;
+                LargeLungsControl.FillFraction = fillFraction;
 
                 SmallCountText.Text = totalSmokes.ToString();
                 SmallBaselineText.Text = $"of {maxSmokes} smokes";
@@ -103,12 +112,30 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 CigarettesCountText.Text = $"🚬 {cigarettes} Cigarettes";
                 HeatedCountText.Text = $"🔥 {heated} Heated";
 
+                // Large Layout Population
+                LargeTotalCountText.Text = totalSmokes.ToString();
+                LargeBaselineText.Text = $"of {maxSmokes}";
+                LargeCigarettesText.Text = $"🚬 {cigarettes} logged";
+                LargeHeatedText.Text = $"🔥 {heated} logged";
+
+                double costPerStick = 1.35; // ~27 Lei per pack of 20
+                double savedLei = Math.Max(0, (maxSmokes - totalSmokes) * costPerStick);
+                LargeMoneySavedText.Text = $"+{savedLei:F1} Lei saved";
+
+                int minutesGained = Math.Max(0, (maxSmokes - totalSmokes) * 11);
+                LargeLifeRegainedText.Text = minutesGained >= 60 ? $"+{minutesGained / 60}h {minutesGained % 60}m life" : $"+{minutesGained}m life";
+
                 // Craving-free calculation with exact UTC timezone parity
                 if (totalSmokes == 0)
                 {
                     SmallCravingText.Text = "Free: All Day";
                     MediumCravingBadge.Text = "Smoke-Free Today! 🌟";
                     HealthStatusText.Text = "Optimal lung capacity (100%)";
+
+                    LargeCravingBadge.Text = "Smoke-Free Today! 🌟";
+                    LargeHealthStatusText.Text = "Optimal lung capacity (100%)";
+                    LargeRecoveryDetail.Text = "Cilia regeneration active · Alveolar oxygen exchange normalized.";
+                    LargeBottomStreakText.Text = "Full Day Smoke-Free Streak 🌟";
                 }
                 else
                 {
@@ -126,6 +153,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                     int capacity = Math.Max(20, 100 - (int)((double)totalSmokes / maxSmokes * 70));
                     HealthStatusText.Text = $"Estimated lung recovery: {capacity}%";
+
+                    LargeCravingBadge.Text = $"Craving-Free: {timeStr}";
+                    LargeHealthStatusText.Text = $"Estimated lung recovery: {capacity}%";
+                    LargeRecoveryDetail.Text = $"Last smoke logged {lastLog.LoggedAt.ToLocalTime():HH:mm} · Detoxification in progress.";
+                    LargeBottomStreakText.Text = $"Craving-Free Interval: {timeStr}";
                 }
             }
             catch (Exception ex)
@@ -142,6 +174,25 @@ namespace Daily_WinUI.DesktopWidgets.Views
         private async void LogHeated_Click(object sender, RoutedEventArgs e)
         {
             await LogSmokeAsync("heated");
+        }
+
+        private async void UndoLastSmoke_Click(object sender, RoutedEventArgs e)
+        {
+            if (_habitsService == null) return;
+            try
+            {
+                var logs = await _habitsService.GetLogsAsync("smokes", DateTime.Today);
+                var lastLog = logs?.OrderByDescending(l => l.LoggedAt).FirstOrDefault();
+                if (lastLog != null)
+                {
+                    await _habitsService.DeleteLogAsync(lastLog.Id);
+                    RefreshData();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DesktopSmokesWidget] Error undoing last smoke: {ex.Message}");
+            }
         }
 
         private async Task LogSmokeAsync(string type)

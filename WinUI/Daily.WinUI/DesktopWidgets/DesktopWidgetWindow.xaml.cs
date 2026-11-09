@@ -629,23 +629,32 @@ namespace Daily_WinUI.DesktopWidgets
 
             // Transparency Submenu
             var transSubItem = new MenuFlyoutSubItem { Text = "Transparency" };
-            var op100 = new ToggleMenuFlyoutItem { Text = "100% (Solid Glass)", IsChecked = Math.Abs(Model.Opacity - 1.0) < 0.05 };
+
+            // Map continuous opacity to the closest discrete preset (guaranteeing exact single selection)
+            int selectedPreset = 100;
+            if (Model.Opacity <= 0.40) selectedPreset = 30;
+            else if (Model.Opacity <= 0.60) selectedPreset = 50;
+            else if (Model.Opacity <= 0.78) selectedPreset = 70;
+            else if (Model.Opacity <= 0.92) selectedPreset = 85;
+            else selectedPreset = 100; // default (100% Solid Glass)
+
+            var op100 = new ToggleMenuFlyoutItem { Text = "100% (Solid Glass)", IsChecked = selectedPreset == 100 };
             op100.Click += (s, e) => SetWidgetOpacity(1.0);
             transSubItem.Items.Add(op100);
 
-            var op85 = new ToggleMenuFlyoutItem { Text = "85% (Subtle Glass)", IsChecked = Math.Abs(Model.Opacity - 0.85) < 0.05 };
+            var op85 = new ToggleMenuFlyoutItem { Text = "85% (Subtle Glass)", IsChecked = selectedPreset == 85 };
             op85.Click += (s, e) => SetWidgetOpacity(0.85);
             transSubItem.Items.Add(op85);
 
-            var op70 = new ToggleMenuFlyoutItem { Text = "70% (Balanced Glass)", IsChecked = Math.Abs(Model.Opacity - 0.70) < 0.05 };
+            var op70 = new ToggleMenuFlyoutItem { Text = "70% (Balanced Glass)", IsChecked = selectedPreset == 70 };
             op70.Click += (s, e) => SetWidgetOpacity(0.70);
             transSubItem.Items.Add(op70);
 
-            var op50 = new ToggleMenuFlyoutItem { Text = "50% (Translucent)", IsChecked = Math.Abs(Model.Opacity - 0.50) < 0.05 };
+            var op50 = new ToggleMenuFlyoutItem { Text = "50% (Translucent)", IsChecked = selectedPreset == 50 };
             op50.Click += (s, e) => SetWidgetOpacity(0.50);
             transSubItem.Items.Add(op50);
 
-            var op30 = new ToggleMenuFlyoutItem { Text = "30% (Clear Glass)", IsChecked = Math.Abs(Model.Opacity - 0.30) < 0.05 };
+            var op30 = new ToggleMenuFlyoutItem { Text = "30% (Clear Glass)", IsChecked = selectedPreset == 30 };
             op30.Click += (s, e) => SetWidgetOpacity(0.30);
             transSubItem.Items.Add(op30);
 

@@ -68,8 +68,8 @@
             </Grid>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -163,6 +163,140 @@
                     </StackPanel>
                 </Button>
             </Grid>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#2538BDF8">
+                        <FontIcon Glyph="&#xEB42;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#38BDF8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Hydration &amp; Fluid Balance" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeSubtitleText" Text="Daily Goal: 2,500 ml · On Track" FontSize="11" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock x:Name="LargePercentBadge" Text="0%" FontSize="22" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- 2. Central Ring & Current Intake Box -->
+            <Border Grid.Row="1" Background="#10FFFFFF" CornerRadius="10" Padding="12,10,12,10" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Width="70" Height="70" Margin="4,0,14,0" VerticalAlignment="Center">
+                        <ProgressRing x:Name="LargeProgressRing" Width="70" Height="70" Value="0" Maximum="100" IsIndeterminate="False"
+                                      Foreground="#38BDF8" Background="#2038BDF8" />
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock x:Name="LargeCenterPercentText" Text="0%" FontSize="13" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock x:Name="LargeCurrentIntakeText" Text="0" FontSize="22" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                            <TextBlock Text="ml logged today" FontSize="12" Foreground="#90FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LargePacingStatusText" Text="Steady hydration pacing. Cellular balance optimal." FontSize="10" Foreground="#BAE6FD" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 3. 4-Card Beverage Breakdown Grid -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="WATER" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeWaterText" Text="💧 0 ml" FontSize="13" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="COFFEE" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeCoffeeText" Text="☕ 0 ml" FontSize="13" FontWeight="Bold" Foreground="#FBBF24"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="TEA &amp; INFUSIONS" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeTeaText" Text="🍵 0 ml" FontSize="13" FontWeight="Bold" Foreground="#4ADE80"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="ELECTROLYTES" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeElectroText" Text="⚡ 0 ml" FontSize="13" FontWeight="Bold" Foreground="#A78BFA"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 4. Quick Action 4-Grid (Coffee 100, Glass 150, Mug 300, Bottle 500) -->
+            <Grid Grid.Row="3" Margin="0,0,0,8" ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#26F59E0B" BorderBrush="#4DF59E0B" BorderThickness="1" CornerRadius="8"
+                        Click="LogCoffee100_Click" ToolTipService.ToolTip="Log 100 ml Coffee">
+                    <TextBlock Text="+100 Cfe" FontSize="10" FontWeight="SemiBold" Foreground="#FFF59E0B" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button Grid.Column="1" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="8"
+                        Click="LogWater150_Click" ToolTipService.ToolTip="Log 150 ml Glass">
+                    <TextBlock Text="+150 ml" FontSize="10" FontWeight="SemiBold" Foreground="#FF00E5FF" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button Grid.Column="2" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="8"
+                        Click="LogWater300_Click" ToolTipService.ToolTip="Log 300 ml Mug">
+                    <TextBlock Text="+300 ml" FontSize="10" FontWeight="SemiBold" Foreground="#FF00E5FF" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button Grid.Column="3" Height="32" HorizontalAlignment="Stretch" Padding="0"
+                        Background="#2400E5FF" BorderBrush="#4800E5FF" BorderThickness="1" CornerRadius="8"
+                        Click="LogWater500_Click" ToolTipService.ToolTip="Log 500 ml Bottle">
+                    <TextBlock Text="+500 ml" FontSize="10" FontWeight="SemiBold" Foreground="#FF00E5FF" HorizontalAlignment="Center"/>
+                </Button>
+            </Grid>
+
+            <!-- 5. Bottom Remaining Goal Pill -->
+            <Border Grid.Row="4" Background="#1538BDF8" CornerRadius="8" Padding="10,5,10,5">
+                <Grid>
+                    <TextBlock x:Name="LargeRemainingText" Text="Remaining: 2,500 ml" FontSize="10" Foreground="#BAE6FD" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Daily Intake Pacing" FontSize="10" Foreground="#38BDF8" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

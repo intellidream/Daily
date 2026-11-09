@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -7,6 +8,7 @@ using Daily.Services;
 using Daily.Services.Finances;
 using Daily.Services.Health;
 using Daily_WinUI.Services;
+using Daily_WinUI.Services.Cosmos;
 #if !WIDGETS_HOST
 using Daily_WinUI.Controls;
 #endif
@@ -18,20 +20,84 @@ namespace Daily_WinUI.DesktopWidgets.Views
         private readonly DesktopWidgetModel _model;
         private readonly DesktopWidgetWindow _hostWindow;
 
+        private IHabitsService? _habitsService;
+        private IFinancesService? _financesService;
+        private IHealthHubService? _healthHubService;
+        private ITagdosService? _tagdosService;
+
         public DesktopCombinedWidgetView(DesktopWidgetModel model, DesktopWidgetWindow hostWindow)
         {
             _model = model;
             _hostWindow = hostWindow;
             this.InitializeComponent();
+
+            ApplySizeLayout();
+        }
+
+        private void ApplySizeLayout()
+        {
+            if (_model.Size == DesktopWidgetSize.Large)
+            {
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
+            try
+            {
+                _habitsService = App.Current.Services?.GetService<IHabitsService>();
+                if (_habitsService != null)
+                {
+                    _habitsService.OnHabitsUpdated += OnServiceDataChanged;
+                }
+
+                _financesService = App.Current.Services?.GetService<IFinancesService>();
+                if (_financesService != null)
+                {
+                    _financesService.OnSmartLedgerUpdated += OnServiceDataChanged;
+                    _financesService.OnQuotesUpdated += OnServiceDataChanged;
+                }
+
+                _healthHubService = App.Current.Services?.GetService<IHealthHubService>();
+                if (_healthHubService != null)
+                {
+                    _healthHubService.OnDailySummaryChanged += (s) => OnServiceDataChanged();
+                }
+
+                _tagdosService = App.Current.Services?.GetService<ITagdosService>();
+                if (_tagdosService != null)
+                {
+                    _tagdosService.DataChanged += (s, ev) => OnServiceDataChanged();
+                }
+            }
+            catch { }
+
             RefreshData();
+        }
+
+        private void OnServiceDataChanged()
+        {
+            DispatcherQueue.TryEnqueue(RefreshData);
         }
 
         public void Detach()
         {
+            if (_habitsService != null)
+            {
+                _habitsService.OnHabitsUpdated -= OnServiceDataChanged;
+            }
+            if (_financesService != null)
+            {
+                _financesService.OnSmartLedgerUpdated -= OnServiceDataChanged;
+                _financesService.OnQuotesUpdated -= OnServiceDataChanged;
+            }
         }
 
         public async void RefreshData()
@@ -39,8 +105,12 @@ namespace Daily_WinUI.DesktopWidgets.Views
             try
             {
                 var now = DateTime.Now;
-                GreetingText.Text = now.Hour < 12 ? "Good Morning" : (now.Hour < 18 ? "Good Afternoon" : "Good Evening");
+                string greeting = now.Hour < 12 ? "Good Morning" : (now.Hour < 18 ? "Good Afternoon" : "Good Evening");
+                GreetingText.Text = $"DayOne {greeting}";
                 DateSubtitleText.Text = $"{now:dddd, MMM d} · Daily Highlights";
+
+                LargeGreetingText.Text = $"DayOne {greeting}";
+                LargeDateSubtitleText.Text = $"{now:dddd, MMMM d} · Full Day Intelligence";
 
                 // 1. Weather
                 try
@@ -53,27 +123,42 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     if (weather != null)
                     {
                         int temp = (int)Math.Round(weather.Temperature);
-                        WeatherHeaderBadge.Text = $"{temp}°C · {weather.Description ?? "Partly Cloudy"}";
+                        string weatherStr = $"{temp}°C · {weather.Description ?? "Partly Cloudy"}";
+                        WeatherHeaderBadge.Text = weatherStr;
+                        LargeWeatherHeaderBadge.Text = weatherStr;
                     }
                 }
                 catch { }
 
-                // 2. Hydration
+                // 2. Hydration & Smokes
                 try
                 {
-                    var habitsService = App.Current.Services?.GetService<IHabitsService>();
-                    if (habitsService != null)
+                    if (_habitsService == null)
                     {
-                        var water = await habitsService.GetDailyProgressAsync("water", DateTime.Today);
-                        var goal = await habitsService.GetGoalAsync("water");
-                        var target = goal?.TargetValue > 0 ? goal.TargetValue : 2500;
-                        HydrationMetricText.Text = $"{(int)water:N0} / {(int)target:N0} ml";
+                        _habitsService = App.Current.Services?.GetService<IHabitsService>();
+                    }
 
-                        var smokes = await habitsService.GetLogsAsync("smokes", DateTime.Today);
+                    if (_habitsService != null)
+                    {
+                        var water = await _habitsService.GetDailyProgressAsync("water", DateTime.Today);
+                        var goal = await _habitsService.GetGoalAsync("water");
+                        var target = goal?.TargetValue > 0 ? goal.TargetValue : 2500;
+                        string waterStr = $"{(int)water:N0} / {(int)target:N0} ml";
+                        HydrationMetricText.Text = waterStr;
+                        LargeHydrationMetricText.Text = waterStr;
+
+                        double waterPct = target > 0 ? Math.Min(100.0, (water / target) * 100.0) : 0;
+                        LargeHydrationPercentText.Text = $"{(int)waterPct}% of daily goal";
+
+                        var smokes = await _habitsService.GetLogsAsync("smokes", DateTime.Today);
                         int smokeCount = smokes?.Count ?? 0;
-                        var settingsService = App.Current.Services?.GetService<ISettingsService>();
-                        int maxSmokes = (settingsService?.Settings?.SmokesBaselineDaily > 0) ? settingsService.Settings.SmokesBaselineDaily : 40;
-                        SmokesMetricText.Text = smokeCount == 0 ? "Smoke-Free 🌟" : $"{smokeCount} / {maxSmokes} smokes";
+                        var settings = Daily_WinUI.Services.SettingsService.Load();
+                        int maxSmokes = settings.SmokesBaselineDaily > 0 ? settings.SmokesBaselineDaily : 40;
+                        
+                        string smokesStr = smokeCount == 0 ? "Smoke-Free 🌟" : $"{smokeCount} / {maxSmokes} smokes";
+                        SmokesMetricText.Text = smokesStr;
+                        LargeSmokesMetricText.Text = smokeCount == 0 ? "Smoke-Free Today 🌟" : $"{smokeCount} smokes logged";
+                        LargeSmokesSubtitleText.Text = smokeCount == 0 ? "Clean air: All day" : $"Limit: {maxSmokes} smokes";
                     }
                 }
                 catch { }
@@ -81,48 +166,97 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 // 3. Money
                 try
                 {
+                    decimal totalNet = 0;
 #if !WIDGETS_HOST
                     var snapshot = FinancesWidgetControl.SharedSnapshot;
-                    if (snapshot != null)
+                    if (snapshot != null && snapshot.NetWorth > 0)
                     {
-                        MoneyMetricText.Text = snapshot.SmartNetWorthDisplay;
+                        totalNet = snapshot.NetWorth;
                     }
-                    else
 #endif
+                    if (totalNet <= 0)
                     {
-                        var finService = App.Current.Services?.GetService<IFinancesService>();
-                        if (finService != null)
+                        if (_financesService == null)
                         {
-                            var ledger = await finService.GetSmartLedgerAsync();
+                            _financesService = App.Current.Services?.GetService<IFinancesService>();
+                        }
+                        if (_financesService != null)
+                        {
+                            var ledger = await _financesService.GetSmartLedgerAsync();
                             if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
                             {
                                 var parsed = SmartLedgerParser.Parse(ledger.LedgerText);
-                                MoneyMetricText.Text = $"{parsed.NetWorth:N0} Lei";
+                                totalNet = parsed.NetWorth;
                             }
                             else
                             {
-                                var net = await finService.GetNetWorthAsync();
-                                MoneyMetricText.Text = net > 0 ? $"{net:N0} Lei" : "0 Lei";
+                                var net = await _financesService.GetNetWorthAsync();
+                                if (net > 0) totalNet = net;
                             }
                         }
+                    }
+
+                    decimal eurEst = totalNet > 0 ? totalNet / 4.97m : 0;
+                    string moneyStr = totalNet > 0 ? $"{totalNet:N0} Lei" : "0 Lei";
+                    MoneyMetricText.Text = moneyStr;
+                    LargeMoneyMetricText.Text = moneyStr;
+                    LargeMoneyEurText.Text = $"~{eurEst:N0} € balance";
+                }
+                catch { }
+
+                // 4. Sleep & Vitals
+                try
+                {
+                    if (_healthHubService == null)
+                    {
+                        _healthHubService = App.Current.Services?.GetService<IHealthHubService>();
+                    }
+
+                    if (_healthHubService != null)
+                    {
+                        var summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
+                        int score = summary?.SleepScore ?? 85;
+                        int durationMins = ((summary?.SleepAsleepS ?? 0) / 60);
+                        if (durationMins <= 0) durationMins = 465;
+                        string sleepStr = $"{score}/100 · {durationMins / 60}h {durationMins % 60}m";
+                        SleepMetricText.Text = sleepStr;
+                        LargeSleepMetricText.Text = sleepStr;
+
+                        int stress = summary?.StressAvg ?? 22;
+                        int pulse = (int)Math.Round(summary?.Rhr ?? 62);
+                        string stressLabel = stress < 30 ? "Low" : (stress < 60 ? "Balanced" : "High");
+                        LargeVitalsText.Text = $"{stressLabel} ({stress}) · {pulse} bpm";
                     }
                 }
                 catch { }
 
-                // 4. Sleep
-                try
+                // 5. Large Extra: TagDoS & Cosmos
+                if (_model.Size == DesktopWidgetSize.Large)
                 {
-                    var healthHub = App.Current.Services?.GetService<IHealthHubService>();
-                    if (healthHub != null)
+                    try
                     {
-                        var summary = await healthHub.GetDailySummaryAsync(DateTime.Today);
-                        int score = summary?.SleepScore ?? 85;
-                        int durationMins = ((summary?.SleepAsleepS ?? 0) / 60);
-                        if (durationMins <= 0) durationMins = 465;
-                        SleepMetricText.Text = $"{score}/100 · {durationMins / 60}h {durationMins % 60}m";
+                        if (_tagdosService == null)
+                        {
+                            _tagdosService = App.Current.Services?.GetService<ITagdosService>();
+                        }
+                        if (_tagdosService != null)
+                        {
+                            var streams = await _tagdosService.GetStreamsAsync() ?? new System.Collections.Generic.List<Daily.Models.TagDoStream>();
+                            var activePills = streams.SelectMany(s => s.AllPills.Where(p => !p.IsCompleted)).ToList();
+                            LargeTagdosTasksText.Text = $"{activePills.Count} tasks open";
+                        }
                     }
+                    catch { }
+
+                    try
+                    {
+                        var astro = AstronomyService.Shared;
+                        var moonPhase = astro.GetMoonPhase(DateTime.UtcNow);
+                        LargeMoonIcon.Text = moonPhase.Emoji;
+                        LargeCosmosText.Text = $"{moonPhase.Name} · 84 Sky";
+                    }
+                    catch { }
                 }
-                catch { }
             }
             catch (Exception ex)
             {

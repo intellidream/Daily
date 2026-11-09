@@ -39,8 +39,8 @@
             </Border>
         </Grid>
 
-        <!-- ── MEDIUM & LARGE LAYOUT (360x170 / 360x360) ── -->
-        <Grid x:Name="MediumLargeLayout" Visibility="Visible">
+        <!-- ── MEDIUM LAYOUT (360x170) ── -->
+        <Grid x:Name="MediumLayout" Visibility="Visible">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -104,6 +104,116 @@
                     <TextBlock x:Name="BreatheButtonText" Text="1-Minute Mindful Breathing" FontSize="11" FontWeight="SemiBold" Foreground="#34D399"/>
                 </StackPanel>
             </Button>
+        </Grid>
+
+        <!-- ── LARGE LAYOUT (360x360) ── -->
+        <Grid x:Name="LargeLayout" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#2534D399">
+                        <FontIcon Glyph="&#xEC0A;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#34D399" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="Autonomic Balance &amp; Stress" FontSize="14" FontWeight="Bold" Foreground="#FFFFFFFF"/>
+                        <TextBlock x:Name="LargeStatusSubtitle" Text="State: Relaxed &amp; Focused · Calm" FontSize="11" Foreground="#80FFFFFF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="LargeScoreText" Text="22" FontSize="22" FontWeight="Bold" Foreground="#34D399"/>
+                    <TextBlock Text="/100" FontSize="12" Foreground="#80FFFFFF" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- 2. Circular Gauge & Nervous System Breakdown -->
+            <Border Grid.Row="1" Background="#10FFFFFF" CornerRadius="10" Padding="12,10,12,10" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Width="64" Height="64" Margin="4,0,14,0" VerticalAlignment="Center">
+                        <ProgressRing x:Name="LargeProgressRing" Width="64" Height="64" Value="22" Maximum="100" IsIndeterminate="False"
+                                      Foreground="#34D399" Background="#2034D399" />
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock x:Name="LargeLevelLabel" Text="Low" FontSize="11" FontWeight="Bold" Foreground="#34D399"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock x:Name="LargeRecommendationText" Text="Optimal autonomic balance. Parasympathetic tone dominant." FontSize="11" FontWeight="SemiBold" Foreground="#D1FAE5" TextWrapping="Wrap"/>
+                        <TextBlock Text="Low physical and cognitive fatigue. High resilience to upcoming tasks." FontSize="10" Foreground="#A0FFFFFF" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 3. 4-Card Biomarkers Grid (HRV, Pulse, Vagal Tone, Recovery) -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="HRV RMSSD" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeHrvText" Text="64 ms (High)" FontSize="13" FontWeight="Bold" Foreground="#34D399"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="HEART RATE" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargePulseText" Text="58 bpm (RHR)" FontSize="13" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="AUTONOMIC TONE" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeToneText" Text="Parasympathetic" FontSize="13" FontWeight="Bold" Foreground="#A78BFA"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Background="#15FFFFFF" CornerRadius="10" Padding="10,6,10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="RESILIENCE CAPACITY" FontSize="9" FontWeight="SemiBold" Foreground="#80FFFFFF"/>
+                        <TextBlock x:Name="LargeResilienceText" Text="94% Optimal" FontSize="13" FontWeight="Bold" Foreground="#34D399"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 4. Interactive Breathe Action Card -->
+            <Button Grid.Row="3" Margin="0,0,0,8" HorizontalAlignment="Stretch" Height="36" Padding="0"
+                    Background="#2034D399" BorderBrush="#3534D399" BorderThickness="1" CornerRadius="8"
+                    Click="BreatheAction_Click">
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                    <FontIcon Glyph="&#xE735;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#34D399"/>
+                    <TextBlock x:Name="LargeBreatheButtonText" Text="Start 1-Minute Mindful Breathing (4-7-8)" FontSize="11" FontWeight="SemiBold" Foreground="#34D399"/>
+                </StackPanel>
+            </Button>
+
+            <!-- 5. Bottom Health Pill -->
+            <Border Grid.Row="4" Background="#1534D399" CornerRadius="8" Padding="10,5,10,5">
+                <Grid>
+                    <TextBlock x:Name="LargeBottomSyncText" Text="Continuous Vitals Telemetry" FontSize="10" Foreground="#A7F3D0" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Smart Health Hub Sync" FontSize="10" Foreground="#34D399" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

@@ -27,12 +27,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -105,6 +113,25 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 WaterAmountText.Text = $"💧 {(int)water} ml";
                 CoffeeAmountText.Text = $"☕ {(int)coffee} ml";
                 TeaAmountText.Text = $"🍵 {(int)tea} ml";
+
+                // Large layout
+                LargeProgressRing.Value = percent;
+                LargePercentBadge.Text = $"{(int)percent}%";
+                LargeCenterPercentText.Text = $"{(int)percent}%";
+                LargeCurrentIntakeText.Text = $"{(int)currentMl:N0}";
+                LargeSubtitleText.Text = $"Daily Goal: {targetMl:N0} ml · {(percent >= 75 ? "Optimal Pace" : "On Track")}";
+
+                double electrolytes = breakdown.TryGetValue("Electrolytes", out var eVal) ? eVal : 0;
+                LargeWaterText.Text = $"💧 {(int)water} ml";
+                LargeCoffeeText.Text = $"☕ {(int)coffee} ml";
+                LargeTeaText.Text = $"🍵 {(int)tea} ml";
+                LargeElectroText.Text = $"⚡ {(int)electrolytes} ml";
+
+                double remaining = Math.Max(0, targetMl - currentMl);
+                LargeRemainingText.Text = remaining > 0 ? $"Remaining: {(int)remaining:N0} ml to goal" : "Daily Goal Achieved! 🌟";
+                LargePacingStatusText.Text = percent >= 100 
+                    ? "Hydration target completed for today. Superb cellular vitality!" 
+                    : $"{(int)remaining:N0} ml remaining today. Drink evenly throughout the day.";
             }
             catch (Exception ex)
             {
@@ -125,6 +152,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
         private async void LogWater300_Click(object sender, RoutedEventArgs e)
         {
             await LogDrinkAsync(300, "Water");
+        }
+
+        private async void LogWater500_Click(object sender, RoutedEventArgs e)
+        {
+            await LogDrinkAsync(500, "Water");
         }
 
         private async Task LogDrinkAsync(double amountMl, string drinkType)

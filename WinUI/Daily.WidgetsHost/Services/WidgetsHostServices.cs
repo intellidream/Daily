@@ -240,34 +240,57 @@ namespace Daily_WinUI.WidgetsHost.Services
                     .Where(e => e.LocalDate == dateStr)
                     .FirstOrDefaultAsync();
 
+                // If today has no summary yet, fall back to the most recent day's real summary
+                if (entity == null)
+                {
+                    entity = await _db.Connection.Table<HealthDailySummaryEntity>()
+                        .OrderByDescending(e => e.LocalDate)
+                        .FirstOrDefaultAsync();
+                }
+
                 if (entity != null)
                 {
+                    HealthDailySummaryRecord? rec = null;
                     if (!string.IsNullOrWhiteSpace(entity.SummaryJson))
                     {
-                        var rec = JsonSerializer.Deserialize<HealthDailySummaryRecord>(entity.SummaryJson, HealthJsonSerializer.DefaultOptions);
-                        if (rec != null)
-                        {
-                            CurrentSummary = rec;
-                            return rec;
-                        }
+                        rec = JsonSerializer.Deserialize<HealthDailySummaryRecord>(entity.SummaryJson, HealthJsonSerializer.DefaultOptions);
                     }
 
-                    var fallbackRec = new HealthDailySummaryRecord
+                    if (rec == null)
                     {
-                        LocalDate = entity.LocalDate,
-                        Steps = entity.Steps,
-                        ActiveKcal = entity.ActiveKcal,
-                        SleepAsleepS = entity.SleepAsleepS,
-                        SleepScore = entity.SleepScore,
-                        StressAvg = entity.StressAvg,
-                        Rhr = entity.Rhr,
-                        HrvSdnn = entity.HrvSdnn,
-                        HrvRmssd = entity.HrvRmssd,
-                        Weight = entity.Weight,
-                        Spo2 = entity.Spo2
-                    };
-                    CurrentSummary = fallbackRec;
-                    return fallbackRec;
+                        rec = new HealthDailySummaryRecord
+                        {
+                            LocalDate = entity.LocalDate,
+                            Steps = entity.Steps,
+                            ActiveKcal = entity.ActiveKcal,
+                            SleepAsleepS = entity.SleepAsleepS,
+                            SleepScore = entity.SleepScore,
+                            StressAvg = entity.StressAvg,
+                            Rhr = entity.Rhr,
+                            HrvSdnn = entity.HrvSdnn,
+                            HrvRmssd = entity.HrvRmssd,
+                            Weight = entity.Weight,
+                            Spo2 = entity.Spo2
+                        };
+                    }
+
+                    // Check if we have a recent live pulse/heart rate recorded in LocalVitalMetric
+                    try
+                    {
+                        var latestHr = await _db.Connection.Table<LocalVitalMetric>()
+                            .Where(v => v.TypeString == "HeartRate" || v.TypeString == "RestingHeartRate")
+                            .OrderByDescending(v => v.Date)
+                            .FirstOrDefaultAsync();
+
+                        if (latestHr != null && latestHr.Value > 35 && latestHr.Value < 220)
+                        {
+                            rec.Rhr = (int)Math.Round(latestHr.Value);
+                        }
+                    }
+                    catch { }
+
+                    CurrentSummary = rec;
+                    return rec;
                 }
             }
             catch { }
@@ -341,7 +364,34 @@ namespace Daily_WinUI.WidgetsHost.Services
 
         public Task SyncNativeHealthDataAsync() => Task.CompletedTask;
 
-        public Task<VitalMetric?> GetLatestMetricAsync(VitalType type) => Task.FromResult<VitalMetric?>(null);
+        public async Task<VitalMetric?> GetLatestMetricAsync(VitalType type)
+        {
+            await _db.InitializeAsync();
+            try
+            {
+                string typeStr = type.ToString();
+                var local = await _db.Connection.Table<LocalVitalMetric>()
+                    .Where(v => v.TypeString == typeStr)
+                    .OrderByDescending(v => v.Date)
+                    .FirstOrDefaultAsync();
+
+                if (local != null)
+                {
+                    return new VitalMetric
+                    {
+                        Id = Guid.TryParse(local.Id, out var g) ? g : Guid.NewGuid(),
+                        UserId = Guid.TryParse(local.UserId, out var u) ? u : Guid.Empty,
+                        Type = type,
+                        Value = local.Value,
+                        Unit = local.Unit,
+                        Date = local.Date,
+                        SourceDevice = local.SourceDevice
+                    };
+                }
+            }
+            catch { }
+            return null;
+        }
 
         public Task<List<VitalMetric>> FetchMetricsAsync(DateTime date) => Task.FromResult(new List<VitalMetric>());
 

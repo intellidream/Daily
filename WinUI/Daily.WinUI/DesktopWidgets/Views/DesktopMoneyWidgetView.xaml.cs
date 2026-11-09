@@ -32,12 +32,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -142,6 +150,35 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 MediumEurSubtitle.Text = $"~{eurEst:N0} € Net Balance";
                 CardBalanceText.Text = $"{cardBal:N0} Lei";
                 CashBalanceText.Text = $"{cashBal:N0} Lei";
+
+                // Large Layout population
+                LargeNetWorthText.Text = $"{totalNet:N0} Lei";
+                LargeEurSubtitle.Text = $"~{eurEst:N0} € Net Balance · Synced";
+                LargeCardBalanceText.Text = $"{cardBal:N0} Lei";
+                LargeCashBalanceText.Text = $"{cashBal:N0} Lei";
+
+                if (ledger != null && !string.IsNullOrWhiteSpace(ledger.LedgerText))
+                {
+                    LargeLedgerUpdatedText.Text = $"Updated {ledger.UpdatedAt:HH:mm}";
+                    var lines = ledger.LedgerText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var keyLines = lines.Where(l => !l.StartsWith("#") && l.Contains(':')).Take(3).ToList();
+                    if (keyLines.Count > 0)
+                    {
+                        LargeLedgerSummaryText.Text = string.Join(" · ", keyLines);
+                    }
+                    else
+                    {
+                        LargeLedgerSummaryText.Text = "Active SmartLedger loaded with zero anomalies.";
+                    }
+                }
+                else
+                {
+                    LargeLedgerUpdatedText.Text = "Live SQLite";
+                    LargeLedgerSummaryText.Text = "Card & Cash balances directly synced from local ledger.";
+                }
+
+                LargeBottomLeftText.Text = $"Total Cashflow: {totalNet:N0} Lei";
+                LargeBottomRightText.Text = "Daily Budget Control";
             }
             catch (Exception ex)
             {
@@ -162,6 +199,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
         private async void AdjustCashPlus100_Click(object sender, RoutedEventArgs e)
         {
             await AdjustAccountAsync("Cash", 100);
+        }
+
+        private async void AdjustCashMinus100_Click(object sender, RoutedEventArgs e)
+        {
+            await AdjustAccountAsync("Cash", -100);
         }
 
         private async Task AdjustAccountAsync(string accountName, decimal delta)

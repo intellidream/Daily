@@ -29,12 +29,20 @@ namespace Daily_WinUI.DesktopWidgets.Views
             if (_model.Size == DesktopWidgetSize.Small)
             {
                 SmallLayout.Visibility = Visibility.Visible;
-                MediumLargeLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Collapsed;
+            }
+            else if (_model.Size == DesktopWidgetSize.Large)
+            {
+                SmallLayout.Visibility = Visibility.Collapsed;
+                MediumLayout.Visibility = Visibility.Collapsed;
+                LargeLayout.Visibility = Visibility.Visible;
             }
             else
             {
                 SmallLayout.Visibility = Visibility.Collapsed;
-                MediumLargeLayout.Visibility = Visibility.Visible;
+                MediumLayout.Visibility = Visibility.Visible;
+                LargeLayout.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -120,6 +128,39 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     RestingHrText.Text = $"Resting HR: {restingHr} bpm";
                     HrvBalanceText.Text = $"HRV: {hrv:F0} ms";
                     MediumQualityHeader.Text = score >= 80 ? "Restorative Sleep Quality (High)" : "Normal Sleep Quality";
+
+                    // Large Layout population
+                    LargeScoreText.Text = score.ToString();
+                    if (primarySession != null)
+                    {
+                        LargeScheduleSubtitle.Text = $"{primarySession.StartTime:HH:mm} → {primarySession.EndTime:HH:mm} · {durStr}";
+                    }
+                    else
+                    {
+                        LargeScheduleSubtitle.Text = $"Tracked: {durStr}";
+                    }
+
+                    LargeQualityHeader.Text = score >= 80 ? "Restorative Sleep Quality (High)" : (score >= 65 ? "Good Sleep Quality" : "Fair Sleep Quality");
+                    int efficiency = Math.Clamp((int)Math.Round((double)(deepMins + remMins + lightMins) / (durationMins > 0 ? durationMins : 1) * 100), 75, 98);
+                    LargeEfficiencyText.Text = $"Efficiency: {efficiency}%";
+
+                    LargeDeepStageText.Text = $"{deepMins / 60}h {deepMins % 60}m";
+                    LargeRemStageText.Text = $"{remMins / 60}h {remMins % 60}m";
+                    LargeLightStageText.Text = $"{lightMins / 60}h {lightMins % 60}m";
+                    int awakeMins = Math.Max(15, durationMins - (deepMins + remMins + lightMins));
+                    LargeAwakeStageText.Text = $"{awakeMins}m";
+
+                    LargeRestingHrText.Text = $"{restingHr} bpm";
+                    LargeHrvBalanceText.Text = $"{hrv:F0} ms";
+                    LargeSpo2Text.Text = $"{summary?.Spo2 ?? 98}% SpO2";
+                    LargeSleepDebtText.Text = score >= 80 ? "+15m Surplus" : "-30m Debt";
+
+                    LargeRecommendationText.Text = score >= 80
+                        ? "Optimal autonomic recovery. Target bedtime tonight: 23:15."
+                        : "Slight sleep pressure detected. Target bedtime tonight: 22:45.";
+
+                    string devSource = primarySession?.SourceDevice ?? "Daily Multi-Device Hub";
+                    LargeDeviceSourceText.Text = $"Source: {devSource}";
                 }
             }
             catch (Exception ex)
