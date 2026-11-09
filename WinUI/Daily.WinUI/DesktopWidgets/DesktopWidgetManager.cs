@@ -275,7 +275,7 @@ namespace Daily_WinUI.DesktopWidgets
                 return;
             }
 
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(() => AddWidget(type, size, x, y));
@@ -320,7 +320,7 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void RemoveWidget(DesktopWidgetWindow window)
         {
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(() => RemoveWidget(window));
@@ -367,7 +367,7 @@ namespace Daily_WinUI.DesktopWidgets
                 return;
             }
 
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(ShowAll);
@@ -405,7 +405,7 @@ namespace Daily_WinUI.DesktopWidgets
                 return;
             }
 
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(HideAll);
@@ -427,7 +427,7 @@ namespace Daily_WinUI.DesktopWidgets
 
         public void ToggleVisibility()
         {
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(ToggleVisibility);
@@ -456,7 +456,7 @@ namespace Daily_WinUI.DesktopWidgets
                 return;
             }
 
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(() => SetAllLocked(locked));
@@ -484,7 +484,7 @@ namespace Daily_WinUI.DesktopWidgets
                 return;
             }
 
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(RefreshAllWidgets);
@@ -512,7 +512,7 @@ namespace Daily_WinUI.DesktopWidgets
                 return;
             }
 
-            var dq = App.Current?.DispatcherQueue ?? App.Current?.MainWindow?.DispatcherQueue;
+            var dq = App.Current?.DispatcherQueue;
             if (dq != null && !dq.HasThreadAccess)
             {
                 dq.TryEnqueue(ResetToDefaults);

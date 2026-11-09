@@ -149,12 +149,15 @@ namespace Daily_WinUI.WidgetsHost.Services
             var log = new LocalHabitLog
             {
                 Id = Guid.NewGuid().ToString(),
+                UserId = string.Empty,
                 HabitType = habitType,
                 Value = value,
                 Unit = unit,
                 LoggedAt = loggedAt.ToUniversalTime(),
                 Metadata = metadata,
-                IsDirty = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                SyncedAt = null,
                 IsDeleted = false
             };
             await _db.Connection.InsertAsync(log);
@@ -169,7 +172,8 @@ namespace Daily_WinUI.WidgetsHost.Services
             if (item != null)
             {
                 item.IsDeleted = true;
-                item.IsDirty = true;
+                item.SyncedAt = null;
+                item.UpdatedAt = DateTime.UtcNow;
                 await _db.Connection.UpdateAsync(item);
                 OnHabitsUpdated?.Invoke();
             }
@@ -442,7 +446,15 @@ namespace Daily_WinUI.WidgetsHost.Services
 
                 if (entities.Count > 0)
                 {
-                    return entities.Select(e => TagdosParser.Parse(e)).ToList();
+                    return entities.Select(s =>
+                    {
+                        DateTime? reminder = s.StreamReminderTicks.HasValue
+                            ? new DateTime(s.StreamReminderTicks.Value, DateTimeKind.Utc)
+                            : null;
+                        var parsed = TagdosParser.ParseStream(s.RawText, s.OrderIndex, s.Title, reminder, s.ActiveMemos, s.AttachmentsJson, s.CustomTitle);
+                        parsed.Id = s.Id;
+                        return parsed;
+                    }).ToList();
                 }
             }
             catch { }
@@ -450,13 +462,7 @@ namespace Daily_WinUI.WidgetsHost.Services
             // Default seed streams
             return new List<TagDoStream>
             {
-                TagdosParser.Parse(new LocalTagdoStream
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    DisplayTitle = "Focus Streams",
-                    RawText = "WRK/PRJ & MET/ZOOM & BUG/FIX",
-                    OrderIndex = 0
-                })
+                TagdosParser.ParseStream("WRK/PRJ & MET/ZOOM & BUG/FIX", 0, "Focus Streams", null, "", "[]", null)
             };
         }
 
@@ -479,7 +485,7 @@ namespace Daily_WinUI.WidgetsHost.Services
             {
                 var entities = await _db.Connection.Table<LocalTagdoQuickNote>()
                     .OrderByDescending(n => n.IsPinned)
-                    .ThenByDescending(n => n.UpdatedAt)
+                    .ThenByDescending(n => n.UpdatedAtTicks)
                     .ToListAsync();
 
                 return entities.Select(e => new TagDoQuickNote
@@ -488,8 +494,8 @@ namespace Daily_WinUI.WidgetsHost.Services
                     Title = e.Title,
                     Content = e.Content,
                     IsPinned = e.IsPinned,
-                    CreatedAt = e.CreatedAt,
-                    UpdatedAt = e.UpdatedAt
+                    CreatedAt = new DateTime(e.CreatedAtTicks, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(e.UpdatedAtTicks, DateTimeKind.Utc)
                 }).ToList();
             }
             catch

@@ -24,6 +24,7 @@ public partial class App : Application
     public static new App Current => (App)Application.Current;
     public IServiceProvider? Services { get; private set; }
     public DispatcherQueue DispatcherQueue { get; private set; } = null!;
+    public object? MainWindow => null;
 
     private readonly List<Window> _activeSecondaryWindows = new();
     public IReadOnlyList<Window> ActiveSecondaryWindows => _activeSecondaryWindows;

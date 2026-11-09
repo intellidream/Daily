@@ -77,6 +77,7 @@
     <Compile Include="..\Daily.WinUI\Models\LocationSuggestion.cs" Link="Models\LocationSuggestion.cs" />
     <Compile Include="..\Daily.WinUI\Models\ForecastDaySnapshot.cs" Link="Models\ForecastDaySnapshot.cs" />
     <Compile Include="..\Daily.WinUI\Models\HourlyForecastSnapshot.cs" Link="Models\HourlyForecastSnapshot.cs" />
+    <Compile Include="..\..\Configuration\Secrets.cs" Link="Configuration\Secrets.cs" />
     <Compile Include="..\..\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\Services\IDatabaseService.cs" Link="Services\IDatabaseService.cs" />
     <Compile Include="..\..\Services\DatabaseService.cs" Link="Services\DatabaseService.cs" />
