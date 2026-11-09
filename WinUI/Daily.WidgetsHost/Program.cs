@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using Microsoft.UI.Xaml;
 using Daily_WinUI.DesktopWidgets;
@@ -7,46 +8,79 @@ namespace Daily_WinUI.WidgetsHost;
 
 public static class Program
 {
+    private static void Log(string msg)
+    {
+        try
+        {
+            var p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "daily_widgetshost_debug.log");
+            File.AppendAllText(p, $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] [PID={Environment.ProcessId}] {msg}\r\n");
+        }
+        catch { }
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
-        WinRT.ComWrappersSupport.InitializeComWrappers();
-
-        bool createdNew;
-        Mutex? mutex = null;
+        Log($"Main enter. Args: {(args != null ? string.Join(" ", args) : "none")}");
         try
         {
-            mutex = new Mutex(true, WidgetsHostIpc.MutexName, out createdNew);
-        }
-        catch (AbandonedMutexException)
-        {
-            createdNew = true;
-        }
+            Log("Calling WinRT.ComWrappersSupport.InitializeComWrappers()...");
+            WinRT.ComWrappersSupport.InitializeComWrappers();
+            Log("ComWrappers initialized.");
 
-        if (!createdNew)
-        {
-            // Another instance is already running!
-            // If any argument was passed, forward as IPC command.
-            if (args != null && args.Length > 0)
+            bool createdNew;
+            Mutex? mutex = null;
+            try
             {
-                _ = WidgetsHostIpc.SendCommandAsync(string.Join(" ", args));
+                mutex = new Mutex(true, WidgetsHostIpc.MutexName, out createdNew);
             }
-            else
+            catch (AbandonedMutexException)
             {
-                _ = WidgetsHostIpc.SendCommandAsync("show_all");
+                createdNew = true;
             }
-            return;
+
+            Log($"Mutex check: createdNew={createdNew}");
+
+            if (!createdNew)
+            {
+                Log("Another instance is running, forwarding command and exiting.");
+                if (args != null && args.Length > 0)
+                {
+                    _ = WidgetsHostIpc.SendCommandAsync(string.Join(" ", args));
+                }
+                else
+                {
+                    _ = WidgetsHostIpc.SendCommandAsync("show_all");
+                }
+                return;
+            }
+
+            Log("Calling Application.Start...");
+            Application.Start((p) =>
+            {
+                Log("Application.Start callback invoked.");
+                try
+                {
+                    var context = new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(
+                        Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
+                    System.Threading.SynchronizationContext.SetSynchronizationContext(context);
+                    Log("Instantiating App...");
+                    new App();
+                    Log("App instantiated.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Exception inside Application.Start callback: {ex}");
+                    throw;
+                }
+            });
+
+            Log("Application.Start finished.");
+            GC.KeepAlive(mutex);
         }
-
-        Application.Start((p) =>
+        catch (Exception ex)
         {
-            var context = new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(
-                Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
-            System.Threading.SynchronizationContext.SetSynchronizationContext(context);
-            new App();
-        });
-
-        // Keep mutex reference alive until application terminates
-        GC.KeepAlive(mutex);
+            Log($"FATAL EXCEPTION in Main: {ex}");
+        }
     }
 }
