@@ -38,7 +38,13 @@ public static class Program
             return;
         }
 
-        Application.Start((p) => new App());
+        Application.Start((p) =>
+        {
+            var context = new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(
+                Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
+            System.Threading.SynchronizationContext.SetSynchronizationContext(context);
+            new App();
+        });
 
         // Keep mutex reference alive until application terminates
         GC.KeepAlive(mutex);

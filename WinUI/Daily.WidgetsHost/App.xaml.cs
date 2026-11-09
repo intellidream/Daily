@@ -48,8 +48,41 @@ public partial class App : Application
         _activeSecondaryWindows.Clear();
     }
 
+    public static void LogDiagnostic(string message)
+    {
+        try
+        {
+            var logPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "daily_widgetshost_debug.log");
+            System.IO.File.AppendAllText(logPath, $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {message}\r\n");
+        }
+        catch { }
+    }
+
+    public App()
+    {
+        this.UnhandledException += (s, e) =>
+        {
+            LogDiagnostic($"UNHANDLED XAML EXCEPTION: {e.Exception}");
+            e.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            LogDiagnostic($"UNHANDLED APPDOMAIN EXCEPTION: {e.ExceptionObject}");
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            LogDiagnostic($"UNOBSERVED TASK EXCEPTION: {e.Exception}");
+            e.SetObserved();
+        };
+
+        this.InitializeComponent();
+    }
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        LogDiagnostic("OnLaunched entered");
         DispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         var services = new ServiceCollection();
@@ -59,8 +92,10 @@ public partial class App : Application
         // Mark this process as the WidgetsHost so DesktopWidgetManager executes locally
         WidgetsHostIpc.IsRunningInHostProcess = true;
 
+        LogDiagnostic("Calling DesktopWidgetManager.Instance.Initialize()...");
         // Initialize Desktop Widgets
         DesktopWidgetManager.Instance.Initialize();
+        LogDiagnostic("DesktopWidgetManager.Instance.Initialize() completed.");
 
         // Start Named Pipe listener for IPC commands from Daily.WinUI or other clients
         StartIpcListener();
