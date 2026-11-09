@@ -49,7 +49,16 @@ namespace Daily_WinUI.WidgetsHost.Services
                 .ToListAsync();
 
             return localLogs
-                .Select(l => l.ToDomain())
+                .Select(l => new HabitLog
+                {
+                    Id = Guid.TryParse(l.Id, out var g) ? g : Guid.NewGuid(),
+                    UserId = l.UserId,
+                    HabitType = l.HabitType,
+                    Value = l.Value,
+                    Unit = l.Unit,
+                    LoggedAt = l.LoggedAt,
+                    Metadata = l.Metadata
+                })
                 .Where(l => l.LoggedAt.ToLocalTime().Date == date.Date)
                 .OrderByDescending(l => l.LoggedAt)
                 .ToList();
@@ -70,7 +79,13 @@ namespace Daily_WinUI.WidgetsHost.Services
 
             if (localGoal != null)
             {
-                return localGoal.ToDomain();
+                return new HabitGoal
+                {
+                    Id = Guid.TryParse(localGoal.Id, out var g) ? g : Guid.NewGuid(),
+                    HabitType = localGoal.HabitType,
+                    TargetValue = localGoal.TargetValue,
+                    Unit = localGoal.Unit
+                };
             }
 
             return new HabitGoal
