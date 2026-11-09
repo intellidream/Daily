@@ -69,11 +69,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 double lon = 26.1063;
                 try
                 {
-                    var settingsSvc = App.Current.Services?.GetService<Daily.Services.ISettingsService>();
-                    if (settingsSvc?.Settings != null && settingsSvc.Settings.LastLatitude != 0)
+                    var settings = SettingsService.Load();
+                    if (settings.LastLatitude.HasValue && settings.LastLatitude.Value != 0)
                     {
-                        lat = settingsSvc.Settings.LastLatitude;
-                        lon = settingsSvc.Settings.LastLongitude;
+                        lat = settings.LastLatitude.Value;
+                        lon = settings.LastLongitude ?? 26.1063;
                     }
                 }
                 catch { }
@@ -153,9 +153,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 try
                 {
                     var weatherClient = App.Current.Services?.GetService<WeatherClient>();
-                    if (weatherClient?.CachedSnapshot != null)
+                    var snapshot = weatherClient?.GetCachedSnapshot();
+                    if (snapshot != null)
                     {
-                        cloudCover = (int)Math.Round(weatherClient.CachedSnapshot.CloudCover);
+                        cloudCover = (int)Math.Round(snapshot.CloudCover);
                     }
                 }
                 catch { }
@@ -217,8 +218,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 LargeMoonGlyph.Text = glyph;
                 LargeMoonSubtitle.Text = $"{phaseName} · {illumination:F0}% illumination";
                 LargeMoonPhaseName.Text = $"{phaseName} ({illumination:F0}% Illuminated)";
-                LargeSkyQualityText.Text = !string.IsNullOrWhiteSpace(conditions.TonightBestWindow)
-                    ? $"Best observing window: {conditions.TonightBestWindow} · {conditions.Summary}"
+                LargeSkyQualityText.Text = !string.IsNullOrWhiteSpace(conditions.BestWindowDescription)
+                    ? $"Best observing window: {conditions.BestWindowDescription} · {conditions.Summary}"
                     : (conditions.Summary ?? "Clear celestial observation conditions.");
 
                 LargePlanetsText.Text = largePlanetSummary;
