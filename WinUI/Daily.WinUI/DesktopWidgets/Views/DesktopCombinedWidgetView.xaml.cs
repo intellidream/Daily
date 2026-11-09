@@ -152,8 +152,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                         var smokes = await _habitsService.GetLogsAsync("smokes", DateTime.Today);
                         int smokeCount = smokes?.Count ?? 0;
-                        var settings = Daily_WinUI.Services.SettingsService.Load();
-                        int maxSmokes = settings.SmokesBaselineDaily > 0 ? settings.SmokesBaselineDaily : 40;
+                        var settingsService = App.Current.Services?.GetService<Daily.Services.ISettingsService>();
+                        int maxSmokes = (settingsService?.Settings?.SmokesBaselineDaily > 0) ? settingsService.Settings.SmokesBaselineDaily : 40;
                         
                         string smokesStr = smokeCount == 0 ? "Smoke-Free 🌟" : $"{smokeCount} / {maxSmokes} smokes";
                         SmokesMetricText.Text = smokesStr;
@@ -252,8 +252,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     {
                         var astro = AstronomyService.Shared;
                         var moonPhase = astro.GetMoonPhase(DateTime.UtcNow);
-                        LargeMoonIcon.Text = moonPhase.Emoji;
-                        LargeCosmosText.Text = $"{moonPhase.Name} · 84 Sky";
+                        string glyph = GetMoonGlyph(moonPhase.IlluminatedFraction);
+                        string phaseDesc = !string.IsNullOrWhiteSpace(moonPhase.Description) ? moonPhase.Description : "Moon";
+                        LargeMoonIcon.Text = glyph;
+                        LargeCosmosText.Text = $"{phaseDesc} · 84 Sky";
                     }
                     catch { }
                 }
@@ -262,6 +264,16 @@ namespace Daily_WinUI.DesktopWidgets.Views
             {
                 System.Diagnostics.Debug.WriteLine($"[DesktopCombinedWidget] Error refreshing: {ex.Message}");
             }
+        }
+
+        private static string GetMoonGlyph(double fraction)
+        {
+            if (fraction < 0.05) return "🌑";
+            if (fraction < 0.25) return "🌒";
+            if (fraction < 0.45) return "🌓";
+            if (fraction < 0.75) return "🌔";
+            if (fraction < 0.95) return "🌕";
+            return "🌖";
         }
     }
 }

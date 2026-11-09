@@ -114,15 +114,15 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 Task1Title.Text = activePills.Count > 0 
                     ? activePills[0].Text 
                     : "No pending tasks · All caught up! 🌟";
-                Task1Tag.Text = activePills.Count > 0 && !string.IsNullOrEmpty(activePills[0].Tag)
-                    ? activePills[0].Tag
+                Task1Tag.Text = activePills.Count > 0
+                    ? FormatPillTag(activePills[0], "Today")
                     : "Today";
 
                 Task2Title.Text = activePills.Count > 1 
                     ? activePills[1].Text 
                     : (activePills.Count == 1 ? "Great momentum! Keep it going" : "Tap to open TagDos Hub");
-                Task2Tag.Text = activePills.Count > 1 && !string.IsNullOrEmpty(activePills[1].Tag)
-                    ? activePills[1].Tag
+                Task2Tag.Text = activePills.Count > 1
+                    ? FormatPillTag(activePills[1], "Next")
                     : (activePills.Count == 1 ? "Next" : "Hub");
 
                 if (StreamNamesStatusText != null)
@@ -137,23 +137,23 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                 // Large Task 1
                 LargeTask1Title.Text = activePills.Count > 0 ? activePills[0].Text : "All tasks completed! 🌟";
-                LargeTask1Tag.Text = activePills.Count > 0 ? (activePills[0].Tag ?? "Priority 1") : "Done";
+                LargeTask1Tag.Text = activePills.Count > 0 ? FormatPillTag(activePills[0], "Priority 1") : "Done";
 
                 // Large Task 2
                 LargeTask2Title.Text = activePills.Count > 1 ? activePills[1].Text : (activePills.Count == 1 ? "Maintain daily habit streak" : "Take a mindful break");
-                LargeTask2Tag.Text = activePills.Count > 1 ? (activePills[1].Tag ?? "Priority 2") : "Habits";
+                LargeTask2Tag.Text = activePills.Count > 1 ? FormatPillTag(activePills[1], "Priority 2") : "Habits";
 
                 // Large Task 3
                 LargeTask3Title.Text = activePills.Count > 2 ? activePills[2].Text : (activePills.Count > 0 ? "Review evening goals & ledger" : "Organize notes");
-                LargeTask3Tag.Text = activePills.Count > 2 ? (activePills[2].Tag ?? "Priority 3") : "Finances";
+                LargeTask3Tag.Text = activePills.Count > 2 ? FormatPillTag(activePills[2], "Priority 3") : "Finances";
 
                 // Large Task 4
                 LargeTask4Title.Text = activePills.Count > 3 ? activePills[3].Text : "Sync health telemetry & sleep stages";
-                LargeTask4Tag.Text = activePills.Count > 3 ? (activePills[3].Tag ?? "Priority 4") : "Health";
+                LargeTask4Tag.Text = activePills.Count > 3 ? FormatPillTag(activePills[3], "Priority 4") : "Health";
 
                 // Large Task 5
                 LargeTask5Title.Text = activePills.Count > 4 ? activePills[4].Text : "Stargazing & astronomical briefing";
-                LargeTask5Tag.Text = activePills.Count > 4 ? (activePills[4].Tag ?? "Priority 5") : "Cosmos";
+                LargeTask5Tag.Text = activePills.Count > 4 ? FormatPillTag(activePills[4], "Priority 5") : "Cosmos";
 
                 // Quick Note preview
                 var latestNote = quickNotes.OrderByDescending(n => n.UpdatedAt).FirstOrDefault();
@@ -175,5 +175,14 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 System.Diagnostics.Debug.WriteLine($"[DesktopTagdosWidget] Error refreshing: {ex.Message}");
             }
         }
+        private static string FormatPillTag(TagDoPill pill, string fallback) =>
+            pill.Type switch
+            {
+                TagDoPillType.Urgent => "Urgent",
+                TagDoPillType.Financial => "Finances",
+                TagDoPillType.TemporalOrMetric => "Metric",
+                TagDoPillType.Completed => "Done",
+                _ => fallback
+            };
     }
 }
