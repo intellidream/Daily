@@ -1,7 +1,14 @@
 # Prism (`daily://prism`) — Assisted Web Capture & AI Studio Architecture
 
 **Date:** November 10, 2026  
-**Status:** Implemented & Verified Across Supabase, `DailyCore`, `macOS`, `iOS` (+ Foldable & Share Extension), `Android` (+ Foldable & Share Target), and `Windows 11 WinUI 3` (+ `WebView2` & Hardware NPU)
+**Status:** Implemented & Live-Verified Across Supabase, `DailyCore`, `macOS`, `iOS` (+ Foldable & Share Extension), `Android` (+ Foldable & Share Target), and `Windows 11 WinUI 3` (+ `WebView2` & Hardware NPU)  
+**Verification Matrix:**
+- **Supabase Cloud (`akkfouifxztnfwwiclwg`):** Migration `20261110000001_prism_web_studio.sql` applied live (`HTTP 201`), verified `prism_clips` (`rls=true`), `prism_pinned_sites` (`rls=true`), private bucket `prism-clips` (`public=false`), 12 RLS policies, `updated_at` triggers, and `supabase_realtime` publication.
+- **`DailyCore` (Swift 6):** `swift test --filter PrismTests` — **5/5 passed (0 failures)**.
+- **`macOS` Native:** `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` — **`** BUILD SUCCEEDED **`**, verified live at **`0.0%` idle CPU** over 65+ minutes.
+- **`iOS` + Foldable + Physical Hardware:** `xcodebuild` Simulator & Device (`Daily.app` + `DailyShareExtension.appex`) — **`** BUILD SUCCEEDED **`**, verified live on **`Simula Phone`**, **`SimulaDuo`**, and physical **iPhone 16 Pro ("Schmitz")** (`-startTabPrism`).
+- **`Android` + Foldable:** `:core-model:testDebugUnitTest` & `assembleDebug` — **`BUILD SUCCESSFUL`**, verified live on **`Medium_Phone_API_36.1`** (compact Bottom Thumb Omnibox + `+RSS` auto-sniffing + `Intent.ACTION_SEND` Share Sheet) and unfolded **Foldable Dual-Pane** (`2208×1840`).
+- **`Windows 11` (`WinUI 3` ARM64):** `dotnet build -c Debug -p:Platform=ARM64` — **`0 Error(s)`**, `Daily.Prism.Tests` — **6/6 passed**, MSIX registered (`Add-AppxPackage -Register`), launched live into `65% / 35%` Research Split with live Supabase Vault hydration (`Vault (10)`).
 
 ---
 
