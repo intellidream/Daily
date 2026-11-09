@@ -1,6 +1,13 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Daily.Models;
+using Daily.Services;
+using Daily_WinUI.Services;
 using Daily_WinUI.Services.Cosmos;
 
 namespace Daily_WinUI.DesktopWidgets.Views
@@ -56,45 +63,172 @@ namespace Daily_WinUI.DesktopWidgets.Views
             try
             {
                 var now = DateTime.UtcNow;
-                var moon = _astronomyService.GetMoonPhase(now);
+
+                // 1. Observer Location (from user settings or default Bucharest)
+                double lat = 44.4323;
+                double lon = 26.1063;
+                try
+                {
+                    var settingsSvc = App.Current.Services?.GetService<Daily.Services.ISettingsService>();
+                    if (settingsSvc?.Settings != null && settingsSvc.Settings.LastLatitude != 0)
+                    {
+                        lat = settingsSvc.Settings.LastLatitude;
+                        lon = settingsSvc.Settings.LastLongitude;
+                    }
+                }
+                catch { }
+
+                // 2. Real Moon Phase, Fraction and Glyph
+                var moon = _astronomyService.GetMoonPhase(now, lat, lon);
                 double illumination = Math.Round(moon.IlluminatedFraction * 100.0);
                 string phaseName = !string.IsNullOrWhiteSpace(moon.Description) ? moon.Description : "Waxing Gibbous";
                 string glyph = GetMoonGlyph(moon.IlluminatedFraction);
 
-                int skyScore = 84;
-                if (illumination > 85) skyScore = 65; // Bright moon washes out faint stars
-                else if (illumination < 25) skyScore = 95; // Dark sky
+                // 3. Real Moonrise & Moonset ephemeris
+                var riseSetMoon = _astronomyService.GetRiseTransitSet(CelestialBody.Moon, now, lat, lon);
+                string riseStr = riseSetMoon.RiseTimeUtc?.ToLocalTime().ToString("HH:mm") ?? "--:--";
+                string setStr = riseSetMoon.SetTimeUtc?.ToLocalTime().ToString("HH:mm") ?? "--:--";
+                string transitStr = riseSetMoon.TransitTimeUtc?.ToLocalTime().ToString("HH:mm") ?? "--:--";
+                string moonTimes = $"Moonrise: {riseStr} · Moonset: {setStr}";
 
+                // 4. Real Sun Times & Twilight / Golden Hour
+                var sunTimes = _astronomyService.GetSunTimes(now, lat, lon);
+                string goldenHourStr;
+                if (sunTimes.SunsetUtc.HasValue)
+                {
+                    var sunsetLocal = sunTimes.SunsetUtc.Value.ToLocalTime();
+                    goldenHourStr = $"🌅 {sunsetLocal.AddMinutes(-40):HH:mm} – {sunsetLocal.AddMinutes(15):HH:mm}";
+                }
+                else
+                {
+                    goldenHourStr = "🌅 17:45 – 18:30";
+                }
+
+                // 5. Real Visible Planets (computed via AstronomyEngine for current hour and evening peak)
+                var bodies = _astronomyService.GetAllVisibleBodies(now, lat, lon);
+                var visibleNow = bodies
+                    .Where(b => b.Body is CelestialBody.Venus or CelestialBody.Mars or CelestialBody.Jupiter or CelestialBody.Saturn or CelestialBody.Mercury)
+                    .Where(b => b.Altitude > 0)
+                    .OrderBy(b => b.Magnitude)
+                    .ToList();
+
+                List<string> planetNames;
+                if (visibleNow.Count > 0)
+                {
+                    planetNames = visibleNow.Select(b => b.Body.ToString()).ToList();
+                }
+                else
+                {
+                    // Look at tonight's astronomical dusk or 21:00 observing window
+                    var duskUtc = sunTimes.DuskAstronomicalUtc ?? sunTimes.DuskNauticalUtc ?? DateTime.Today.AddHours(21).ToUniversalTime();
+                    var eveningBodies = _astronomyService.GetAllVisibleBodies(duskUtc, lat, lon);
+                    var visibleEvening = eveningBodies
+                        .Where(b => b.Body is CelestialBody.Venus or CelestialBody.Mars or CelestialBody.Jupiter or CelestialBody.Saturn or CelestialBody.Mercury)
+                        .Where(b => b.Altitude > 5)
+                        .OrderBy(b => b.Magnitude)
+                        .ToList();
+                    planetNames = visibleEvening.Select(b => b.Body.ToString()).ToList();
+                }
+
+                string planetSummary;
+                string largePlanetSummary;
+                if (planetNames.Count >= 2)
+                {
+                    planetSummary = $"🪐 {planetNames[0]} & {planetNames[1]} visible";
+                    largePlanetSummary = $"🪐 {planetNames[0]} & {planetNames[1]}";
+                }
+                else if (planetNames.Count == 1)
+                {
+                    planetSummary = $"🪐 {planetNames[0]} in evening sky";
+                    largePlanetSummary = $"🪐 {planetNames[0]} (Evening)";
+                }
+                else
+                {
+                    planetSummary = "✨ Deep Sky Objects visible";
+                    largePlanetSummary = "✨ Deep Sky / Messier";
+                }
+
+                // 6. Real Deterministic Stargazing Score (combining cloud cover + moon illumination + moon altitude)
+                int? cloudCover = null;
+                try
+                {
+                    var weatherClient = App.Current.Services?.GetService<WeatherClient>();
+                    if (weatherClient?.CachedSnapshot != null)
+                    {
+                        cloudCover = (int)Math.Round(weatherClient.CachedSnapshot.CloudCover);
+                    }
+                }
+                catch { }
+
+                var conditions = _astronomyService.EvaluateStargazingConditions(
+                    lat, lon, now,
+                    cloudCoverTotal: cloudCover,
+                    bortleClass: 4);
+
+                int skyScore = conditions.Score;
+
+                // 7. Real ISS Pass (calculated via SGP4Propagator if cached OMM exists)
+                string issPassText = "🛰️ Next Pass: Orbit Daylight";
+                string largeIssPassText = "🛰️ Daylight Pass Only";
+                try
+                {
+                    string cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyApp", "Cache");
+                    string issFile = Path.Combine(cacheDir, "iss_omm.json");
+                    if (File.Exists(issFile))
+                    {
+                        var rawJson = File.ReadAllText(issFile);
+                        var omm = System.Text.Json.JsonSerializer.Deserialize<Daily.Models.CelesTrakOmmRecord>(rawJson);
+                        if (omm != null)
+                        {
+                            var passes = SGP4Propagator.PredictPasses(omm, lat, lon, now, hoursAhead: 24, minPeakAltitudeDeg: 15, requireSunlitAndDarkSky: true);
+                            var nextPass = passes.FirstOrDefault();
+                            if (nextPass != null)
+                            {
+                                var passLocal = nextPass.StartTimeUtc.ToLocalTime();
+                                issPassText = $"🛰️ Next Pass: {passLocal:HH:mm}";
+                                largeIssPassText = $"🛰️ {passLocal:HH:mm} ({nextPass.StartCompass} · Mag {nextPass.PeakMagnitude:F1})";
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // ── Populate Small Layout ──
                 SmallMoonGlyph.Text = glyph;
                 SmallMoonPhaseText.Text = phaseName;
                 SmallIllumText.Text = $"{illumination:F0}% illuminated";
                 SmallStargazingText.Text = $"Stargazing: {skyScore}/100 ✨";
 
+                // ── Populate Medium Layout ──
                 MediumMoonGlyph.Text = glyph;
                 MediumMoonSubtitle.Text = $"{phaseName} · {illumination:F0}% illumination";
                 MediumScoreText.Text = skyScore.ToString();
 
-                SkyQualityText.Text = skyScore >= 80 
-                    ? "Excellent dark sky conditions for stargazing." 
-                    : "Moderate sky brightness from lunar illumination.";
+                SkyQualityText.Text = !string.IsNullOrWhiteSpace(conditions.Summary) 
+                    ? conditions.Summary 
+                    : (skyScore >= 80 ? "Optimal dark sky conditions for stargazing." : "Moderate observing conditions tonight.");
 
-                PlanetsText.Text = "🪐 Jupiter & Saturn visible";
-                IssPassText.Text = "🛰️ Next ISS Pass: 21:42";
-                MoonTimesText.Text = "Moonrise: 17:15 · Moonset: 05:40";
+                PlanetsText.Text = planetSummary;
+                IssPassText.Text = issPassText;
+                MoonTimesText.Text = moonTimes;
 
-                // Large Layout Population
+                // ── Populate Large Layout ──
                 LargeScoreText.Text = skyScore.ToString();
                 LargeMoonGlyph.Text = glyph;
                 LargeMoonSubtitle.Text = $"{phaseName} · {illumination:F0}% illumination";
                 LargeMoonPhaseName.Text = $"{phaseName} ({illumination:F0}% Illuminated)";
-                LargeSkyQualityText.Text = skyScore >= 80 
-                    ? "Optimal clear dark sky for deep-sky and planetary observation tonight."
-                    : "Moderate sky brightness from lunar illumination. Focus on bright planets.";
-                LargePlanetsText.Text = "🪐 Jupiter & Saturn";
-                LargeIssPassText.Text = "🛰️ 21:42 (Mag -2.8)";
-                LargeGoldenHourText.Text = "🌅 18:45 – 19:25";
+                LargeSkyQualityText.Text = !string.IsNullOrWhiteSpace(conditions.TonightBestWindow)
+                    ? $"Best observing window: {conditions.TonightBestWindow} · {conditions.Summary}"
+                    : (conditions.Summary ?? "Clear celestial observation conditions.");
+
+                LargePlanetsText.Text = largePlanetSummary;
+                LargeIssPassText.Text = largeIssPassText;
+                LargeGoldenHourText.Text = goldenHourStr;
                 LargeTransparencyText.Text = skyScore >= 80 ? "🌌 Bortle Class 4" : "🌌 Bortle Class 5";
-                LargeEphemerisText.Text = "Moonrise: 17:15 · Moonset: 05:40 · Zenith: 23:30";
+                LargeEphemerisText.Text = $"Moonrise: {riseStr} · Moonset: {setStr} · Transit: {transitStr}";
+
+                LargeBottomStargazingText.Text = $"Stargazing Index: {skyScore}/100";
+                LargeBottomQualityText.Text = skyScore >= 80 ? "Optimal Night Sky ✨" : (skyScore >= 60 ? "Good Observing 🌟" : "Fair Seeing Conditions");
             }
             catch (Exception ex)
             {

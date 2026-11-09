@@ -215,6 +215,15 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     if (_healthHubService != null)
                     {
                         var summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
+                        if (summary == null || ((summary.SleepScore == null || summary.SleepScore == 0) && (summary.SleepAsleepS == null || summary.SleepAsleepS == 0)))
+                        {
+                            var yesterday = await _healthHubService.GetDailySummaryAsync(DateTime.Today.AddDays(-1));
+                            if (yesterday != null && ((yesterday.SleepScore > 0) || (yesterday.SleepAsleepS > 0)))
+                            {
+                                summary = yesterday;
+                            }
+                        }
+
                         int score = summary?.SleepScore ?? 85;
                         int durationMins = ((summary?.SleepAsleepS ?? 0) / 60);
                         if (durationMins <= 0) durationMins = 465;
@@ -250,12 +259,41 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                     try
                     {
+                        var now = DateTime.UtcNow;
+                        double lat = 44.4323;
+                        double lon = 26.1063;
+                        try
+                        {
+                            var settingsSvc = App.Current.Services?.GetService<Daily.Services.ISettingsService>();
+                            if (settingsSvc?.Settings != null && settingsSvc.Settings.LastLatitude != 0)
+                            {
+                                lat = settingsSvc.Settings.LastLatitude;
+                                lon = settingsSvc.Settings.LastLongitude;
+                            }
+                        }
+                        catch { }
+
                         var astro = AstronomyService.Shared;
-                        var moonPhase = astro.GetMoonPhase(DateTime.UtcNow);
+                        var moonPhase = astro.GetMoonPhase(now, lat, lon);
                         string glyph = GetMoonGlyph(moonPhase.IlluminatedFraction);
                         string phaseDesc = !string.IsNullOrWhiteSpace(moonPhase.Description) ? moonPhase.Description : "Moon";
                         LargeMoonIcon.Text = glyph;
-                        LargeCosmosText.Text = $"{phaseDesc} · 84 Sky";
+
+                        int? cloudCover = null;
+                        try
+                        {
+                            var weatherClient = App.Current.Services?.GetService<WeatherClient>();
+                            if (weatherClient?.CachedSnapshot != null)
+                            {
+                                cloudCover = (int)Math.Round(weatherClient.CachedSnapshot.CloudCover);
+                            }
+                        }
+                        catch { }
+
+                        var conditions = astro.EvaluateStargazingConditions(lat, lon, now, cloudCoverTotal: cloudCover, bortleClass: 4);
+                        int skyScore = conditions.Score;
+
+                        LargeCosmosText.Text = $"{phaseDesc} · {skyScore} Sky";
                     }
                     catch { }
                 }

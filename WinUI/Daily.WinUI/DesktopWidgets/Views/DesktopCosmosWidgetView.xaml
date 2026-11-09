@@ -196,8 +196,8 @@
             <!-- 5. Bottom Stargazing Status Pill -->
             <Border Grid.Row="4" Background="#15A78BFA" CornerRadius="8" Padding="10,5,10,5">
                 <Grid>
-                    <TextBlock Text="Stargazing Index: 84/100" FontSize="10" Foreground="#DDD6FE" HorizontalAlignment="Left"/>
-                    <TextBlock Text="Optimal Night Sky ✨" FontSize="10" Foreground="#FBBF24" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="LargeBottomStargazingText" Text="Stargazing Index: 84/100" FontSize="10" Foreground="#DDD6FE" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="LargeBottomQualityText" Text="Optimal Night Sky ✨" FontSize="10" Foreground="#FBBF24" HorizontalAlignment="Right"/>
                 </Grid>
             </Border>
         </Grid>

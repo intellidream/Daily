@@ -77,6 +77,15 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 if (_healthHubService != null)
                 {
                     var summary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
+                    if (summary == null || (summary.StressAvg == null && summary.HrvRmssd == null))
+                    {
+                        var yesterdaySummary = await _healthHubService.GetDailySummaryAsync(DateTime.Today.AddDays(-1));
+                        if (yesterdaySummary?.StressAvg != null || yesterdaySummary?.HrvRmssd != null)
+                        {
+                            summary = yesterdaySummary;
+                        }
+                    }
+
                     if (summary != null)
                     {
                         stressScore = summary.StressAvg ?? 22;

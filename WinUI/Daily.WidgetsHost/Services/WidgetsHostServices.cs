@@ -240,39 +240,90 @@ namespace Daily_WinUI.WidgetsHost.Services
                     .Where(e => e.LocalDate == dateStr)
                     .FirstOrDefaultAsync();
 
-                // If today has no summary yet, fall back to the most recent day's real summary
-                if (entity == null)
+                // If today has no summary yet or has zero sleep & stress, check yesterday's summary
+                if (entity == null || ((entity.SleepScore == null || entity.SleepScore == 0) && (entity.SleepAsleepS == null || entity.SleepAsleepS == 0) && string.IsNullOrWhiteSpace(entity.SummaryJson)))
                 {
-                    entity = await _db.Connection.Table<HealthDailySummaryEntity>()
-                        .OrderByDescending(e => e.LocalDate)
+                    string prevDateStr = date.AddDays(-1).ToString("yyyy-MM-dd");
+                    var prevEntity = await _db.Connection.Table<HealthDailySummaryEntity>()
+                        .Where(e => e.LocalDate == prevDateStr)
                         .FirstOrDefaultAsync();
+
+                    if (prevEntity != null && ((prevEntity.SleepScore > 0) || (prevEntity.SleepAsleepS > 0) || !string.IsNullOrWhiteSpace(prevEntity.SummaryJson)))
+                    {
+                        entity = prevEntity;
+                    }
+                    else if (entity == null)
+                    {
+                        // Fall back to the most recent day's real summary
+                        entity = await _db.Connection.Table<HealthDailySummaryEntity>()
+                            .OrderByDescending(e => e.LocalDate)
+                            .FirstOrDefaultAsync();
+                    }
                 }
 
                 if (entity != null)
                 {
-                    HealthDailySummaryRecord? rec = null;
+                    DailyHealthSummaryPayload? payload = null;
                     if (!string.IsNullOrWhiteSpace(entity.SummaryJson))
                     {
-                        rec = JsonSerializer.Deserialize<HealthDailySummaryRecord>(entity.SummaryJson, HealthJsonSerializer.DefaultOptions);
+                        try
+                        {
+                            payload = HealthJsonSerializer.Deserialize<DailyHealthSummaryPayload>(entity.SummaryJson);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[WidgetsHostHealthService] JSON parse error: {ex.Message}");
+                        }
                     }
 
-                    if (rec == null)
+                    var primarySleep = payload?.Sleep?.PrimarySession;
+                    int? sleepAsleep = entity.SleepAsleepS > 0 
+                        ? entity.SleepAsleepS 
+                        : (primarySleep?.AsleepSeconds > 0 ? primarySleep.AsleepSeconds : primarySleep?.DurationSeconds);
+                    int? sleepScore = entity.SleepScore > 0 
+                        ? entity.SleepScore 
+                        : (primarySleep?.SleepScore > 0 ? primarySleep.SleepScore : payload?.Sleep?.Guidance?.Verdict?.ReadinessScore);
+                    int? stressScore = entity.StressAvg > 0 
+                        ? entity.StressAvg 
+                        : (payload?.Stress?.EffectiveScore > 0 ? payload.Stress.EffectiveScore : (payload?.Stress?.Score > 0 ? payload.Stress.Score : (int?)null));
+                    double? rhr = entity.Rhr > 0 
+                        ? entity.Rhr 
+                        : (payload?.Cardiovascular?.RestingHeartRate > 0 ? payload.Cardiovascular.RestingHeartRate : (double?)null);
+                    double? hrv = entity.HrvRmssd > 0 
+                        ? entity.HrvRmssd 
+                        : (payload?.Stress?.RestingHrvRmssd > 0 ? payload.Stress.RestingHrvRmssd : (double?)null);
+
+                    // If stress score is not explicitly in summary, estimate dynamically from HRV RMSSD
+                    if (stressScore == null && hrv.HasValue && hrv.Value > 0)
                     {
-                        rec = new HealthDailySummaryRecord
+                        stressScore = hrv.Value switch
                         {
-                            LocalDate = entity.LocalDate,
-                            Steps = entity.Steps,
-                            ActiveKcal = entity.ActiveKcal,
-                            SleepAsleepS = entity.SleepAsleepS,
-                            SleepScore = entity.SleepScore,
-                            StressAvg = entity.StressAvg,
-                            Rhr = entity.Rhr,
-                            HrvSdnn = entity.HrvSdnn,
-                            HrvRmssd = entity.HrvRmssd,
-                            Weight = entity.Weight,
-                            Spo2 = entity.Spo2
+                            >= 70 => 18,
+                            >= 55 => 26,
+                            >= 40 => 38,
+                            >= 25 => 58,
+                            _ => 76
                         };
                     }
+
+                    var rec = new HealthDailySummaryRecord
+                    {
+                        LocalDate = entity.LocalDate,
+                        UserId = entity.UserId,
+                        ComputedAt = entity.ComputedAt,
+                        EngineVersion = entity.EngineVersion,
+                        Steps = entity.Steps ?? payload?.Activity?.TotalSteps,
+                        ActiveKcal = entity.ActiveKcal ?? payload?.Activity?.EffectiveActiveCalories,
+                        SleepAsleepS = sleepAsleep,
+                        SleepScore = sleepScore,
+                        StressAvg = stressScore,
+                        Rhr = rhr,
+                        HrvSdnn = entity.HrvSdnn,
+                        HrvRmssd = hrv,
+                        Weight = entity.Weight,
+                        Spo2 = entity.Spo2,
+                        Summary = payload
+                    };
 
                     // Check if we have a recent live pulse/heart rate recorded in LocalVitalMetric
                     try
@@ -293,7 +344,10 @@ namespace Daily_WinUI.WidgetsHost.Services
                     return rec;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WidgetsHostHealthService] SQLite read error: {ex.Message}");
+            }
 
             // Default balanced fallback
             var def = new HealthDailySummaryRecord
@@ -312,22 +366,82 @@ namespace Daily_WinUI.WidgetsHost.Services
         public async Task<(SleepSession? PrimarySession, List<SleepSession> AllSessions)> GetSleepSessionsAsync(DateTime date)
         {
             var summary = await GetDailySummaryAsync(date);
+
+            // 1. If payload contains granular primary session, extract full domain session
+            if (summary?.Summary?.Sleep?.PrimarySession != null && summary.Summary.Sleep.PrimarySession.DurationSeconds > 0)
+            {
+                var primary = summary.Summary.Sleep.PrimarySession;
+                DateTimeOffset.TryParse(primary.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var startDto);
+                DateTimeOffset.TryParse(primary.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var endDto);
+                var start = startDto != default ? startDto.LocalDateTime : (DateTime.TryParse(primary.StartTime, out var sParsed) ? sParsed : date.Date.AddHours(23));
+                var end = endDto != default ? endDto.LocalDateTime : (DateTime.TryParse(primary.EndTime, out var eParsed) ? eParsed : date.Date.AddDays(1).AddHours(7));
+
+                var session = new SleepSession
+                {
+                    StartTime = start,
+                    EndTime = end,
+                    IsNap = false,
+                    DurationSeconds = primary.DurationSeconds,
+                    AsleepSeconds = primary.AsleepSeconds > 0 ? primary.AsleepSeconds : primary.DurationSeconds,
+                    DeepSeconds = primary.DeepSeconds,
+                    RemSeconds = primary.RemSeconds,
+                    LightSeconds = primary.LightSeconds,
+                    AwakeSeconds = primary.AwakeSeconds,
+                    SleepScore = primary.SleepScore > 0 ? primary.SleepScore : (summary.SleepScore ?? 85),
+                    SourceDevice = primary.EffectiveSourceDevice,
+                    HasGranularHypnogram = primary.HasGranularHypnogram
+                };
+
+                if (primary.Stages != null && primary.Stages.Any())
+                {
+                    session.Stages = primary.Stages.Select(st =>
+                    {
+                        DateTimeOffset.TryParse(st.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var sTimeDto);
+                        DateTimeOffset.TryParse(st.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var eTimeDto);
+                        var sTime = sTimeDto != default ? sTimeDto.LocalDateTime : start;
+                        var eTime = eTimeDto != default ? eTimeDto.LocalDateTime : sTime.AddSeconds(st.DurationSeconds);
+                        var stageKey = st.Stage.ToLowerInvariant() switch
+                        {
+                            "deep" => "sleep_stage_deep",
+                            "rem" => "sleep_stage_rem",
+                            "light" or "core" => "sleep_stage_light",
+                            _ => "sleep_stage_awake"
+                        };
+
+                        return new HealthTelemetry
+                        {
+                            TypeString = stageKey,
+                            Value = st.DurationSeconds,
+                            Unit = "sec",
+                            StartTime = sTime,
+                            EndTime = eTime,
+                            SourceDevice = primary.EffectiveSourceDevice
+                        };
+                    }).ToList();
+                }
+
+                return (session, new List<SleepSession> { session });
+            }
+
+            // 2. Otherwise derive session from daily summary metrics
             int sleepSeconds = summary?.SleepAsleepS ?? 27600;
             if (sleepSeconds <= 0) sleepSeconds = 27600;
 
-            var primary = new SleepSession
+            var derivedPrimary = new SleepSession
             {
                 StartTime = date.Date.AddHours(-1).AddMinutes(15), // 23:15 previous day
                 EndTime = date.Date.AddHours(7).AddMinutes(15),     // 07:15 today
+                DurationSeconds = (int)(sleepSeconds / 0.92),
+                AsleepSeconds = sleepSeconds,
                 DeepSeconds = sleepSeconds * 0.22,
                 RemSeconds = sleepSeconds * 0.25,
                 LightSeconds = sleepSeconds * 0.45,
                 AwakeSeconds = sleepSeconds * 0.08,
                 SleepScore = summary?.SleepScore ?? 85,
-                SourceDevice = "Daily Multi-Device Hub"
+                SourceDevice = "Daily Health Hub"
             };
 
-            return (primary, new List<SleepSession> { primary });
+            return (derivedPrimary, new List<SleepSession> { derivedPrimary });
         }
 
         public Task<List<HealthDailySummaryRecord>> GetDailySummariesRangeAsync(DateTime startDate, DateTime endDate) =>
