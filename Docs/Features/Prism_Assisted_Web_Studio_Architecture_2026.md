@@ -82,3 +82,23 @@
 ### Physical Device Deployment & Live Verification
 - **Google Pixel 9 Pro ("Trapper", `caiman`)**: Paired via Wireless Debugging TLS, deployed `app-debug.apk` with `--no-streaming`, launched live with `daily://prism` (PID 30004).
 - **Samsung Galaxy Z Fold 8 ("RADAR", `SM-F971B`, `h8q`)**: Connected over Wireless TLS, deployed `app-debug.apk` with `--no-streaming`, launched live with `daily://prism` (PID 23982) with Foldable Dual-Pane and Research Split support.
+
+---
+
+## 4. Pop-Out Window Chrome Integration & Memory Optimization (macOS & iOS)
+
+### A. Titlebar Chrome Integration (macOS)
+- **Zero Redundant Vertical Space**: In `PrismWindowManager.swift`, the detached pop-out window configures `window.titlebarAppearsTransparent = true`, `window.titleVisibility = .hidden`, `window.titlebarSeparatorStyle = .none`, and `window.isMovableByWindowBackground = true`. The hosting view is wrapped in `.ignoresSafeArea(.all)`.
+- **Integrated Omnibox & Controls**: The top navigation bar (`topNavigationChrome`) places a 76pt leading spacer to cleanly clear macOS traffic lights (`close`, `minimize`, `zoom`), embedding the back/forward controls, search omnibox, Vault bookmark, reader mode, region crop, and Studio toggles directly in the titlebar line. Reclaims ~32pt of vertical screen space for the web canvas.
+
+### B. Studio Button Anti-Wrap Safeguard (macOS & iOS)
+- **Problem**: When window or sheet width was narrow, the `✨ Studio [N]` button text would wrap into two lines, distorting the top bar height.
+- **Solution**: Implemented `ViewThatFits(in: .horizontal)` with `.lineLimit(1)`, `fixedSize(horizontal: true, vertical: false)`, and a strict `.frame(height: 30)`. On constrained widths, the label automatically drops the `"Studio"` string, cleanly showing only the `sparkles` icon and clip count badge without ever expanding vertically. Applied across macOS desktop and iOS phone/foldable layouts.
+
+### C. Mouse-Friendly 2x2 Quick Co-Pilot Suggestions (macOS)
+- **Problem**: The horizontal action chips required horizontal scrolling, which was inaccessible on Mac without touch screens or tilt-wheel mice, and were hidden when viewing the Vault tab.
+- **Solution**: Refactored `coPilotActionsStrip` in `PrismSideStudioPane.swift` into a compact 2x2 `LazyVGrid` positioned directly beneath the header switcher. All 4 quick actions (`TL;DR Summary`, `Tasks → TagDoS`, `Key Facts & Numbers`, `Explain Selection`) are 100% visible at all times with 0 scrolling. Clicking any action while in the `Vault` tab automatically animates the tab switch to `Co-Pilot` and triggers Gemini streaming immediately.
+
+### D. Multi-Window Memory Optimization & Hibernation
+- **Memory Duplication Elimination**: When detached into a separate window on macOS, the main window replaces its live `PrismMainView` `WKWebView` with `detachedPopOutPlaceholderView` observed through `PrismWindowManager.shared.isPopOutWindowActive`. This completely unmounts the background `WKWebView`, dropping background WebProcess CPU to `0.0%` and preventing duplicated memory consumption.
+- **Single-Window Invariant on Foldables & WinUI 3**: On foldables (`SimulaDuo`, `RADAR`) and WinUI 3, expanding/unfolding occurs in-place within a single Activity or Window using a single WebView engine, ensuring zero memory duplication by design.

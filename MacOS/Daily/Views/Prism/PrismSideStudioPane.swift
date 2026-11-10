@@ -67,6 +67,8 @@ public struct PrismSideStudioPane: View {
         VStack(spacing: 0) {
             headerSwitcher
 
+            coPilotActionsStrip
+
             Divider().background(Color.white.opacity(0.10))
 
             if activeStudioTab == .copilot {
@@ -173,40 +175,51 @@ public struct PrismSideStudioPane: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Co-Pilot Action Chips (Available in both Co-Pilot & Vault)
+
+    private var coPilotActionsStrip: some View {
+        VStack(spacing: 6) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
+                ForEach(PrismCoPilotAction.allCases) { action in
+                    Button {
+                        if activeStudioTab != .copilot {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                activeStudioTab = .copilot
+                            }
+                        }
+                        triggerCoPilotAction(action)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: action.iconName)
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundColor(Color(hex: action.accentHex))
+                            Text(action.title)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.92))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: action.accentHex).opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(hex: action.accentHex).opacity(0.35), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isGeneratingTurn || engine.currentURLString.isEmpty)
+                    .help("Run \(action.title) on current page")
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.20))
+    }
+
     // MARK: - Co-Pilot Body
 
     private var coPilotBody: some View {
         VStack(spacing: 0) {
-            // 4 Instant Prefabricated Action Chips
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 7) {
-                    ForEach(PrismCoPilotAction.allCases) { action in
-                        Button {
-                            triggerCoPilotAction(action)
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: action.iconName)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(Color(hex: action.accentHex))
-                                Text(action.title)
-                                    .font(.system(size: 11.5, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.92))
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(hex: action.accentHex).opacity(0.14), in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color(hex: action.accentHex).opacity(0.35), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isGeneratingTurn || engine.currentURLString.isEmpty)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-            }
-
-            Divider().background(Color.white.opacity(0.08))
-
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     if isGeneratingTurn {

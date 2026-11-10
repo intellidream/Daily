@@ -414,7 +414,7 @@ public struct PrismMainView: View {
                     .buttonStyle(.plain)
                 }
 
-                // 1-Tap Studio Sheet Launcher
+                // 1-Tap Studio Sheet Launcher (safeguarded against vertical stretching)
                 Button {
                     isOmniboxFocused = false
                     showingStudioSheet = true
@@ -425,11 +425,13 @@ public struct PrismMainView: View {
                         if !prismStore.clips.isEmpty {
                             Text("\(prismStore.clips.count)")
                                 .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                                .lineLimit(1)
                         }
                     }
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundColor(.black)
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
+                    .frame(height: 30)
                     .background(ThemeColors.accentCyan, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -577,15 +579,43 @@ public struct PrismMainView: View {
                         isWideSideStudioVisible.toggle()
                     }
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Studio")
-                            .font(.system(size: 12, weight: .semibold))
+                    ViewThatFits(in: .horizontal) {
+                        // Full width: Icon + "Studio" + badge
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Studio")
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                            if !prismStore.clips.isEmpty {
+                                Text("\(prismStore.clips.count)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.white.opacity(0.18), in: Capsule())
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+
+                        // Compact fallback: Icon + badge only, omitting "Studio" text to prevent 2-line expansion
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12, weight: .bold))
+                            if !prismStore.clips.isEmpty {
+                                Text("\(prismStore.clips.count)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.white.opacity(0.18), in: Capsule())
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                     .foregroundColor(isWideSideStudioVisible ? .black : .white)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
                     .background(isWideSideStudioVisible ? ThemeColors.accentCyan : Color.white.opacity(0.10), in: Capsule())
                 }
                 .buttonStyle(.plain)

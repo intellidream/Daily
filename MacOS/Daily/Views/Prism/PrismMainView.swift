@@ -13,6 +13,7 @@ public struct PrismMainView: View {
     @StateObject private var engine = PrismWebEngineModel()
     @ObservedObject private var prismStore = PrismStore.shared
     @ObservedObject private var settingsService = SettingsService.shared
+    @ObservedObject private var windowManager = PrismWindowManager.shared
 
     @State private var omniboxText: String = ""
     @FocusState private var isOmniboxFocused: Bool
@@ -43,6 +44,16 @@ public struct PrismMainView: View {
     }
 
     public var body: some View {
+        Group {
+            if !isInPopOutWindow && windowManager.isPopOutWindowActive {
+                detachedPopOutPlaceholderView
+            } else {
+                activePrismWorkspaceView
+            }
+        }
+    }
+
+    private var activePrismWorkspaceView: some View {
         VStack(spacing: 0) {
             topNavigationChrome
 
@@ -140,6 +151,76 @@ public struct PrismMainView: View {
         }
     }
 
+    // MARK: - Detached Pop-Out Memory Saver View
+
+    private var detachedPopOutPlaceholderView: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(ThemeColors.accentCyan.opacity(0.12))
+                    .frame(width: 84, height: 84)
+
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundColor(ThemeColors.accentCyan)
+            }
+
+            VStack(spacing: 8) {
+                Text("Prism is Active in Pop-Out Window")
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundColor(.white)
+
+                Text("Your research canvas and live web session are currently detached into a separate floating window.\nBackground WebView is hibernated to save system memory and battery.")
+                    .font(.system(size: 12.5))
+                    .foregroundColor(ThemeColors.fgMutedDark)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 480)
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    windowManager.focusPopOutWindow()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "macwindow")
+                            .font(.system(size: 12.5, weight: .semibold))
+                        Text("Bring Window to Front")
+                            .font(.system(size: 12.5, weight: .semibold))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(ThemeColors.accentCyan, in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    windowManager.closePopOutWindow()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.right.and.arrow.up.left")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Dock Back Here")
+                            .font(.system(size: 12.5, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.10), in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 4)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: "#050914").opacity(0.92))
+    }
+
     private func consumePendingNavigationIfNeeded() {
         guard let req = prismStore.pendingNavigationRequest else { return }
         prismStore.pendingNavigationRequest = nil
@@ -167,7 +248,7 @@ public struct PrismMainView: View {
     private var topNavigationChrome: some View {
         HStack(spacing: 8) {
             if isInPopOutWindow {
-                Spacer().frame(width: 68) // Clearance for macOS traffic lights
+                Spacer().frame(width: 76) // Clearance for macOS traffic lights in pop-out window
             } else {
                 Button(action: onNavigateBack) {
                     Image(systemName: "chevron.left")
@@ -255,28 +336,49 @@ public struct PrismMainView: View {
                     }
                 }
 
-                // Assisted Co-Pilot & Vault Studio Toggle
+                // Assisted Co-Pilot & Vault Studio Toggle (safeguarded against multi-line expansion)
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
                         isSideStudioVisible.toggle()
                     }
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Studio")
-                            .font(.system(size: 12, weight: .semibold))
-                        if !prismStore.clips.isEmpty {
-                            Text("\(prismStore.clips.count)")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Color.white.opacity(0.18), in: Capsule())
+                    ViewThatFits(in: .horizontal) {
+                        // Full width: Icon + "Studio" + badge
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Studio")
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                            if !prismStore.clips.isEmpty {
+                                Text("\(prismStore.clips.count)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.white.opacity(0.18), in: Capsule())
+                            }
                         }
+                        .fixedSize(horizontal: true, vertical: false)
+
+                        // Compact fallback: Icon + badge only, omitting "Studio" text to prevent line wrapping
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12, weight: .bold))
+                            if !prismStore.clips.isEmpty {
+                                Text("\(prismStore.clips.count)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.white.opacity(0.18), in: Capsule())
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                     .foregroundColor(isSideStudioVisible ? .black : .white)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
                     .background(isSideStudioVisible ? ThemeColors.accentCyan : Color.white.opacity(0.10), in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -301,9 +403,9 @@ public struct PrismMainView: View {
                 }
             }
         }
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-        .padding(.horizontal, 16)
+        .padding(.top, isInPopOutWindow ? 6 : 8)
+        .padding(.bottom, isInPopOutWindow ? 6 : 8)
+        .padding(.horizontal, 14)
     }
 
     private var smartOmniboxBar: some View {
