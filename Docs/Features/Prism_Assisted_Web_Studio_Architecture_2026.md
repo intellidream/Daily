@@ -78,3 +78,7 @@
 ### Supabase Ingress & Egress Sync Contract Update (macOS & iOS)
 - **Supabase Swift Overload Resolution Fix**: Removed `: PostgrestResponse<Data>` type annotation on PostgREST queries in `PrismStore.swift`. `execute<T: Decodable>` coerced Foundation `Data` expecting a base64 string, failing on JSON arrays. Using untyped `execute()` returning `PostgrestResponse<Void>` provides raw `res.data` for standard ISO-8601 JSON decoding.
 - **Eager Lifecycle Sync Triggers**: Added `PrismStore.shared.syncWithSupabase()` to `AuthService` session hydration/login callbacks, `DailyMacOSApp.init()` eager startup sequence, `RootView.swift` `⌘R` multi-service refresh, `PrismMainView` `.onAppear`, and `PrismSideStudioPane` `.onAppear` with manual `arrow.clockwise` refresh button and realtime sync indicator.
+
+### Physical Device Deployment & Live Verification
+- **Google Pixel 9 Pro ("Trapper", `caiman`)**: Paired via Wireless Debugging TLS, deployed `app-debug.apk` with `--no-streaming`, launched live with `daily://prism` (PID 30004).
+- **Samsung Galaxy Z Fold 8 ("RADAR", `SM-F971B`, `h8q`)**: Connected over Wireless TLS, deployed `app-debug.apk` with `--no-streaming`, launched live with `daily://prism` (PID 23982) with Foldable Dual-Pane and Research Split support.
