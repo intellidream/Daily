@@ -108,6 +108,9 @@ public struct PrismMainView: View {
             engine.syncWithActiveTab(prismStore.activeTab)
             omniboxText = prismStore.activeTab?.url ?? ""
             consumePendingNavigationIfNeeded()
+            Task { @MainActor in
+                await prismStore.syncWithSupabase()
+            }
         }
         .onDisappear {
             engine.pauseBackgroundMedia()

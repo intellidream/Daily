@@ -102,4 +102,11 @@ final class PrismTests: XCTestCase {
         XCTAssertFalse(turn.keyBullets.isEmpty)
         XCTAssertFalse(turn.extractedTasks.isEmpty)
     }
+
+    @MainActor
+    func testLiveSupabaseSync() async throws {
+        await PrismStore.shared.syncWithSupabase(forceFullPull: true)
+        XCTAssertGreaterThanOrEqual(PrismStore.shared.allClips.count, 1)
+        XCTAssertFalse(PrismStore.shared.clips.isEmpty)
+    }
 }

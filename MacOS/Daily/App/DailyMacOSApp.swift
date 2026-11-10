@@ -41,6 +41,7 @@ struct DailyMacOSApp: App {
             await HabitsService.shared.flushOfflineQueue()
             await HabitsService.shared.loadDataForSelectedDate()
             await TagdosStore.shared.syncWithSupabase()
+            await PrismStore.shared.syncWithSupabase()
             await HealthDataService.shared.refreshIfStale()
             await WeatherService.shared.refreshWeather()
         }

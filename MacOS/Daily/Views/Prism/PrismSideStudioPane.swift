@@ -76,6 +76,11 @@ public struct PrismSideStudioPane: View {
             }
         }
         .background(Color(hex: "#090F1E").opacity(0.88))
+        .onAppear {
+            Task { @MainActor in
+                await prismStore.syncWithSupabase()
+            }
+        }
         .sheet(item: $editingClip) { clip in
             clipAnnotationSheet(for: clip)
         }
@@ -93,6 +98,27 @@ public struct PrismSideStudioPane: View {
             .background(Color.white.opacity(0.06), in: Capsule())
 
             Spacer()
+
+            if prismStore.isSyncing {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(ThemeColors.accentCyan)
+                    .help("Syncing with Supabase...")
+            } else if activeStudioTab == .vault {
+                Button {
+                    Task { @MainActor in
+                        await prismStore.syncWithSupabase(forceFullPull: true)
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                        .frame(width: 24, height: 24)
+                        .background(Color.white.opacity(0.06), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Refresh Vault from Supabase")
+            }
 
             if let onClosePane = onClosePane {
                 Button(action: onClosePane) {

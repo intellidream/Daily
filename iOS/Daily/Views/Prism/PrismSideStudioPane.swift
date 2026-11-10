@@ -76,6 +76,11 @@ public struct PrismSideStudioPane: View {
             }
         }
         .background(Color(hex: "#090F1E").ignoresSafeArea())
+        .onAppear {
+            Task { @MainActor in
+                await prismStore.syncWithSupabase()
+            }
+        }
         .sheet(item: $editingClip) { clip in
             clipAnnotationSheet(for: clip)
         }
@@ -91,6 +96,26 @@ public struct PrismSideStudioPane: View {
             .background(Color.white.opacity(0.06), in: Capsule())
 
             Spacer()
+
+            if prismStore.isSyncing {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle())
+                    .scaleEffect(0.7)
+                    .tint(ThemeColors.accentCyan)
+            } else if activeStudioTab == .vault {
+                Button {
+                    Task { @MainActor in
+                        await prismStore.syncWithSupabase(forceFullPull: true)
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(ThemeColors.fgMutedDark)
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.06), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
 
             if let onClosePane = onClosePane {
                 Button(action: onClosePane) {

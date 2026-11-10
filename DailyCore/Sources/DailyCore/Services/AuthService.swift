@@ -69,6 +69,7 @@ public final class AuthService: NSObject, ObservableObject {
             
             Task { @MainActor in
                 await SavedArticlesService.shared.syncWithSupabase()
+                await PrismStore.shared.syncWithSupabase()
             }
         } catch {
             sessionState = .unauthenticated
@@ -142,6 +143,7 @@ public final class AuthService: NSObject, ObservableObject {
             sessionState = .authenticated(profile)
             Task { @MainActor in
                 await SavedArticlesService.shared.syncWithSupabase()
+                await PrismStore.shared.syncWithSupabase()
             }
             isLoading = false
             statusMessage = "Success!"
@@ -203,6 +205,7 @@ public final class AuthService: NSObject, ObservableObject {
             sessionState = .authenticated(profile)
             Task { @MainActor in
                 await SavedArticlesService.shared.syncWithSupabase()
+                await PrismStore.shared.syncWithSupabase()
             }
             isLoading = false
             statusMessage = "Success!"

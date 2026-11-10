@@ -735,8 +735,8 @@ public final class PrismStore: ObservableObject {
     }
 
     public func syncWithSupabase(forceFullPull: Bool = false) async {
-        guard SettingsService.shared.settings.cloudSyncEnabled,
-              let userId = await effectiveUserIdAsync() else { return }
+        guard SettingsService.shared.settings.cloudSyncEnabled else { return }
+        guard let userId = await effectiveUserIdAsync() else { return }
 
         isSyncing = true
         defer { isSyncing = false }
@@ -747,75 +747,66 @@ public final class PrismStore: ObservableObject {
         // 1. Incremental Delta Pull for `prism_clips`
         do {
             let lastClipWatermark = forceFullPull ? nil : defaults.string(forKey: clipsWatermarkKey)
-            let response: PostgrestResponse<Data>
+            var query = client
+                .from("prism_clips")
+                .select()
+                .eq("user_id", value: userId)
+
             if let wm = lastClipWatermark, !wm.isEmpty {
-                response = try await client
-                    .from("prism_clips")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .gt("updated_at", value: wm)
-                    .order("updated_at", ascending: false)
-                    .limit(200)
-                    .execute()
+                query = query.gt("updated_at", value: wm)
             } else {
-                response = try await client
-                    .from("prism_clips")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .eq("is_deleted", value: false)
-                    .order("updated_at", ascending: false)
-                    .limit(200)
-                    .execute()
+                query = query.eq("is_deleted", value: false)
             }
 
-            if let remoteClips = try? decoder.decode([PrismClip].self, from: response.data) {
-                var merged = allClips
-                var newestDate: Date? = nil
-                for rc in remoteClips {
-                    if newestDate == nil || rc.updatedAt > newestDate! {
-                        newestDate = rc.updatedAt
-                    }
-                    if let idx = merged.firstIndex(where: { $0.id == rc.id }) {
-                        if rc.updatedAt >= merged[idx].updatedAt {
-                            merged[idx] = rc
-                        }
-                    } else if !rc.isDeleted {
-                        merged.append(rc)
-                    }
+            let response = try await query
+                .order("updated_at", ascending: false)
+                .limit(200)
+                .execute()
+
+            let remoteClips = try decoder.decode([PrismClip].self, from: response.data)
+            var merged = allClips
+            var newestDate: Date? = nil
+            for rc in remoteClips {
+                if newestDate == nil || rc.updatedAt > newestDate! {
+                    newestDate = rc.updatedAt
                 }
-                allClips = merged
-                saveClipsLocally()
-                if let maxDate = newestDate {
-                    defaults.set(ISO8601DateFormatter().string(from: maxDate), forKey: clipsWatermarkKey)
+                if let idx = merged.firstIndex(where: { $0.id == rc.id }) {
+                    if rc.updatedAt >= merged[idx].updatedAt {
+                        merged[idx] = rc
+                    }
+                } else if !rc.isDeleted {
+                    merged.append(rc)
                 }
             }
+            allClips = merged
+            saveClipsLocally()
+            if let maxDate = newestDate {
+                defaults.set(ISO8601DateFormatter().string(from: maxDate), forKey: clipsWatermarkKey)
+            }
         } catch {
-            // Gracefully preserve local-first cache on transient network issues
+            print("[PrismStore] Supabase clips sync notice: \(error)")
         }
 
         // 2. Incremental Delta Pull for `prism_pinned_sites`
         do {
             let lastPinWatermark = forceFullPull ? nil : defaults.string(forKey: pinsWatermarkKey)
-            let response: PostgrestResponse<Data>
+            var query = client
+                .from("prism_pinned_sites")
+                .select()
+                .eq("user_id", value: userId)
+
             if let wm = lastPinWatermark, !wm.isEmpty {
-                response = try await client
-                    .from("prism_pinned_sites")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .gt("updated_at", value: wm)
-                    .order("updated_at", ascending: false)
-                    .execute()
+                query = query.gt("updated_at", value: wm)
             } else {
-                response = try await client
-                    .from("prism_pinned_sites")
-                    .select()
-                    .eq("user_id", value: userId)
-                    .eq("is_deleted", value: false)
-                    .order("display_order", ascending: true)
-                    .execute()
+                query = query.eq("is_deleted", value: false)
             }
 
-            if let remotePins = try? decoder.decode([PrismPinnedSite].self, from: response.data), !remotePins.isEmpty {
+            let response = try await query
+                .order("display_order", ascending: true)
+                .limit(100)
+                .execute()
+            let remotePins = try decoder.decode([PrismPinnedSite].self, from: response.data)
+            if !remotePins.isEmpty {
                 var merged = allPinnedSites
                 var newestDate: Date? = nil
                 for rp in remotePins {
@@ -836,7 +827,9 @@ public final class PrismStore: ObservableObject {
                     defaults.set(ISO8601DateFormatter().string(from: maxDate), forKey: pinsWatermarkKey)
                 }
             }
-        } catch {}
+        } catch {
+            print("[PrismStore] Supabase pins sync notice: \(error)")
+        }
     }
 
     private func pushClipToSupabase(_ clip: PrismClip) async {

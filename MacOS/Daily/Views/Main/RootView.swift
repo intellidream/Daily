@@ -145,7 +145,8 @@ public struct RootView: View {
                         async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
                         async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
                         async let s: () = SavedArticlesService.shared.syncWithSupabase()
-                        _ = await (w, h, hab, n, f, s)
+                        async let p: () = PrismStore.shared.syncWithSupabase(forceFullPull: true)
+                        _ = await (w, h, hab, n, f, s, p)
                     }
                 }.keyboardShortcut("r", modifiers: .command)
             }
