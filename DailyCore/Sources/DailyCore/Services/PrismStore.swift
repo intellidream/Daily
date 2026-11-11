@@ -293,6 +293,18 @@ public final class PrismStore: ObservableObject {
         enforceHibernationPolicy()
     }
 
+    public func duplicateTab(_ tabId: UUID) {
+        guard let tab = tabs.first(where: { $0.id == tabId }) else { return }
+        openNewTab(url: tab.url, title: tab.title, isPrivate: tab.isPrivate)
+    }
+
+    public func closeOtherTabs(except tabId: UUID) {
+        guard tabs.contains(where: { $0.id == tabId }) else { return }
+        tabs.removeAll { $0.id != tabId }
+        activeTabId = tabId
+        enforceHibernationPolicy()
+    }
+
     public func updateActiveTabMetadata(
         url: String? = nil,
         title: String? = nil,

@@ -66,10 +66,9 @@ public final class PrismWebEngineModel: NSObject, ObservableObject {
 
     @Published public var toastMessage: String? = nil
 
-    public private(set) var persistentWebView: WKWebView?
-    public private(set) var privateWebView: WKWebView?
+    @Published public private(set) var activeTabId: UUID? = nil
+    private var tabWebViews: [UUID: WKWebView] = [:]
     private var activeIsPrivate: Bool = false
-    private var loadedTabId: UUID? = nil
     private var pendingScrollRestoreY: Double = 0
     private var progressObservation: NSKeyValueObservation?
     private var titleObservation: NSKeyValueObservation?
@@ -84,18 +83,26 @@ public final class PrismWebEngineModel: NSObject, ObservableObject {
     }
 
     public var activeWebView: WKWebView {
-        if activeIsPrivate {
-            if let existing = privateWebView { return existing }
-            let created = buildWebView(isPrivate: true)
-            privateWebView = created
-            attachKVO(to: created)
-            return created
-        } else {
-            if let existing = persistentWebView { return existing }
-            let created = buildWebView(isPrivate: false)
-            persistentWebView = created
-            attachKVO(to: created)
-            return created
+        if let currentId = activeTabId, let existing = tabWebViews[currentId] {
+            return existing
+        }
+        if let first = tabWebViews.values.first {
+            return first
+        }
+        let fallback = buildWebView(isPrivate: activeIsPrivate)
+        if let currentId = activeTabId {
+            tabWebViews[currentId] = fallback
+        }
+        attachKVO(to: fallback)
+        return fallback
+    }
+
+    public func removeTabWebView(for tabId: UUID) {
+        if let wv = tabWebViews[tabId] {
+            wv.stopLoading()
+            wv.navigationDelegate = nil
+            wv.uiDelegate = nil
+            tabWebViews.removeValue(forKey: tabId)
         }
     }
 
@@ -209,23 +216,20 @@ public final class PrismWebEngineModel: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Tab Synchronization & Hibernation Restoration
+    // MARK: - Tab Synchronization & Multi-Tab WebViews Pool
 
     public func syncWithActiveTab(_ tab: PrismTabState?) {
         guard let tab = tab else { return }
 
-        if tab.isPrivate != activeIsPrivate {
-            if activeIsPrivate && !tab.isPrivate {
-                // Tear down ephemeral private WebView when leaving private mode
-                privateWebView?.stopLoading()
-                privateWebView = nil
-            }
-            activeIsPrivate = tab.isPrivate
-            attachKVO(to: activeWebView)
+        // Clean up webViews for tabs that were removed from PrismStore
+        let validIds = Set(PrismStore.shared.tabs.map(\.id))
+        let closedIds = tabWebViews.keys.filter { !validIds.contains($0) }
+        for id in closedIds {
+            removeTabWebView(for: id)
         }
 
-        let switchedTab = (loadedTabId != tab.id)
-        loadedTabId = tab.id
+        activeTabId = tab.id
+        activeIsPrivate = tab.isPrivate
 
         if tab.isStartPage {
             currentURLString = ""
@@ -235,17 +239,45 @@ public final class PrismWebEngineModel: NSObject, ObservableObject {
             selectionState = nil
             isReaderModeActive = false
             extractedReaderArticle = nil
+            objectWillChange.send()
             return
         }
 
-        if switchedTab || activeWebView.url?.absoluteString != tab.url {
+        if let existingWv = tabWebViews[tab.id] {
+            // Tab already active and loaded in memory!
+            // Seamless instant swap - DO NOT RELOAD!
+            attachKVO(to: existingWv)
+            currentURLString = existingWv.url?.absoluteString ?? tab.url
+            pageTitle = existingWv.title ?? tab.title
+            canGoBack = existingWv.canGoBack
+            canGoForward = existingWv.canGoForward
+            isLoading = existingWv.isLoading
+            estimatedProgress = existingWv.estimatedProgress
+            isSecureHTTPS = currentURLString.lowercased().hasPrefix("https://")
+            isReaderModeActive = tab.isReaderMode
+            detectedRssUrl = tab.detectedRssUrl
+            detectedRssTitle = tab.detectedRssTitle
+            selectionState = nil
+
+            if (existingWv.url == nil || existingWv.url?.absoluteString == "about:blank") && !tab.url.isEmpty {
+                loadURLString(tab.url)
+            }
+            objectWillChange.send()
+        } else {
+            // First time loading this tab: instantiate its dedicated WKWebView
+            let wv = buildWebView(isPrivate: tab.isPrivate)
+            tabWebViews[tab.id] = wv
+            attachKVO(to: wv)
             selectionState = nil
             isReaderModeActive = tab.isReaderMode
             extractedReaderArticle = nil
             detectedRssUrl = tab.detectedRssUrl
             detectedRssTitle = tab.detectedRssTitle
             pendingScrollRestoreY = tab.scrollY
-            loadURLString(tab.url)
+            if !tab.url.isEmpty {
+                loadURLString(tab.url)
+            }
+            objectWillChange.send()
         }
     }
 
@@ -296,8 +328,9 @@ public final class PrismWebEngineModel: NSObject, ObservableObject {
     }
 
     public func pauseBackgroundMedia() {
-        persistentWebView?.evaluateJavaScript("document.querySelectorAll('video, audio').forEach(m => m.pause());", completionHandler: nil)
-        privateWebView?.evaluateJavaScript("document.querySelectorAll('video, audio').forEach(m => m.pause());", completionHandler: nil)
+        for wv in tabWebViews.values {
+            wv.evaluateJavaScript("document.querySelectorAll('video, audio').forEach(m => m.pause());", completionHandler: nil)
+        }
     }
 
     public func openInSystemBrowser() {
@@ -397,6 +430,68 @@ public final class PrismWebEngineModel: NSObject, ObservableObject {
             }
         }
     }
+
+    // MARK: - OAuth & Link Detection Helpers
+
+    private func isOAuthOrAuthenticationRequest(url: URL, windowFeatures: WKWindowFeatures) -> Bool {
+        let host = (url.host ?? "").lowercased()
+        let path = url.path.lowercased()
+        let query = (url.query ?? "").lowercased()
+
+        let authDomains = [
+            "instagram.com", "threads.net", "threads.com", "facebook.com", "meta.com",
+            "accounts.google.com", "appleid.apple.com", "github.com",
+            "twitter.com", "x.com", "linkedin.com", "discord.com",
+            "login.microsoftonline.com", "login.live.com", "auth0.com", "okta.com"
+        ]
+
+        if authDomains.contains(where: { host.contains($0) }) {
+            if path.contains("login") || path.contains("auth") || path.contains("oauth") ||
+               path.contains("signin") || path.contains("checkpoint") || path.contains("two_factor") ||
+               query.contains("client_id") || query.contains("redirect_uri") || query.contains("response_type") {
+                return true
+            }
+        }
+
+        if path.contains("/oauth") || path.contains("/auth/") || path.contains("/login") || path.contains("/signin") {
+            return true
+        }
+
+        if query.contains("client_id=") || query.contains("redirect_uri=") || query.contains("response_type=") {
+            return true
+        }
+
+        if windowFeatures.width != nil || windowFeatures.height != nil {
+            return true
+        }
+
+        return false
+    }
+
+    private func isOAuthCompletionRedirect(url: URL) -> Bool {
+        let host = (url.host ?? "").lowercased()
+        let path = url.path.lowercased()
+        let query = (url.query ?? "").lowercased()
+
+        if let activeUrl = URL(string: currentURLString), let activeHost = activeUrl.host?.lowercased() {
+            let cleanActive = PrismSearchEngine.extractCleanDomain(from: activeHost)
+            let cleanPopup = PrismSearchEngine.extractCleanDomain(from: host)
+            if !cleanActive.isEmpty && (cleanActive == cleanPopup || (cleanActive.contains("threads") && cleanPopup.contains("threads"))) {
+                if !path.contains("login") && !path.contains("oauth/authorize") && !path.contains("accounts/login") {
+                    return true
+                }
+                if query.contains("code=") || query.contains("oauth_token=") || query.contains("access_token=") {
+                    return true
+                }
+            }
+        }
+
+        if path.hasSuffix("/oauth/callback") || path.hasSuffix("/auth/callback") || path.contains("login/callback") {
+            return true
+        }
+
+        return false
+    }
 }
 
 // MARK: - WKNavigationDelegate & WKUIDelegate & Script Bridge
@@ -414,17 +509,60 @@ extension PrismWebEngineModel: WKNavigationDelegate, WKUIDelegate, WKScriptMessa
         }
 
         let scheme = (url.scheme ?? "").lowercased()
+
+        // Handle app-specific OAuth callback schemes (e.g. threads://, instagram://, barcelona://, fbconnect://)
+        let authCallbackSchemes: Set<String> = ["threads", "instagram", "barcelona", "fbconnect"]
+        if authCallbackSchemes.contains(scheme) {
+            if webView === oauthPopupWebView {
+                self.oauthPopupWebView = nil
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    self.activeWebView.reload()
+                }
+            }
+            decisionHandler(.cancel)
+            return
+        }
+
         let allowedSchemes: Set<String> = ["https", "http", "about", "blob"]
         guard allowedSchemes.contains(scheme) else {
             decisionHandler(.cancel)
             return
         }
 
-        // Route regular `_blank` anchor clicks smoothly into the active WebView (while `createWebViewWith` handles true JS OAuth popups)
-        if navigationAction.targetFrame == nil && navigationAction.navigationType == .linkActivated {
-            webView.load(navigationAction.request)
+        // Handle OAuth Popup Completion / Redirect back to target domain
+        if webView === oauthPopupWebView {
+            if isOAuthCompletionRedirect(url: url) {
+                self.oauthPopupWebView = nil
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    self.activeWebView.reload()
+                }
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+            return
+        }
+
+        // Command-Click to open link in a new tab
+        if navigationAction.modifierFlags.contains(.command) && navigationAction.navigationType == .linkActivated {
+            PrismStore.shared.openNewTab(url: url.absoluteString, isPrivate: activeIsPrivate)
             decisionHandler(.cancel)
             return
+        }
+
+        // Target=_blank link clicked in web page: open in new tab!
+        if navigationAction.targetFrame == nil {
+            if navigationAction.navigationType == .linkActivated {
+                PrismStore.shared.openNewTab(url: url.absoluteString, isPrivate: activeIsPrivate)
+                decisionHandler(.cancel)
+                return
+            } else {
+                webView.load(navigationAction.request)
+                decisionHandler(.cancel)
+                return
+            }
         }
 
         decisionHandler(.allow)
@@ -439,6 +577,13 @@ extension PrismWebEngineModel: WKNavigationDelegate, WKUIDelegate, WKScriptMessa
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === oauthPopupWebView {
             oauthPopupTitle = webView.title ?? "Sign In"
+            if let u = webView.url, isOAuthCompletionRedirect(url: u) {
+                oauthPopupWebView = nil
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    self.activeWebView.reload()
+                }
+            }
             return
         }
         isLoading = false
@@ -468,34 +613,34 @@ extension PrismWebEngineModel: WKNavigationDelegate, WKUIDelegate, WKScriptMessa
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard let url = navigationAction.request.url else { return nil }
-        let host = (url.host ?? "").lowercased()
 
-        // True federated OAuth / SSO popup windows keep `window.opener` intact inside a modal sub-sheet
-        let isOAuthPopup = host.contains("accounts.google.com") ||
-            host.contains("appleid.apple.com") ||
-            host.contains("facebook.com") ||
-            host.contains("github.com/login") ||
-            host.contains("oauth") ||
-            host.contains("auth0") ||
-            windowFeatures.width != nil
-
-        if isOAuthPopup {
+        // 1. True federated OAuth / SSO popup windows keep window.opener intact inside a modal sub-sheet
+        if isOAuthOrAuthenticationRequest(url: url, windowFeatures: windowFeatures) {
+            configuration.websiteDataStore = activeWebView.configuration.websiteDataStore
             let popup = WKWebView(frame: .zero, configuration: configuration)
             popup.customUserAgent = Self.desktopSafariUserAgent
             popup.navigationDelegate = self
             popup.uiDelegate = self
-            self.oauthPopupTitle = host.isEmpty ? "Authenticate" : host
+            let host = (url.host ?? "").lowercased()
+            self.oauthPopupTitle = host.isEmpty ? "Sign In" : host
             self.oauthPopupWebView = popup
             return popup
         }
 
-        webView.load(navigationAction.request)
-        return nil
+        // 2. Normal link or target="_blank" window.open request -> OPEN IN NEW TAB!
+        let newTab = PrismStore.shared.openNewTab(url: url.absoluteString, isPrivate: activeIsPrivate)
+        let newWv = buildWebView(isPrivate: newTab.isPrivate)
+        tabWebViews[newTab.id] = newWv
+        return newWv
     }
 
     public func webViewDidClose(_ webView: WKWebView) {
         if webView === oauthPopupWebView {
             oauthPopupWebView = nil
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                self.activeWebView.reload()
+            }
         }
     }
 

@@ -102,3 +102,46 @@
 ### D. Multi-Window Memory Optimization & Hibernation
 - **Memory Duplication Elimination**: When detached into a separate window on macOS, the main window replaces its live `PrismMainView` `WKWebView` with `detachedPopOutPlaceholderView` observed through `PrismWindowManager.shared.isPopOutWindowActive`. This completely unmounts the background `WKWebView`, dropping background WebProcess CPU to `0.0%` and preventing duplicated memory consumption.
 - **Single-Window Invariant on Foldables & WinUI 3**: On foldables (`SimulaDuo`, `RADAR`) and WinUI 3, expanding/unfolding occurs in-place within a single Activity or Window using a single WebView engine, ensuring zero memory duplication by design.
+
+---
+
+## 5. Multi-Tab Session Preservation & Instant Tab Switching (macOS & iOS)
+
+- **Elimination of Constant Page Reloads**:
+  - Replaced single `persistentWebView` singleton with a dedicated per-tab pool: `tabWebViews: [UUID: WKWebView]`.
+  - When switching between tabs in `syncWithActiveTab`, if a tab's `WKWebView` already exists in `tabWebViews[tab.id]`, the engine simply re-attaches KVO and swaps the view in `PrismHostedWebView` with **zero network fetch and zero page reload**.
+  - All DOM trees, scroll offsets, form inputs, and video playback states are preserved intact.
+  - Closed tabs cleanly clean up and remove their `WKWebView` instances via `removeTabWebView(for:)`.
+
+---
+
+## 6. Comprehensive "Open in New Tab" Link & Tab Management (macOS & iOS)
+
+- **`target="_blank"` & Window Open Delegation**:
+  - Intercepted in `decidePolicyFor navigationAction` (`navigationAction.targetFrame == nil && navigationAction.navigationType == .linkActivated`) and `createWebViewWith` to open directly into a fresh tab via `PrismStore.shared.openNewTab(url:)`, preventing active page hijacking.
+- **Desktop Command-Click (macOS)**:
+  - `navigationAction.modifierFlags.contains(.command)` opens any clicked link in a background/new tab.
+- **Native iOS Long-Press Context Menu**:
+  - Implemented `WKUIDelegate.contextMenuConfigurationForElement` on iOS with native actions:
+    - `"Open in New Tab"` (`+` icon)
+    - `"Open in Private Tab"` (`eyeglasses` icon)
+    - `"Save Link to Vault"` (`bookmark` icon)
+    - `"Copy Link"` (`doc.on.doc` icon)
+    - `"Share..."` (`square.and.arrow.up` icon via `UIActivityViewController`)
+- **Tab Strip Context Menus**:
+  - Both macOS and iOS tab strips now support right-click / long-press menus with `"Duplicate Tab"`, `"New Tab"`, `"New Private Tab"`, `"Close Tab"`, and `"Close Other Tabs"`.
+
+---
+
+## 7. Federated OAuth & SSO Redirection Architecture (Threads / Instagram / Meta / Google)
+
+- **The Problem**:
+  - Previous implementations failed on Instagram/Threads logins because `instagram.com` and `threads.net` were not recognized as authentication popup providers, forcing `window.open` requests into the parent WebView and severing `window.opener`. This caused cross-origin scripts to fail before redirecting back to the app.
+- **Comprehensive Auth Recognition**:
+  - Added deterministic recognition for Meta/Instagram/Threads (`instagram.com`, `threads.net`, `threads.com`, `facebook.com`, `meta.com`), Google, Apple, GitHub, Twitter/X, Microsoft, Auth0, and Okta, alongside parameter checks (`client_id`, `redirect_uri`, `response_type`, `checkpoint`).
+- **Opener Preservation & Shared Data Store**:
+  - Popups retain their native parent configuration with `configuration.websiteDataStore = activeWebView.configuration.websiteDataStore` and proper desktop/mobile User-Agents.
+- **Automatic Completion & Session Hydration**:
+  - `isOAuthCompletionRedirect` detects when the popup navigates back to the root application domain (e.g. `threads.net`) or OAuth callback routes (`/oauth/callback`, `/login/callback`).
+  - Supports app-specific callback schemes (`threads://`, `instagram://`, `barcelona://`, `fbconnect://`).
+  - When the OAuth popup completes or calls `window.close()` / `webViewDidClose`, the popup sheet auto-dismisses and triggers `activeWebView.reload()` after 300ms, seamlessly hydrating the logged-in session into the main tab.

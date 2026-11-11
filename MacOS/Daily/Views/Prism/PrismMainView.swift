@@ -589,6 +589,41 @@ public struct PrismMainView: View {
                                 lineWidth: 1
                             )
                         )
+                        .contextMenu {
+                            Button {
+                                prismStore.duplicateTab(tab.id)
+                            } label: {
+                                Label("Duplicate Tab", systemImage: "plus.square.on.square")
+                            }
+
+                            Button {
+                                prismStore.openNewTab()
+                            } label: {
+                                Label("New Tab", systemImage: "plus")
+                            }
+
+                            Button {
+                                prismStore.openNewTab(isPrivate: true)
+                            } label: {
+                                Label("New Private Tab", systemImage: "eyeglasses")
+                            }
+
+                            Divider()
+
+                            if prismStore.tabs.count > 1 {
+                                Button(role: .destructive) {
+                                    prismStore.closeTab(tab.id)
+                                } label: {
+                                    Label("Close Tab", systemImage: "xmark")
+                                }
+
+                                Button(role: .destructive) {
+                                    prismStore.closeOtherTabs(except: tab.id)
+                                } label: {
+                                    Label("Close Other Tabs", systemImage: "xmark.circle")
+                                }
+                            }
+                        }
                     }
                 }
             }

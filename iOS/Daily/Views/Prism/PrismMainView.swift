@@ -235,6 +235,41 @@ public struct PrismMainView: View {
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
                         .background(isActive ? ThemeColors.accentBlue.opacity(0.26) : Color.white.opacity(0.05), in: Capsule())
+                        .contextMenu {
+                            Button {
+                                prismStore.duplicateTab(tab.id)
+                            } label: {
+                                Label("Duplicate Tab", systemImage: "plus.square.on.square")
+                            }
+
+                            Button {
+                                prismStore.openNewTab()
+                            } label: {
+                                Label("New Tab", systemImage: "plus")
+                            }
+
+                            Button {
+                                prismStore.openNewTab(isPrivate: true)
+                            } label: {
+                                Label("New Private Tab", systemImage: "eyeglasses")
+                            }
+
+                            Divider()
+
+                            if prismStore.tabs.count > 1 {
+                                Button(role: .destructive) {
+                                    prismStore.closeTab(tab.id)
+                                } label: {
+                                    Label("Close Tab", systemImage: "xmark")
+                                }
+
+                                Button(role: .destructive) {
+                                    prismStore.closeOtherTabs(except: tab.id)
+                                } label: {
+                                    Label("Close Other Tabs", systemImage: "xmark.circle")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -655,6 +690,41 @@ public struct PrismMainView: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(isActive ? ThemeColors.accentBlue.opacity(0.24) : Color.white.opacity(0.05), in: Capsule())
+                            .contextMenu {
+                                Button {
+                                    prismStore.duplicateTab(tab.id)
+                                } label: {
+                                    Label("Duplicate Tab", systemImage: "plus.square.on.square")
+                                }
+
+                                Button {
+                                    prismStore.openNewTab()
+                                } label: {
+                                    Label("New Tab", systemImage: "plus")
+                                }
+
+                                Button {
+                                    prismStore.openNewTab(isPrivate: true)
+                                } label: {
+                                    Label("New Private Tab", systemImage: "eyeglasses")
+                                }
+
+                                Divider()
+
+                                if prismStore.tabs.count > 1 {
+                                    Button(role: .destructive) {
+                                        prismStore.closeTab(tab.id)
+                                    } label: {
+                                        Label("Close Tab", systemImage: "xmark")
+                                    }
+
+                                    Button(role: .destructive) {
+                                        prismStore.closeOtherTabs(except: tab.id)
+                                    } label: {
+                                        Label("Close Other Tabs", systemImage: "xmark.circle")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
