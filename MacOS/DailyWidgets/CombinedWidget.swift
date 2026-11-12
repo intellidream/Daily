@@ -79,12 +79,18 @@ public struct CombinedTimelineProvider: TimelineProvider {
                             drivingPillType: "standard",
                             activePillsCount: 4,
                             reminderTimeFormatted: nil,
-                            pills: []
+                            pills: [
+                                TagdosWidgetSnapshotPill(text: "Fix brief auto-open", typeRaw: "standard", isCompleted: false),
+                                TagdosWidgetSnapshotPill(text: "Sync widgets", typeRaw: "standard", isCompleted: false),
+                                TagdosWidgetSnapshotPill(text: "Review PR", typeRaw: "standard", isCompleted: false)
+                            ]
                         )
                     ],
                     totalActivePills: 4,
                     nextReminderFormatted: nil
                 ),
+                stress: .placeholder,
+                cosmos: .placeholder,
                 morningSummary: BriefingSummarySnippet(
                     greeting: "Good Morning, Mihai",
                     weatherTemp: 18.0,
@@ -156,152 +162,49 @@ public struct CombinedWidgetView: View {
                 mediumRegularView
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .widgetURL(targetUrl)
         .containerBackground(WidgetColors.bgGradient, for: .widget)
     }
 
-    // =========================================================================
-    // MARK: - 1. SMALL WIDGET
-    // =========================================================================
+    // MARK: - Shared Helpers
 
-    // Small - Morning Mode
-    private var smallMorningView: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            // Header: Greeting + Weather
-            HStack(alignment: .center) {
-                HStack(spacing: 4) {
-                    Image(systemName: "sun.max.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(WidgetColors.accentAmber)
-                    Text("Morning")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
+    /// Extracts up to `limit` important distinct TagDoS focus items (driving pills first, then active pills across streams).
+    private func importantTagdosItems(limit: Int = 3) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
 
-                Spacer()
+        func appendIfUnique(_ raw: String?) {
+            guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
+            let key = text.lowercased()
+            guard !seen.contains(key) else { return }
+            seen.insert(key)
+            result.append(text)
+        }
 
-                if let temp = entry.snapshot.morningSummary?.weatherTemp {
-                    let iconCode = entry.snapshot.morningSummary?.weatherIcon ?? "01d"
-                    HStack(spacing: 3) {
-                        Image(systemName: WeatherConditionHelper.sfSymbol(for: iconCode))
-                            .font(.system(size: 9))
-                            .foregroundColor(WidgetColors.accentCyan)
-                        Text("\(Int(round(temp)))°")
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.85))
-                    }
-                }
-            }
+        // 1. Driving pills across all streams
+        for stream in entry.snapshot.tagdos.streams {
+            appendIfUnique(stream.drivingPillText)
+            if result.count >= limit { return result }
+        }
 
-            // Sleep Hero Progress Ring & Recovery
-            HStack(spacing: 9) {
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 3.5)
-                        .frame(width: 36, height: 36)
-                    Circle()
-                        .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
-                        .stroke(
-                            LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 36, height: 36)
-                    Text("\(entry.snapshot.sleep.sleepScore)")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.snapshot.sleep.totalAsleepFormatted)
-                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Text(entry.snapshot.sleep.sleepQualityRating)
-                        .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentMint)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, 2)
-
-            // Focus snippet or driving pill
-            if let focus = cleanMorningFocusTask(
-                topFocus: entry.snapshot.morningSummary?.topFocusText,
-                streamDriving: entry.snapshot.tagdos.streams.first?.drivingPillText
-            ) {
-                HStack(spacing: 4) {
-                    Text("Focus")
-                        .font(.system(size: 8, weight: .heavy, design: .rounded))
-                        .foregroundColor(WidgetColors.accentPurple)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(WidgetColors.accentPurple.opacity(0.2))
-                        .clipShape(Capsule())
-
-                    Text(focus)
-                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.9))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3.5)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-
-            Spacer(minLength: 0)
-
-            // Bottom 3-metric quick status
-            HStack(spacing: 4) {
-                // Water
-                HStack(spacing: 2) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 8))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Text(widgetFormatCompactNumber(entry.snapshot.bubbles.todayMl))
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
-
-                // Smokes
-                let count = entry.snapshot.smokes.todayTotal
-                let base = entry.snapshot.smokes.baseline
-                HStack(spacing: 2) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 8))
-                        .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
-                    Text("\(count)")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
-
-                // Net worth in EUR, compact integer format (e.g. 55k) without decimals
-                HStack(spacing: 2) {
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 8))
-                        .foregroundColor(WidgetColors.accentGreen)
-                    Text(widgetFormatCompactIntegerEUR(entry.snapshot.money.netWorthEUR))
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
+        // 2. Remaining active pills across all streams
+        for stream in entry.snapshot.tagdos.streams {
+            for pill in stream.pills {
+                appendIfUnique(pill.text)
+                if result.count >= limit { return result }
             }
         }
+
+        // 3. Fallback to cleaned morning focus text
+        if result.isEmpty, let cleaned = cleanMorningFocusTask(
+            topFocus: entry.snapshot.morningSummary?.topFocusText,
+            streamDriving: nil
+        ) {
+            appendIfUnique(cleaned)
+        }
+
+        return result
     }
 
     private func cleanMorningFocusTask(topFocus: String?, streamDriving: String?) -> String? {
@@ -329,7 +232,255 @@ public struct CombinedWidgetView: View {
         return cleaned.isEmpty ? raw : cleaned
     }
 
-    // Mini Progress Ring Helper for Small Executive Widget
+    // =========================================================================
+    // MARK: - 1. SMALL WIDGET
+    // =========================================================================
+
+    // Small - Morning Mode (With Brief)
+    // Layout:
+    // 1. Header: Morning + Weather
+    // 2. Sleep (left) + Compact Stress with Monkey Mascot (right)
+    // 3. Money line (Net Worth Lei + EUR)
+    // 4. TagDoS Focus line (2-3 important TagDoS items that fit)
+    // 5. Bottom 3 pills: Water, Smokes, Cosmos
+    private var smallMorningView: some View {
+        let stress = entry.snapshot.stress
+        let hasStress = stress.hasData
+        let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
+        let cosmos = entry.snapshot.cosmos
+        let cosmosColor = Color(hex: cosmos.qualityHexColor)
+        let focusItems = importantTagdosItems(limit: 3)
+
+        return VStack(alignment: .leading, spacing: 4) {
+            // Row 1: Header (Greeting + Weather)
+            HStack(alignment: .center, spacing: 4) {
+                HStack(spacing: 3.5) {
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundColor(WidgetColors.accentAmber)
+                    Text("Morning")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 2)
+
+                if let temp = entry.snapshot.morningSummary?.weatherTemp {
+                    let iconCode = entry.snapshot.morningSummary?.weatherIcon ?? "01d"
+                    HStack(spacing: 2.5) {
+                        Image(systemName: WeatherConditionHelper.sfSymbol(for: iconCode))
+                            .font(.system(size: 9.5))
+                            .foregroundColor(WidgetColors.accentCyan)
+                        Text("\(Int(round(temp)))°")
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                }
+            }
+
+            // Row 2: Sleep Ring & Duration (left) + Compact Stress Indicator (right)
+            HStack(spacing: 5) {
+                // Sleep side
+                HStack(spacing: 5) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.12), lineWidth: 3.0)
+                            .frame(width: 28, height: 28)
+                        Circle()
+                            .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
+                            .stroke(
+                                LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                style: StrokeStyle(lineWidth: 3.0, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 28, height: 28)
+                        Text("\(entry.snapshot.sleep.sleepScore)")
+                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 0.5) {
+                        Text(entry.snapshot.sleep.totalAsleepFormatted)
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Text(entry.snapshot.sleep.sleepQualityRating)
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentMint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                }
+
+                Spacer(minLength: 2)
+
+                // Stress compact indicator on the right of Sleep
+                HStack(spacing: 3.5) {
+                    WidgetMonkeyMascotView(mood: stress.monkeyMood, size: 17)
+
+                    VStack(alignment: .trailing, spacing: 0.5) {
+                        Text(hasStress ? "\(stress.stressScore)" : "--")
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Text(hasStress ? stress.level.displayName : "Calm")
+                            .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                            .foregroundColor(stressColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+                .padding(.horizontal, 5.5)
+                .padding(.vertical, 3.5)
+                .background(stressColor.opacity(hasStress ? 0.14 : 0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+
+            // Row 3: Money Line (above TagDoS Focus)
+            HStack(spacing: 4) {
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 8.5))
+                    .foregroundColor(WidgetColors.accentGreen)
+
+                Text(entry.snapshot.money.formattedNetWorth)
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Spacer(minLength: 2)
+
+                Text(entry.snapshot.money.formattedNetWorthEUR)
+                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                    .foregroundColor(WidgetColors.accentGreen)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, 6.5)
+            .padding(.vertical, 3.5)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            // Row 4: TagDoS Focus (2-3 important items that fit cleanly)
+            VStack(alignment: .leading, spacing: 2.5) {
+                if focusItems.isEmpty {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(WidgetColors.accentPurple)
+                            .frame(width: 4.5, height: 4.5)
+                        Text("All focus streams clear")
+                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                } else {
+                    // Primary item + secondary items compactly arranged so 2-3 items fit
+                    HStack(spacing: 3.5) {
+                        ForEach(Array(focusItems.prefix(2).enumerated()), id: \.offset) { idx, item in
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(idx == 0 ? WidgetColors.accentPurple : WidgetColors.accentCyan)
+                                    .frame(width: 4, height: 4)
+                                Text(item)
+                                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.92))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                        }
+                    }
+
+                    if focusItems.count >= 3 {
+                        HStack(spacing: 3.5) {
+                            Circle()
+                                .fill(WidgetColors.accentMint)
+                                .frame(width: 4, height: 4)
+                            Text(focusItems[2])
+                                .font(.system(size: 8, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.82))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 0)
+                            if entry.snapshot.tagdos.totalActivePills > 3 {
+                                Text("+\(entry.snapshot.tagdos.totalActivePills - 3)")
+                                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                                    .foregroundColor(WidgetColors.accentPurple)
+                            }
+                        }
+                        .padding(.horizontal, 5)
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+            .padding(.horizontal, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            Spacer(minLength: 0)
+
+            // Row 5: Bottom 3 Pills (Water, Smokes, Cosmos)
+            HStack(spacing: 4) {
+                // 1. Water
+                HStack(spacing: 2.5) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(WidgetColors.accentCyan)
+                    Text(widgetFormatCompactNumber(entry.snapshot.bubbles.todayMl))
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 3.5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+
+                // 2. Smokes
+                let count = entry.snapshot.smokes.todayTotal
+                let base = entry.snapshot.smokes.baseline
+                HStack(spacing: 2.5) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
+                    Text("\(count)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 3.5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+
+                // 3. Cosmos (replacing Money pill at bottom)
+                HStack(spacing: 2.5) {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(cosmosColor)
+                    Text("\(cosmos.stargazingScore)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 3.5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // Mini Progress Ring Helper for Small Executive Widget (Regular Mode)
     private func smallProgressRing(
         progress: CGFloat,
         valueText: String,
@@ -342,7 +493,7 @@ public struct CombinedWidgetView: View {
             ZStack {
                 Circle()
                     .stroke(Color.white.opacity(0.12), lineWidth: 3.2)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 34, height: 34)
 
                 Circle()
                     .trim(from: 0, to: max(0.04, min(progress, 1.0)))
@@ -355,10 +506,10 @@ public struct CombinedWidgetView: View {
                         style: StrokeStyle(lineWidth: 3.2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 34, height: 34)
 
                 Text(valueText)
-                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -366,11 +517,11 @@ public struct CombinedWidgetView: View {
 
             HStack(spacing: 2) {
                 Image(systemName: iconName)
-                    .font(.system(size: 7))
+                    .font(.system(size: 6.5))
                     .foregroundColor(tintColor)
                 Text(labelText)
                     .font(.system(size: 7.5, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.75))
+                    .foregroundColor(.white.opacity(0.78))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
@@ -378,12 +529,23 @@ public struct CombinedWidgetView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // Small - Regular Mode (Executive 3-Ring Gauges + Horizontal Stress Bar + Combined Money & TagDoS)
+    // Small - Regular Mode (Without Brief)
+    // Includes:
+    // 1. 3 Liquid Progress Rings (Sleep, Water, Smokes)
+    // 2. Horizontal Stress Bar with real Monkey Mascot & single-line level badge
+    // 3. Money & Cosmos quick row
+    // 4. TagDoS Focus row (2 important items)
     private var smallRegularView: some View {
-        VStack(spacing: 7.5) {
+        let stress = entry.snapshot.stress
+        let hasStress = stress.hasData
+        let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
+        let cosmos = entry.snapshot.cosmos
+        let cosmosColor = Color(hex: cosmos.qualityHexColor)
+        let focusItems = importantTagdosItems(limit: 2)
+
+        return VStack(spacing: 4.5) {
             // Row 1: 3 Liquid Progress Rings (Sleep, Water, Smokes)
             HStack(spacing: 4) {
-                // Sleep Ring
                 smallProgressRing(
                     progress: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0),
                     valueText: "\(entry.snapshot.sleep.sleepScore)%",
@@ -393,7 +555,6 @@ public struct CombinedWidgetView: View {
                     tintColor: WidgetColors.accentCyan
                 )
 
-                // Water Ring
                 smallProgressRing(
                     progress: entry.snapshot.bubbles.progressPercent,
                     valueText: "\(Int(entry.snapshot.bubbles.progressPercent * 100))%",
@@ -403,7 +564,6 @@ public struct CombinedWidgetView: View {
                     tintColor: WidgetColors.accentBlue
                 )
 
-                // Smokes Ring
                 let sCount = entry.snapshot.smokes.todayTotal
                 let sBase = entry.snapshot.smokes.baseline
                 let sColor = widgetSmokeRingColor(countToday: sCount, baseline: sBase)
@@ -417,19 +577,15 @@ public struct CombinedWidgetView: View {
                 )
             }
 
-            // Row 2: Horizontal Stress Bar with Monkey Mascot (no word "STRESS" for extra room)
-            let stress = entry.snapshot.stress
-            let hasStress = stress.hasData
-            let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
-            HStack(spacing: 5) {
-                Text(stress.monkeyMood.emoji)
-                    .font(.system(size: 11.5))
+            // Row 2: Horizontal Stress Bar with our Monkey Mascot & strictly 1-line level badge
+            HStack(spacing: 4.5) {
+                WidgetMonkeyMascotView(mood: stress.monkeyMood, size: 16)
 
                 Text(hasStress ? "\(stress.stressScore)" : "--")
-                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .font(.system(size: 10.5, weight: .heavy, design: .rounded))
                     .foregroundColor(hasStress ? .white : .white.opacity(0.5))
+                    .lineLimit(1)
 
-                // Mini horizontal gauge
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
@@ -455,299 +611,477 @@ public struct CombinedWidgetView: View {
                 Text(hasStress ? stress.level.displayName : "No Data")
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(stressColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 1.5)
                     .background(stressColor.opacity(hasStress ? 0.18 : 0.08))
                     .clipShape(Capsule())
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4.5)
+            .padding(.horizontal, 6.5)
+            .padding(.vertical, 4)
             .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
 
-            // Row 3: Combined Money (EUR) & TagDoS Row (No S1 badge to maximize task text)
-            let driving = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "Clear"
-            HStack(spacing: 5) {
-                // Left: Money in EUR
+            // Row 3: Money (EUR + Lei) & Cosmos Pill
+            HStack(spacing: 4) {
                 HStack(spacing: 3.5) {
                     Image(systemName: "creditcard.fill")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 8))
                         .foregroundColor(WidgetColors.accentGreen)
 
-                    Text(entry.snapshot.money.formattedNetWorthEUR)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                    Text(entry.snapshot.money.formattedNetWorth)
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .minimumScaleFactor(0.75)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3.5)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                // Right: TagDoS Focus
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(cosmosColor)
+                    Text("\(cosmos.stargazingScore)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("\(cosmos.moonIlluminationPercent)%")
+                        .font(.system(size: 7.5, weight: .medium, design: .rounded))
+                        .foregroundColor(WidgetColors.fgMuted)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3.5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+
+            Spacer(minLength: 0)
+
+            // Row 4: TagDoS Focus (up to 2 pills)
+            HStack(spacing: 4) {
+                if focusItems.isEmpty {
                     Circle()
                         .fill(WidgetColors.accentPurple)
                         .frame(width: 4.5, height: 4.5)
-
-                    Text(driving)
-                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.92))
+                    Text("Clear focus")
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.85))
                         .lineLimit(1)
-                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                } else {
+                    ForEach(Array(focusItems.prefix(2).enumerated()), id: \.offset) { idx, item in
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(idx == 0 ? WidgetColors.accentPurple : WidgetColors.accentCyan)
+                                .frame(width: 4, height: 4)
+                            Text(item)
+                                .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.92))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .padding(.horizontal, 5.5)
+                        .padding(.vertical, 3.5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // =========================================================================
     // MARK: - 2. MEDIUM WIDGET
     // =========================================================================
 
-    // Medium - Morning Mode (Split: Spotlight Summary + 4 Metric Tiles)
+    // Medium - Morning Mode (With Brief)
+    // Includes all info from Small Morning + richer Medium breakdowns:
+    // Left Column (Morning Brief Card): Greeting + Weather, Sleep Ring + Stress with Monkey Mascot, TagDoS Focus (2-3 items)
+    // Right Column (4 Metric Tiles): Bubbles (with Coffee/Water), Smokes (with Cig/Heat & elapsed), Money (Lei + EUR), Cosmos (Score + Verdict + Moon/Window)
     private var mediumMorningView: some View {
-        HStack(spacing: 10) {
-            // Left Card (48%): Morning Mini-Summary Spotlight
-            VStack(alignment: .leading, spacing: 6) {
-                // Greeting Header
-                HStack(spacing: 5) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Text("Morning Brief")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
+        let stress = entry.snapshot.stress
+        let hasStress = stress.hasData
+        let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
+        let cosmos = entry.snapshot.cosmos
+        let cosmosColor = Color(hex: cosmos.qualityHexColor)
+        let focusItems = importantTagdosItems(limit: 3)
 
-                if let temp = entry.snapshot.morningSummary?.weatherTemp {
-                    let iconCode = entry.snapshot.morningSummary?.weatherIcon ?? "01d"
-                    HStack(spacing: 4) {
-                        Image(systemName: WeatherConditionHelper.sfSymbol(for: iconCode))
-                            .font(.system(size: 11))
-                            .foregroundColor(Color(hex: WeatherConditionHelper.conditionColorHex(for: iconCode)))
-                        Text("\(Int(round(temp)))° · \(entry.snapshot.morningSummary?.weatherCondition ?? "Clear")")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.9))
+        return HStack(spacing: 8) {
+            // Left Column (50%): Morning Brief Spotlight + Sleep & Stress + TagDoS Focus
+            VStack(alignment: .leading, spacing: 5) {
+                // Header: Morning Brief + Weather
+                HStack(spacing: 4) {
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(WidgetColors.accentAmber)
+                    Text("Morning Brief")
+                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 2)
+
+                    if let temp = entry.snapshot.morningSummary?.weatherTemp {
+                        let iconCode = entry.snapshot.morningSummary?.weatherIcon ?? "01d"
+                        HStack(spacing: 3) {
+                            Image(systemName: WeatherConditionHelper.sfSymbol(for: iconCode))
+                                .font(.system(size: 10))
+                                .foregroundColor(WidgetColors.accentCyan)
+                            Text("\(Int(round(temp)))° · \(entry.snapshot.morningSummary?.weatherCondition ?? "Clear")")
+                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(1)
+                        }
                     }
                 }
 
-                // Sleep Recap
-                HStack(spacing: 5) {
-                    Text("\(entry.snapshot.sleep.sleepScore)%")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Text("· \(entry.snapshot.sleep.totalAsleepFormatted)")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.85))
+                // Sleep + Stress Row
+                HStack(spacing: 6) {
+                    // Sleep Ring + Duration
+                    HStack(spacing: 5) {
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.12), lineWidth: 3.2)
+                                .frame(width: 30, height: 30)
+                            Circle()
+                                .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
+                                .stroke(
+                                    LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    style: StrokeStyle(lineWidth: 3.2, lineCap: .round)
+                                )
+                                .rotationEffect(.degrees(-90))
+                                .frame(width: 30, height: 30)
+                            Text("\(entry.snapshot.sleep.sleepScore)")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                        }
+
+                        VStack(alignment: .leading, spacing: 0.5) {
+                            Text(entry.snapshot.sleep.totalAsleepFormatted)
+                                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            Text("Eff \(entry.snapshot.sleep.efficiencyPercent)%")
+                                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentMint)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 2)
+
+                    // Stress Indicator on Right of Sleep
+                    HStack(spacing: 4) {
+                        WidgetMonkeyMascotView(mood: stress.monkeyMood, size: 18)
+                        VStack(alignment: .trailing, spacing: 0.5) {
+                            Text(hasStress ? "\(stress.stressScore)" : "--")
+                                .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            Text(hasStress ? stress.level.displayName : "Calm")
+                                .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                                .foregroundColor(stressColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3.5)
+                    .background(stressColor.opacity(hasStress ? 0.15 : 0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
 
-                // Focus item
-                if let focus = entry.snapshot.morningSummary?.topFocusText ?? entry.snapshot.tagdos.streams.first?.drivingPillText {
-                    Text(focus)
-                        .font(.system(size: 10, weight: .regular, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
-                        .lineLimit(2)
+                // TagDoS Focus (2-3 items)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text("FOCUS")
+                            .font(.system(size: 7.5, weight: .heavy, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPurple)
+                        Spacer()
+                        Text("\(entry.snapshot.tagdos.totalActivePills) active")
+                            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
+                    }
+
+                    ForEach(Array(focusItems.prefix(3).enumerated()), id: \.offset) { idx, item in
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(idx == 0 ? WidgetColors.accentPurple : (idx == 1 ? WidgetColors.accentCyan : WidgetColors.accentMint))
+                                .frame(width: 4.5, height: 4.5)
+                            Text(item)
+                                .font(.system(size: 9, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.92))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
                 }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 Spacer(minLength: 0)
-
-                // Tap to view prompt
-                HStack(spacing: 4) {
-                    Text("Tap for full Briefing")
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(WidgetColors.accentCyan)
-                }
             }
-            .padding(11)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(9)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: "#061020").opacity(0.75))
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color(hex: "#061020").opacity(0.78))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(WidgetColors.accentCyan.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .strokeBorder(WidgetColors.accentCyan.opacity(0.28), lineWidth: 1)
                     )
             )
 
-            // Right Column (52%): 4 Compact Metric Tiles
-            VStack(spacing: 5) {
+            // Right Column (50%): 4 Rich Metric Rows (Water, Smokes, Money, Cosmos)
+            VStack(spacing: 4.5) {
                 // Tile 1: Water
-                HStack {
-                    HStack(spacing: 5) {
-                        Image(systemName: "drop.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(WidgetColors.accentBlue)
-                        Text("Water")
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
-                    }
-                    Spacer()
-                    Text("\(Int(entry.snapshot.bubbles.todayMl)) ml")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                HStack(spacing: 5) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(WidgetColors.accentCyan)
+                    Text("Bubbles")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
+                    Spacer(minLength: 2)
+                    Text("\(Int(entry.snapshot.bubbles.todayMl))/\(Int(entry.snapshot.bubbles.goalMl)) ml")
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("(\(Int(entry.snapshot.bubbles.progressPercent * 100))%)")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundColor(WidgetColors.accentCyan)
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 // Tile 2: Smokes
                 let sCount = entry.snapshot.smokes.todayTotal
                 let sBase = entry.snapshot.smokes.baseline
-                HStack {
-                    HStack(spacing: 5) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(widgetSmokeRingColor(countToday: sCount, baseline: sBase))
-                        Text("Smokes")
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
+                let sColor = widgetSmokeRingColor(countToday: sCount, baseline: sBase)
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(sColor)
+                    Text("Smokes")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer(minLength: 2)
+                    if let last = entry.snapshot.smokes.lastSmokeDate {
+                        Text(widgetFormatCompactTimeAgo(last))
+                            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
                     }
-                    Spacer()
                     Text("\(sCount) / \(sBase)")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(sColor)
+                        .lineLimit(1)
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                // Tile 3: Money (Net Worth)
-                HStack {
-                    HStack(spacing: 5) {
-                        Image(systemName: "creditcard.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(WidgetColors.accentGreen)
-                        Text("Net Worth")
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
-                    }
-                    Spacer()
+                // Tile 3: Money (Net Worth Lei + EUR)
+                HStack(spacing: 5) {
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(WidgetColors.accentGreen)
                     Text(entry.snapshot.money.formattedNetWorth)
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-
-                // Tile 4: TagDoS
-                let pill = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "All clear"
-                HStack {
-                    HStack(spacing: 5) {
-                        Text("S1")
-                            .font(.system(size: 8.5, weight: .heavy, design: .rounded))
-                            .foregroundColor(WidgetColors.accentPurple)
-                        Text(pill)
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundColor(.white.opacity(0.9))
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(11)
-    }
-
-    // Medium - Regular Mode (Sleep & Money Hero + 3-Row Metrics)
-    private var mediumRegularView: some View {
-        HStack(spacing: 12) {
-            // Left Hero Column: Sleep Arc + Net Worth + Stress
-            VStack(alignment: .center, spacing: 5) {
-                // Sleep Arc Gauge
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 5.5)
-                        .frame(width: 52, height: 52)
-                    Circle()
-                        .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
-                        .stroke(
-                            LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            style: StrokeStyle(lineWidth: 5.5, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 52, height: 52)
-                    VStack(spacing: 0) {
-                        Text("\(entry.snapshot.sleep.sleepScore)")
-                            .font(.system(size: 15, weight: .heavy, design: .rounded))
-                            .foregroundColor(.white)
-                        Text(entry.snapshot.sleep.totalAsleepFormatted)
-                            .font(.system(size: 8, weight: .semibold, design: .rounded))
-                            .foregroundColor(WidgetColors.accentMint)
-                    }
-                }
-
-                // Net Worth Pill
-                VStack(spacing: 1) {
-                    Text(entry.snapshot.money.formattedNetWorth)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 2)
+                    Text(entry.snapshot.money.formattedNetWorthEUR)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
                         .foregroundColor(WidgetColors.accentGreen)
                         .lineLimit(1)
-                    Text(entry.snapshot.money.formattedNetWorthEUR)
+                        .minimumScaleFactor(0.8)
+                }
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                // Tile 4: Cosmos (Stargazing Score + Moon + Window)
+                HStack(spacing: 5) {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(cosmosColor)
+                    Text("Cosmos")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer(minLength: 2)
+                    Image(systemName: cosmos.moonSymbol)
+                        .font(.system(size: 8.5))
+                        .foregroundColor(Color(hex: "#FDE68A"))
+                    Text("\(cosmos.moonIlluminationPercent)%")
                         .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                        .foregroundColor(WidgetColors.fgMuted)
+                        .foregroundColor(.white.opacity(0.85))
+                    Text("\(cosmos.stargazingScore)")
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundColor(cosmosColor)
+                }
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // Medium - Regular Mode (Without Brief)
+    // Left Column: Sleep Ring + Deep/REM/Eff, Stress with Monkey Mascot & 1-line level, Cosmos Pill
+    // Right Column: 4 Rich Metric Rows (Water with breakdown, Smokes with breakdown, Money Lei+EUR+Card/Cash, TagDoS 2-3 focus items)
+    private var mediumRegularView: some View {
+        let stress = entry.snapshot.stress
+        let hasStress = stress.hasData
+        let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
+        let cosmos = entry.snapshot.cosmos
+        let cosmosColor = Color(hex: cosmos.qualityHexColor)
+        let focusItems = importantTagdosItems(limit: 2)
+
+        return HStack(spacing: 8) {
+            // Left Hero Column: Sleep + Stress + Cosmos
+            VStack(spacing: 5) {
+                // 1. Sleep Card
+                HStack(spacing: 6) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.1), lineWidth: 4)
+                            .frame(width: 38, height: 38)
+                        Circle()
+                            .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
+                            .stroke(
+                                LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 38, height: 38)
+                        Text("\(entry.snapshot.sleep.sleepScore)")
+                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(entry.snapshot.sleep.totalAsleepFormatted)
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Text("D \(entry.snapshot.sleep.deepFormatted) · R \(entry.snapshot.sleep.remFormatted)")
+                            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Text("Eff \(entry.snapshot.sleep.efficiencyPercent)% · \(entry.snapshot.sleep.sleepQualityRating)")
+                            .font(.system(size: 7.5, weight: .medium, design: .rounded))
+                            .foregroundColor(WidgetColors.accentMint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                // Stress Pill with Monkey Mascot
-                let stress = entry.snapshot.stress
-                let hasStress = stress.hasData
-                let sColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
-                HStack(spacing: 3) {
-                    Text(stress.monkeyMood.emoji)
-                        .font(.system(size: 9))
-                    Text(hasStress ? "\(stress.stressScore)" : "--")
-                        .font(.system(size: 10, weight: .heavy, design: .rounded))
-                        .foregroundColor(sColor)
-                    Text(hasStress ? stress.level.displayName : "No Data")
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundColor(sColor)
+                // 2. Stress Card with our Monkey Mascot & strictly 1-line level
+                HStack(spacing: 5) {
+                    WidgetMonkeyMascotView(mood: stress.monkeyMood, size: 20)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(hasStress ? "\(stress.stressScore)" : "--")
+                                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                            Text(hasStress ? stress.level.displayName : "No Data")
+                                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                                .foregroundColor(stressColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        HStack(spacing: 4) {
+                            if let hrv = stress.hrvMs {
+                                Text("HRV \(Int(round(hrv)))")
+                                    .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(WidgetColors.accentCyan)
+                            }
+                            if let rhr = stress.restingHeartRate {
+                                Text("RHR \(Int(round(rhr)))")
+                                    .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(WidgetColors.accentPink)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2.5)
-                .background(sColor.opacity(hasStress ? 0.15 : 0.08))
-                .clipShape(Capsule())
-            }
-            .frame(width: 104)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4.5)
+                .frame(maxWidth: .infinity)
+                .background(stressColor.opacity(hasStress ? 0.14 : 0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-            // Right Column: 3 Metric Cards (Water, Smokes, TagDoS)
-            VStack(spacing: 7) {
-                // 1. Water Progress Bar
-                VStack(alignment: .leading, spacing: 4) {
+                // 3. Cosmos Compact Bar
+                HStack(spacing: 4) {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 9))
+                        .foregroundColor(cosmosColor)
+                    Text("\(cosmos.stargazingScore)/100")
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer(minLength: 2)
+                    Image(systemName: cosmos.moonSymbol)
+                        .font(.system(size: 8.5))
+                        .foregroundColor(Color(hex: "#FDE68A"))
+                    Text("\(cosmos.moonIlluminationPercent)%")
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(cosmosColor)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .frame(width: 132)
+            .frame(maxHeight: .infinity)
+
+            // Right Column: 4 Metric Cards (Water, Smokes, Money, TagDoS)
+            VStack(spacing: 4.5) {
+                // 1. Water Progress + Breakdown
+                VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         HStack(spacing: 4) {
                             Image(systemName: "drop.fill")
-                                .font(.system(size: 10))
+                                .font(.system(size: 9.5))
                                 .foregroundColor(WidgetColors.accentBlue)
                             Text("Water")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
                                 .foregroundColor(.white)
                         }
                         Spacer()
                         Text("\(Int(entry.snapshot.bubbles.todayMl)) / \(Int(entry.snapshot.bubbles.goalMl)) ml")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.85))
+                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
@@ -757,148 +1091,164 @@ public struct CombinedWidgetView: View {
                                 .frame(width: max(4, geo.size.width * CGFloat(min(1.0, entry.snapshot.bubbles.progressPercent))))
                         }
                     }
-                    .frame(height: 5)
+                    .frame(height: 4)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8.5, style: .continuous))
 
-                // 2. Smokes Counter
+                // 2. Smokes Counter + Breakdown
                 let count = entry.snapshot.smokes.todayTotal
                 let base = entry.snapshot.smokes.baseline
-                HStack {
-                    HStack(spacing: 5) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
-                        Text("Smokes")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
+                let sColor = widgetSmokeRingColor(countToday: count, baseline: base)
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(sColor)
+                    Text("Smokes")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer()
+                    if let last = entry.snapshot.smokes.lastSmokeDate {
+                        Text(widgetFormatCompactTimeAgo(last))
+                            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
                     }
-                    Spacer()
-                    Text("\(count) / \(base) cigs")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
+                    Text("\(count) / \(base)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(sColor)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8.5, style: .continuous))
 
-                // 3. TagDoS Active Pill
-                let pill = entry.snapshot.tagdos.streams.first?.drivingPillText ?? "No pending focus"
-                HStack(spacing: 6) {
-                    Text("S1")
-                        .font(.system(size: 9.5, weight: .heavy, design: .rounded))
-                        .foregroundColor(WidgetColors.accentPurple)
-                    Text(pill)
-                        .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.9))
+                // 3. Money Row (Net Worth Lei + EUR)
+                HStack(spacing: 5) {
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(WidgetColors.accentGreen)
+                    Text(entry.snapshot.money.formattedNetWorth)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Spacer()
+                    Text(entry.snapshot.money.formattedNetWorthEUR)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundColor(WidgetColors.accentGreen)
+                        .lineLimit(1)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8.5, style: .continuous))
+
+                // 4. TagDoS Active Focus (up to 2 pills)
+                HStack(spacing: 4) {
+                    if focusItems.isEmpty {
+                        Circle()
+                            .fill(WidgetColors.accentPurple)
+                            .frame(width: 4.5, height: 4.5)
+                        Text("No pending focus")
+                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.85))
+                            .lineLimit(1)
+                        Spacer()
+                    } else {
+                        ForEach(Array(focusItems.prefix(2).enumerated()), id: \.offset) { idx, item in
+                            HStack(spacing: 3.5) {
+                                Circle()
+                                    .fill(idx == 0 ? WidgetColors.accentPurple : WidgetColors.accentCyan)
+                                    .frame(width: 4.5, height: 4.5)
+                                Text(item)
+                                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.92))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8.5, style: .continuous))
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(11)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // =========================================================================
     // MARK: - 3. LARGE WIDGET
     // =========================================================================
 
-    // Large - Morning Mode (Executive Morning Summary Card + 5 Modular Tiles)
+    // Large - Morning Mode (With Brief)
+    // Edge-to-edge layout occupying full space with rich data across all 7 pillars:
+    // 1. Morning Briefing Spotlight Card (Greeting + Weather + AI Focus + Quick Status)
+    // 2. Sleep & Stress Studio Row (Sleep Score/Stages + Stress Monkey/Score/HRV/RHR)
+    // 3. Habits, Money & Cosmos 2x2 Grid (Bubbles, Smokes, Money, Cosmos)
+    // 4. TagDoS Active Focus Pipeline (Up to 3 streams / important pills)
     private var largeMorningView: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 7) {
             largeMorningHeaderCard
-            largeMorningHabitsRow
-            largeMorningTagdosRow
+            largeSleepAndStressRow
+            largeFourPillarGrid
+            largeTagdosPipelineCard(title: "TAGDOS MORNING FOCUS")
         }
-        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var largeMorningHeaderCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(WidgetColors.accentCyan)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(WidgetColors.accentAmber)
                     Text(entry.snapshot.morningSummary?.greeting ?? "Good Morning, Mihai")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)
                 }
 
                 Spacer()
 
                 if let temp = entry.snapshot.morningSummary?.weatherTemp {
                     let iconCode = entry.snapshot.morningSummary?.weatherIcon ?? "01d"
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Image(systemName: WeatherConditionHelper.sfSymbol(for: iconCode))
-                            .font(.system(size: 13))
+                            .font(.system(size: 11.5))
                             .foregroundColor(Color(hex: WeatherConditionHelper.conditionColorHex(for: iconCode)))
                         Text("\(Int(round(temp)))° · \(entry.snapshot.morningSummary?.weatherCondition ?? "Clear")")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.9))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.92))
+                            .lineLimit(1)
                     }
                 }
             }
 
-            Divider().background(Color.white.opacity(0.12))
-
             if let focus = entry.snapshot.morningSummary?.topFocusText {
                 Text(focus)
-                    .font(.system(size: 11.5, weight: .regular, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.92))
+                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.9))
                     .lineLimit(2)
-                    .lineSpacing(2)
-            }
-
-            HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    Image(systemName: "moon.stars.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Text("Sleep: \(entry.snapshot.sleep.sleepScore)% (\(entry.snapshot.sleep.totalAsleepFormatted))")
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentCyan)
-                }
-
-                HStack(spacing: 4) {
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(WidgetColors.accentGreen)
-                    Text("Net Worth: \(entry.snapshot.money.formattedNetWorth)")
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentGreen)
-                }
-
-                Spacer()
-
-                HStack(spacing: 4) {
-                    Text("Open Briefing")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Image(systemName: "arrow.up.right.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(WidgetColors.accentCyan)
-                }
             }
         }
-        .padding(13)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(hex: "#061020").opacity(0.8))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(hex: "#061020").opacity(0.82))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
-                                colors: [WidgetColors.accentCyan.opacity(0.5), Color.white.opacity(0.2)],
+                                colors: [WidgetColors.accentCyan.opacity(0.45), Color.white.opacity(0.15)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -908,178 +1258,195 @@ public struct CombinedWidgetView: View {
         )
     }
 
-    private var largeMorningHabitsRow: some View {
-        HStack(spacing: 10) {
-            // Card 1: Hydration
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(WidgetColors.accentBlue)
-                    Text("Bubbles")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                Text("\(Int(entry.snapshot.bubbles.todayMl)) ml")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundColor(.white)
-                Text("Goal: \(Int(entry.snapshot.bubbles.goalMl)) ml")
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .foregroundColor(WidgetColors.fgMuted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-            // Card 2: Smokes
-            let sCount = entry.snapshot.smokes.todayTotal
-            let sBase = entry.snapshot.smokes.baseline
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(widgetSmokeRingColor(countToday: sCount, baseline: sBase))
-                    Text("Smokes")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                Text("\(sCount) / \(sBase)")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundColor(widgetSmokeRingColor(countToday: sCount, baseline: sBase))
-                Text(sCount == 0 ? "Clean today" : "\(entry.snapshot.smokes.cigsCount) cigs")
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .foregroundColor(WidgetColors.fgMuted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-    }
-
-    private func tagdosStreamRow(index: Int, stream: TagdosWidgetSnapshotStream) -> some View {
-        HStack(spacing: 6) {
-            Text("S\(index + 1)")
-                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                .foregroundColor(WidgetColors.accentPurple)
-            Text(stream.drivingPillText ?? stream.title)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(.white)
-                .lineLimit(1)
-        }
-    }
-
-    private var largeMorningTagdosRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("TAGDOS ACTIVE FOCUS")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(WidgetColors.accentPurple)
-                Spacer()
-                Text("\(entry.snapshot.tagdos.streams.count) streams")
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .foregroundColor(WidgetColors.fgMuted)
-            }
-            ForEach(Array(entry.snapshot.tagdos.streams.prefix(2).enumerated()), id: \.offset) { index, stream in
-                tagdosStreamRow(index: index, stream: stream)
-            }
-        }
-        .padding(11)
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    // Large - Regular Mode (Full Executive Command Center)
+    // Large - Regular Mode (Without Brief)
+    // Full Executive Command Center occupying horizontal & vertical space properly:
+    // 1. Header Bar (Daily Executive + Date + Cosmos Quick Pill + Net Worth)
+    // 2. Sleep & Stress Studio Row (Sleep stages + Stress Monkey Mascot & 1-line level)
+    // 3. Habits, Money & Cosmos 2x2 Grid
+    // 4. TagDoS Active Pipeline (Up to 3 streams + active pills)
     private var largeRegularView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 7) {
             largeRegularHeaderBar
-            largeRegularSleepCard
-            largeRegularHabitsRow
-            largeRegularTagdosRow
+            largeSleepAndStressRow
+            largeFourPillarGrid
+            largeTagdosPipelineCard(title: "TAGDOS ACTIVE PIPELINE")
         }
-        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var largeRegularHeaderBar: some View {
-        HStack {
+        let cosmos = entry.snapshot.cosmos
+        let cosmosColor = Color(hex: cosmos.qualityHexColor)
+        return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Daily Executive")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 Text(Date().formatted(date: .abbreviated, time: .omitted))
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
                     .foregroundColor(WidgetColors.fgMuted)
             }
 
             Spacer()
 
-            HStack(spacing: 6) {
+            // Cosmos quick pill in header
+            HStack(spacing: 4) {
+                Image(systemName: "moon.stars.fill")
+                    .font(.system(size: 9.5))
+                    .foregroundColor(cosmosColor)
+                Text("\(cosmos.stargazingScore)")
+                    .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+                Image(systemName: cosmos.moonSymbol)
+                    .font(.system(size: 9.5))
+                    .foregroundColor(Color(hex: "#FDE68A"))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.06))
+            .clipShape(Capsule())
+
+            // Net Worth in Header
+            HStack(spacing: 5) {
                 Image(systemName: "creditcard.fill")
-                    .font(.system(size: 11))
+                    .font(.system(size: 10.5))
                     .foregroundColor(WidgetColors.accentGreen)
                 VStack(alignment: .trailing, spacing: 0) {
                     Text(entry.snapshot.money.formattedNetWorth)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentGreen)
+                        .lineLimit(1)
                     Text(entry.snapshot.money.formattedNetWorthEUR)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
                         .foregroundColor(WidgetColors.fgMuted)
+                        .lineLimit(1)
                 }
             }
         }
     }
 
-    private var largeRegularSleepCard: some View {
-        HStack(spacing: 14) {
-            // Sleep Arc
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.08), lineWidth: 6)
-                    .frame(width: 52, height: 52)
-                Circle()
-                    .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
-                    .stroke(
-                        LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 52, height: 52)
-                Text("\(entry.snapshot.sleep.sleepScore)")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
+    // Shared Large Row 2: Sleep Studio (Left) + Stress Studio with Monkey Mascot (Right)
+    private var largeSleepAndStressRow: some View {
+        let stress = entry.snapshot.stress
+        let hasStress = stress.hasData
+        let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text("Sleep Studio")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+        return HStack(spacing: 7) {
+            // Left: Sleep Studio Card
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 4.5)
+                        .frame(width: 42, height: 42)
+                    Circle()
+                        .trim(from: 0, to: min(1.0, CGFloat(entry.snapshot.sleep.sleepScore) / 100.0))
+                        .stroke(
+                            LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentBlue], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            style: StrokeStyle(lineWidth: 4.5, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 42, height: 42)
+                    Text("\(entry.snapshot.sleep.sleepScore)")
+                        .font(.system(size: 13, weight: .heavy, design: .rounded))
                         .foregroundColor(.white)
-                    Spacer()
-                    Text(entry.snapshot.sleep.totalAsleepFormatted)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentCyan)
                 }
 
-                largeSleepStagesBar
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(entry.snapshot.sleep.totalAsleepFormatted)
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Spacer(minLength: 2)
+                        Text("Eff \(entry.snapshot.sleep.efficiencyPercent)%")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentMint)
+                            .lineLimit(1)
+                    }
 
-                HStack {
-                    Text("Deep \(entry.snapshot.sleep.deepFormatted)")
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
-                        .foregroundColor(Color(hex: "#6366F1"))
-                    Text("REM \(entry.snapshot.sleep.remFormatted)")
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
-                        .foregroundColor(Color(hex: "#8B5CF6"))
-                    Spacer()
-                    Text("Eff \(entry.snapshot.sleep.efficiencyPercent)%")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.accentMint)
+                    largeSleepStagesBar
+
+                    HStack(spacing: 5) {
+                        Text("D \(entry.snapshot.sleep.deepFormatted)")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color(hex: "#6366F1"))
+                            .lineLimit(1)
+                        Text("R \(entry.snapshot.sleep.remFormatted)")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color(hex: "#8B5CF6"))
+                            .lineLimit(1)
+                    }
                 }
             }
+            .padding(8.5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+            // Right: Stress Studio Card with our Monkey Mascot & strictly 1-line level
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    WidgetMonkeyMascotView(mood: stress.monkeyMood, size: 22)
+
+                    VStack(alignment: .leading, spacing: 0.5) {
+                        HStack(spacing: 4) {
+                            Text(hasStress ? "\(stress.stressScore)" : "--")
+                                .font(.system(size: 12.5, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                            Text("/100")
+                                .font(.system(size: 8, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.fgMuted)
+                        }
+                        Text(hasStress ? stress.level.displayName : "No Data")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundColor(stressColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                // Autonomic Balance Bar
+                GeometryReader { geo in
+                    let paraW = max(6, geo.size.width * CGFloat(stress.parasympatheticPercent) / 100.0)
+                    HStack(spacing: 2) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(WidgetColors.accentMint)
+                            .frame(width: paraW)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(stressColor)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(height: 4)
+
+                HStack(spacing: 6) {
+                    Text("Rest \(stress.parasympatheticPercent)%")
+                        .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        .foregroundColor(WidgetColors.accentMint)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    if let hrv = stress.hrvMs {
+                        Text("HRV \(Int(round(hrv)))")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                            .lineLimit(1)
+                    }
+                    if let rhr = stress.restingHeartRate {
+                        Text("RHR \(Int(round(rhr)))")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPink)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(8.5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
-        .padding(11)
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var largeSleepStagesBar: some View {
@@ -1090,153 +1457,259 @@ public struct CombinedWidgetView: View {
             let lW = CGFloat((entry.snapshot.sleep.lightSeconds / total)) * geo.size.width
             let aW = CGFloat((entry.snapshot.sleep.awakeSeconds / total)) * geo.size.width
 
-            HStack(spacing: 2) {
+            HStack(spacing: 1.5) {
                 RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#6366F1")).frame(width: max(2, dW))
                 RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#8B5CF6")).frame(width: max(2, rW))
                 RoundedRectangle(cornerRadius: 2).fill(WidgetColors.accentCyan).frame(width: max(2, lW))
                 RoundedRectangle(cornerRadius: 2).fill(WidgetColors.accentRed.opacity(0.7)).frame(width: max(2, aW))
             }
         }
-        .frame(height: 5)
+        .frame(height: 4.5)
     }
 
-    private var largeRegularHabitsRow: some View {
-        HStack(spacing: 8) {
-            // 1. Water
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(WidgetColors.accentBlue)
-                    Text("Hydration")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text(widgetFormatCompactNumber(entry.snapshot.bubbles.todayMl))
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.08))
-                        Capsule()
-                            .fill(LinearGradient(colors: [WidgetColors.accentBlue, WidgetColors.accentCyan], startPoint: .leading, endPoint: .trailing))
-                            .frame(width: max(3, geo.size.width * CGFloat(min(1.0, entry.snapshot.bubbles.progressPercent))))
+    // Shared Large Row 3: 2x2 Grid for Bubbles, Smokes, Money, and Cosmos
+    private var largeFourPillarGrid: some View {
+        let cosmos = entry.snapshot.cosmos
+        let cosmosColor = Color(hex: cosmos.qualityHexColor)
+        let sCount = entry.snapshot.smokes.todayTotal
+        let sBase = entry.snapshot.smokes.baseline
+        let sColor = widgetSmokeRingColor(countToday: sCount, baseline: sBase)
+
+        return VStack(spacing: 6) {
+            // Top pair: Bubbles & Smokes
+            HStack(spacing: 7) {
+                // 1. Bubbles
+                VStack(alignment: .leading, spacing: 3.5) {
+                    HStack {
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(WidgetColors.accentCyan)
+                        Text("Bubbles")
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text("\(Int(entry.snapshot.bubbles.todayMl)) / \(Int(entry.snapshot.bubbles.goalMl)) ml")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
                     }
-                }
-                .frame(height: 4)
-
-                Text("\(Int(entry.snapshot.bubbles.progressPercent * 100))% of goal")
-                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                    .foregroundColor(WidgetColors.fgMuted)
-            }
-            .padding(9)
-            .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            // 2. Smokes
-            let count = entry.snapshot.smokes.todayTotal
-            let base = entry.snapshot.smokes.baseline
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
-                    Text("Smokes")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
-                        .foregroundColor(widgetSmokeRingColor(countToday: count, baseline: base))
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.08))
-                        Capsule()
-                            .fill(widgetSmokeRingColor(countToday: count, baseline: base))
-                            .frame(width: max(3, geo.size.width * CGFloat(min(1.0, Double(count) / Double(max(1, base))))))
-                    }
-                }
-                .frame(height: 4)
-
-                Text("Limit \(base)")
-                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                    .foregroundColor(WidgetColors.fgMuted)
-            }
-            .padding(9)
-            .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            // 3. Stress
-            let stress = entry.snapshot.stress
-            let hasStress = stress.hasData
-            let stressColor = hasStress ? Color(hex: stress.level.hexColor) : WidgetColors.fgMuted
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(stress.monkeyMood.emoji)
-                        .font(.system(size: 11))
-                    Text("Stress")
-                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text(hasStress ? "\(stress.stressScore)" : "--")
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
-                        .foregroundColor(stressColor)
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.08))
-                        if hasStress {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.08))
                             Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color(hex: stress.level.gradientHex.first ?? "#00FFB2"),
-                                            Color(hex: stress.level.gradientHex.last ?? "#00B4D8")
-                                        ],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: max(3, geo.size.width * CGFloat(min(100, max(0, stress.stressScore))) / 100.0))
+                                .fill(LinearGradient(colors: [WidgetColors.accentBlue, WidgetColors.accentCyan], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: max(4, geo.size.width * CGFloat(min(1.0, entry.snapshot.bubbles.progressPercent))))
+                        }
+                    }
+                    .frame(height: 4)
+                    HStack {
+                        Text("Water \(Int(entry.snapshot.bubbles.waterMl)) · Coffee \(Int(entry.snapshot.bubbles.coffeeMl))")
+                            .font(.system(size: 8, weight: .medium, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("\(Int(entry.snapshot.bubbles.progressPercent * 100))%")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                // 2. Smokes
+                VStack(alignment: .leading, spacing: 3.5) {
+                    HStack {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(sColor)
+                        Text("Smokes")
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text("\(sCount) / \(sBase)")
+                            .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                            .foregroundColor(sColor)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.08))
+                            Capsule()
+                                .fill(sColor)
+                                .frame(width: max(4, geo.size.width * CGFloat(min(1.0, Double(sCount) / Double(max(1, sBase))))))
+                        }
+                    }
+                    .frame(height: 4)
+                    HStack {
+                        Text(sCount == 0 ? "Smoke-Free Today 🌟" : "Cig \(entry.snapshot.smokes.cigsCount) · Heat \(entry.snapshot.smokes.heatedCount)")
+                            .font(.system(size: 8, weight: .medium, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
+                            .lineLimit(1)
+                        Spacer()
+                        if let last = entry.snapshot.smokes.lastSmokeDate {
+                            Text(widgetFormatCompactTimeAgo(last))
+                                .font(.system(size: 8, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.85))
                         }
                     }
                 }
-                .frame(height: 4)
-
-                Text(hasStress ? stress.level.displayName : "No Data")
-                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                    .foregroundColor(stressColor)
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            .padding(9)
-            .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            // Bottom pair: Money & Cosmos
+            HStack(spacing: 7) {
+                // 3. Money
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Image(systemName: "creditcard.fill")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(WidgetColors.accentGreen)
+                        Text(entry.snapshot.money.formattedNetWorth)
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer()
+                        Text(entry.snapshot.money.formattedNetWorthEUR)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentGreen)
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 6) {
+                        Text("Card \(widgetFormatCompactNumber(entry.snapshot.money.cardAmount))")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                            .lineLimit(1)
+                        Text("Cash \(widgetFormatCompactNumber(entry.snapshot.money.cashAmount))")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentMint)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("-\(widgetFormatCompactNumber(entry.snapshot.money.outgoingTotal))")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPink)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                // 4. Cosmos
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Image(systemName: "moon.stars.fill")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(cosmosColor)
+                        Text("Cosmos \(cosmos.stargazingScore)/100")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(cosmos.stargazingVerdict)
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundColor(cosmosColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    HStack(spacing: 5) {
+                        Image(systemName: cosmos.moonSymbol)
+                            .font(.system(size: 8))
+                            .foregroundColor(Color(hex: "#FDE68A"))
+                        Text("\(cosmos.moonPhaseName) (\(cosmos.moonIlluminationPercent)%)")
+                            .font(.system(size: 8, weight: .medium, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(cosmos.bestWindowLabel)
+                            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
         }
     }
 
-    private var largeRegularTagdosRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    // Shared Large Row 4: TagDoS Pipeline Card
+    private func largeTagdosPipelineCard(title: String) -> some View {
+        let streams = Array(entry.snapshot.tagdos.streams.prefix(3))
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("TAGDOS PIPELINE")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(WidgetColors.accentPurple)
+                HStack(spacing: 4) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(WidgetColors.accentPurple)
+                    Text(title)
+                        .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                        .foregroundColor(WidgetColors.accentPurple)
+                }
                 Spacer()
-                Text("\(entry.snapshot.tagdos.streams.count) streams active")
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                if let rem = entry.snapshot.tagdos.nextReminderFormatted {
+                    HStack(spacing: 2.5) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 7.5))
+                        Text(rem)
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(WidgetColors.accentCyan)
+                }
+                Text("\(entry.snapshot.tagdos.totalActivePills) active tags")
+                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
                     .foregroundColor(WidgetColors.fgMuted)
             }
 
-            ForEach(Array(entry.snapshot.tagdos.streams.prefix(2).enumerated()), id: \.offset) { index, stream in
-                tagdosStreamRow(index: index, stream: stream)
+            if streams.isEmpty {
+                Text("All streams clear — enjoy your day!")
+                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                    .foregroundColor(WidgetColors.fgMuted)
+            } else {
+                ForEach(Array(streams.enumerated()), id: \.offset) { index, stream in
+                    HStack(spacing: 5) {
+                        Text("S\(index + 1)")
+                            .font(.system(size: 8, weight: .heavy, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPurple)
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(WidgetColors.accentPurple.opacity(0.18))
+                            .clipShape(Capsule())
+
+                        Text(stream.drivingPillText ?? stream.title)
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 4)
+
+                        let extraPills = Array(stream.pills.dropFirst().prefix(2))
+                        ForEach(Array(extraPills.enumerated()), id: \.offset) { _, pill in
+                            Text(pill.text)
+                                .font(.system(size: 8, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.75))
+                                .lineLimit(1)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
             }
         }
-        .padding(11)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 }
 
@@ -1254,7 +1727,7 @@ public struct CombinedWidget: Widget {
             CombinedWidgetView(entry: entry)
         }
         .configurationDisplayName("Daily Combined")
-        .description("Unified executive dashboard integrating Water, Smokes, Sleep, Money, TagDoS and adaptive morning briefing.")
+        .description("Unified executive dashboard integrating Water, Smokes, Sleep, Stress, Money, Cosmos, TagDoS and adaptive morning briefing.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

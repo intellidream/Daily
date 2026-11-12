@@ -148,6 +148,7 @@ public struct CombinedWidgetSnapshot: Sendable {
     public let sleep: SleepWidgetSnapshot
     public let tagdos: TagdosWidgetSnapshot
     public let stress: StressWidgetSnapshot
+    public let cosmos: CosmosWidgetSnapshot
     public let morningSummary: BriefingSummarySnippet?
     public let isMorningSlot: Bool
     
@@ -158,6 +159,7 @@ public struct CombinedWidgetSnapshot: Sendable {
         sleep: SleepWidgetSnapshot,
         tagdos: TagdosWidgetSnapshot,
         stress: StressWidgetSnapshot = .placeholder,
+        cosmos: CosmosWidgetSnapshot = .placeholder,
         morningSummary: BriefingSummarySnippet? = nil,
         isMorningSlot: Bool = false
     ) {
@@ -167,6 +169,7 @@ public struct CombinedWidgetSnapshot: Sendable {
         self.sleep = sleep
         self.tagdos = tagdos
         self.stress = stress
+        self.cosmos = cosmos
         self.morningSummary = morningSummary
         self.isMorningSlot = isMorningSlot
     }
@@ -534,6 +537,24 @@ public struct CosmosWidgetSnapshot: Sendable, Codable {
         self.bortleClass = bortleClass
         self.provenanceBadge = provenanceBadge
         self.lastUpdated = lastUpdated
+    }
+    
+    public static var placeholder: CosmosWidgetSnapshot {
+        CosmosWidgetSnapshot(
+            stargazingScore: 84,
+            stargazingVerdict: "Excellent Sky",
+            qualityHexColor: "#00E676",
+            moonPhaseName: "Waxing Crescent",
+            moonIlluminationPercent: 22,
+            moonSymbol: "moonphase.waxing.crescent",
+            visiblePlanetsCount: 4,
+            topPlanetsSummary: "Jupiter · Saturn · Venus · Mars",
+            bestWindowLabel: "21:30 – 01:00",
+            nextIssPassSummary: "ISS Pass · 21:42 (68°)",
+            kpIndex: 2.3,
+            bortleClass: 5,
+            provenanceBadge: "Live Weather + Ephemeris"
+        )
     }
 }
 
@@ -1564,6 +1585,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         let sleep = fetchSleepSnapshot()
         let tagdos = fetchTagdosSnapshot()
         let stress = fetchStressSnapshot()
+        let cosmos = fetchCosmosSnapshot()
         let weather = fetchWeatherSnapshot()
 
         let hour = Calendar.current.component(.hour, from: Date())
@@ -1617,6 +1639,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             sleep: sleep,
             tagdos: tagdos,
             stress: stress,
+            cosmos: cosmos,
             morningSummary: snippet,
             isMorningSlot: isMorning
         )

@@ -138,6 +138,8 @@ public final class HabitsService: ObservableObject {
     private var offlineLogQueue: [HabitLogRecord] = []
     private var lastForegroundRefreshAt: Date = .distantPast
     private var lastConsistencyAndPrefsFetchAt: Date = .distantPast
+    private var lastKnownTodayStart: Date = Calendar.current.startOfDay(for: Date())
+    private var lastPastDateNavigationAt: Date? = nil
     
     private let isoDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -164,11 +166,12 @@ public final class HabitsService: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                let rolledOver = self.checkMidnightRolloverIfNeeded()
                 self.reloadFromLocalStorage()
                 await self.flushOfflineQueue()
-                guard Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
+                guard rolledOver || Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
                 self.lastForegroundRefreshAt = Date()
-                await self.loadDataForSelectedDate()
+                await self.loadDataForSelectedDate(forceRefresh: rolledOver)
             }
         }
         #elseif canImport(AppKit)
@@ -179,11 +182,12 @@ public final class HabitsService: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                let rolledOver = self.checkMidnightRolloverIfNeeded()
                 self.reloadFromLocalStorage()
                 await self.flushOfflineQueue()
-                guard Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
+                guard rolledOver || Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
                 self.lastForegroundRefreshAt = Date()
-                await self.loadDataForSelectedDate()
+                await self.loadDataForSelectedDate(forceRefresh: rolledOver)
             }
         }
         #endif
@@ -193,14 +197,65 @@ public final class HabitsService: ObservableObject {
         }
     }
     
-    // MARK: - Navigation
+    // MARK: - Midnight Rollover & Date Navigation
+    
+    @discardableResult
+    public func checkMidnightRolloverIfNeeded() -> Bool {
+        let cal = Calendar.current
+        let now = Date()
+        let currentTodayStart = cal.startOfDay(for: now)
+        if currentTodayStart > lastKnownTodayStart {
+            lastKnownTodayStart = currentTodayStart
+            selectedDate = now
+            lastPastDateNavigationAt = nil
+            loadLocalLogsForSelectedDate()
+            recalculateDailyAggregates()
+            saveDailyTotals()
+            return true
+        }
+        if !cal.isDateInToday(selectedDate) {
+            if let navAt = lastPastDateNavigationAt, now.timeIntervalSince(navAt) > 1800 {
+                selectedDate = now
+                lastPastDateNavigationAt = nil
+                loadLocalLogsForSelectedDate()
+                recalculateDailyAggregates()
+                saveDailyTotals()
+                return true
+            } else if lastPastDateNavigationAt == nil {
+                selectedDate = now
+                loadLocalLogsForSelectedDate()
+                recalculateDailyAggregates()
+                saveDailyTotals()
+                return true
+            }
+        }
+        return false
+    }
     
     public func changeDate(to newDate: Date) {
         let cal = Calendar.current
-        guard !cal.isDate(newDate, inSameDayAs: selectedDate) else { return }
+        let isNavigatingToToday = cal.isDateInToday(newDate)
+        if isNavigatingToToday {
+            lastPastDateNavigationAt = nil
+        } else {
+            lastPastDateNavigationAt = Date()
+        }
+        guard !cal.isDate(newDate, inSameDayAs: selectedDate) else {
+            if isNavigatingToToday {
+                Task {
+                    await loadDataForSelectedDate(forceRefresh: true)
+                }
+            }
+            return
+        }
         selectedDate = newDate
+        loadLocalLogsForSelectedDate()
+        recalculateDailyAggregates()
+        if isNavigatingToToday {
+            saveDailyTotals()
+        }
         Task {
-            await loadDataForSelectedDate()
+            await loadDataForSelectedDate(forceRefresh: isNavigatingToToday)
         }
     }
     
@@ -217,6 +272,7 @@ public final class HabitsService: ObservableObject {
     }
     
     public func jumpToToday() {
+        lastPastDateNavigationAt = nil
         changeDate(to: Date())
     }
     
@@ -506,6 +562,7 @@ public final class HabitsService: ObservableObject {
     // MARK: - Data Fetching & Sync
     
     public func loadDataForSelectedDate(forceRefresh: Bool = false) async {
+        _ = checkMidnightRolloverIfNeeded()
         isLoading = true
         defer { isLoading = false }
         

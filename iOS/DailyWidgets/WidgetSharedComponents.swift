@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import DailyCore
 
 // MARK: - Color Hex Extension
 public extension Color {
@@ -232,4 +233,186 @@ public func widgetFormatCompactIntegerEUR(_ amount: Double) -> String {
         return "\(Int(round(amount)))"
     }
 }
+
+// MARK: - Procedural Vector Monkey Mascot for Widgets
+public struct WidgetMonkeyMascotView: View {
+    public let mood: MonkeyMood
+    public var size: CGFloat = 24
+    
+    public init(mood: MonkeyMood, size: CGFloat = 24) {
+        self.mood = mood
+        self.size = size
+    }
+    
+    private var moodAccentColor: Color {
+        switch mood {
+        case .zen: return Color(hex: "#00FFB2")
+        case .curious: return Color(hex: "#00E5FF")
+        case .busy: return Color(hex: "#FFB800")
+        case .overheated: return Color(hex: "#FF3B30")
+        }
+    }
+    
+    public var body: some View {
+        ZStack {
+            // Subtle ambient halo
+            Circle()
+                .fill(moodAccentColor.opacity(0.18))
+                .frame(width: size, height: size)
+            
+            // Left & Right Ears
+            HStack(spacing: size * 0.50) {
+                earView
+                earView
+            }
+            
+            // Main Monkey Head (Warm Caramel)
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.65, green: 0.42, blue: 0.24),
+                            Color(red: 0.45, green: 0.27, blue: 0.14)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: size * 0.66, height: size * 0.66)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.22), lineWidth: max(0.75, size * 0.03))
+                )
+            
+            // Inner Face Mask (Peaches & Cream)
+            ZStack {
+                HStack(spacing: size * 0.04) {
+                    Circle()
+                        .fill(Color(red: 0.96, green: 0.84, blue: 0.72))
+                        .frame(width: size * 0.28, height: size * 0.28)
+                    Circle()
+                        .fill(Color(red: 0.96, green: 0.84, blue: 0.72))
+                        .frame(width: size * 0.28, height: size * 0.28)
+                }
+                .offset(y: -size * 0.05)
+                
+                Capsule()
+                    .fill(Color(red: 0.96, green: 0.84, blue: 0.72))
+                    .frame(width: size * 0.50, height: size * 0.30)
+                    .offset(y: size * 0.11)
+            }
+            
+            // Eyes
+            HStack(spacing: size * 0.15) {
+                eyeView(isLeft: true)
+                eyeView(isLeft: false)
+            }
+            .offset(y: -size * 0.05)
+            
+            // Cute Oval Nose
+            Capsule()
+                .fill(Color(red: 0.30, green: 0.16, blue: 0.08))
+                .frame(width: size * 0.09, height: size * 0.055)
+                .offset(y: size * 0.05)
+            
+            // Mouth
+            mouthView
+                .offset(y: size * 0.15)
+            
+            // Mood top accessory forZen / Overheated
+            if mood == .zen {
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: max(6, size * 0.24), weight: .bold))
+                    .foregroundColor(Color(hex: "#00FFB2"))
+                    .offset(x: size * 0.24, y: -size * 0.28)
+            } else if mood == .overheated {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: "#00E5FF"), Color(hex: "#3B82F6")],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: size * 0.34, height: size * 0.12)
+                    .rotationEffect(.degrees(-8))
+                    .offset(y: -size * 0.33)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+    
+    private var earView: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.55, green: 0.34, blue: 0.18))
+                .frame(width: size * 0.24, height: size * 0.24)
+            Circle()
+                .fill(Color(red: 0.92, green: 0.72, blue: 0.60))
+                .frame(width: size * 0.14, height: size * 0.14)
+        }
+    }
+    
+    @ViewBuilder
+    private func eyeView(isLeft: Bool) -> some View {
+        let darkBrown = Color(red: 0.18, green: 0.10, blue: 0.05)
+        switch mood {
+        case .zen:
+            Circle()
+                .trim(from: 0.05, to: 0.45)
+                .stroke(darkBrown, style: StrokeStyle(lineWidth: max(1.0, size * 0.045), lineCap: .round))
+                .frame(width: size * 0.13, height: size * 0.13)
+        case .curious:
+            ZStack {
+                Circle()
+                    .fill(darkBrown)
+                    .frame(width: size * 0.11, height: size * 0.11)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: size * 0.04, height: size * 0.04)
+                    .offset(x: -size * 0.02, y: -size * 0.02)
+            }
+        case .busy:
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: size * 0.13, height: size * 0.13)
+                Circle()
+                    .fill(darkBrown)
+                    .frame(width: size * 0.08, height: size * 0.08)
+            }
+        case .overheated:
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: size * 0.14, height: size * 0.14)
+                Circle()
+                    .fill(Color(hex: "#FF3B30"))
+                    .frame(width: size * 0.06, height: size * 0.06)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var mouthView: some View {
+        let darkBrown = Color(red: 0.22, green: 0.12, blue: 0.06)
+        switch mood {
+        case .zen, .curious:
+            Circle()
+                .trim(from: 0.12, to: 0.38)
+                .stroke(darkBrown, style: StrokeStyle(lineWidth: max(1.0, size * 0.045), lineCap: .round))
+                .frame(width: size * 0.18, height: size * 0.15)
+                .offset(y: -size * 0.03)
+        case .busy:
+            Capsule()
+                .fill(darkBrown)
+                .frame(width: size * 0.12, height: max(1.2, size * 0.04))
+        case .overheated:
+            Circle()
+                .stroke(darkBrown, lineWidth: max(1.0, size * 0.04))
+                .frame(width: size * 0.09, height: size * 0.09)
+        }
+    }
+}
+
 

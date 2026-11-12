@@ -114,6 +114,7 @@ public final class HealthDataService: ObservableObject {
     private var lastEnginePayloadFingerprint: [String: String] = [:]
     private var pendingEngineDebounceTask: [String: Task<Void, Never>] = [:]
     private var lastKnownTodayStart: Date = Calendar.current.startOfDay(for: Date())
+    private var lastPastDateNavigationAt: Date? = nil
     private var isSyncingHistory: Bool = false
     private var lastPushedTelemetryEpochMs: TimeInterval = 0
     private var lastSyncedSignatureByDate: [String: (timestamp: Date, signature: String)] = [:]
@@ -206,25 +207,39 @@ public final class HealthDataService: ObservableObject {
     // MARK: - Midnight Rollover & Active Periodic Cadence
     
     /// Automatically advances `selectedDate` to the new day across midnight if the user was viewing "Today",
+    /// or if the user had manually selected a past date (e.g. "Yesterday" late at night after 00:00) and more than 30 minutes have elapsed,
     /// while flushing yesterday's final local telemetry once in the background.
-    private func checkMidnightRolloverIfNeeded() {
+    public func checkMidnightRolloverIfNeeded() {
         let cal = Calendar.current
-        let currentTodayStart = cal.startOfDay(for: Date())
-        guard currentTodayStart > lastKnownTodayStart else { return }
-        let previousDay = lastKnownTodayStart
-        lastKnownTodayStart = currentTodayStart
-        
-        if cal.isDate(selectedDate, inSameDayAs: previousDay) {
-            selectedDate = Date()
-            if let provider = localDataProvider, AuthService.shared.isAuthenticated {
-                Task { [weak self] in
-                    let finalTelem = await provider.fetchLocalTelemetry(for: previousDay)
-                    let finalSleep = await provider.fetchLocalSleepStages(for: previousDay)
-                    let combined = finalTelem + finalSleep
-                    if !combined.isEmpty {
-                        await self?.syncTelemetryToSupabase(telemetry: combined)
+        let now = Date()
+        let currentTodayStart = cal.startOfDay(for: now)
+        if currentTodayStart > lastKnownTodayStart {
+            let previousDay = lastKnownTodayStart
+            lastKnownTodayStart = currentTodayStart
+            
+            if cal.isDate(selectedDate, inSameDayAs: previousDay) || !cal.isDateInToday(selectedDate) {
+                selectedDate = now
+                lastPastDateNavigationAt = nil
+                if let provider = localDataProvider, AuthService.shared.isAuthenticated {
+                    Task { [weak self] in
+                        let finalTelem = await provider.fetchLocalTelemetry(for: previousDay)
+                        let finalSleep = await provider.fetchLocalSleepStages(for: previousDay)
+                        let combined = finalTelem + finalSleep
+                        if !combined.isEmpty {
+                            await self?.syncTelemetryToSupabase(telemetry: combined)
+                        }
                     }
                 }
+            }
+            return
+        }
+        
+        if !cal.isDateInToday(selectedDate) {
+            if let navAt = lastPastDateNavigationAt, now.timeIntervalSince(navAt) > 1800 {
+                selectedDate = now
+                lastPastDateNavigationAt = nil
+            } else if lastPastDateNavigationAt == nil {
+                selectedDate = now
             }
         }
     }
@@ -503,7 +518,19 @@ public final class HealthDataService: ObservableObject {
     }
     
     public func jumpToToday() {
-        changeDate(to: Date())
+        let today = Date()
+        lastPastDateNavigationAt = nil
+        let todayKey = isoDateFormatter.string(from: today)
+        lastSuccessfulLoadTime.removeValue(forKey: todayKey)
+        if Calendar.current.isDate(today, inSameDayAs: selectedDate) {
+            activeLoadTask?.cancel()
+            activeLoadTask = nil
+            Task {
+                await loadDataForSelectedDate(forceRefresh: true)
+            }
+        } else {
+            changeDate(to: today)
+        }
     }
     
     public func nextDay() {
@@ -524,6 +551,13 @@ public final class HealthDataService: ObservableObject {
     
     public func changeDate(to newDate: Date) {
         let cal = Calendar.current
+        if cal.isDateInToday(newDate) {
+            lastPastDateNavigationAt = nil
+            let dateKey = isoDateFormatter.string(from: newDate)
+            lastSuccessfulLoadTime.removeValue(forKey: dateKey)
+        } else {
+            lastPastDateNavigationAt = Date()
+        }
         guard !cal.isDate(newDate, inSameDayAs: selectedDate) else { return }
         selectedDate = newDate
         activeLoadTask?.cancel()
@@ -879,6 +913,10 @@ public final class HealthDataService: ObservableObject {
         self.intradayStress = []
         self.currentStressScore = 0
         self.currentStressLevel = .calm
+        if isToday && selectedDeviceFilter == nil {
+            WidgetDataCoordinator.shared.updateSleepSnapshot(from: nil)
+            WidgetDataCoordinator.shared.clearStressSnapshot()
+        }
         lastSuccessfulLoadTime[dateKey] = Date()
         await loadHistoricalTrends()
     }
@@ -2083,6 +2121,29 @@ public final class HealthDataService: ObservableObject {
                 sourceDevice: resolvedStressSource
             )
             self.currentVitals = updated
+        }
+        
+        // Keep OS Widget snapshots in sync whenever All-Devices Today state is evaluated
+        if selectedDeviceFilter == nil && Calendar.current.isDateInToday(selectedDate) {
+            WidgetDataCoordinator.shared.updateSleepSnapshot(
+                from: self.primarySleepSession,
+                restingHeartRate: self.restingBpm > 0 ? self.restingBpm : nil,
+                hrvMs: self.currentVitals[.hrvSdnn]?.value ?? self.currentVitals[.hrvRmssd]?.value ?? self.stressAnalysis?.currentHrvMs
+            )
+            if let result = self.stressAnalysis, result.currentScore > 0 {
+                WidgetDataCoordinator.shared.updateStressSnapshot(
+                    score: result.currentScore,
+                    level: result.currentLevel,
+                    monkeyMood: result.monkeyMood,
+                    advice: result.adviceQuote,
+                    hrvMs: result.currentHrvMs,
+                    restingHeartRate: result.restingHeartRateBpm,
+                    parasympathetic: result.parasympatheticPercent,
+                    sympathetic: result.sympatheticPercent
+                )
+            } else {
+                WidgetDataCoordinator.shared.clearStressSnapshot()
+            }
         }
     }
     

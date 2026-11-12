@@ -88,12 +88,19 @@ public struct DashboardView: View {
         }
         .scrollBounceBehavior(.always, axes: .vertical)
         .refreshable {
+            if !HealthDataService.shared.isToday {
+                HealthDataService.shared.selectedDate = Date()
+            }
+            if !HabitsService.shared.isToday {
+                HabitsService.shared.selectedDate = Date()
+            }
             async let w: () = WeatherService.shared.refreshWeather(force: true)
             async let h: () = HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
             async let hab: () = HabitsService.shared.loadDataForSelectedDate(forceRefresh: true)
             async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
             async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
             _ = await (w, h, hab, n, f)
+            TagdosStore.shared.syncWithWidgets()
         }
         .task {
             async let w: () = WeatherService.shared.currentWeather == nil ? WeatherService.shared.refreshWeather() : ()

@@ -1,5 +1,8 @@
 import SwiftUI
 import DailyCore
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 @main
 struct DailyApp: App {
@@ -25,10 +28,17 @@ struct DailyApp: App {
             if newPhase == .active {
                 Task { @MainActor in
                     SmartLedgerStore.shared.reloadFromStorage()
+                    TagdosStore.shared.loadFromStorage()
+                    TagdosStore.shared.syncWithWidgets()
+                    _ = HabitsService.shared.checkMidnightRolloverIfNeeded()
+                    HealthDataService.shared.checkMidnightRolloverIfNeeded()
                     HabitsService.shared.reloadFromLocalStorage()
                     await HabitsService.shared.flushOfflineQueue()
                     await HabitsService.shared.loadDataForSelectedDate()
                     await HealthDataService.shared.refreshIfStale()
+                    #if canImport(WidgetKit)
+                    WidgetCenter.shared.reloadAllTimelines()
+                    #endif
                 }
             }
         }

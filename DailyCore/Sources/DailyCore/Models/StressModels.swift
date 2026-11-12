@@ -91,7 +91,7 @@ public enum MonkeyMood: String, Codable, CaseIterable, Sendable {
     
     public var emoji: String {
         switch self {
-        case .zen: return "🧘‍♂️"
+        case .zen: return "🐵"
         case .curious: return "🐵"
         case .busy: return "🐒"
         case .overheated: return "🙈"

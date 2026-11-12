@@ -188,7 +188,7 @@ public struct SleepWidgetView: View {
 
     // MARK: - Medium (2x1)
     private var mediumView: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             // Left: Large Radial Sleep Score Ring (inset to prevent clipping)
             ZStack {
                 Circle()
@@ -209,7 +209,7 @@ public struct SleepWidgetView: View {
 
                 VStack(spacing: 1) {
                     Text(entry.snapshot.totalAsleepFormatted)
-                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -223,24 +223,23 @@ public struct SleepWidgetView: View {
                         .clipShape(Capsule())
                 }
             }
-            .frame(width: 78, height: 78)
-            .padding(.leading, 2)
-            .padding(.vertical, 2)
+            .frame(width: 84, height: 84)
 
             // Right: Telemetry & Proportional Sleep Architecture
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 // Header row: Schedule and Restorative/Efficiency badge
-                HStack(alignment: .center) {
-                    HStack(spacing: 4) {
+                HStack(alignment: .center, spacing: 4) {
+                    HStack(spacing: 3.5) {
                         Image(systemName: "moon.stars.fill")
                             .font(.system(size: 9))
                             .foregroundColor(WidgetColors.accentPurple)
                         Text("\(entry.snapshot.bedtimeFormatted) ➔ \(entry.snapshot.wakeTimeFormatted)")
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.9))
+                            .lineLimit(1)
                     }
 
-                    Spacer()
+                    Spacer(minLength: 2)
 
                     Text("\(entry.snapshot.efficiencyPercent)% Eff · \(entry.snapshot.restorativePercent)% Rest")
                         .font(.system(size: 8.5, weight: .bold, design: .rounded))
@@ -249,7 +248,10 @@ public struct SleepWidgetView: View {
                         .padding(.vertical, 2)
                         .background(WidgetColors.accentPurple.opacity(0.15))
                         .clipShape(Capsule())
+                        .lineLimit(1)
                 }
+
+                Spacer(minLength: 0)
 
                 // Multi-Stage Proportional Bar
                 stageProportionalBar(height: 7)
@@ -262,25 +264,52 @@ public struct SleepWidgetView: View {
                     stagePill(label: "Awake", duration: entry.snapshot.awakeFormatted, color: awakeColor)
                 }
 
-                // In-Bed and Source row
-                HStack {
-                    Text("\(entry.snapshot.timeInBedFormatted) in bed")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
+                Spacer(minLength: 0)
 
-                    Spacer()
+                // In-Bed, Nocturnal Vitals (RHR / HRV), and Source row
+                HStack(spacing: 6) {
+                    Text("\(entry.snapshot.timeInBedFormatted) bed")
+                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.55))
+                        .lineLimit(1)
 
-                    HStack(spacing: 3.5) {
+                    if let rhr = entry.snapshot.restingHeartRate {
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(WidgetColors.accentRed)
+                            Text("\(Int(rhr))")
+                                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                    }
+
+                    if let hrv = entry.snapshot.hrvMs {
+                        HStack(spacing: 2) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(WidgetColors.accentCyan)
+                            Text("\(Int(hrv))ms")
+                                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                    }
+
+                    Spacer(minLength: 2)
+
+                    HStack(spacing: 3) {
                         Circle()
                             .fill(Color(hex: entry.snapshot.sourceColor ?? DeviceColorPalette.getColor(for: entry.snapshot.sourceDevice)))
                             .frame(width: 5, height: 5)
                         Text(entry.snapshot.sourceDevice)
                             .font(.system(size: 8.5, weight: .semibold))
+                            .lineLimit(1)
                     }
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(.white.opacity(0.55))
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(alignment: .trailing) {
             Image(systemName: "moon.stars.fill")
                 .resizable()
@@ -296,10 +325,10 @@ public struct SleepWidgetView: View {
 
     // MARK: - Large (2x2)
     private var largeView: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             // Header: Title & Device chip
-            HStack(alignment: .center) {
-                HStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 6) {
+                HStack(spacing: 5) {
                     Image(systemName: "moon.zzz.fill")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(WidgetColors.accentPurple)
@@ -308,14 +337,15 @@ public struct SleepWidgetView: View {
                         .foregroundColor(WidgetColors.accentPurple)
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                HStack(spacing: 4.5) {
+                HStack(spacing: 4) {
                     Circle()
                         .fill(Color(hex: entry.snapshot.sourceColor ?? DeviceColorPalette.getColor(for: entry.snapshot.sourceDevice)))
                         .frame(width: 6, height: 6)
                     Text(entry.snapshot.sourceDevice)
                         .font(.system(size: 9, weight: .semibold))
+                        .lineLimit(1)
                 }
                 .foregroundColor(.white.opacity(0.75))
                 .padding(.horizontal, 7)
@@ -325,14 +355,16 @@ public struct SleepWidgetView: View {
                 Text(entry.snapshot.sleepQualityRating)
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .foregroundColor(WidgetColors.accentCyan)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 6.5)
                     .padding(.vertical, 2.5)
                     .background(WidgetColors.accentCyan.opacity(0.18))
                     .clipShape(Capsule())
             }
 
-            // Top Hero Row: Score Radial Gauge on Left, Primary Stats on Right
-            HStack(spacing: 16) {
+            Spacer(minLength: 0)
+
+            // Top Hero Row: Score Radial Gauge on Left, Primary Stats Card on Right
+            HStack(spacing: 14) {
                 ZStack {
                     Circle()
                         .inset(by: 4.5)
@@ -359,20 +391,21 @@ public struct SleepWidgetView: View {
                             .foregroundColor(WidgetColors.accentCyan)
                     }
                 }
-                .frame(width: 82, height: 82)
-                .padding(2)
+                .frame(width: 88, height: 88)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(entry.snapshot.totalAsleepFormatted)
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)
 
                     Text("\(entry.snapshot.timeInBedFormatted) in bed • \(entry.snapshot.efficiencyPercent)% efficiency")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.65))
+                        .lineLimit(1)
 
                     HStack(spacing: 10) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3.5) {
                             Image(systemName: "moon.stars.fill")
                                 .font(.system(size: 9))
                                 .foregroundColor(WidgetColors.accentPurple)
@@ -381,7 +414,7 @@ public struct SleepWidgetView: View {
                                 .foregroundColor(.white)
                         }
 
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3.5) {
                             Image(systemName: "sun.horizon.fill")
                                 .font(.system(size: 9))
                                 .foregroundColor(WidgetColors.coffeeYellow)
@@ -390,24 +423,35 @@ public struct SleepWidgetView: View {
                                 .foregroundColor(.white)
                         }
                     }
-                    .padding(.top, 2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                )
             }
+
+            Spacer(minLength: 0)
 
             // Proportional Sleep Stage Bar
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("STAGE ARCHITECTURE")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 8.5, weight: .bold))
                         .foregroundColor(.white.opacity(0.45))
                     Spacer()
-                    Text("\(entry.snapshot.restorativePercent)% Restorative")
-                        .font(.system(size: 9, weight: .bold))
+                    Text("\(entry.snapshot.restorativePercent)% Restorative (Deep + REM)")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentPurple)
                 }
 
                 stageProportionalBar(height: 10)
             }
+
+            Spacer(minLength: 0)
 
             // 4-Column Stage Breakdown Grid
             HStack(spacing: 6) {
@@ -417,17 +461,34 @@ public struct SleepWidgetView: View {
                 stageDetailCard(label: "Awake", duration: entry.snapshot.awakeFormatted, percent: entry.snapshot.awakePercent, color: awakeColor)
             }
 
-            // Bottom Nocturnal Vitals Row
+            Spacer(minLength: 0)
+
+            // Bottom Nocturnal Vitals Row (Always 3 balanced cards)
             HStack(spacing: 6) {
-                if let rhr = entry.snapshot.restingHeartRate {
-                    vitalCard(title: "RESTING HR", value: "\(Int(rhr))", unit: "bpm", icon: "heart.fill", color: WidgetColors.accentRed)
-                }
-                if let hrv = entry.snapshot.hrvMs {
-                    vitalCard(title: "HRV SDNN", value: "\(Int(hrv))", unit: "ms", icon: "waveform.path.ecg", color: WidgetColors.accentCyan)
-                }
-                vitalCard(title: "RESTORATIVE", value: "\(entry.snapshot.restorativePercent)", unit: "%", icon: "sparkles", color: WidgetColors.accentPurple)
+                vitalCard(
+                    title: "RESTING HR",
+                    value: entry.snapshot.restingHeartRate != nil ? "\(Int(entry.snapshot.restingHeartRate!))" : "--",
+                    unit: "bpm",
+                    icon: "heart.fill",
+                    color: WidgetColors.accentRed
+                )
+                vitalCard(
+                    title: "HRV SDNN",
+                    value: entry.snapshot.hrvMs != nil ? "\(Int(entry.snapshot.hrvMs!))" : "--",
+                    unit: "ms",
+                    icon: "waveform.path.ecg",
+                    color: WidgetColors.accentCyan
+                )
+                vitalCard(
+                    title: "EFFICIENCY",
+                    value: "\(entry.snapshot.efficiencyPercent)",
+                    unit: "%",
+                    icon: "sparkles",
+                    color: WidgetColors.accentPurple
+                )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(alignment: .trailing) {
             Image(systemName: "moon.stars.fill")
                 .resizable()

@@ -55,6 +55,8 @@ public struct StressWidgetView: View {
                     smallView
                 case .systemMedium:
                     mediumView
+                case .systemLarge:
+                    largeView
                 case .accessoryCircular:
                     accessoryCircularView
                 case .accessoryRectangular:
@@ -66,149 +68,191 @@ public struct StressWidgetView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(WidgetColors.bgGradient, for: .widget)
         .widgetURL(URL(string: "daily://health/stress"))
     }
 
     private var emptyView: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Text("🐵")
-                    .font(.system(size: 13))
-                Text("STRESS")
-                    .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 56, weight: .black))
+                .foregroundColor(WidgetColors.accentCyan.opacity(0.05))
+                .offset(x: 10, y: 10)
+
+            VStack(spacing: 6) {
+                HStack(spacing: 5) {
+                    WidgetMonkeyMascotView(mood: .curious, size: 18)
+                    Text("STRESS")
+                        .font(.system(size: 9, weight: .heavy, design: .rounded))
+                        .foregroundColor(WidgetColors.fgMuted)
+                    Spacer()
+                }
+
+                Spacer(minLength: 0)
+
+                Text("--")
+                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+
+                Text("No Telemetry")
+                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
                     .foregroundColor(WidgetColors.fgMuted)
-                Spacer()
+
+                Text("Wear watch to track")
+                    .font(.system(size: 8.5, weight: .medium))
+                    .foregroundColor(WidgetColors.fgMuted.opacity(0.8))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
             }
-            
-            Spacer(minLength: 2)
-            
-            Text("--")
-                .font(.system(size: 30, weight: .heavy, design: .rounded))
-                .foregroundColor(.white.opacity(0.4))
-            
-            Text("No Telemetry")
-                .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                .foregroundColor(WidgetColors.fgMuted)
-            
-            Text("Wear watch to track")
-                .font(.system(size: 8.5, weight: .medium))
-                .foregroundColor(WidgetColors.fgMuted.opacity(0.8))
-                .lineLimit(1)
-            
-            Spacer(minLength: 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(4)
     }
 
     // =========================================================================
     // MARK: - 1. SYSTEM SMALL
     // =========================================================================
     private var smallView: some View {
-        VStack(spacing: 5) {
-            // Header: Monkey + Label + Status Pill
-            HStack {
-                HStack(spacing: 3.5) {
-                    Text(entry.snapshot.monkeyMood.emoji)
-                        .font(.system(size: 11))
-                    Text("STRESS")
-                        .font(.system(size: 8, weight: .heavy, design: .rounded))
+        ZStack(alignment: .bottomTrailing) {
+            // Subtle background watermark matching Bubbles / Smokes / Sleep small widgets
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 56, weight: .black))
+                .foregroundColor(levelColor.opacity(0.05))
+                .offset(x: 10, y: 10)
+
+            VStack(spacing: 4.5) {
+                // Header: Monkey Mascot + STRESS + Single-line Status Pill
+                HStack(spacing: 4) {
+                    HStack(spacing: 4) {
+                        WidgetMonkeyMascotView(mood: entry.snapshot.monkeyMood, size: 18)
+                        Text("STRESS")
+                            .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                            .foregroundColor(levelColor)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 2)
+
+                    Text(entry.snapshot.level.displayName)
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
                         .foregroundColor(levelColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(levelColor.opacity(0.18))
+                        .clipShape(Capsule())
                 }
 
-                Spacer(minLength: 2)
+                Spacer(minLength: 0)
 
-                Text(entry.snapshot.level.displayName)
-                    .font(.system(size: 8, weight: .bold, design: .rounded))
-                    .foregroundColor(levelColor)
-                    .padding(.horizontal, 4.5)
-                    .padding(.vertical, 1.5)
-                    .background(levelColor.opacity(0.18))
-                    .clipShape(Capsule())
-            }
+                // Center Circular Score Gauge
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 5.5)
+                        .frame(width: 54, height: 54)
 
-            // Center Circular Score Gauge
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.1), lineWidth: 5)
-                    .frame(width: 52, height: 52)
-
-                Circle()
-                    .trim(from: 0, to: max(0.04, min(CGFloat(entry.snapshot.stressScore) / 100.0, 1.0)))
-                    .stroke(
-                        LinearGradient(
-                            colors: gradientColors.isEmpty ? [levelColor, levelColor.opacity(0.7)] : gradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 52, height: 52)
-
-                VStack(spacing: 0) {
-                    Text("\(entry.snapshot.stressScore)")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundColor(.white)
-                    Text("/100")
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundColor(WidgetColors.fgMuted)
-                }
-            }
-            .padding(.vertical, 1)
-
-            // Autonomic Balance Mini-Bar
-            HStack(spacing: 3) {
-                Text("\(entry.snapshot.parasympatheticPercent)% Rest")
-                    .font(.system(size: 7.5, weight: .semibold, design: .rounded))
-                    .foregroundColor(WidgetColors.accentCyan)
-                Spacer()
-                Text("\(entry.snapshot.sympatheticPercent)% Active")
-                    .font(.system(size: 7.5, weight: .semibold, design: .rounded))
-                    .foregroundColor(WidgetColors.accentOrange)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(WidgetColors.accentOrange.opacity(0.35))
-                    Capsule()
-                        .fill(
+                    Circle()
+                        .trim(from: 0, to: max(0.04, min(CGFloat(entry.snapshot.stressScore) / 100.0, 1.0)))
+                        .stroke(
                             LinearGradient(
-                                colors: [WidgetColors.accentCyan, WidgetColors.accentMint],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
+                                colors: gradientColors.isEmpty ? [levelColor, levelColor.opacity(0.7)] : gradientColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 5.5, lineCap: .round)
                         )
-                        .frame(width: max(3, geo.size.width * CGFloat(entry.snapshot.parasympatheticPercent) / 100.0))
-                }
-            }
-            .frame(height: 3)
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 54, height: 54)
 
-            // Bottom Metric / Snippet
-            HStack(spacing: 3) {
-                if let hrv = entry.snapshot.hrvMs {
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 7.5))
-                        .foregroundColor(WidgetColors.accentCyan)
-                    Text("\(Int(hrv)) ms HRV")
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
-                } else {
-                    Text(entry.snapshot.monkeyMood.displayName)
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
+                    VStack(spacing: 0) {
+                        Text("\(entry.snapshot.stressScore)")
+                            .font(.system(size: 17, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("/100")
+                            .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
+                    }
                 }
 
-                Spacer(minLength: 2)
+                Spacer(minLength: 0)
 
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 7, weight: .bold))
-                    .foregroundColor(levelColor)
+                // Autonomic Balance Mini-Bar
+                VStack(spacing: 2) {
+                    HStack(spacing: 3) {
+                        Text("\(entry.snapshot.parasympatheticPercent)% Rest")
+                            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("\(entry.snapshot.sympatheticPercent)% Active")
+                            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentOrange)
+                            .lineLimit(1)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(WidgetColors.accentOrange.opacity(0.35))
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [WidgetColors.accentCyan, WidgetColors.accentMint],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: max(3, geo.size.width * CGFloat(entry.snapshot.parasympatheticPercent) / 100.0))
+                        }
+                    }
+                    .frame(height: 3.5)
+                }
+
+                // Bottom Biometric Bar (HRV + RHR / Mood)
+                HStack(spacing: 4) {
+                    if let hrv = entry.snapshot.hrvMs {
+                        HStack(spacing: 2.5) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(WidgetColors.accentCyan)
+                            Text("\(Int(round(hrv))) ms")
+                                .font(.system(size: 8, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.92))
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Text(entry.snapshot.monkeyMood.displayName)
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 2)
+
+                    if let rhr = entry.snapshot.restingHeartRate {
+                        HStack(spacing: 2.5) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 7))
+                                .foregroundColor(WidgetColors.accentPink)
+                            Text("\(Int(round(rhr))) bpm")
+                                .font(.system(size: 8, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.92))
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundColor(levelColor)
+                    }
+                }
+                .padding(.horizontal, 6.5)
+                .padding(.vertical, 3.5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -216,25 +260,29 @@ public struct StressWidgetView: View {
     // MARK: - 2. SYSTEM MEDIUM
     // =========================================================================
     private var mediumView: some View {
-        HStack(spacing: 12) {
-            // Left Column (42%): Mascot + Gauge + Autonomic Balance
+        HStack(spacing: 10) {
+            // Left Column: Monkey Mascot + Score Ring + Autonomic Balance
             VStack(spacing: 6) {
-                HStack(spacing: 4) {
-                    Text(entry.snapshot.monkeyMood.emoji)
-                        .font(.system(size: 13))
+                HStack(spacing: 4.5) {
+                    WidgetMonkeyMascotView(mood: entry.snapshot.monkeyMood, size: 20)
                     Text(entry.snapshot.level.displayName)
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundColor(levelColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(levelColor.opacity(0.18))
                         .clipShape(Capsule())
                 }
 
+                Spacer(minLength: 0)
+
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 6)
-                        .frame(width: 58, height: 58)
+                        .stroke(Color.white.opacity(0.09), lineWidth: 6)
+                        .frame(width: 60, height: 60)
 
                     Circle()
                         .trim(from: 0, to: max(0.04, min(CGFloat(entry.snapshot.stressScore) / 100.0, 1.0)))
@@ -247,11 +295,11 @@ public struct StressWidgetView: View {
                             style: StrokeStyle(lineWidth: 6, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 58, height: 58)
+                        .frame(width: 60, height: 60)
 
                     VStack(spacing: 0) {
                         Text("\(entry.snapshot.stressScore)")
-                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .font(.system(size: 19, weight: .heavy, design: .rounded))
                             .foregroundColor(.white)
                         Text("STRESS")
                             .font(.system(size: 7.5, weight: .heavy, design: .rounded))
@@ -259,8 +307,10 @@ public struct StressWidgetView: View {
                     }
                 }
 
+                Spacer(minLength: 0)
+
                 // Balance bar
-                VStack(spacing: 2) {
+                VStack(spacing: 2.5) {
                     HStack {
                         Text("Rest \(entry.snapshot.parasympatheticPercent)%")
                             .font(.system(size: 7.5, weight: .semibold, design: .rounded))
@@ -278,26 +328,28 @@ public struct StressWidgetView: View {
                                 .frame(width: max(3, geo.size.width * CGFloat(entry.snapshot.parasympatheticPercent) / 100.0))
                         }
                     }
-                    .frame(height: 3.5)
+                    .frame(height: 4)
                 }
             }
-            .frame(width: 108)
+            .frame(width: 116)
+            .frame(maxHeight: .infinity)
 
-            // Right Column (58%): Wisdom Quote + Biometrics + Action
-            VStack(alignment: .leading, spacing: 6) {
+            // Right Column: Biometrics + Monkey Wisdom Card + Recommended Action
+            VStack(alignment: .leading, spacing: 5.5) {
                 // Biometrics mini pills
                 HStack(spacing: 5) {
                     if let hrv = entry.snapshot.hrvMs {
                         HStack(spacing: 3) {
                             Image(systemName: "waveform.path.ecg")
-                                .font(.system(size: 8))
+                                .font(.system(size: 8.5))
                                 .foregroundColor(WidgetColors.accentCyan)
-                            Text("\(Int(hrv)) ms")
+                            Text("HRV \(Int(round(hrv))) ms")
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
+                                .lineLimit(1)
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
+                        .padding(.horizontal, 6.5)
+                        .padding(.vertical, 3.5)
                         .background(Color.white.opacity(0.06))
                         .clipShape(Capsule())
                     }
@@ -305,14 +357,15 @@ public struct StressWidgetView: View {
                     if let rhr = entry.snapshot.restingHeartRate {
                         HStack(spacing: 3) {
                             Image(systemName: "heart.fill")
-                                .font(.system(size: 8))
-                                .foregroundColor(WidgetColors.accentRed)
-                            Text("\(Int(rhr)) bpm")
+                                .font(.system(size: 8.5))
+                                .foregroundColor(WidgetColors.accentPink)
+                            Text("RHR \(Int(round(rhr))) bpm")
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
+                                .lineLimit(1)
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
+                        .padding(.horizontal, 6.5)
+                        .padding(.vertical, 3.5)
                         .background(Color.white.opacity(0.06))
                         .clipShape(Capsule())
                     }
@@ -324,45 +377,267 @@ public struct StressWidgetView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
                         Text(entry.snapshot.monkeyMood.displayName)
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
                             .foregroundColor(levelColor)
                         Spacer()
+                        Image(systemName: entry.snapshot.monkeyMood.iconSymbol)
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(levelColor)
                     }
                     Text(entry.snapshot.adviceSnippet)
                         .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.88))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(3)
                 }
-                .padding(8)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(hex: "#061020").opacity(0.75))
+                        .fill(Color(hex: "#061020").opacity(0.78))
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(levelColor.opacity(0.3), lineWidth: 1)
+                                .strokeBorder(levelColor.opacity(0.32), lineWidth: 1)
                         )
                 )
 
-                Spacer(minLength: 0)
-
-                // Footer Prompt
-                HStack(spacing: 4) {
-                    Text("Open Stress Studio")
+                // Footer Action Pill
+                HStack(spacing: 5) {
+                    Image(systemName: "wind")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundColor(WidgetColors.accentCyan)
+                    Text(entry.snapshot.monkeyMood.quickActionTitle)
                         .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    Spacer()
+                    Text("Stress Studio")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentCyan)
                     Image(systemName: "arrow.right")
                         .font(.system(size: 7.5, weight: .bold))
                         .foregroundColor(WidgetColors.accentCyan)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding(11)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // =========================================================================
-    // MARK: - 3. LOCK SCREEN ACCESSORIES
+    // MARK: - 3. SYSTEM LARGE
+    // =========================================================================
+    private var largeView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Row 1: Header
+            HStack(spacing: 8) {
+                WidgetMonkeyMascotView(mood: entry.snapshot.monkeyMood, size: 28)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Stress Studio")
+                        .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text(entry.snapshot.monkeyMood.displayName)
+                        .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(levelColor)
+                }
+
+                Spacer()
+
+                Text(entry.snapshot.level.displayName)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(levelColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(levelColor.opacity(0.18))
+                    .clipShape(Capsule())
+            }
+
+            // Row 2: Hero Score Ring + Autonomic Balance Breakdown
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 7)
+                        .frame(width: 72, height: 72)
+
+                    Circle()
+                        .trim(from: 0, to: max(0.04, min(CGFloat(entry.snapshot.stressScore) / 100.0, 1.0)))
+                        .stroke(
+                            LinearGradient(
+                                colors: gradientColors.isEmpty ? [levelColor, levelColor.opacity(0.7)] : gradientColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 72, height: 72)
+
+                    VStack(spacing: 0) {
+                        Text("\(entry.snapshot.stressScore)")
+                            .font(.system(size: 22, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("/100")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.fgMuted)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AUTONOMIC BALANCE")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .foregroundColor(WidgetColors.fgMuted)
+
+                    // Parasympathetic (Rest)
+                    VStack(alignment: .leading, spacing: 2.5) {
+                        HStack {
+                            Text("Parasympathetic (Rest & Digest)")
+                                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(entry.snapshot.parasympatheticPercent)%")
+                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentMint)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.08))
+                                Capsule()
+                                    .fill(LinearGradient(colors: [WidgetColors.accentCyan, WidgetColors.accentMint], startPoint: .leading, endPoint: .trailing))
+                                    .frame(width: max(4, geo.size.width * CGFloat(entry.snapshot.parasympatheticPercent) / 100.0))
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+
+                    // Sympathetic (Active)
+                    VStack(alignment: .leading, spacing: 2.5) {
+                        HStack {
+                            Text("Sympathetic (Active Load)")
+                                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(entry.snapshot.sympatheticPercent)%")
+                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                .foregroundColor(WidgetColors.accentOrange)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.08))
+                                Capsule()
+                                    .fill(LinearGradient(colors: [WidgetColors.accentAmber, WidgetColors.accentOrange], startPoint: .leading, endPoint: .trailing))
+                                    .frame(width: max(4, geo.size.width * CGFloat(entry.snapshot.sympatheticPercent) / 100.0))
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(11)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+            // Row 3: 3-Tile Biometrics Grid (HRV, RHR, Recovery Tone)
+            HStack(spacing: 7) {
+                stressBiometricTile(
+                    icon: "waveform.path.ecg",
+                    label: "HRV (SDNN)",
+                    value: entry.snapshot.hrvMs != nil ? "\(Int(round(entry.snapshot.hrvMs!))) ms" : "--",
+                    color: WidgetColors.accentCyan
+                )
+                stressBiometricTile(
+                    icon: "heart.fill",
+                    label: "Resting HR",
+                    value: entry.snapshot.restingHeartRate != nil ? "\(Int(round(entry.snapshot.restingHeartRate!))) bpm" : "--",
+                    color: WidgetColors.accentPink
+                )
+                stressBiometricTile(
+                    icon: "leaf.fill",
+                    label: "Rest Ratio",
+                    value: "\(entry.snapshot.parasympatheticPercent)%",
+                    color: WidgetColors.accentMint
+                )
+            }
+
+            // Row 4: Monkey Wisdom & Breathing Protocol Card
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: entry.snapshot.monkeyMood.iconSymbol)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(levelColor)
+                    Text("MONKEY WISDOM")
+                        .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .foregroundColor(levelColor)
+                    Spacer()
+                    HStack(spacing: 3.5) {
+                        Image(systemName: "wind")
+                            .font(.system(size: 8.5, weight: .bold))
+                        Text(entry.snapshot.monkeyMood.quickActionTitle)
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(WidgetColors.accentCyan)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(WidgetColors.accentCyan.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+
+                Text(entry.snapshot.adviceSnippet)
+                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.92))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(hex: "#061020").opacity(0.82))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(levelColor.opacity(0.32), lineWidth: 1)
+                    )
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func stressBiometricTile(icon: String, label: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(color)
+                Text(label)
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .foregroundColor(WidgetColors.fgMuted)
+                    .lineLimit(1)
+            }
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    // =========================================================================
+    // MARK: - 4. LOCK SCREEN ACCESSORIES
     // =========================================================================
     private var accessoryCircularView: some View {
         ZStack {
@@ -383,6 +658,7 @@ public struct StressWidgetView: View {
                     .font(.system(size: 9))
                 Text("Stress: \(entry.snapshot.stressScore) (\(entry.snapshot.level.displayName))")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .lineLimit(1)
             }
             Text(entry.snapshot.adviceSnippet)
                 .font(.system(size: 9, weight: .regular, design: .rounded))
@@ -416,6 +692,7 @@ public struct StressWidget: Widget {
         .supportedFamilies([
             .systemSmall,
             .systemMedium,
+            .systemLarge,
             .accessoryCircular,
             .accessoryRectangular,
             .accessoryInline

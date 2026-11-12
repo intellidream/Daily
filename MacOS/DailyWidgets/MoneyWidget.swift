@@ -182,198 +182,311 @@ public struct MoneyWidgetView: View {
 
     // MARK: - Medium (2x1)
     private var mediumView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Header: Wallet icon on left, EUR badge on right (No text title)
-            HStack {
+        let topOut = entry.snapshot.topOutgoingAllocations.first
+
+        return VStack(alignment: .leading, spacing: 6) {
+            // Header: Wallet icon + Net Worth (Lei) on left, Deposits + EUR badge on right
+            HStack(alignment: .center, spacing: 6) {
                 Image(systemName: "wallet.bifold.fill")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(WidgetColors.accentGreen)
 
-                Spacer()
+                Text("\(formatCompactLei(entry.snapshot.netWorthLei)) Lei")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Text("Dep \(formatCompactLei(entry.snapshot.depositsTotal))")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(WidgetColors.accentPurple)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(WidgetColors.accentPurple.opacity(0.14)))
 
                 Text(entry.snapshot.formattedNetWorthEUR)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
                     .foregroundColor(WidgetColors.accentCyan)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(WidgetColors.accentCyan.opacity(0.14)))
             }
 
-            // 3 Columns: NET WORTH | FLOW | LIQUID
-            HStack(spacing: 12) {
+            Spacer(minLength: 0)
+
+            // 3 Rich Tiles: LIQUID | MONTHLY FLOW | TOP OUTGOING
+            HStack(spacing: 6) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("NET WORTH")
-                        .font(.system(size: 8.5, weight: .bold))
+                    Text("LIQUID (CRD/CSH)")
+                        .font(.system(size: 7.5, weight: .bold))
                         .foregroundColor(Color.white.opacity(0.45))
-                    Text("\(formatCompactLei(entry.snapshot.netWorthLei)) Lei")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
                         .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Divider().frame(height: 28).background(Color.white.opacity(0.12))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("FLOW (IN/OUT)")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .foregroundColor(Color.white.opacity(0.45))
-                    Text("\(formatCompactLei(entry.snapshot.incomingTotal)) / \(formatCompactLei(entry.snapshot.outgoingTotal))")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Divider().frame(height: 28).background(Color.white.opacity(0.12))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("LIQUID")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .foregroundColor(Color.white.opacity(0.45))
-                    Text("Crd \(formatCompactLei(entry.snapshot.cardAmount)) · Csh \(formatCompactLei(entry.snapshot.cashAmount))")
+                    Text("\(formatCompactLei(entry.snapshot.cardAmount)) · \(formatCompactLei(entry.snapshot.cashAmount))")
                         .font(.system(size: 11.5, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentCyan)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FLOW (IN/OUT)")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundColor(Color.white.opacity(0.45))
+                        .lineLimit(1)
+                    HStack(spacing: 2) {
+                        Text("+\(formatCompactLei(entry.snapshot.incomingTotal))")
+                            .foregroundColor(WidgetColors.accentGreen)
+                        Text("/")
+                            .foregroundColor(Color.white.opacity(0.35))
+                        Text("-\(formatCompactLei(entry.snapshot.outgoingTotal))")
+                            .foregroundColor(WidgetColors.accentPink)
+                    }
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(topOut != nil ? "TOP OUT: \((topOut!.name.split(separator: "/").first.map(String.init) ?? topOut!.name).uppercased())" : "NET FLOW")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundColor(Color.white.opacity(0.45))
+                        .lineLimit(1)
+                    if let topOut = topOut {
+                        Text("\(formatCompactLei(topOut.amount)) Lei")
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    } else {
+                        let net = entry.snapshot.incomingTotal - entry.snapshot.outgoingTotal
+                        Text("\(net >= 0 ? "+" : "")\(formatCompactLei(net)) Lei")
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(net >= 0 ? WidgetColors.accentGreen : WidgetColors.accentPink)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                )
             }
 
-            Spacer(minLength: 2)
+            Spacer(minLength: 0)
 
             // 3 Smart Interactive Adjust Buttons
             HStack(spacing: 6) {
                 Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: -100)) {
                     Text("-100 Crd")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                         .foregroundColor(WidgetColors.accentPink)
                         .background(
                             Capsule()
                                 .fill(WidgetColors.accentPink.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.25), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
 
                 Button(intent: AdjustLedgerIntent(accountName: "Cash", deltaReal: -100)) {
                     Text("-100 Csh")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                         .foregroundColor(WidgetColors.accentPink)
                         .background(
                             Capsule()
                                 .fill(WidgetColors.accentPink.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.25), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
 
                 Button(intent: AdjustLedgerIntent(accountName: "Card", deltaReal: 100)) {
                     Text("+100 Crd")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                         .foregroundColor(WidgetColors.accentGreen)
                         .background(
                             Capsule()
                                 .fill(WidgetColors.accentGreen.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentGreen.opacity(0.25), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentGreen.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Large (2x2)
     private var largeView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Header: Large Animated Wallet Icon + Live EUR Badge
-            HStack {
-                if #available(iOS 17.0, *) {
+        let netFlow = entry.snapshot.incomingTotal - entry.snapshot.outgoingTotal
+        let totalLiquid = entry.snapshot.cardAmount + entry.snapshot.cashAmount
+
+        return VStack(alignment: .leading, spacing: 8) {
+            // Header: Wallet Icon + Title + Net Flow Badge + Live EUR Badge
+            HStack(alignment: .center, spacing: 6) {
+                HStack(spacing: 5) {
                     Image(systemName: "wallet.bifold.fill")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(WidgetColors.accentGreen)
-                        .symbolEffect(.pulse)
-                } else {
-                    Image(systemName: "wallet.bifold.fill")
-                        .font(.system(size: 20, weight: .bold))
+                    Text("MONEY & FINANCES")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentGreen)
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
+
+                Text("Flow \(netFlow >= 0 ? "+" : "")\(formatCompactLei(netFlow))")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(netFlow >= 0 ? WidgetColors.accentGreen : WidgetColors.accentPink)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill((netFlow >= 0 ? WidgetColors.accentGreen : WidgetColors.accentPink).opacity(0.14)))
 
                 Text(entry.snapshot.formattedNetWorthEUR)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
                     .foregroundColor(WidgetColors.accentCyan)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(WidgetColors.accentCyan.opacity(0.14)))
             }
 
-            // Upper Panel: Net Worth Hero + Deposits/Liquid
-            HStack(spacing: 16) {
+            Spacer(minLength: 0)
+
+            // Upper Panel: Net Worth Hero Card
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("NET WORTH")
-                        .font(.system(size: 9, weight: .bold))
+                    Text("TOTAL NET WORTH")
+                        .font(.system(size: 8.5, weight: .bold))
                         .foregroundColor(Color.white.opacity(0.45))
                     Text(entry.snapshot.formattedNetWorth)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .minimumScaleFactor(0.8)
                 }
 
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 3) {
                     HStack(spacing: 4) {
-                        Text("Deposits:")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.5))
-                        Text("\(formatCompactLei(entry.snapshot.depositsTotal)) Lei")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundColor(WidgetColors.accentPurple)
+                        Text("Liquid:")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.55))
+                        Text("\(formatCompactLei(totalLiquid)) Lei")
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentCyan)
                     }
                     HStack(spacing: 4) {
-                        Text("Liquid:")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.5))
-                        Text("\(formatCompactLei(entry.snapshot.cardAmount)) / \(formatCompactLei(entry.snapshot.cashAmount)) Lei")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundColor(WidgetColors.accentCyan)
+                        Text("Deposits:")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.55))
+                        Text("\(formatCompactLei(entry.snapshot.depositsTotal)) Lei")
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(WidgetColors.accentPurple)
                     }
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            )
 
-            Divider().background(Color.white.opacity(0.12))
+            Spacer(minLength: 0)
+
+            // 2x2 Grid of Account & Monthly Flow Cards
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    moneyMetricCard(
+                        title: "CARD BALANCE",
+                        value: "\(formatCompactLei(entry.snapshot.cardAmount)) Lei",
+                        subtitle: "Cash: \(formatCompactLei(entry.snapshot.cashAmount)) Lei",
+                        icon: "creditcard.fill",
+                        color: WidgetColors.accentCyan
+                    )
+                    moneyMetricCard(
+                        title: "DEPOSITS & SAVINGS",
+                        value: "\(formatCompactLei(entry.snapshot.depositsTotal)) Lei",
+                        subtitle: entry.snapshot.netWorthLei > 0 ? "\(Int((entry.snapshot.depositsTotal / entry.snapshot.netWorthLei) * 100))% of net worth" : "0% share",
+                        icon: "building.columns.fill",
+                        color: WidgetColors.accentPurple
+                    )
+                }
+                HStack(spacing: 6) {
+                    moneyMetricCard(
+                        title: "MONTHLY INCOMING",
+                        value: "+\(formatCompactLei(entry.snapshot.incomingTotal)) Lei",
+                        subtitle: "Active cycle income",
+                        icon: "arrow.down.left.circle.fill",
+                        color: WidgetColors.accentGreen
+                    )
+                    moneyMetricCard(
+                        title: "MONTHLY OUTGOING",
+                        value: "-\(formatCompactLei(entry.snapshot.outgoingTotal)) Lei",
+                        subtitle: entry.snapshot.incomingTotal > 0 ? "\(Int((entry.snapshot.outgoingTotal / entry.snapshot.incomingTotal) * 100))% of income" : "Active cycle spend",
+                        icon: "arrow.up.right.circle.fill",
+                        color: WidgetColors.accentPink
+                    )
+                }
+            }
+
+            Spacer(minLength: 0)
 
             // Key Outgoing Allocations Capsules
-            VStack(alignment: .leading, spacing: 5) {
-                Text("TOP OUTGOING ALLOCATIONS")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(Color.white.opacity(0.45))
-
-                HStack(spacing: 6) {
-                    ForEach(entry.snapshot.topOutgoingAllocations, id: \.name) { item in
-                        HStack(spacing: 3) {
+            if !entry.snapshot.topOutgoingAllocations.isEmpty {
+                HStack(spacing: 5) {
+                    ForEach(entry.snapshot.topOutgoingAllocations.prefix(3), id: \.name) { item in
+                        HStack(spacing: 3.5) {
                             Text(item.name.split(separator: "/").first.map(String.init) ?? item.name)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.white)
+                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                .foregroundColor(Color.white.opacity(0.85))
                                 .lineLimit(1)
+                            Spacer(minLength: 2)
                             Text("\(formatCompactLei(item.amount))")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
                                 .foregroundColor(WidgetColors.accentPink)
+                                .lineLimit(1)
                         }
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill(Color.white.opacity(0.06))
+                                .fill(Color.white.opacity(0.05))
                                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         )
                     }
                 }
+                Spacer(minLength: 0)
             }
-
-            Divider().background(Color.white.opacity(0.12))
 
             // Quick Adjust Action Grid
             HStack(spacing: 6) {
@@ -381,12 +494,12 @@ public struct MoneyWidgetView: View {
                     Text("-100 Card")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
+                        .frame(height: 30)
                         .foregroundColor(WidgetColors.accentPink)
                         .background(
                             Capsule()
                                 .fill(WidgetColors.accentPink.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.25), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
@@ -395,12 +508,12 @@ public struct MoneyWidgetView: View {
                     Text("-100 Cash")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
+                        .frame(height: 30)
                         .foregroundColor(WidgetColors.accentPink)
                         .background(
                             Capsule()
                                 .fill(WidgetColors.accentPink.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.25), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentPink.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
@@ -409,17 +522,49 @@ public struct MoneyWidgetView: View {
                     Text("+100 Card")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
+                        .frame(height: 30)
                         .foregroundColor(WidgetColors.accentGreen)
                         .background(
                             Capsule()
                                 .fill(WidgetColors.accentGreen.opacity(0.14))
-                                .overlay(Capsule().strokeBorder(WidgetColors.accentGreen.opacity(0.25), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(WidgetColors.accentGreen.opacity(0.28), lineWidth: 1))
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func moneyMetricCard(title: String, value: String, subtitle: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 3.5) {
+                Image(systemName: icon)
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(color)
+                Text(title)
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(Color.white.opacity(0.5))
+                    .lineLimit(1)
+            }
+            Text(value)
+                .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(subtitle)
+                .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                .foregroundColor(color.opacity(0.9))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5.5)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(color.opacity(0.2), lineWidth: 1))
+        )
     }
 }
 
