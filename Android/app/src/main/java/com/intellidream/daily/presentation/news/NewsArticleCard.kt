@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,7 +45,11 @@ import androidx.compose.ui.unit.sp
 import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.model.ArticleFramingAnalyzer
+import com.intellidream.daily.model.MediaIntelligenceRegistry
+import com.intellidream.daily.model.MediaOutletProfile
 import com.intellidream.daily.model.NewsArticle
+import com.intellidream.daily.model.StoryCluster
 
 @Composable
 fun NewsArticleCard(
@@ -53,14 +58,29 @@ fun NewsArticleCard(
     isFavorite: Boolean,
     isMediumSubscribed: Boolean = false,
     isSubstackSubscribed: Boolean = false,
+    storyCluster: StoryCluster? = null,
     onTap: () -> Unit,
     onToggleReadLater: () -> Unit,
     onToggleFavorite: () -> Unit,
     onFollowMediumAuthor: ((String) -> Unit)? = null,
-    onSubscribeSubstackPublication: ((String) -> Unit)? = null
+    onSubscribeSubstackPublication: ((String) -> Unit)? = null,
+    onOpenPerspectives: ((StoryCluster) -> Unit)? = null,
+    onInspectSource: ((MediaOutletProfile) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    // Zero-allocation 120Hz scroll memoization
+    val outletProfile = remember(article.link, article.publicationName) {
+        MediaIntelligenceRegistry.shared.resolve(article)
+    }
+    val framingTag = remember(article.link, article.title) {
+        ArticleFramingAnalyzer.classify(
+            title = article.title,
+            description = article.description,
+            link = article.link,
+            profile = outletProfile
+        )
+    }
 
     GlassCard(
         modifier = Modifier
@@ -97,26 +117,21 @@ fun NewsArticleCard(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
 
-                val cat = article.category
-                if (cat != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = cat.displayName,
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
+                // Sleek Variant A Micro-Pill (Bias · Factuality + non-standard Framing)
+                OutletMicroBadge(
+                    profile = outletProfile,
+                    framing = framingTag,
+                    onClick = if (onInspectSource != null) {
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onInspectSource(outletProfile)
+                        }
+                    } else null
+                )
 
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -171,6 +186,22 @@ fun NewsArticleCard(
                         contentScale = ContentScale.Crop
                     )
                 }
+            }
+
+            // Conditional Multi-Source Bias Spectrum Bar (Variant A: shown ONLY when >= 2 outlets cover this story)
+            if (storyCluster != null && storyCluster.hasMultipleSources) {
+                BiasSpectrumBar(
+                    distribution = storyCluster.distribution,
+                    blindspot = storyCluster.blindspot,
+                    uniqueOutlets = storyCluster.uniqueOutletCount,
+                    compact = true,
+                    onOpenPerspectives = if (onOpenPerspectives != null) {
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onOpenPerspectives(storyCluster)
+                        }
+                    } else null
+                )
             }
 
             // Actions Footer: Author, Subscribe/Follow, Read Later, Favorite, Share

@@ -5,14 +5,38 @@ import DailyCore
 public struct NewsArticleCard: View {
     public let article: NewsArticle
     public let onTap: () -> Void
+    public let onOpenPerspectives: ((NewsArticle, StoryCluster) -> Void)?
     
     @ObservedObject private var newsService = NewsService.shared
     @ObservedObject private var savedService = SavedArticlesService.shared
     @ObservedObject private var settingsService = SettingsService.shared
+    @State private var showSourceTransparency = false
     
-    public init(article: NewsArticle, onTap: @escaping () -> Void) {
+    public init(
+        article: NewsArticle,
+        onOpenPerspectives: ((NewsArticle, StoryCluster) -> Void)? = nil,
+        onTap: @escaping () -> Void
+    ) {
         self.article = article
+        self.onOpenPerspectives = onOpenPerspectives
         self.onTap = onTap
+    }
+    
+    private var outletProfile: MediaOutletProfile {
+        MediaIntelligenceRegistry.shared.resolve(for: article)
+    }
+    
+    private var articleFraming: ArticleFramingTag {
+        ArticleFramingAnalyzer.classify(
+            title: article.title,
+            description: article.description,
+            link: article.link,
+            profile: outletProfile
+        )
+    }
+    
+    private var storyCluster: StoryCluster? {
+        newsService.cluster(for: article)
     }
     
     private var isReadLater: Bool {
@@ -45,10 +69,28 @@ public struct NewsArticleCard: View {
                             }
                         }
                         
-                        Text(article.publicationName ?? "News")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentCyan)
-                            .lineLimit(1)
+                        Button {
+                            showSourceTransparency = true
+                            triggerHaptic()
+                        } label: {
+                            Text(article.publicationName ?? outletProfile.name)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(ThemeColors.accentCyan)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .sheet(isPresented: $showSourceTransparency) {
+                            SourceTransparencyPopover(profile: outletProfile) {
+                                showSourceTransparency = false
+                            }
+                            .presentationDetents([.medium, .large])
+                            .presentationDragIndicator(.visible)
+                        }
+                        
+                        OutletMicroBadge(profile: outletProfile, framing: articleFraming, compact: true) {
+                            showSourceTransparency = true
+                            triggerHaptic()
+                        }
                         
                         if let category = article.category {
                             Text(category.displayName)
@@ -104,6 +146,18 @@ public struct NewsArticleCard: View {
                                 default:
                                     EmptyView()
                                 }
+                            }
+                        }
+                    }
+                    
+                    // Variant A: Multi-Source Bias Spectrum Bar (rendered ONLY when >= 2 outlets cover the story)
+                    if let cluster = storyCluster, cluster.hasMultipleSources {
+                        BiasSpectrumBar(cluster: cluster, showActionPill: true) {
+                            triggerHaptic()
+                            if let onOpenPerspectives = onOpenPerspectives {
+                                onOpenPerspectives(article, cluster)
+                            } else {
+                                onTap()
                             }
                         }
                     }

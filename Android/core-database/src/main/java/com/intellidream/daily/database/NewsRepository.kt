@@ -5,15 +5,27 @@ import com.intellidream.daily.database.entity.CachedFeedArticleEntity
 import com.intellidream.daily.database.entity.RssSubscriptionEntity
 import com.intellidream.daily.database.entity.SavedArticleEntity
 import com.intellidream.daily.model.ArticleExtractor
+import com.intellidream.daily.model.ArticleFramingTag
 import com.intellidream.daily.model.FeedCategory
 import com.intellidream.daily.model.FeedParser
 import com.intellidream.daily.model.FeedSearchResult
 import com.intellidream.daily.model.FeedSource
 import com.intellidream.daily.model.FeedType
+import com.intellidream.daily.model.FramingDifferenceItem
+import com.intellidream.daily.model.FactualityTier
+import com.intellidream.daily.model.MediaBias
+import com.intellidream.daily.model.MediaDietSnapshot
+import com.intellidream.daily.model.MediaIntelligenceRegistry
+import com.intellidream.daily.model.MediaOutletProfile
 import com.intellidream.daily.model.NewsArticle
+import com.intellidream.daily.model.PerspectiveComparison
+import com.intellidream.daily.model.RemoteMediaOutletProfileRow
+import com.intellidream.daily.model.RemoteNewsReadingStatsRow
 import com.intellidream.daily.model.RssSubscription
 import com.intellidream.daily.model.SavedArticle
 import com.intellidream.daily.model.SavedArticleType
+import com.intellidream.daily.model.StoryCluster
+import com.intellidream.daily.model.StoryClusterEngine
 import com.intellidream.daily.model.WpJsonParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,12 +61,19 @@ interface NewsSyncHandler {
     suspend fun extractSubstackArticle(url: String, baseArticle: NewsArticle? = null): NewsArticle? = null
     suspend fun fetchSubstackSubscriptions(handle: String? = null): List<FeedSearchResult> = emptyList()
     fun hasAuthenticatedSubstackSession(): Boolean = false
+    suspend fun pullOutletDeltas(watermarkIso: String): List<RemoteMediaOutletProfileRow> = emptyList()
+    suspend fun fetchPerspectiveCache(clusterHash: String): PerspectiveComparison? = null
+    suspend fun savePerspectiveCache(comparison: PerspectiveComparison): Boolean = false
+    suspend fun pullReadingStats(userId: String, yearMonth: String): MediaDietSnapshot? = null
+    suspend fun pushReadingStats(row: RemoteNewsReadingStatsRow): Boolean = false
+    suspend fun generateGeminiPerspectiveComparison(cluster: StoryCluster, languageCode: String, apiKey: String): PerspectiveComparison? = null
 }
 
 class NewsRepository(
     private val dao: NewsDao,
     var syncHandler: NewsSyncHandler? = null,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val appContext: android.content.Context? = null
 ) {
 
     val allNewsFeedSource = FeedSource(
@@ -94,6 +113,26 @@ class NewsRepository(
     private val _favoriteArticles = MutableStateFlow<List<NewsArticle>>(emptyList())
     val favoriteArticles: StateFlow<List<NewsArticle>> = _favoriteArticles.asStateFlow()
 
+    // Perspectives, Blindspots & Personal Media Diet State
+    private val _storyClusters = MutableStateFlow<List<StoryCluster>>(emptyList())
+    val storyClusters: StateFlow<List<StoryCluster>> = _storyClusters.asStateFlow()
+
+    private val _blindspotClusters = MutableStateFlow<List<StoryCluster>>(emptyList())
+    val blindspotClusters: StateFlow<List<StoryCluster>> = _blindspotClusters.asStateFlow()
+
+    private val _clusterByLink = MutableStateFlow<Map<String, StoryCluster>>(emptyMap())
+    val clusterByLink: StateFlow<Map<String, StoryCluster>> = _clusterByLink.asStateFlow()
+
+    private val _mediaDietSnapshot = MutableStateFlow(MediaDietSnapshot(yearMonth = currentYearMonthString()))
+    val mediaDietSnapshot: StateFlow<MediaDietSnapshot> = _mediaDietSnapshot.asStateFlow()
+
+    private val expansionCache = ConcurrentHashMap<String, Pair<StoryCluster, Long>>()
+    private val comparisonCache = ConcurrentHashMap<String, PerspectiveComparison>()
+    private val seenReadArticleLinks = ConcurrentHashMap.newKeySet<String>()
+    @Volatile
+    private var lastGdeltRequestMillis: Long = 0L
+    private var dietSyncJob: kotlinx.coroutines.Job? = null
+
     private val feedCache = ConcurrentHashMap<String, Pair<List<NewsArticle>, Long>>()
     private val cacheDurationMillis = 15 * 60 * 1000L // 15 minutes
 
@@ -109,7 +148,16 @@ class NewsRepository(
         }
 
     init {
+        loadCachedPerspectivesState()
         observeDb(currentUserId)
+        scope.launch(Dispatchers.Default) {
+            _articles.collect { list ->
+                val out = StoryClusterEngine.clusterArticles(list)
+                _storyClusters.value = out.clusters
+                _blindspotClusters.value = out.clusters.filter { it.blindspot.isBlindspot }
+                _clusterByLink.value = out.byArticleLink
+            }
+        }
         scope.launch {
             val localCached = dao.getAllCachedArticles()
             if (localCached.isNotEmpty()) {
@@ -970,7 +1018,407 @@ class NewsRepository(
                     dao.markSavedArticlesSynced(listOf(art.id), System.currentTimeMillis())
                 }
             }
+
+            // 5. Incremental 24h Outlet Profile Deltas & Monthly Reading Stats
+            syncOutletDeltasIfNeeded(handler)
+            syncReadingStatsIfNeeded(userId, handler)
         } catch (_: Exception) {}
+    }
+
+    // MARK: - Perspectives, Blindspots & Personal Media Diet Engine
+
+    fun clusterForArticle(article: NewsArticle): StoryCluster? =
+        _clusterByLink.value[article.link]
+
+    suspend fun expandClusterCoverage(cluster: StoryCluster, force: Boolean = false): StoryCluster = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        if (!force) {
+            val cached = expansionCache[cluster.id]
+            if (cached != null && now - cached.second < 15 * 60_000L) {
+                return@withContext cached.first
+            }
+        }
+
+        val (query, isRomanian) = StoryClusterEngine.buildDiscoveryQuery(cluster.leadArticle)
+        if (query.isBlank()) return@withContext cluster
+
+        val discovered = ArrayList<NewsArticle>()
+        if (isRomanian) {
+            coroutineScope {
+                val roDef = async { fetchGoogleNewsSearch(query, "ro", "RO", "RO:ro", cluster.leadArticle.category) }
+                val intlDef = async { fetchGoogleNewsSearch(query, "en-US", "US", "US:en", cluster.leadArticle.category) }
+                discovered.addAll(roDef.await())
+                discovered.addAll(intlDef.await().take(10))
+            }
+        } else {
+            discovered.addAll(fetchGoogleNewsSearch(query, "en-US", "US", "US:en", cluster.leadArticle.category))
+        }
+
+        if (discovered.size < 3) {
+            discovered.addAll(fetchGdeltFallback(query, cluster.leadArticle.category))
+        }
+
+        val merged = withContext(Dispatchers.Default) {
+            StoryClusterEngine.mergeExpandedArticles(cluster, discovered)
+        }
+        expansionCache[cluster.id] = merged to now
+
+        // Update reactive cluster lists in place if present
+        val currentList = _storyClusters.value
+        val idx = currentList.indexOfFirst { it.id == merged.id }
+        if (idx >= 0) {
+            val updated = currentList.toMutableList()
+            updated[idx] = merged
+            _storyClusters.value = updated
+            _blindspotClusters.value = updated.filter { it.blindspot.isBlindspot }
+        }
+        val updatedLinks = _clusterByLink.value.toMutableMap()
+        for (item in merged.items) {
+            updatedLinks[item.article.link] = merged
+        }
+        _clusterByLink.value = updatedLinks
+
+        merged
+    }
+
+    private suspend fun fetchGoogleNewsSearch(
+        query: String,
+        hl: String,
+        gl: String,
+        ceid: String,
+        category: FeedCategory?
+    ): List<NewsArticle> {
+        return try {
+            val fullQuery = java.net.URLEncoder.encode("$query when:3d", "UTF-8")
+            val searchUrl = "https://news.google.com/rss/search?q=$fullQuery&hl=$hl&gl=$gl&ceid=$ceid"
+            val rawXml = syncHandler?.fetchUrl(searchUrl) ?: fetchRawHttp(searchUrl) ?: return emptyList()
+            val tempFeed = FeedSource(
+                id = "gnews_perspective_search",
+                name = "Google News",
+                url = searchUrl,
+                type = FeedType.Rss,
+                category = category ?: FeedCategory.World
+            )
+            FeedParser(tempFeed).parse(rawXml).take(22)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchGdeltFallback(query: String, category: FeedCategory?): List<NewsArticle> {
+        val now = System.currentTimeMillis()
+        if (now - lastGdeltRequestMillis < 6000L) return emptyList()
+        lastGdeltRequestMillis = now
+
+        return try {
+            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+            val gdeltUrl = "https://api.gdeltproject.org/api/v2/doc/doc?query=$encoded&mode=ArtList&maxrecords=15&timespan=72h&format=json"
+            val rawJson = syncHandler?.fetchUrl(gdeltUrl) ?: fetchRawHttp(gdeltUrl) ?: return emptyList()
+            val root = org.json.JSONObject(rawJson)
+            val arr = root.optJSONArray("articles") ?: return emptyList()
+            val items = ArrayList<NewsArticle>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val title = obj.optString("title", "").trim()
+                val url = obj.optString("url", "").trim()
+                if (title.isEmpty() || url.isEmpty()) continue
+                val domain = obj.optString("domain", "").ifEmpty { MediaIntelligenceRegistry.extractNormalizedHost(url) }
+                val profile = MediaIntelligenceRegistry.shared.resolve(url = url, publicationName = domain)
+                val socialImg = obj.optString("socialimage", "").takeIf { it.isNotBlank() }
+                items.add(
+                    NewsArticle(
+                        id = url,
+                        title = title,
+                        link = url,
+                        publishDate = now,
+                        imageUrl = socialImg,
+                        publicationName = profile.name,
+                        publicationIconUrl = "https://www.google.com/s2/favicons?domain=${profile.domain}&sz=64",
+                        category = category
+                    )
+                )
+            }
+            items
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun fetchRawHttp(urlString: String): String? {
+        return try {
+            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 8000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36")
+            }
+            if (conn.responseCode in 200..299) {
+                BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun compareClusterPerspectives(
+        cluster: StoryCluster,
+        apiKey: String?,
+        forceRefresh: Boolean = false
+    ): PerspectiveComparison = withContext(Dispatchers.IO) {
+        val minSources = (cluster.uniqueOutletCount - 2).coerceAtLeast(2)
+        if (!forceRefresh) {
+            val mem = comparisonCache[cluster.id]
+            if (mem != null && mem.sourceCount >= minSources) return@withContext mem
+
+            val remote = syncHandler?.fetchPerspectiveCache(cluster.id)
+            if (remote != null && remote.sourceCount >= (cluster.uniqueOutletCount - 3).coerceAtLeast(2)) {
+                comparisonCache[cluster.id] = remote
+                return@withContext remote
+            }
+        }
+
+        val isRo = StoryClusterEngine.detectRomanian(
+            "${cluster.leadArticle.title} ${cluster.leadArticle.description ?: ""}",
+            cluster.leadArticle.link
+        )
+        val langCode = if (isRo) "ro" else "en"
+        val cleanKey = apiKey?.trim().orEmpty()
+
+        if (cleanKey.isNotEmpty() && cluster.items.size >= 2) {
+            val aiResult = syncHandler?.generateGeminiPerspectiveComparison(cluster, langCode, cleanKey)
+            if (aiResult != null) {
+                comparisonCache[cluster.id] = aiResult
+                scope.launch(Dispatchers.IO) {
+                    syncHandler?.savePerspectiveCache(aiResult)
+                }
+                return@withContext aiResult
+            }
+        }
+
+        val deterministic = buildDeterministicComparison(cluster, isRo)
+        comparisonCache[cluster.id] = deterministic
+        deterministic
+    }
+
+    private fun buildDeterministicComparison(cluster: StoryCluster, isRomanian: Boolean): PerspectiveComparison {
+        val d = cluster.distribution
+        val sampleNames = cluster.items.map { it.profile.name }.distinct().sorted().take(4).joinToString(", ")
+
+        val summaryText = if (isRomanian) {
+            "Acest subiect este acoperit de ${cluster.uniqueOutletCount} publicații ($sampleNames), cu o distribuție de ${d.leftPercentInt}% Stânga, ${d.centerPercentInt}% Centru și ${d.rightPercentInt}% Dreapta."
+        } else {
+            "This story is covered across ${cluster.uniqueOutletCount} distinct outlets ($sampleNames), spanning ${d.leftPercentInt}% Left, ${d.centerPercentInt}% Center, and ${d.rightPercentInt}% Right perspectives."
+        }
+
+        val facts = ArrayList<String>()
+        if (cluster.anchorEntities.isNotEmpty()) {
+            facts.add(
+                if (isRomanian) "Entități și repere comune în titluri: ${cluster.anchorEntities.joinToString(" • ")}."
+                else "Core entities shared across reporting: ${cluster.anchorEntities.joinToString(" • ")}."
+            )
+        }
+        val highFactCount = cluster.items.count {
+            it.profile.factuality == FactualityTier.VeryHigh || it.profile.factuality == FactualityTier.High
+        }
+        if (highFactCount > 0) {
+            facts.add(
+                if (isRomanian) "$highFactCount din ${cluster.items.size} articole provin din redacții cu factualitate ridicată (High / Very High)."
+                else "$highFactCount of ${cluster.items.size} reports originate from High or Very High factuality newsrooms."
+            )
+        }
+
+        val diffs = ArrayList<FramingDifferenceItem>()
+        cluster.items.firstOrNull { it.profile.bias.bucket == MediaBias.SpectrumBucket.Left }?.let { item ->
+            diffs.add(
+                FramingDifferenceItem(
+                    perspectiveLabel = if (isRomanian) "Stânga / Progresist (${item.profile.name})" else "Left / Lean Left (${item.profile.name})",
+                    angle = "„${item.article.title}”"
+                )
+            )
+        }
+        cluster.items.firstOrNull { it.profile.bias.bucket == MediaBias.SpectrumBucket.Center }?.let { item ->
+            diffs.add(
+                FramingDifferenceItem(
+                    perspectiveLabel = if (isRomanian) "Centru / Echilibrat (${item.profile.name})" else "Center / Wire (${item.profile.name})",
+                    angle = "„${item.article.title}”"
+                )
+            )
+        }
+        cluster.items.firstOrNull { it.profile.bias.bucket == MediaBias.SpectrumBucket.Right }?.let { item ->
+            diffs.add(
+                FramingDifferenceItem(
+                    perspectiveLabel = if (isRomanian) "Dreapta / Pro-Piață (${item.profile.name})" else "Right / Lean Right (${item.profile.name})",
+                    angle = "„${item.article.title}”"
+                )
+            )
+        }
+        if (diffs.size < 3) {
+            cluster.items.firstOrNull {
+                it.profile.bias == MediaBias.IndependentCreator || it.profile.ownershipType.isIndependentOrNonProfit
+            }?.let { item ->
+                diffs.add(
+                    FramingDifferenceItem(
+                        perspectiveLabel = if (isRomanian) "Independent / Non-Profit (${item.profile.name})" else "Independent / Non-Profit (${item.profile.name})",
+                        angle = "„${item.article.title}”"
+                    )
+                )
+            }
+        }
+
+        val omissions = ArrayList<String>()
+        if (cluster.blindspot.isBlindspot) {
+            omissions.add(cluster.blindspot.explanation)
+        }
+        val opinionCount = cluster.items.count { it.framing == ArticleFramingTag.Opinion }
+        val sensationalCount = cluster.items.count { it.framing == ArticleFramingTag.Sensational }
+        if (opinionCount > 0) {
+            omissions.add(
+                if (isRomanian) "$opinionCount surse tratează subiectul în registru de editorial/opinie, nu doar relatare factuală."
+                else "$opinionCount outlet(s) frame this event as editorial commentary rather than straight wire reporting."
+            )
+        }
+        if (sensationalCount > 0) {
+            omissions.add(
+                if (isRomanian) "Atenție la încadrarea emoțională: $sensationalCount titluri folosesc formulări senzaționaliste."
+                else "Note on tone: $sensationalCount headline(s) employ sensational or loaded phrasing."
+            )
+        }
+
+        return PerspectiveComparison(
+            clusterHash = cluster.id,
+            storyTitle = cluster.leadArticle.title,
+            summaryText = summaryText,
+            commonFacts = facts,
+            framingDifferences = diffs,
+            omissions = omissions,
+            languageCode = if (isRomanian) "ro" else "en",
+            sourceCount = cluster.uniqueOutletCount,
+            isAiGenerated = false
+        )
+    }
+
+    fun recordArticleRead(article: NewsArticle, wasBlindspot: Boolean = false) {
+        val cleanLink = article.link.trim()
+        if (cleanLink.isEmpty() || !seenReadArticleLinks.add(cleanLink)) return
+
+        val profile = MediaIntelligenceRegistry.shared.resolve(article)
+        val ym = currentYearMonthString()
+        val current = _mediaDietSnapshot.value
+        val counts = if (current.yearMonth == ym) current.counts.toMutableMap() else HashMap()
+
+        counts["total_read"] = (counts["total_read"] ?: 0) + 1
+        counts[profile.bias.rawValue] = (counts[profile.bias.rawValue] ?: 0) + 1
+        counts[profile.factuality.rawValue] = (counts[profile.factuality.rawValue] ?: 0) + 1
+        if (profile.ownershipType.isIndependentOrNonProfit) {
+            counts["independent_own"] = (counts["independent_own"] ?: 0) + 1
+        } else {
+            counts["corporate_own"] = (counts["corporate_own"] ?: 0) + 1
+        }
+        val clusterBlindspot = _clusterByLink.value[cleanLink]?.blindspot?.isBlindspot == true
+        if (wasBlindspot || clusterBlindspot) {
+            counts["blindspots_read"] = (counts["blindspots_read"] ?: 0) + 1
+        }
+
+        val updated = MediaDietSnapshot(yearMonth = ym, counts = counts)
+        _mediaDietSnapshot.value = updated
+        persistMediaDietLocally(updated)
+        scheduleDebouncedDietCloudPush(updated)
+    }
+
+    private fun scheduleDebouncedDietCloudPush(snapshot: MediaDietSnapshot) {
+        val uid = currentUserId
+        if (!isValidUuid(uid)) return
+        dietSyncJob?.cancel()
+        dietSyncJob = scope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(60_000L)
+            val latest = _mediaDietSnapshot.value
+            val row = RemoteNewsReadingStatsRow(
+                userId = uid,
+                yearMonth = latest.yearMonth,
+                counts = latest.counts,
+                updatedAt = java.time.Instant.now().toString()
+            )
+            syncHandler?.pushReadingStats(row)
+        }
+    }
+
+    private fun loadCachedPerspectivesState() {
+        val prefs = appContext?.getSharedPreferences("daily_perspectives_prefs", android.content.Context.MODE_PRIVATE) ?: return
+        try {
+            val jsonCodec = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            prefs.getString("outlet_deltas_v1", null)?.let { raw ->
+                val deltas = jsonCodec.decodeFromString<List<MediaOutletProfile>>(raw)
+                MediaIntelligenceRegistry.shared.applyRemoteDeltas(deltas)
+            }
+            val ym = currentYearMonthString()
+            prefs.getString("media_diet_$ym", null)?.let { raw ->
+                _mediaDietSnapshot.value = jsonCodec.decodeFromString<MediaDietSnapshot>(raw)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun persistMediaDietLocally(snapshot: MediaDietSnapshot) {
+        val prefs = appContext?.getSharedPreferences("daily_perspectives_prefs", android.content.Context.MODE_PRIVATE) ?: return
+        try {
+            val encoded = kotlinx.serialization.json.Json.encodeToString(MediaDietSnapshot.serializer(), snapshot)
+            prefs.edit().putString("media_diet_${snapshot.yearMonth}", encoded).apply()
+        } catch (_: Exception) {}
+    }
+
+    private suspend fun syncOutletDeltasIfNeeded(handler: NewsSyncHandler) {
+        val prefs = appContext?.getSharedPreferences("daily_perspectives_prefs", android.content.Context.MODE_PRIVATE) ?: return
+        val now = System.currentTimeMillis()
+        val lastCheck = prefs.getLong("outlet_deltas_last_check", 0L)
+        if (lastCheck > 0L && now - lastCheck < 24 * 3600_000L) return
+
+        prefs.edit().putLong("outlet_deltas_last_check", now).apply()
+        val watermark = prefs.getString("outlet_deltas_watermark", "2026-11-14T00:00:00Z") ?: "2026-11-14T00:00:00Z"
+        val remoteRows = handler.pullOutletDeltas(watermark)
+        if (remoteRows.isEmpty()) return
+
+        val jsonCodec = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val existing = prefs.getString("outlet_deltas_v1", null)?.let {
+            runCatching { jsonCodec.decodeFromString<List<MediaOutletProfile>>(it) }.getOrNull()
+        }.orEmpty().associateBy { it.domain }.toMutableMap()
+
+        var maxWatermark = watermark
+        for (row in remoteRows) {
+            val mapped = row.toDomainProfile()
+            existing[mapped.domain] = mapped
+            if (!row.updatedAt.isNullOrBlank() && row.updatedAt!! > maxWatermark) {
+                maxWatermark = row.updatedAt!!
+            }
+        }
+        val mergedList = existing.values.toList()
+        MediaIntelligenceRegistry.shared.applyRemoteDeltas(mergedList)
+        runCatching {
+            val encoded = jsonCodec.encodeToString(kotlinx.serialization.builtins.ListSerializer(MediaOutletProfile.serializer()), mergedList)
+            prefs.edit()
+                .putString("outlet_deltas_v1", encoded)
+                .putString("outlet_deltas_watermark", maxWatermark)
+                .apply()
+        }
+    }
+
+    private suspend fun syncReadingStatsIfNeeded(userId: String, handler: NewsSyncHandler) {
+        val ym = currentYearMonthString()
+        val remote = handler.pullReadingStats(userId, ym) ?: return
+        val local = _mediaDietSnapshot.value
+        val merged = HashMap<String, Int>()
+        merged.putAll(remote.counts)
+        if (local.yearMonth == ym) {
+            for ((k, v) in local.counts) {
+                merged[k] = maxOf(merged[k] ?: 0, v)
+            }
+        }
+        val updated = MediaDietSnapshot(yearMonth = ym, counts = merged)
+        _mediaDietSnapshot.value = updated
+        persistMediaDietLocally(updated)
+    }
+
+    private fun currentYearMonthString(): String {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM", java.util.Locale.US)
+            .withZone(java.time.ZoneId.systemDefault())
+        return fmt.format(java.time.Instant.now())
     }
 
     fun normalizeFeedUrl(url: String): String = Companion.normalizeFeedUrl(url)

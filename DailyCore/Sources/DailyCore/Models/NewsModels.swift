@@ -82,6 +82,7 @@ public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
     public var publicationName: String?
     public var publicationIconUrl: String?
     public var category: FeedCategory?
+    public var googleNewsSiblings: [ClusterSibling]?
     
     public init(
         id: String? = nil,
@@ -94,7 +95,8 @@ public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
         author: String? = nil,
         publicationName: String? = nil,
         publicationIconUrl: String? = nil,
-        category: FeedCategory? = nil
+        category: FeedCategory? = nil,
+        googleNewsSiblings: [ClusterSibling]? = nil
     ) {
         self.id = id ?? link
         self.title = title
@@ -107,6 +109,7 @@ public struct NewsArticle: Identifiable, Hashable, Codable, Sendable {
         self.publicationName = publicationName
         self.publicationIconUrl = publicationIconUrl
         self.category = category
+        self.googleNewsSiblings = googleNewsSiblings
     }
     
     public var isMediumItem: Bool {

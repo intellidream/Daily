@@ -1,18 +1,34 @@
 package com.intellidream.daily.network
 
+import com.intellidream.daily.model.ClusterCoverageItem
 import com.intellidream.daily.model.FeedSearchResult
+import com.intellidream.daily.model.FramingDifferenceItem
+import com.intellidream.daily.model.MediaBias
+import com.intellidream.daily.model.MediaDietSnapshot
+import com.intellidream.daily.model.PerspectiveComparison
+import com.intellidream.daily.model.RemoteMediaOutletProfileRow
+import com.intellidream.daily.model.RemoteNewsReadingStatsRow
+import com.intellidream.daily.model.RemotePerspectiveCacheRow
 import com.intellidream.daily.model.RssSubscription
 import com.intellidream.daily.model.SavedArticle
+import com.intellidream.daily.model.StoryCluster
 import com.intellidream.daily.model.extractSubstackFeedUrl
 import com.intellidream.daily.model.extractSubstackPublicationSlug
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -382,5 +398,253 @@ class NewsRemoteService(
             android.util.Log.w("NewsRemoteService", "Failed to push saved article (${article.id}): ${e.message}")
             false
         }
+    }
+
+    // MARK: - Perspectives Media Intelligence (24h Delta Watermark, 72h Cache, 1 Row/Month Diet)
+
+    suspend fun pullOutletDeltas(watermarkIso: String): List<RemoteMediaOutletProfileRow> = withContext(Dispatchers.IO) {
+        try {
+            if (clientManager.client.auth.currentAccessTokenOrNull().isNullOrBlank()) return@withContext emptyList()
+            val res = clientManager.client.postgrest["media_outlet_profiles"].select {
+                filter {
+                    gt("updated_at", watermarkIso)
+                }
+                order("updated_at", Order.ASCENDING)
+                limit(200)
+            }
+            json.decodeFromString<List<RemoteMediaOutletProfileRow>>(res.data)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun fetchPerspectiveCache(clusterHash: String): PerspectiveComparison? = withContext(Dispatchers.IO) {
+        try {
+            if (clientManager.client.auth.currentAccessTokenOrNull().isNullOrBlank()) return@withContext null
+            val res = clientManager.client.postgrest["news_perspective_cache"].select {
+                filter {
+                    eq("cluster_hash", clusterHash)
+                }
+                limit(1)
+            }
+            json.decodeFromString<List<RemotePerspectiveCacheRow>>(res.data).firstOrNull()?.toDomain()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun savePerspectiveCache(comparison: PerspectiveComparison): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (clientManager.client.auth.currentAccessTokenOrNull().isNullOrBlank()) return@withContext false
+            val row = RemotePerspectiveCacheRow(
+                clusterHash = comparison.clusterHash,
+                storyTitle = comparison.storyTitle.take(240),
+                summaryText = comparison.summaryText.take(900),
+                commonFacts = comparison.commonFacts.take(5),
+                framingDifferences = comparison.framingDifferences.take(5),
+                omissions = comparison.omissions.take(4),
+                languageCode = comparison.languageCode,
+                sourceCount = comparison.sourceCount
+            )
+            // PostgREST upsert in supabase-kt uses Prefer: return=minimal by default unless select() is requested
+            clientManager.client.postgrest["news_perspective_cache"].upsert(row) {
+                onConflict = "cluster_hash"
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun pullReadingStats(userId: String, yearMonth: String): MediaDietSnapshot? = withContext(Dispatchers.IO) {
+        try {
+            if (clientManager.client.auth.currentAccessTokenOrNull().isNullOrBlank()) return@withContext null
+            val res = clientManager.client.postgrest["news_reading_stats"].select {
+                filter {
+                    eq("user_id", userId)
+                    eq("year_month", yearMonth)
+                }
+                limit(1)
+            }
+            val row = json.decodeFromString<List<RemoteNewsReadingStatsRow>>(res.data).firstOrNull() ?: return@withContext null
+            MediaDietSnapshot(yearMonth = row.yearMonth, counts = row.counts)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun pushReadingStats(row: RemoteNewsReadingStatsRow): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (clientManager.client.auth.currentAccessTokenOrNull().isNullOrBlank()) return@withContext false
+            clientManager.client.postgrest["news_reading_stats"].upsert(row) {
+                onConflict = "user_id,year_month"
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun generateGeminiPerspectiveComparison(
+        cluster: StoryCluster,
+        languageCode: String,
+        apiKey: String
+    ): PerspectiveComparison? = withContext(Dispatchers.IO) {
+        val cleanKey = apiKey.trim()
+        if (cleanKey.isEmpty() || cluster.items.size < 2) return@withContext null
+
+        for (model in listOf("gemini-2.5-flash", "gemini-1.5-flash")) {
+            val res = runCatching { callGeminiPerspectiveModel(model, cluster, languageCode, cleanKey) }.getOrNull()
+            if (res != null) return@withContext res
+        }
+        null
+    }
+
+    private suspend fun callGeminiPerspectiveModel(
+        model: String,
+        cluster: StoryCluster,
+        languageCode: String,
+        apiKey: String
+    ): PerspectiveComparison {
+        val selected = selectDiverseSample(cluster.items, 12)
+        val sourcesLines = selected.mapIndexed { idx, item ->
+            val snippet = item.article.description?.take(160).orEmpty()
+            val cleanSnippet = if (snippet.isBlank()) "" else " — Snippet: $snippet"
+            "[${idx + 1}] ${item.profile.name} (Bias: ${item.profile.bias.displayName} / ${item.profile.biasContext}, Factuality: ${item.profile.factuality.displayName}, Country: ${item.profile.countryCode}, Ownership: ${item.profile.ownershipType.displayName}): \"${item.article.title}\"$cleanSnippet"
+        }.joinToString("\n")
+
+        val langInstruction = if (languageCode == "ro") {
+            "Write all output values in natural, concise Romanian."
+        } else {
+            "Write all output values in crisp, neutral English."
+        }
+
+        val systemPrompt = """
+            You are Daily Perspectives, an impartial Ground News-grade media analyst.
+            Compare how different newsrooms across the political, geographic, and ownership spectrum frame the same underlying news event.
+            $langInstruction
+            Return strictly valid JSON matching this exact schema:
+            {
+              "summaryText": "Neutral 2-3 sentence executive synthesis of what happened",
+              "commonFacts": ["3 to 4 concrete verifiable facts agreed upon across sources"],
+              "framingDifferences": [
+                {"perspectiveLabel": "e.g. Center / Wire or Civic Reformist or Pro-Market / Right or International Press", "angle": "1 sentence explaining how specific named outlets frame or emphasize the story"}
+              ],
+              "omissions": ["1 to 3 notable context points, blindspots, or nuances highlighted by some outlets but omitted by others"]
+            }
+        """.trimIndent()
+
+        val userPrompt = """
+            Event Anchor Entities: ${cluster.anchorEntities.joinToString(", ")}
+            Distribution: Left ${cluster.distribution.leftCount}, Center ${cluster.distribution.centerCount}, Right ${cluster.distribution.rightCount}, Independent ${cluster.distribution.independentCount}
+            Sources (${selected.size} of ${cluster.uniqueOutletCount}):
+            $sourcesLines
+        """.trimIndent()
+
+        val requestBody = JSONObject().apply {
+            put("systemInstruction", JSONObject().apply {
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply { put("text", systemPrompt) })
+                })
+            })
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply { put("text", userPrompt) })
+                    })
+                })
+            })
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.25)
+                put("responseMimeType", "application/json")
+            })
+        }
+
+        val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+        val response = httpClient.post(endpoint) {
+            contentType(ContentType.Application.Json)
+            setBody(requestBody.toString())
+        }
+        if (!response.status.isSuccess()) {
+            throw RuntimeException("Gemini HTTP ${response.status.value}")
+        }
+
+        val root = JSONObject(response.bodyAsText())
+        var rawText = root.optJSONArray("candidates")
+            ?.optJSONObject(0)
+            ?.optJSONObject("content")
+            ?.optJSONArray("parts")
+            ?.optJSONObject(0)
+            ?.optString("text", "")
+            ?.trim()
+            .orEmpty()
+
+        if (rawText.startsWith("```")) {
+            rawText = rawText.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        }
+        val parsed = JSONObject(rawText)
+        val summaryText = parsed.optString("summaryText", "").trim()
+        if (summaryText.isEmpty()) throw RuntimeException("Empty summaryText")
+
+        val commonFacts = ArrayList<String>()
+        parsed.optJSONArray("commonFacts")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val s = arr.optString(i, "").trim()
+                if (s.isNotEmpty()) commonFacts.add(s)
+            }
+        }
+
+        val diffs = ArrayList<FramingDifferenceItem>()
+        parsed.optJSONArray("framingDifferences")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val label = obj.optString("perspectiveLabel", "").trim()
+                val angle = obj.optString("angle", "").trim()
+                if (label.isNotEmpty() && angle.isNotEmpty()) {
+                    diffs.add(FramingDifferenceItem(label, angle))
+                }
+            }
+        }
+
+        val omissions = ArrayList<String>()
+        parsed.optJSONArray("omissions")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val s = arr.optString(i, "").trim()
+                if (s.isNotEmpty()) omissions.add(s)
+            }
+        }
+
+        return PerspectiveComparison(
+            clusterHash = cluster.id,
+            storyTitle = cluster.leadArticle.title,
+            summaryText = summaryText,
+            commonFacts = commonFacts,
+            framingDifferences = diffs,
+            omissions = omissions,
+            languageCode = languageCode,
+            sourceCount = cluster.uniqueOutletCount,
+            isAiGenerated = true
+        )
+    }
+
+    private fun selectDiverseSample(items: List<ClusterCoverageItem>, maxCount: Int): List<ClusterCoverageItem> {
+        if (items.size <= maxCount) return items
+        val left = items.filter { it.profile.bias.bucket == MediaBias.SpectrumBucket.Left }.toMutableList()
+        val center = items.filter { it.profile.bias.bucket == MediaBias.SpectrumBucket.Center }.toMutableList()
+        val right = items.filter { it.profile.bias.bucket == MediaBias.SpectrumBucket.Right }.toMutableList()
+        val other = items.filter {
+            it.profile.bias.bucket == MediaBias.SpectrumBucket.Independent ||
+                it.profile.bias.bucket == MediaBias.SpectrumBucket.Unrated
+        }.toMutableList()
+
+        val picked = ArrayList<ClusterCoverageItem>(maxCount)
+        while (picked.size < maxCount && (left.isNotEmpty() || center.isNotEmpty() || right.isNotEmpty() || other.isNotEmpty())) {
+            if (center.isNotEmpty() && picked.size < maxCount) picked.add(center.removeAt(0))
+            if (left.isNotEmpty() && picked.size < maxCount) picked.add(left.removeAt(0))
+            if (right.isNotEmpty() && picked.size < maxCount) picked.add(right.removeAt(0))
+            if (other.isNotEmpty() && picked.size < maxCount) picked.add(other.removeAt(0))
+        }
+        return picked
     }
 }

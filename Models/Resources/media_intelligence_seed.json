@@ -1,0 +1,2989 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-14T00:00:00Z",
+  "outlets": [
+    {
+      "domain": "recorder.ro",
+      "name": "Recorder",
+      "aliases": [
+        "Recorder.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Investigative Non-Profit / Reader-Funded",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Harfa Online Publishing & Asociația Recorder Community (Reader-Funded)",
+      "countryCode": "RO",
+      "editorialNote": "Journalist-founded investigative newsroom funded overwhelmingly by individual reader donations with strict editorial independence."
+    },
+    {
+      "domain": "snoop.ro",
+      "name": "Snoop",
+      "aliases": [
+        "Snoop.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Investigative Non-Profit",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Asociația Journalism for Society (Reader & Grant-Funded Non-Profit)",
+      "countryCode": "RO",
+      "editorialNote": "Non-profit investigative newsroom co-founded by veteran investigative journalists, focused on public accountability and data journalism."
+    },
+    {
+      "domain": "riseproject.ro",
+      "name": "RISE Project",
+      "aliases": [
+        "RISE Project Romania"
+      ],
+      "bias": "center",
+      "biasContext": "Investigative Non-Profit (OCCRP Partner)",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Asociația RISE Project (Non-Profit Investigative)",
+      "countryCode": "RO",
+      "editorialNote": "Investigative journalism collective specializing in cross-border organized crime and corruption investigations."
+    },
+    {
+      "domain": "context.ro",
+      "name": "Context.ro",
+      "aliases": [
+        "Context"
+      ],
+      "bias": "center",
+      "biasContext": "Investigative Non-Profit",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Asociația Context Investigative Reporting",
+      "countryCode": "RO",
+      "editorialNote": "Independent Romanian investigative platform member of OCCRP network."
+    },
+    {
+      "domain": "safielumina.ro",
+      "name": "Să Fie Lumină",
+      "aliases": [
+        "Sa Fie Lumina"
+      ],
+      "bias": "center",
+      "biasContext": "Investigative Non-Profit",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Asociația Centrul de Investigații Media (Reader-Funded)",
+      "countryCode": "RO",
+      "editorialNote": "Long-form investigative reporting project funded by reader contributions."
+    },
+    {
+      "domain": "dela0.ro",
+      "name": "Dela0.ro",
+      "aliases": [
+        "Dela0"
+      ],
+      "bias": "center",
+      "biasContext": "Independent Long-Form & Fact-Checking",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Independent Journalist Collective (Reader & Grant-Funded)",
+      "countryCode": "RO",
+      "editorialNote": "Independent long-form journalism and fact-checking outlet (co-author of Factual.ro)."
+    },
+    {
+      "domain": "factual.ro",
+      "name": "Factual",
+      "aliases": [
+        "Factual.ro"
+      ],
+      "bias": "center",
+      "biasContext": "IFCN Fact-Checking Initiative",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Asociația Funky Citizens (Non-Profit Civic)",
+      "countryCode": "RO",
+      "editorialNote": "Romania's dedicated policy and political statement fact-checking platform."
+    },
+    {
+      "domain": "hotnews.ro",
+      "name": "HotNews",
+      "aliases": [
+        "HotNews.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Civic Reformist / General News",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "ZYX Publishing Group (Dragoș Vîlcu; Editorial Dir. Cătălin Tolontan)",
+      "countryCode": "RO",
+      "editorialNote": "Major Romanian breaking news and public-interest newsroom with strong civic-reformist and European orientation."
+    },
+    {
+      "domain": "panorama.ro",
+      "name": "Panorama",
+      "aliases": [
+        "Panorama.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Data & Explanatory Journalism",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "ZYX Publishing Group (Dragoș Vîlcu)",
+      "countryCode": "RO",
+      "editorialNote": "Explanatory and data-driven journalism publication within the ZYX / HotNews media group."
+    },
+    {
+      "domain": "startupcafe.ro",
+      "name": "StartupCafe.ro",
+      "aliases": [
+        "StartupCafe"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Entrepreneurship & SME Policy",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "ZYX Publishing Group (HotNews Network)",
+      "countryCode": "RO",
+      "editorialNote": "Small business, fiscal policy, EU grants, and startup reporting desk affiliated with HotNews."
+    },
+    {
+      "domain": "golazo.ro",
+      "name": "Golazo.ro",
+      "aliases": [
+        "Golazo"
+      ],
+      "bias": "center",
+      "biasContext": "Sports Journalism",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "ZYX Publishing Group",
+      "countryCode": "RO",
+      "editorialNote": "Sports reporting newsroom within the ZYX / HotNews group."
+    },
+    {
+      "domain": "g4media.ro",
+      "name": "G4Media",
+      "aliases": [
+        "G4Media.ro"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Civic Reformist / Euro-Atlantic",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Titluri Quality S.R.L. / Radu Budeanu (Acquired Aug 2025 from Tăpălagă & Pantazi)",
+      "countryCode": "RO",
+      "editorialNote": "Founded by Dan Tăpălagă and Cristian Pantazi as a non-profit-backed justice/EU reform outlet; acquired in August 2025 by Radu Budeanu's Titluri Quality group under an editorial charter."
+    },
+    {
+      "domain": "economedia.ro",
+      "name": "Economedia",
+      "aliases": [
+        "Economedia.ro"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Economic & Infrastructure Policy",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Titluri Quality S.R.L. / Radu Budeanu (G4Media Group, Aug 2025 M&A)",
+      "countryCode": "RO",
+      "editorialNote": "Macroeconomic, fiscal, and major infrastructure reporting sister site of G4Media."
+    },
+    {
+      "domain": "edupedu.ro",
+      "name": "Edupedu",
+      "aliases": [
+        "Edupedu.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Education & Research Policy",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Independent Journalist-Owned (Raluca Pantazi & Mihai Peticilă)",
+      "countryCode": "RO",
+      "editorialNote": "Specialized Romanian education, academic policy, and research newsroom."
+    },
+    {
+      "domain": "digi24.ro",
+      "name": "Digi24",
+      "aliases": [
+        "Digi 24",
+        "Digi24.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Mainstream Commercial / Pro-European",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Digi Communications N.V. (RCS & RDS / Zoltan Teszari)",
+      "countryCode": "RO",
+      "editorialNote": "24-hour news television and digital portal operated by regional telecom conglomerate Digi Communications."
+    },
+    {
+      "domain": "zf.ro",
+      "name": "Ziarul Financiar",
+      "aliases": [
+        "Ziarul Financiar",
+        "ZF.ro",
+        "ZF"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Pro-Market / Corporate & Financial",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Mediafax Group (Adrian Sârbu)",
+      "countryCode": "RO",
+      "editorialNote": "Romania's flagship daily financial and business newspaper with pro-market macroeconomic commentary."
+    },
+    {
+      "domain": "biziday.ro",
+      "name": "Biziday",
+      "aliases": [
+        "Biziday App",
+        "Biziday.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Curated News Synthesis",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Biziday Consulting (Moise Guran / Independent)",
+      "countryCode": "RO",
+      "editorialNote": "Concise verified news synthesis platform emphasizing multi-source confirmation and zero tabloid content."
+    },
+    {
+      "domain": "republica.ro",
+      "name": "Republica",
+      "aliases": [
+        "Republica.ro"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Civic Liberal / Essay & Opinion Platform",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Journalist-Founded Independent Platform (CT Popescu, C. Negrici, F. Negruțiu, A. Livadaru)",
+      "countryCode": "RO",
+      "editorialNote": "Columnist, essay, and civic commentary platform featuring prominent liberal intellectuals and journalists."
+    },
+    {
+      "domain": "libertatea.ro",
+      "name": "Libertatea",
+      "aliases": [
+        "Libertatea.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Mainstream Commercial & Public Interest",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Ringier Romania / Ringier AG (Switzerland)",
+      "countryCode": "RO",
+      "editorialNote": "High-reach general news daily owned by Swiss media group Ringier AG."
+    },
+    {
+      "domain": "adevarul.ro",
+      "name": "Adevărul",
+      "aliases": [
+        "Adevarul",
+        "Adevarul.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Mainstream Commercial",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Adevărul Holding (Cristian Burci)",
+      "countryCode": "RO",
+      "editorialNote": "National generalist daily covering domestic politics, society, history, and opinion."
+    },
+    {
+      "domain": "spotmedia.ro",
+      "name": "SpotMedia",
+      "aliases": [
+        "SpotMedia.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Civic Reformist / Analytical",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Independent Journalist Team (Project- & Reader-Supported)",
+      "countryCode": "RO",
+      "editorialNote": "Independent general news and political analysis portal founded by former Ziare.com editorial leadership."
+    },
+    {
+      "domain": "pressone.ro",
+      "name": "PressOne",
+      "aliases": [
+        "PressOne.ro"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Progressive Civic & Feature Journalism",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "PressOne Media (Independent)",
+      "countryCode": "RO",
+      "editorialNote": "Feature journalism, human rights, urban policy, and social analysis publication based in Cluj & Bucharest."
+    },
+    {
+      "domain": "scena9.ro",
+      "name": "Scena 9",
+      "aliases": [
+        "Scena9"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Cultural & Long-Form Journalism",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Fundația9 (BRD Groupe Société Générale Cultural Endowment)",
+      "countryCode": "RO",
+      "editorialNote": "In-depth cultural, social, and anthropological journalism magazine."
+    },
+    {
+      "domain": "libertateapentrulumea.ro",
+      "name": "Mindcraft Stories",
+      "aliases": [],
+      "bias": "center",
+      "biasContext": "Science & Technology Essays",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "mindcraftstories.ro",
+      "countryCode": "RO",
+      "editorialNote": "Romanian science and technology journalism magazine."
+    },
+    {
+      "domain": "mindcraftstories.ro",
+      "name": "Mindcraft Stories",
+      "aliases": [
+        "Mindcraft"
+      ],
+      "bias": "center",
+      "biasContext": "Science & Society",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Fundația9",
+      "countryCode": "RO",
+      "editorialNote": "Science, technology, and critical thinking publication."
+    },
+    {
+      "domain": "economica.net",
+      "name": "Economica.net",
+      "aliases": [
+        "Economica"
+      ],
+      "bias": "center",
+      "biasContext": "Business & Fiscal News",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Realitatea / Ridzone Corporate Media Network",
+      "countryCode": "RO",
+      "editorialNote": "Dedicated Romanian macroeconomic, energy, banking, and real-estate business portal."
+    },
+    {
+      "domain": "profit.ro",
+      "name": "Profit.ro",
+      "aliases": [
+        "Profit"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Business, Fiscal & Markets Breaking News",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Clever Media Network / Profit News (Prima Group & Orlando Nicoară)",
+      "countryCode": "RO",
+      "editorialNote": "Fast-breaking Romanian fiscal, regulatory, and corporate M&A reporting."
+    },
+    {
+      "domain": "cursdeguvernare.ro",
+      "name": "CursDeGuvernare",
+      "aliases": [
+        "Curs de Guvernare"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Macroeconomic & Public Policy Analysis",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Independent Policy & Economic Editorial Group",
+      "countryCode": "RO",
+      "editorialNote": "In-depth Romanian governance, fiscal policy, and European macroeconomic analysis."
+    },
+    {
+      "domain": "wall-street.ro",
+      "name": "Wall-Street.ro",
+      "aliases": [
+        "Wall-Street"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Business & Markets",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "InternetCorp S.R.L.",
+      "countryCode": "RO",
+      "editorialNote": "Romanian corporate, banking, e-commerce, and real estate business publication."
+    },
+    {
+      "domain": "agerpres.ro",
+      "name": "AGERPRES",
+      "aliases": [
+        "Agerpres"
+      ],
+      "bias": "center",
+      "biasContext": "National Public News Wire",
+      "factuality": "very_high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Romanian National News Agency (Autonomous Public Institution under Parliament)",
+      "countryCode": "RO",
+      "editorialNote": "Official national news wire service providing factual domestic and diplomatic dispatches."
+    },
+    {
+      "domain": "europalibera.org",
+      "name": "Europa Liberă România",
+      "aliases": [
+        "romania.europalibera.org",
+        "Europa Libera",
+        "Europa Liberă"
+      ],
+      "bias": "center",
+      "biasContext": "Public Service & Investigative",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Radio Free Europe / Radio Liberty (U.S. Public Grant with Editorial Firewall)",
+      "countryCode": "RO",
+      "editorialNote": "Romanian bureau of RFE/RL producing original investigative and institutional accountability reporting."
+    },
+    {
+      "domain": "rfi.ro",
+      "name": "RFI România",
+      "aliases": [
+        "RFI Romania"
+      ],
+      "bias": "center",
+      "biasContext": "European Public Broadcaster",
+      "factuality": "very_high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "France Médias Monde (French Public Broadcasting)",
+      "countryCode": "RO",
+      "editorialNote": "Romanian-language radio and digital newsroom of Radio France Internationale."
+    },
+    {
+      "domain": "euronews.ro",
+      "name": "Euronews România",
+      "aliases": [
+        "Euronews Romania"
+      ],
+      "bias": "center",
+      "biasContext": "European Public-University Affiliate",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Politehnica University of Bucharest (Euronews Brand License)",
+      "countryCode": "RO",
+      "editorialNote": "Romanian television and digital affiliate operating under Euronews editorial standards."
+    },
+    {
+      "domain": "stirileprotv.ro",
+      "name": "Știrile ProTV",
+      "aliases": [
+        "protv.ro",
+        "Stirile ProTV",
+        "ProTV"
+      ],
+      "bias": "center",
+      "biasContext": "Mainstream Commercial Broadcast",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "PRO TV S.R.L. / Central European Media Enterprises (PPF Group)",
+      "countryCode": "RO",
+      "editorialNote": "Romania's highest-audience commercial broadcast newsroom, including 'România, te iubesc!' investigations."
+    },
+    {
+      "domain": "observatornews.ro",
+      "name": "Observator News",
+      "aliases": [
+        "Observator"
+      ],
+      "bias": "center",
+      "biasContext": "Mainstream Commercial Broadcast",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Antena TV Group (Intact Media Group / Voiculescu Family)",
+      "countryCode": "RO",
+      "editorialNote": "Generalist commercial television news portal of Antena 1."
+    },
+    {
+      "domain": "antena3.ro",
+      "name": "Antena 3 CNN",
+      "aliases": [
+        "Antena 3",
+        "Antena3"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Partisan Commercial / Social-Populist Framing",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Antena 3 S.A. (Intact Media Group / CNN NewsSource Partner)",
+      "countryCode": "RO",
+      "editorialNote": "24-hour commercial news channel known for strong political talk-show commentary alongside breaking news."
+    },
+    {
+      "domain": "gandul.ro",
+      "name": "Gândul",
+      "aliases": [
+        "Gandul",
+        "Gandul.ro"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Commercial Political & Tabloid Framing",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Gândul Media Network / Radu Budeanu",
+      "countryCode": "RO",
+      "editorialNote": "Commercial political and general news portal operated by Radu Budeanu's media group."
+    },
+    {
+      "domain": "mediafax.ro",
+      "name": "Mediafax",
+      "aliases": [
+        "Mediafax.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Commercial News Wire",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Titluri Quality / Radu Budeanu (Acquired from Adrian Sârbu Group)",
+      "countryCode": "RO",
+      "editorialNote": "Private Romanian news agency covering domestic politics, justice, and business."
+    },
+    {
+      "domain": "ziare.com",
+      "name": "Ziare.com",
+      "aliases": [
+        "Ziare"
+      ],
+      "bias": "center",
+      "biasContext": "General News Aggregator & Original Desk",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "NCH / Broadhurst Digital Media",
+      "countryCode": "RO",
+      "editorialNote": "High-traffic Romanian news portal combining original reporting, interviews, and curated dispatches."
+    },
+    {
+      "domain": "b1tv.ro",
+      "name": "B1TV",
+      "aliases": [
+        "B1 TV"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Political Talk & Breaking News",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "B1 TV Channel S.R.L. (Sorin Oancea)",
+      "countryCode": "RO",
+      "editorialNote": "Romanian news and political debate television portal."
+    },
+    {
+      "domain": "romaniatv.net",
+      "name": "România TV",
+      "aliases": [
+        "Romania TV",
+        "RTV"
+      ],
+      "bias": "right",
+      "biasContext": "Nationalist-Populist Sensational Broadcast",
+      "factuality": "low",
+      "ownershipType": "corporation",
+      "ownerLabel": "Ridzone Computers S.R.L.",
+      "countryCode": "RO",
+      "editorialNote": "Commercial news channel frequently sanctioned by CNA for sensationalist framing and unverified claims."
+    },
+    {
+      "domain": "realitatea.net",
+      "name": "Realitatea Plus",
+      "aliases": [
+        "Realitatea",
+        "Realitatea.net"
+      ],
+      "bias": "right",
+      "biasContext": "Sovereigntist / Partisan Talk Broadcast",
+      "factuality": "low",
+      "ownershipType": "corporation",
+      "ownerLabel": "Geopol International S.R.L. (Păcuraru Family)",
+      "countryCode": "RO",
+      "editorialNote": "Partisan commentary and talk-show channel with strong sovereigntist framing."
+    },
+    {
+      "domain": "stiripesurse.ro",
+      "name": "Știri pe Surse",
+      "aliases": [
+        "Stiri pe Surse",
+        "Stiripesurse"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Political Rumor & Breaking Aggregator",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Stiri Pe Surse Digital S.R.L. (Iosif Buble)",
+      "countryCode": "RO",
+      "editorialNote": "Fast political backstage reporting mixed with unattributed party-source claims."
+    },
+    {
+      "domain": "dcnews.ro",
+      "name": "DCNews",
+      "aliases": [
+        "DC News"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Political Commentary & Interviews",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "DC News Media (Bogdan Chirieac)",
+      "countryCode": "RO",
+      "editorialNote": "Political interview and domestic news portal."
+    },
+    {
+      "domain": "defapt.ro",
+      "name": "DeFapt.ro",
+      "aliases": [
+        "DeFapt"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Investigative & Political Accountability",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Independent Journalist-Owned (Mircea Marian & Silviu Sergiu)",
+      "countryCode": "RO",
+      "editorialNote": "Independent political accountability and public-spending investigative portal."
+    },
+    {
+      "domain": "evz.ro",
+      "name": "Evenimentul Zilei",
+      "aliases": [
+        "Evenimentul Zilei",
+        "EVZ"
+      ],
+      "bias": "right",
+      "biasContext": "Conservative Commercial Commentary",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Editura Evenimentul și Capital (Dan Andronic)",
+      "countryCode": "RO",
+      "editorialNote": "Historic Romanian daily now operating primarily as an opinionated conservative commercial portal."
+    },
+    {
+      "domain": "zonait.ro",
+      "name": "Zona IT",
+      "aliases": [
+        "ZonaIT"
+      ],
+      "bias": "center",
+      "biasContext": "Independent Tech & Consumer Hardware",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Zona IT Media (Dan Cadar / Independent Creator)",
+      "countryCode": "RO",
+      "editorialNote": "Leading independent Romanian technology, hardware review, and digital society publication."
+    },
+    {
+      "domain": "nwradu.ro",
+      "name": "nwradu.ro",
+      "aliases": [
+        "NWRadu"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Independent Tech & Gadget Blog",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Radu Dumitru (Independent Creator)",
+      "countryCode": "RO",
+      "editorialNote": "Long-running independent Romanian technology, telecom, and consumer electronics blog."
+    },
+    {
+      "domain": "mobilissimo.ro",
+      "name": "Mobilissimo",
+      "aliases": [],
+      "bias": "center",
+      "biasContext": "Mobile Hardware Reviews",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Mobilissimo Media (Independent)",
+      "countryCode": "RO",
+      "editorialNote": "Romanian smartphone and mobile hardware testing publication."
+    },
+    {
+      "domain": "tvrinfo.ro",
+      "name": "TVR Info",
+      "aliases": [
+        "stiri.tvr.ro",
+        "TVR",
+        "Televiziunea Română"
+      ],
+      "bias": "center",
+      "biasContext": "National Public Television",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Societatea Română de Televiziune (SRTv — Public Broadcaster)",
+      "countryCode": "RO",
+      "editorialNote": "News channel and portal of Romania's national public television service."
+    },
+    {
+      "domain": "romania-actualitati.ro",
+      "name": "Radio România Actualități",
+      "aliases": [
+        "radioromania.ro",
+        "RRA",
+        "Radio Romania Actualitati"
+      ],
+      "bias": "center",
+      "biasContext": "National Public Radio",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Societatea Română de Radiodifuziune (SRR — Public Radio)",
+      "countryCode": "RO",
+      "editorialNote": "Flagship national public radio news network of Romania."
+    },
+    {
+      "domain": "veridica.ro",
+      "name": "Veridica",
+      "aliases": [
+        "Veridica.ro"
+      ],
+      "bias": "center",
+      "biasContext": "Fact-Checking & Disinformation Analysis",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Independent Eastern European Fact-Checking Journal",
+      "countryCode": "RO",
+      "editorialNote": "Specialized monitoring and debunking of disinformation across Romania and Central/Eastern Europe."
+    },
+    {
+      "domain": "presshub.ro",
+      "name": "PressHUB",
+      "aliases": [
+        "PressHub"
+      ],
+      "bias": "center",
+      "biasContext": "Independent Local Press Network",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Freedom House Romania Network",
+      "countryCode": "RO",
+      "editorialNote": "Decentralized network of independent Romanian local and investigative newsrooms."
+    },
+    {
+      "domain": "aktual24.ro",
+      "name": "Aktual24",
+      "aliases": [
+        "Aktual 24"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Civic Anti-Corruption / Pointed Headlines",
+      "factuality": "mixed",
+      "ownershipType": "independent",
+      "ownerLabel": "Aktual24 Media (Ovidiu Albu)",
+      "countryCode": "RO",
+      "editorialNote": "Independent political news site with pro-European positioning and sharp headlines."
+    },
+    {
+      "domain": "cotidianul.ro",
+      "name": "Cotidianul",
+      "aliases": [
+        "Cotidianul"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Political Commentary & Daily",
+      "factuality": "mixed",
+      "ownershipType": "independent",
+      "ownerLabel": "Casa Serafim / Cornel Nistorescu",
+      "countryCode": "RO",
+      "editorialNote": "Romanian political commentary and general news portal."
+    },
+    {
+      "domain": "jurnalul.ro",
+      "name": "Jurnalul",
+      "aliases": [
+        "Jurnalul National",
+        "Jurnalul Național"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Commercial General Daily",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Intact Media Group",
+      "countryCode": "RO",
+      "editorialNote": "General news and social features daily within Intact Media Group."
+    },
+    {
+      "domain": "capital.ro",
+      "name": "Capital",
+      "aliases": [
+        "Capital.ro"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Commercial Business & Tabloid Finance",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Editura Evenimentul și Capital",
+      "countryCode": "RO",
+      "editorialNote": "Commercial finance and consumer news portal."
+    },
+    {
+      "domain": "forbes.ro",
+      "name": "Forbes România",
+      "aliases": [
+        "Forbes Romania"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Corporate Leadership & Entrepreneurship",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "BP Publishing Media (Forbes License)",
+      "countryCode": "RO",
+      "editorialNote": "Romanian edition of Forbes covering executive leadership and entrepreneurship."
+    },
+    {
+      "domain": "alephnews.ro",
+      "name": "Aleph News",
+      "aliases": [
+        "Aleph News"
+      ],
+      "bias": "center",
+      "biasContext": "Social-Visual Commercial News",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Aleph Media (Adrian Sârbu)",
+      "countryCode": "RO",
+      "editorialNote": "Modern visual broadcast and digital newsroom founded by Adrian Sârbu."
+    },
+    {
+      "domain": "ziaruldeiasi.ro",
+      "name": "Ziarul de Iași",
+      "aliases": [
+        "Ziarul de Iasi"
+      ],
+      "bias": "center",
+      "biasContext": "Regional Quality Press",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Independent Regional Editorial Group (Iași)",
+      "countryCode": "RO",
+      "editorialNote": "Leading regional newspaper in Moldova/Iași with strong local accountability reporting."
+    },
+    {
+      "domain": "reuters.com",
+      "name": "Reuters",
+      "aliases": [
+        "Thomson Reuters"
+      ],
+      "bias": "center",
+      "biasContext": "Global Financial & Breaking Wire",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Thomson Reuters Corporation (Woodbridge Co. / Thomson Family)",
+      "countryCode": "GB",
+      "editorialNote": "Gold-standard international wire agency governed by the Reuters Trust Principles of neutrality."
+    },
+    {
+      "domain": "apnews.com",
+      "name": "Associated Press",
+      "aliases": [
+        "AP News",
+        "AP",
+        "The Associated Press"
+      ],
+      "bias": "center",
+      "biasContext": "Non-Profit Cooperative Wire",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "The Associated Press (Not-for-Profit U.S. News Cooperative)",
+      "countryCode": "US",
+      "editorialNote": "Independent non-profit news cooperative serving global newsrooms with strict factual wire standards."
+    },
+    {
+      "domain": "afp.com",
+      "name": "Agence France-Presse",
+      "aliases": [
+        "AFP"
+      ],
+      "bias": "center",
+      "biasContext": "Global Autonomous Wire Agency",
+      "factuality": "very_high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Agence France-Presse (Statutorily Autonomous Public-Interest Charter)",
+      "countryCode": "FR",
+      "editorialNote": "One of the world's three largest international news agencies with statutory editorial independence."
+    },
+    {
+      "domain": "bloomberg.com",
+      "name": "Bloomberg",
+      "aliases": [
+        "Bloomberg News",
+        "Bloomberg Markets"
+      ],
+      "bias": "center",
+      "biasContext": "Global Markets, Institutional Data & Policy",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Bloomberg L.P. (Michael Bloomberg — 88%)",
+      "countryCode": "US",
+      "editorialNote": "Global financial, central bank, and policy newsroom; straight news desk is strictly data-driven."
+    },
+    {
+      "domain": "bbc.com",
+      "name": "BBC News",
+      "aliases": [
+        "bbci.co.uk",
+        "feeds.bbci.co.uk",
+        "bbc.co.uk",
+        "BBC",
+        "BBC World"
+      ],
+      "bias": "center",
+      "biasContext": "Public Service Broadcaster",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "British Broadcasting Corporation (UK Royal Charter / Licence Fee)",
+      "countryCode": "GB",
+      "editorialNote": "UK public service broadcaster legally bound by Royal Charter impartiality guidelines."
+    },
+    {
+      "domain": "npr.org",
+      "name": "NPR",
+      "aliases": [
+        "feeds.npr.org",
+        "National Public Radio"
+      ],
+      "bias": "lean_left",
+      "biasContext": "U.S. Non-Profit Public Radio",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "National Public Radio Inc. (Member Stations, Listeners & Foundations)",
+      "countryCode": "US",
+      "editorialNote": "Non-profit public media network with high factual reporting and ligeramente progressive cultural topic selection."
+    },
+    {
+      "domain": "pbs.org",
+      "name": "PBS News",
+      "aliases": [
+        "PBS NewsHour",
+        "PBS"
+      ],
+      "bias": "center",
+      "biasContext": "U.S. Public Service Broadcaster",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Public Broadcasting Service (Non-Profit Member Stations)",
+      "countryCode": "US",
+      "editorialNote": "Public television network noted for balanced institutional policy reporting on PBS NewsHour."
+    },
+    {
+      "domain": "dw.com",
+      "name": "Deutsche Welle",
+      "aliases": [
+        "rss.dw.com",
+        "DW",
+        "DW News"
+      ],
+      "bias": "center",
+      "biasContext": "European International Public Broadcaster",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "ARD Member Public Institution (Funded via German Federal Tax Budget with Legal Firewall)",
+      "countryCode": "DE",
+      "editorialNote": "Germany's international broadcaster operating under statutory editorial independence."
+    },
+    {
+      "domain": "france24.com",
+      "name": "France 24",
+      "aliases": [
+        "France24"
+      ],
+      "bias": "center",
+      "biasContext": "European International Public Broadcaster",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "France Médias Monde (French Public Broadcasting)",
+      "countryCode": "FR",
+      "editorialNote": "International public service news network covering European and global affairs."
+    },
+    {
+      "domain": "euronews.com",
+      "name": "Euronews",
+      "aliases": [
+        "Euronews English"
+      ],
+      "bias": "center",
+      "biasContext": "Pan-European Multilingual News",
+      "factuality": "high",
+      "ownershipType": "private_equity",
+      "ownerLabel": "Alpac Capital (Portugal-based Investment Firm)",
+      "countryCode": "EU",
+      "editorialNote": "Pan-European news network covering EU institutions and continental affairs across multiple languages."
+    },
+    {
+      "domain": "aljazeera.com",
+      "name": "Al Jazeera",
+      "aliases": [
+        "Al Jazeera English"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Global South & Middle East Focus (State-Funded)",
+      "factuality": "mixed",
+      "ownershipType": "state_affiliated",
+      "ownerLabel": "Al Jazeera Media Network (Funded by Government of Qatar)",
+      "countryCode": "QA",
+      "editorialNote": "Strong international field reporting across the Global South, while reflecting Qatari state alignment on Gulf affairs."
+    },
+    {
+      "domain": "cbc.ca",
+      "name": "CBC News",
+      "aliases": [
+        "CBC"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Canadian Public Broadcaster",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Canadian Broadcasting Corporation (Crown Corporation)",
+      "countryCode": "CA",
+      "editorialNote": "Canada's national public radio and television news service."
+    },
+    {
+      "domain": "abc.net.au",
+      "name": "ABC News Australia",
+      "aliases": [
+        "ABC Australia"
+      ],
+      "bias": "center",
+      "biasContext": "Australian Public Broadcaster",
+      "factuality": "high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Australian Broadcasting Corporation",
+      "countryCode": "AU",
+      "editorialNote": "Australia's national public broadcaster operating under statutory impartiality rules."
+    },
+    {
+      "domain": "swissinfo.ch",
+      "name": "SWI swissinfo.ch",
+      "aliases": [
+        "Swissinfo"
+      ],
+      "bias": "center",
+      "biasContext": "Swiss Public Service International",
+      "factuality": "very_high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "Swiss Broadcasting Corporation (SRG SSR)",
+      "countryCode": "CH",
+      "editorialNote": "International multilingual public news service of Switzerland."
+    },
+    {
+      "domain": "politico.eu",
+      "name": "Politico Europe",
+      "aliases": [
+        "POLITICO Europe"
+      ],
+      "bias": "center",
+      "biasContext": "Brussels & EU Institutional Policy",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Axel Springer SE (Germany / KKR Minority Unwound 2024)",
+      "countryCode": "EU",
+      "editorialNote": "Premier Brussels policy, regulation, and European diplomacy newsroom."
+    },
+    {
+      "domain": "ft.com",
+      "name": "Financial Times",
+      "aliases": [
+        "Financial Times",
+        "FT"
+      ],
+      "bias": "center",
+      "biasContext": "Global Financial & Classical Liberal",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Nikkei Inc. (Japan)",
+      "countryCode": "GB",
+      "editorialNote": "Internationally respected financial daily known for rigorous economic data and institutional reporting."
+    },
+    {
+      "domain": "economist.com",
+      "name": "The Economist",
+      "aliases": [
+        "Economist"
+      ],
+      "bias": "center",
+      "biasContext": "Classical Economic Liberal / Globalist",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "The Economist Group (Exor, Cadbury, Rothschild, Schroder & Staff Governance Trustees)",
+      "countryCode": "GB",
+      "editorialNote": "Editorial board explicitly identifies with the radical center: free markets, open trade, and liberal institutions; protected by independent trustees."
+    },
+    {
+      "domain": "theguardian.com",
+      "name": "The Guardian",
+      "aliases": [
+        "Guardian",
+        "guardian.co.uk"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Social Democratic / Progressive Trust",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Guardian Media Group / The Scott Trust Ltd. (Perpetual Endowment)",
+      "countryCode": "GB",
+      "editorialNote": "Owned by the Scott Trust to safeguard progressive editorial independence without commercial proprietors."
+    },
+    {
+      "domain": "telegraph.co.uk",
+      "name": "The Telegraph",
+      "aliases": [
+        "Daily Telegraph",
+        "The Daily Telegraph"
+      ],
+      "bias": "lean_right",
+      "biasContext": "British Conservative",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Telegraph Media Group",
+      "countryCode": "GB",
+      "editorialNote": "Broadsheet UK daily with traditional center-right / Conservative editorial alignment."
+    },
+    {
+      "domain": "thetimes.com",
+      "name": "The Times",
+      "aliases": [
+        "thetimes.co.uk",
+        "The Times & The Sunday Times"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Institutional Center-Right",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "News UK / News Corp (Murdoch Family)",
+      "countryCode": "GB",
+      "editorialNote": "Historic UK newspaper of record with high-factuality reporting and center-right editorial pages."
+    },
+    {
+      "domain": "spectator.co.uk",
+      "name": "The Spectator",
+      "aliases": [
+        "The Spectator"
+      ],
+      "bias": "right",
+      "biasContext": "British Conservative Essays & Politics",
+      "factuality": "mixed",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Old Queen Street Ventures (Sir Paul Marshall)",
+      "countryCode": "GB",
+      "editorialNote": "Britain's oldest weekly political and cultural magazine with right-of-center commentary."
+    },
+    {
+      "domain": "independent.co.uk",
+      "name": "The Independent",
+      "aliases": [
+        "The Independent"
+      ],
+      "bias": "lean_left",
+      "biasContext": "British Liberal Commercial",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Independent Digital News & Media",
+      "countryCode": "GB",
+      "editorialNote": "Digital UK general news publication with liberal-leaning editorial positioning."
+    },
+    {
+      "domain": "sky.com",
+      "name": "Sky News",
+      "aliases": [
+        "news.sky.com"
+      ],
+      "bias": "center",
+      "biasContext": "UK Regulated Broadcast News",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Sky Group / Comcast Corporation",
+      "countryCode": "GB",
+      "editorialNote": "24-hour UK broadcast newsroom regulated under Ofcom due-impartiality rules."
+    },
+    {
+      "domain": "dailymail.co.uk",
+      "name": "Daily Mail",
+      "aliases": [
+        "MailOnline",
+        "Daily Mail Online"
+      ],
+      "bias": "right",
+      "biasContext": "Right-Populist Tabloid",
+      "factuality": "low",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Daily Mail and General Trust (Lord Rothermere)",
+      "countryCode": "GB",
+      "editorialNote": "High-traffic tabloid combining fast breaking photos with sensationalized headlines and right-wing commentary."
+    },
+    {
+      "domain": "lemonde.fr",
+      "name": "Le Monde",
+      "aliases": [
+        "Le Monde"
+      ],
+      "bias": "lean_left",
+      "biasContext": "French Newspaper of Record / Center-Left",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Groupe Le Monde (Fonds pour l'Indépendance de la Presse — Niel, Křetínský & Staff Veto)",
+      "countryCode": "FR",
+      "editorialNote": "France's leading daily with statutory journalist veto rights protecting editorial independence."
+    },
+    {
+      "domain": "lefigaro.fr",
+      "name": "Le Figaro",
+      "aliases": [
+        "Le Figaro"
+      ],
+      "bias": "lean_right",
+      "biasContext": "French Gaullist / Center-Right",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Groupe Figaro / Groupe Dassault (Dassault Family)",
+      "countryCode": "FR",
+      "editorialNote": "France's oldest national daily, aligned with center-right and business perspectives."
+    },
+    {
+      "domain": "spiegel.de",
+      "name": "Der Spiegel",
+      "aliases": [
+        "DER SPIEGEL",
+        "Spiegel Online"
+      ],
+      "bias": "lean_left",
+      "biasContext": "German Investigative & Social Liberal",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Spiegel-Verlag (50.5% Employee-Owned KG, Augstein Heirs & Gruner + Jahr)",
+      "countryCode": "DE",
+      "editorialNote": "Employee-majority-owned German investigative news magazine with dedicated fact-checking documentation department."
+    },
+    {
+      "domain": "faz.net",
+      "name": "Frankfurter Allgemeine",
+      "aliases": [
+        "FAZ"
+      ],
+      "bias": "lean_right",
+      "biasContext": "German Ordoliberal / Conservative",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "FAZIT-Stiftung (Charitable Foundation — 93.7%)",
+      "countryCode": "DE",
+      "editorialNote": "Foundation-owned German newspaper of record governed by a collegial board of five co-publishers."
+    },
+    {
+      "domain": "handelsblatt.com",
+      "name": "Handelsblatt",
+      "aliases": [
+        "Handelsblatt"
+      ],
+      "bias": "lean_right",
+      "biasContext": "German Financial & Industrial Policy",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Handelsblatt Media Group (DvH Medien)",
+      "countryCode": "DE",
+      "editorialNote": "Germany's leading financial and industrial business daily."
+    },
+    {
+      "domain": "euractiv.com",
+      "name": "Euractiv",
+      "aliases": [
+        "EURACTIV"
+      ],
+      "bias": "center",
+      "biasContext": "EU Policy Network",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Mediahuis (European Publishing Group)",
+      "countryCode": "EU",
+      "editorialNote": "Pan-European policy news network covering Brussels legislative dossiers."
+    },
+    {
+      "domain": "euobserver.com",
+      "name": "EUobserver",
+      "aliases": [
+        "EUobserver"
+      ],
+      "bias": "center",
+      "biasContext": "Non-Profit EU Accountability",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "EUobserver ASBL (Brussels Non-Profit)",
+      "countryCode": "EU",
+      "editorialNote": "Independent non-profit online newspaper focused on EU democracy and transparency."
+    },
+    {
+      "domain": "balkaninsight.com",
+      "name": "Balkan Insight (BIRN)",
+      "aliases": [
+        "BIRN",
+        "Balkan Insight"
+      ],
+      "bias": "center",
+      "biasContext": "Central & SE Europe Investigative Non-Profit",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Balkan Investigative Reporting Network (Non-Profit)",
+      "countryCode": "EU",
+      "editorialNote": "Regional investigative network covering Central, Eastern, and Southeastern Europe including Romania and Moldova."
+    },
+    {
+      "domain": "kyivindependent.com",
+      "name": "The Kyiv Independent",
+      "aliases": [
+        "Kyiv Independent"
+      ],
+      "bias": "center",
+      "biasContext": "Journalist-Owned Eastern Europe Desk",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Journalist-Owned (Staff Majority & Reader Memberships)",
+      "countryCode": "UA",
+      "editorialNote": "English-language Ukrainian newsroom majority-owned by its journalists."
+    },
+    {
+      "domain": "wsj.com",
+      "name": "The Wall Street Journal",
+      "aliases": [
+        "Wall Street Journal",
+        "WSJ",
+        "online.wsj.com"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Straight Business Desk / Conservative Opinion Board",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Dow Jones & Company / News Corp (Murdoch Family)",
+      "countryCode": "US",
+      "editorialNote": "Rigorous factual news and markets reporting paired with a distinctly conservative editorial page."
+    },
+    {
+      "domain": "cnbc.com",
+      "name": "CNBC",
+      "aliases": [
+        "CNBC Markets",
+        "CNBC International"
+      ],
+      "bias": "center",
+      "biasContext": "Real-Time Markets & Corporate Finance",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "NBCUniversal / Versant (Comcast Corporation)",
+      "countryCode": "US",
+      "editorialNote": "Financial television and markets reporting focused on equities, central banks, and corporate earnings."
+    },
+    {
+      "domain": "marketwatch.com",
+      "name": "MarketWatch",
+      "aliases": [
+        "MarketWatch"
+      ],
+      "bias": "center",
+      "biasContext": "Retail & Institutional Markets",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Dow Jones & Company (News Corp)",
+      "countryCode": "US",
+      "editorialNote": "Financial markets and personal investing news desk."
+    },
+    {
+      "domain": "barrons.com",
+      "name": "Barron's",
+      "aliases": [
+        "Barrons"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Institutional Investing",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Dow Jones & Company (News Corp)",
+      "countryCode": "US",
+      "editorialNote": "Weekly investment and capital markets magazine."
+    },
+    {
+      "domain": "fortune.com",
+      "name": "Fortune",
+      "aliases": [
+        "Fortune Magazine"
+      ],
+      "bias": "center",
+      "biasContext": "Global Executive & Corporate Strategy",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Fortune Media Group Holdings (Chatchaval Jiaravanon)",
+      "countryCode": "US",
+      "editorialNote": "Corporate leadership, finance, and enterprise technology magazine."
+    },
+    {
+      "domain": "forbes.com",
+      "name": "Forbes",
+      "aliases": [
+        "Forbes"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Pro-Business & Contributor Network",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Integrated Whale Media Investments & Forbes Family",
+      "countryCode": "US",
+      "editorialNote": "Business newsroom combined with a wide external contributor network of varying rigor."
+    },
+    {
+      "domain": "businessinsider.com",
+      "name": "Business Insider",
+      "aliases": [
+        "insider.com",
+        "Insider"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Digital Business & Tech Commercial",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Axel Springer SE",
+      "countryCode": "US",
+      "editorialNote": "Digital business, Silicon Valley, and workplace journalism."
+    },
+    {
+      "domain": "nytimes.com",
+      "name": "The New York Times",
+      "aliases": [
+        "NYT",
+        "New York Times",
+        "rss.nytimes.com"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Institutional Liberal Newspaper of Record",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "The New York Times Company (Public NYSE; Ochs-Sulzberger Family Voting Control)",
+      "countryCode": "US",
+      "editorialNote": "Extensive global investigative and beat reporting with a center-left editorial and cultural lens."
+    },
+    {
+      "domain": "washingtonpost.com",
+      "name": "The Washington Post",
+      "aliases": [
+        "Washington Post",
+        "WaPo"
+      ],
+      "bias": "lean_left",
+      "biasContext": "National Political & Institutional Reporting",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Nash Holdings LLC (Jeff Bezos)",
+      "countryCode": "US",
+      "editorialNote": "Deep federal policy and investigative newsroom owned privately by Amazon founder Jeff Bezos."
+    },
+    {
+      "domain": "axios.com",
+      "name": "Axios",
+      "aliases": [
+        "Axios"
+      ],
+      "bias": "center",
+      "biasContext": "Smart Brevity Policy & Tech",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Cox Enterprises",
+      "countryCode": "US",
+      "editorialNote": "Concise structured reporting on Washington policy, AI, energy, and dealmaking."
+    },
+    {
+      "domain": "semafor.com",
+      "name": "Semafor",
+      "aliases": [
+        "Semafor"
+      ],
+      "bias": "center",
+      "biasContext": "Structured Fact vs. Opinion Separation",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Semafor Inc. (Ben Smith & Justin B. Smith)",
+      "countryCode": "US",
+      "editorialNote": "Explicitly separates 'The News' (facts) from 'The View' (reporter analysis) and 'Room for Disagreement'."
+    },
+    {
+      "domain": "thehill.com",
+      "name": "The Hill",
+      "aliases": [
+        "The Hill"
+      ],
+      "bias": "center",
+      "biasContext": "Capitol Hill Legislative Reporting",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Nexstar Media Group",
+      "countryCode": "US",
+      "editorialNote": "Non-partisan Congressional and executive branch political reporting."
+    },
+    {
+      "domain": "politico.com",
+      "name": "POLITICO",
+      "aliases": [
+        "Politico"
+      ],
+      "bias": "lean_left",
+      "biasContext": "U.S. Campaign & Policy Insider",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Axel Springer SE",
+      "countryCode": "US",
+      "editorialNote": "Capitol Hill, White House, and campaign trail reporting."
+    },
+    {
+      "domain": "usatoday.com",
+      "name": "USA Today",
+      "aliases": [
+        "USA TODAY"
+      ],
+      "bias": "center",
+      "biasContext": "Mainstream National Commercial",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Gannett Co., Inc.",
+      "countryCode": "US",
+      "editorialNote": "Broad-reach national U.S. daily newspaper network."
+    },
+    {
+      "domain": "csmonitor.com",
+      "name": "Christian Science Monitor",
+      "aliases": [
+        "The Christian Science Monitor"
+      ],
+      "bias": "center",
+      "biasContext": "Constructive Non-Profit Global Reporting",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Christian Science Publishing Society (Secular Editorial Charter)",
+      "countryCode": "US",
+      "editorialNote": "Pulitzer-winning secular international journalism organization prized for non-sensational depth."
+    },
+    {
+      "domain": "propublica.org",
+      "name": "ProPublica",
+      "aliases": [
+        "ProPublica"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Non-Profit Investigative",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Pro Publica Inc. (501(c)(3) Donor-Funded)",
+      "countryCode": "US",
+      "editorialNote": "Pulitzer-winning non-profit investigative newsroom uncovering abuses of institutional power."
+    },
+    {
+      "domain": "bellingcat.com",
+      "name": "Bellingcat",
+      "aliases": [
+        "Bellingcat"
+      ],
+      "bias": "center",
+      "biasContext": "Open-Source Intelligence (OSINT) Investigative",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Stichting Bellingcat (Dutch Non-Profit Foundation)",
+      "countryCode": "NL",
+      "editorialNote": "Independent investigative collective verifying conflict and geopolitical events via open-source forensics."
+    },
+    {
+      "domain": "foreignaffairs.com",
+      "name": "Foreign Affairs",
+      "aliases": [
+        "Foreign Affairs"
+      ],
+      "bias": "center",
+      "biasContext": "Geopolitical & Strategic Scholarship",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Council on Foreign Relations (Non-Profit Think Tank)",
+      "countryCode": "US",
+      "editorialNote": "Bipartisan international relations and grand strategy journal."
+    },
+    {
+      "domain": "foreignpolicy.com",
+      "name": "Foreign Policy",
+      "aliases": [
+        "Foreign Policy"
+      ],
+      "bias": "center",
+      "biasContext": "Global Geopolitics & Diplomacy",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "The FP Group (Graham Holdings Company)",
+      "countryCode": "US",
+      "editorialNote": "International diplomacy, security, and global economics magazine."
+    },
+    {
+      "domain": "time.com",
+      "name": "TIME",
+      "aliases": [
+        "TIME Magazine",
+        "Time"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Mainstream News Weekly",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Marc & Lynne Benioff",
+      "countryCode": "US",
+      "editorialNote": "Global news and profile magazine owned by Salesforce co-founder Marc Benioff."
+    },
+    {
+      "domain": "newsweek.com",
+      "name": "Newsweek",
+      "aliases": [
+        "Newsweek"
+      ],
+      "bias": "center",
+      "biasContext": "Commercial Multi-Perspective Aggregator",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Newsweek Publishing LLC (Dev Pragad)",
+      "countryCode": "US",
+      "editorialNote": "High-volume commercial news portal hosting cross-partisan opinion columns."
+    },
+    {
+      "domain": "theatlantic.com",
+      "name": "The Atlantic",
+      "aliases": [
+        "The Atlantic"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Long-Form Liberal Institutional Essays",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Emerson Collective (Laurene Powell Jobs)",
+      "countryCode": "US",
+      "editorialNote": "Long-form political, cultural, and constitutional analysis magazine."
+    },
+    {
+      "domain": "newyorker.com",
+      "name": "The New Yorker",
+      "aliases": [
+        "The New Yorker"
+      ],
+      "bias": "left",
+      "biasContext": "Literary & Progressive Investigative",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Condé Nast / Advance Publications (Newhouse Family)",
+      "countryCode": "US",
+      "editorialNote": "Renowned for rigorous fact-checking department alongside progressive cultural and political essays."
+    },
+    {
+      "domain": "vox.com",
+      "name": "Vox",
+      "aliases": [
+        "Vox"
+      ],
+      "bias": "left",
+      "biasContext": "Progressive Explanatory Journalism",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Vox Media (Penske Media Minority Stake)",
+      "countryCode": "US",
+      "editorialNote": "Explanatory policy and cultural journalism from a progressive viewpoint."
+    },
+    {
+      "domain": "cnn.com",
+      "name": "CNN",
+      "aliases": [
+        "rss.cnn.com",
+        "edition.cnn.com",
+        "CNN International"
+      ],
+      "bias": "lean_left",
+      "biasContext": "24-Hour Commercial Broadcast News",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Warner Bros. Discovery",
+      "countryCode": "US",
+      "editorialNote": "Global breaking news network mixing strong field correspondents with panel-driven political commentary."
+    },
+    {
+      "domain": "nbcnews.com",
+      "name": "NBC News",
+      "aliases": [
+        "NBC News"
+      ],
+      "bias": "lean_left",
+      "biasContext": "U.S. Broadcast Network News",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "NBCUniversal (Comcast Corporation)",
+      "countryCode": "US",
+      "editorialNote": "Major U.S. broadcast network news division."
+    },
+    {
+      "domain": "cbsnews.com",
+      "name": "CBS News",
+      "aliases": [
+        "CBS News"
+      ],
+      "bias": "lean_left",
+      "biasContext": "U.S. Broadcast Network News",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Paramount Skydance Corporation",
+      "countryCode": "US",
+      "editorialNote": "Major U.S. broadcast news division home to 60 Minutes."
+    },
+    {
+      "domain": "abcnews.go.com",
+      "name": "ABC News",
+      "aliases": [
+        "ABC News"
+      ],
+      "bias": "lean_left",
+      "biasContext": "U.S. Broadcast Network News",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "The Walt Disney Company",
+      "countryCode": "US",
+      "editorialNote": "Major U.S. television network newsroom."
+    },
+    {
+      "domain": "msnbc.com",
+      "name": "MSNBC",
+      "aliases": [
+        "ms.now",
+        "MS NOW"
+      ],
+      "bias": "left",
+      "biasContext": "Progressive Cable Opinion & Politics",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Versant / Comcast Spin-Off",
+      "countryCode": "US",
+      "editorialNote": "Cable news network heavily weighted toward progressive political commentary."
+    },
+    {
+      "domain": "motherjones.com",
+      "name": "Mother Jones",
+      "aliases": [
+        "Mother Jones"
+      ],
+      "bias": "left",
+      "biasContext": "Progressive Non-Profit Investigative",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Foundation for National Progress",
+      "countryCode": "US",
+      "editorialNote": "Reader-supported progressive investigative magazine."
+    },
+    {
+      "domain": "theintercept.com",
+      "name": "The Intercept",
+      "aliases": [
+        "The Intercept"
+      ],
+      "bias": "left",
+      "biasContext": "Civil Liberties & Investigative Non-Profit",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Intercept Media Inc. (501(c)(3) Non-Profit)",
+      "countryCode": "US",
+      "editorialNote": "Adversarial national security and civil liberties investigative newsroom."
+    },
+    {
+      "domain": "jacobin.com",
+      "name": "Jacobin",
+      "aliases": [
+        "Jacobin Magazine"
+      ],
+      "bias": "left",
+      "biasContext": "Democratic Socialist Essays",
+      "factuality": "mixed",
+      "ownershipType": "independent",
+      "ownerLabel": "Jacobin Foundation",
+      "countryCode": "US",
+      "editorialNote": "Explicitly socialist quarterly and digital commentary publication."
+    },
+    {
+      "domain": "huffpost.com",
+      "name": "HuffPost",
+      "aliases": [
+        "Huffington Post"
+      ],
+      "bias": "left",
+      "biasContext": "Progressive Digital Commercial",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "BuzzFeed, Inc.",
+      "countryCode": "US",
+      "editorialNote": "Progressive-leaning general politics and lifestyle digital newsroom."
+    },
+    {
+      "domain": "thedispatch.com",
+      "name": "The Dispatch",
+      "aliases": [
+        "The Dispatch"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Principled Center-Right / Fact-Focused",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "The Dispatch (Reader-Subscribed; Jonah Goldberg & Stephen Hayes)",
+      "countryCode": "US",
+      "editorialNote": "Subscription-funded center-right reporting and conservative policy analysis with IFCN-certified fact-checking."
+    },
+    {
+      "domain": "reason.com",
+      "name": "Reason",
+      "aliases": [
+        "Reason Magazine"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Libertarian / Free Minds & Free Markets",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Reason Foundation (501(c)(3) Libertarian Non-Profit)",
+      "countryCode": "US",
+      "editorialNote": "Consistent civil-libertarian and free-market policy journalism."
+    },
+    {
+      "domain": "thefp.com",
+      "name": "The Free Press",
+      "aliases": [
+        "Free Press"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Heterodox / Classical Liberal Commentary",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "The Free Press / Paramount Skydance (Founded by Bari Weiss)",
+      "countryCode": "US",
+      "editorialNote": "Counter-institutional journalism and heterodox cultural/political essays."
+    },
+    {
+      "domain": "nationalreview.com",
+      "name": "National Review",
+      "aliases": [
+        "National Review"
+      ],
+      "bias": "right",
+      "biasContext": "American Conservative Intellectual",
+      "factuality": "mixed",
+      "ownershipType": "non_profit",
+      "ownerLabel": "National Review Institute",
+      "countryCode": "US",
+      "editorialNote": "Flagship American conservative political opinion and policy magazine."
+    },
+    {
+      "domain": "washingtonexaminer.com",
+      "name": "Washington Examiner",
+      "aliases": [
+        "Washington Examiner"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Conservative Beltway Politics",
+      "factuality": "mixed",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Clarity Media Group (Philip Anschutz)",
+      "countryCode": "US",
+      "editorialNote": "Conservative Washington political news and opinion publication."
+    },
+    {
+      "domain": "nypost.com",
+      "name": "New York Post",
+      "aliases": [
+        "NY Post"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Conservative Commercial Tabloid",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "News Corp (Murdoch Family)",
+      "countryCode": "US",
+      "editorialNote": "Punchy metro and national tabloid mixing scoops with right-leaning framing."
+    },
+    {
+      "domain": "foxnews.com",
+      "name": "Fox News",
+      "aliases": [
+        "moxie.foxnews.com",
+        "Fox News Digital"
+      ],
+      "bias": "right",
+      "biasContext": "Conservative Cable Broadcast & Commentary",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Fox Corporation (Murdoch Family)",
+      "countryCode": "US",
+      "editorialNote": "Dominant U.S. conservative cable network combining daytime straight-news desks with partisan prime-time opinion."
+    },
+    {
+      "domain": "foxbusiness.com",
+      "name": "Fox Business",
+      "aliases": [
+        "Fox Business"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Free-Market Cable Business",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Fox Corporation",
+      "countryCode": "US",
+      "editorialNote": "Markets and fiscal news network with pro-deregulation commentary."
+    },
+    {
+      "domain": "realclearpolitics.com",
+      "name": "RealClearPolitics",
+      "aliases": [
+        "RCP"
+      ],
+      "bias": "lean_right",
+      "biasContext": "Polling Aggregator & Cross-Partisan Curation",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "RealClearHoldings LLC (Forbes & McIntyre)",
+      "countryCode": "US",
+      "editorialNote": "Political polling average and daily curated links pairing left and right columns."
+    },
+    {
+      "domain": "dailywire.com",
+      "name": "The Daily Wire",
+      "aliases": [
+        "Daily Wire"
+      ],
+      "bias": "right",
+      "biasContext": "Conservative Commentary & Media",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Bentkey Ventures (Jeremy Boreing, Ben Shapiro & Caleb Robinson)",
+      "countryCode": "US",
+      "editorialNote": "Subscription conservative commentary and political news platform."
+    },
+    {
+      "domain": "breitbart.com",
+      "name": "Breitbart",
+      "aliases": [
+        "Breitbart News"
+      ],
+      "bias": "right",
+      "biasContext": "Populist-Right Partisan",
+      "factuality": "low",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Breitbart News Network (Mercer Family & Susie Breitbart)",
+      "countryCode": "US",
+      "editorialNote": "Strongly partisan populist-right outlet frequently employing loaded framing."
+    },
+    {
+      "domain": "newsmax.com",
+      "name": "Newsmax",
+      "aliases": [
+        "Newsmax"
+      ],
+      "bias": "right",
+      "biasContext": "Right-Wing Cable & Digital",
+      "factuality": "low",
+      "ownershipType": "corporation",
+      "ownerLabel": "Newsmax Inc. (Christopher Ruddy)",
+      "countryCode": "US",
+      "editorialNote": "Conservative cable and online outlet with strongly partisan framing."
+    },
+    {
+      "domain": "zerohedge.com",
+      "name": "ZeroHedge",
+      "aliases": [
+        "Zero Hedge"
+      ],
+      "bias": "right",
+      "biasContext": "Contrarian Permabear Markets & Commentary",
+      "factuality": "low",
+      "ownershipType": "independent",
+      "ownerLabel": "ABC Media Ltd. (Daniel Ivandjiiski)",
+      "countryCode": "BG",
+      "editorialNote": "Pseudonymous financial blog mixing fast market tape snippets with conspiratorial geopolitical claims."
+    },
+    {
+      "domain": "techcrunch.com",
+      "name": "TechCrunch",
+      "aliases": [
+        "TechCrunch"
+      ],
+      "bias": "center",
+      "biasContext": "Venture Capital, Startups & AI Industry",
+      "factuality": "high",
+      "ownershipType": "private_equity",
+      "ownerLabel": "Regent LP (Acquired from Yahoo / Apollo 2025)",
+      "countryCode": "US",
+      "editorialNote": "Leading Silicon Valley startup, venture funding, and AI product newsroom."
+    },
+    {
+      "domain": "theverge.com",
+      "name": "The Verge",
+      "aliases": [
+        "Verge"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Consumer Tech, Policy & Culture",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Vox Media",
+      "countryCode": "US",
+      "editorialNote": "Consumer hardware, platform policy, and tech culture journalism."
+    },
+    {
+      "domain": "arstechnica.com",
+      "name": "Ars Technica",
+      "aliases": [
+        "feeds.arstechnica.com",
+        "Ars"
+      ],
+      "bias": "center",
+      "biasContext": "Deep Technical, Science & IT Policy",
+      "factuality": "very_high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Condé Nast / Advance Publications",
+      "countryCode": "US",
+      "editorialNote": "Deeply technical reporting on computing architectures, spaceflight, science, and tech law."
+    },
+    {
+      "domain": "wired.com",
+      "name": "WIRED",
+      "aliases": [
+        "Wired"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Technology, Security & Digital Society",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Condé Nast / Advance Publications",
+      "countryCode": "US",
+      "editorialNote": "Long-form investigative technology, cybersecurity, and science reporting."
+    },
+    {
+      "domain": "404media.co",
+      "name": "404 Media",
+      "aliases": [
+        "404 Media"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Journalist-Owned Tech Investigative",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Journalist-Owned (Jason Koebler, Emanuel Maiberg, Samantha Cole & Joseph Cox)",
+      "countryCode": "US",
+      "editorialNote": "Reader-funded investigative tech newsroom uncovering AI, privacy, and cyber underground stories."
+    },
+    {
+      "domain": "technologyreview.com",
+      "name": "MIT Technology Review",
+      "aliases": [
+        "MIT Tech Review"
+      ],
+      "bias": "center",
+      "biasContext": "Academic Frontier Tech & AI",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Massachusetts Institute of Technology (Independent Editorial)",
+      "countryCode": "US",
+      "editorialNote": "Authoritative reporting on frontier AI, biotech, semiconductors, and climate tech owned by MIT."
+    },
+    {
+      "domain": "spectrum.ieee.org",
+      "name": "IEEE Spectrum",
+      "aliases": [
+        "ieee.org",
+        "IEEE"
+      ],
+      "bias": "center",
+      "biasContext": "Peer-Informed Engineering Journalism",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Institute of Electrical and Electronics Engineers (IEEE)",
+      "countryCode": "US",
+      "editorialNote": "Flagship engineering magazine of the world's largest technical professional organization."
+    },
+    {
+      "domain": "windowscentral.com",
+      "name": "Windows Central",
+      "aliases": [
+        "Windows Central"
+      ],
+      "bias": "center",
+      "biasContext": "Windows, Surface, Copilot+ & PC Ecosystem",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Future plc (UK Public Media Group)",
+      "countryCode": "GB",
+      "editorialNote": "Specialized Microsoft, Windows 11, ARM64 PC, and Xbox ecosystem newsroom."
+    },
+    {
+      "domain": "tomshardware.com",
+      "name": "Tom's Hardware",
+      "aliases": [
+        "Toms Hardware"
+      ],
+      "bias": "center",
+      "biasContext": "Silicon, GPU/CPU Lab Benchmarks",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Future plc",
+      "countryCode": "US",
+      "editorialNote": "Empirical hardware benchmarking, semiconductor fabrication, and PC component lab journalism."
+    },
+    {
+      "domain": "9to5mac.com",
+      "name": "9to5Mac",
+      "aliases": [
+        "9to5Mac"
+      ],
+      "bias": "center",
+      "biasContext": "Apple Ecosystem & Supply Chain",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "9to5 Network (Seth Weintraub / Independent)",
+      "countryCode": "US",
+      "editorialNote": "Dedicated Apple hardware, iOS, and macOS beat reporting."
+    },
+    {
+      "domain": "9to5google.com",
+      "name": "9to5Google",
+      "aliases": [
+        "9to5Google"
+      ],
+      "bias": "center",
+      "biasContext": "Android, Pixel & Google Ecosystem",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "9to5 Network (Independent)",
+      "countryCode": "US",
+      "editorialNote": "Dedicated Android, Pixel, Wear OS, and Google APK-teardown reporting."
+    },
+    {
+      "domain": "macrumors.com",
+      "name": "MacRumors",
+      "aliases": [
+        "MacRumors"
+      ],
+      "bias": "center",
+      "biasContext": "Apple Ecosystem & Analyst Tracking",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "MacRumors.com LLC (Arnold Kim / Independent)",
+      "countryCode": "US",
+      "editorialNote": "Apple supply-chain, software beta, and hardware news."
+    },
+    {
+      "domain": "engadget.com",
+      "name": "Engadget",
+      "aliases": [
+        "Engadget"
+      ],
+      "bias": "center",
+      "biasContext": "Consumer Electronics",
+      "factuality": "high",
+      "ownershipType": "private_equity",
+      "ownerLabel": "Static Media / Yahoo Affiliate",
+      "countryCode": "US",
+      "editorialNote": "Consumer gadget news and hardware reviews."
+    },
+    {
+      "domain": "theregister.com",
+      "name": "The Register",
+      "aliases": [
+        "El Reg"
+      ],
+      "bias": "center",
+      "biasContext": "Enterprise IT, Cloud & Systems Skepticism",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Situation Publishing",
+      "countryCode": "GB",
+      "editorialNote": "Sharp, technically rigorous enterprise infrastructure, Linux, cloud, and security reporting."
+    },
+    {
+      "domain": "bleepingcomputer.com",
+      "name": "BleepingComputer",
+      "aliases": [
+        "Bleeping Computer"
+      ],
+      "bias": "center",
+      "biasContext": "Cybersecurity, Vulnerabilities & Incident Response",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Bleeping Computer LLC (Lawrence Abrams / Independent)",
+      "countryCode": "US",
+      "editorialNote": "Primary source for breaking zero-day vulnerabilities, ransomware, and OS patch reporting."
+    },
+    {
+      "domain": "krebsonsecurity.com",
+      "name": "KrebsOnSecurity",
+      "aliases": [
+        "Krebs on Security"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Investigative Cybercrime Reporting",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Brian Krebs (Independent Investigative Journalist)",
+      "countryCode": "US",
+      "editorialNote": "Deep investigative reporting on cybercrime syndicates and data breaches."
+    },
+    {
+      "domain": "phoronix.com",
+      "name": "Phoronix",
+      "aliases": [
+        "Phoronix"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Linux Kernel, Compilers & Silicon Benchmarks",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Phoronix Media (Michael Larabel / Independent)",
+      "countryCode": "US",
+      "editorialNote": "Gold-standard empirical Linux, open-source driver, and CPU/GPU benchmark journalism."
+    },
+    {
+      "domain": "lwn.net",
+      "name": "LWN.net",
+      "aliases": [
+        "LWN"
+      ],
+      "bias": "center",
+      "biasContext": "Linux Kernel & Free Software Engineering",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Eklektix, Inc. (Jonathan Corbet / Subscriber-Funded)",
+      "countryCode": "US",
+      "editorialNote": "Authoritative subscriber-supported Linux kernel and systems engineering publication."
+    },
+    {
+      "domain": "infoq.com",
+      "name": "InfoQ",
+      "aliases": [
+        "InfoQ"
+      ],
+      "bias": "center",
+      "biasContext": "Software Architecture & Engineering",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "C4Media Inc. (Practitioner-Driven)",
+      "countryCode": "CA",
+      "editorialNote": "Peer-reviewed software architecture, distributed systems, and engineering news."
+    },
+    {
+      "domain": "devblogs.microsoft.com",
+      "name": "Microsoft DevBlogs",
+      "aliases": [
+        "Microsoft Developer Blogs"
+      ],
+      "bias": "center",
+      "biasContext": "Official .NET, C# & Windows Engineering",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Microsoft Corporation (Engineering Teams)",
+      "countryCode": "US",
+      "editorialNote": "Primary first-party engineering blog for .NET, C#, Visual Studio, and Windows App SDK."
+    },
+    {
+      "domain": "nature.com",
+      "name": "Nature",
+      "aliases": [
+        "Nature Portfolio"
+      ],
+      "bias": "center",
+      "biasContext": "Peer-Reviewed Scientific Journal & News",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Springer Nature Group",
+      "countryCode": "GB",
+      "editorialNote": "Premier multidisciplinary peer-reviewed scientific journal and science news desk."
+    },
+    {
+      "domain": "science.org",
+      "name": "Science (AAAS)",
+      "aliases": [
+        "sciencemag.org",
+        "Science Magazine"
+      ],
+      "bias": "center",
+      "biasContext": "Peer-Reviewed Scientific Journal",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "American Association for the Advancement of Science (Non-Profit)",
+      "countryCode": "US",
+      "editorialNote": "Flagship peer-reviewed journal and science policy newsroom of AAAS."
+    },
+    {
+      "domain": "quantamagazine.org",
+      "name": "Quanta Magazine",
+      "aliases": [
+        "Quanta"
+      ],
+      "bias": "center",
+      "biasContext": "Fundamental Physics, Math & CS",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Simons Foundation (Editorially Independent Non-Profit)",
+      "countryCode": "US",
+      "editorialNote": "Pulitzer-winning deep-dive journalism covering mathematics, theoretical physics, and computer science."
+    },
+    {
+      "domain": "bigthink.com",
+      "name": "Big Think / Starts With A Bang!",
+      "aliases": [
+        "Starts With A Bang",
+        "Starts With a Bang!"
+      ],
+      "bias": "center",
+      "biasContext": "Astrophysics & Science Communication",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Freethink Media (Home of Ethan Siegel's Starts With A Bang!)",
+      "countryCode": "US",
+      "editorialNote": "Science, cosmology, and philosophy publication hosting astrophysicist Ethan Siegel's flagship column."
+    },
+    {
+      "domain": "spacenews.com",
+      "name": "SpaceNews",
+      "aliases": [
+        "SpaceNews"
+      ],
+      "bias": "center",
+      "biasContext": "Aerospace Industry & Orbital Policy",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Pocket Ventures LLC (Independent)",
+      "countryCode": "US",
+      "editorialNote": "Industry-standard reporting on commercial launch, satellite constellations, and space agencies."
+    },
+    {
+      "domain": "nasaspaceflight.com",
+      "name": "NASASpaceFlight",
+      "aliases": [
+        "NSF"
+      ],
+      "bias": "center",
+      "biasContext": "Launch Engineering & Spaceflight Tracking",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "NASASpaceFlight LLC (Chris Bergin / Independent)",
+      "countryCode": "US",
+      "editorialNote": "Technical aerospace engineering and live launch site reporting."
+    },
+    {
+      "domain": "space.com",
+      "name": "Space.com",
+      "aliases": [
+        "Space.com"
+      ],
+      "bias": "center",
+      "biasContext": "Astronomy & Space Exploration",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Future plc",
+      "countryCode": "US",
+      "editorialNote": "Popular astronomy, skywatching, and space mission journalism."
+    },
+    {
+      "domain": "universetoday.com",
+      "name": "Universe Today",
+      "aliases": [
+        "Universe Today"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Independent Space & Astronomy Journalism",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Fraser Cain (Independent Creator)",
+      "countryCode": "CA",
+      "editorialNote": "Independent astronomy and planetary science publication founded by Fraser Cain."
+    },
+    {
+      "domain": "nasa.gov",
+      "name": "NASA",
+      "aliases": [
+        "NASA.gov"
+      ],
+      "bias": "center",
+      "biasContext": "Primary Space Agency Releases",
+      "factuality": "very_high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "U.S. National Aeronautics and Space Administration",
+      "countryCode": "US",
+      "editorialNote": "Official mission telemetry, astrophysics discoveries, and agency releases."
+    },
+    {
+      "domain": "esa.int",
+      "name": "European Space Agency",
+      "aliases": [
+        "ESA"
+      ],
+      "bias": "center",
+      "biasContext": "Primary Space Agency Releases",
+      "factuality": "very_high",
+      "ownershipType": "public_broadcaster",
+      "ownerLabel": "European Space Agency (Intergovernmental)",
+      "countryCode": "EU",
+      "editorialNote": "Official European Space Agency mission science and launch updates."
+    },
+    {
+      "domain": "pragmaticengineer.com",
+      "name": "The Pragmatic Engineer",
+      "aliases": [
+        "newsletter.pragmaticengineer.com",
+        "pragmaticengineer.substack.com"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Independent Software Engineering Research",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Gergely Orosz (Reader-Funded Substack Creator)",
+      "countryCode": "NL",
+      "editorialNote": "Original reporting and deep industry analysis on Big Tech engineering culture and compensation."
+    },
+    {
+      "domain": "stratechery.com",
+      "name": "Stratechery",
+      "aliases": [
+        "Stratechery by Ben Thompson"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Independent Tech Strategy & Economics",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Ben Thompson (Independent Reader-Subscribed)",
+      "countryCode": "TW",
+      "editorialNote": "Foundational independent analysis of technology business models, semiconductors, and aggregation theory."
+    },
+    {
+      "domain": "bytebytego.com",
+      "name": "ByteByteGo",
+      "aliases": [
+        "blog.bytebytego.com",
+        "bytebytego.substack.com"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Systems Design & Architecture",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Alex Xu (Independent Creator)",
+      "countryCode": "US",
+      "editorialNote": "Visual distributed systems and software architecture engineering newsletter."
+    },
+    {
+      "domain": "semianalysis.com",
+      "name": "SemiAnalysis",
+      "aliases": [
+        "semianalysis.substack.com"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Semiconductor & AI Supply Chain Research",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Dylan Patel (Independent Research)",
+      "countryCode": "US",
+      "editorialNote": "Deep semiconductor, datacenter GPU cluster, and AI economics research."
+    },
+    {
+      "domain": "simonwillison.net",
+      "name": "Simon Willison's Weblog",
+      "aliases": [
+        "simonw.substack.com"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Applied LLM & Open-Source Engineering",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Simon Willison (Independent Creator)",
+      "countryCode": "US",
+      "editorialNote": "Hands-on open-source software and LLM engineering notes from Datasette creator Simon Willison."
+    },
+    {
+      "domain": "daringfireball.net",
+      "name": "Daring Fireball",
+      "aliases": [
+        "Daring Fireball"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Independent Apple & Design Commentary",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "John Gruber (Independent Creator)",
+      "countryCode": "US",
+      "editorialNote": "Long-running independent Apple, UI design, and tech industry commentary."
+    },
+    {
+      "domain": "noahpinion.blog",
+      "name": "Noahpinion",
+      "aliases": [
+        "noahpinion.substack.com"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Abundance / Center-Left Economics Newsletter",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Noah Smith (Reader-Funded Substack Creator)",
+      "countryCode": "US",
+      "editorialNote": "Macroeconomics, industrial policy, and geopolitics essays by economist Noah Smith."
+    },
+    {
+      "domain": "astralcodexten.com",
+      "name": "Astral Codex Ten",
+      "aliases": [
+        "astralcodexten.substack.com",
+        "ACX"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Rationalist Science & Epistemology Essays",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Scott Alexander (Reader-Funded Substack Creator)",
+      "countryCode": "US",
+      "editorialNote": "Long-form literature reviews across psychiatry, statistics, AI, and philosophy."
+    },
+    {
+      "domain": "oneusefulthing.org",
+      "name": "One Useful Thing",
+      "aliases": [
+        "oneusefulthing.substack.com"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Academic Applied AI Research",
+      "factuality": "very_high",
+      "ownershipType": "independent",
+      "ownerLabel": "Prof. Ethan Mollick (Wharton / Independent Substack)",
+      "countryCode": "US",
+      "editorialNote": "Empirical research and practical experiments on generative AI in work and education."
+    },
+    {
+      "domain": "platformer.news",
+      "name": "Platformer",
+      "aliases": [
+        "Platformer"
+      ],
+      "bias": "independent_creator",
+      "biasContext": "Independent Silicon Valley & AI Accountability",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Casey Newton (Independent Reader-Subscribed)",
+      "countryCode": "US",
+      "editorialNote": "Independent reporting on social platforms, AI governance, and Silicon Valley."
+    },
+    {
+      "domain": "elpais.com",
+      "name": "El País",
+      "aliases": [
+        "EL PAÍS",
+        "El Pais"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Spanish Newspaper of Record / Social Democratic",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "PRISA Media",
+      "countryCode": "ES",
+      "editorialNote": "Spain's flagship international daily covering Iberian, EU, and Latin American affairs."
+    },
+    {
+      "domain": "corriere.it",
+      "name": "Corriere della Sera",
+      "aliases": [
+        "Corriere"
+      ],
+      "bias": "center",
+      "biasContext": "Italian Institutional Daily",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "RCS MediaGroup (Urbano Cairo)",
+      "countryCode": "IT",
+      "editorialNote": "Italy's highest-circulation historic daily newspaper based in Milan."
+    },
+    {
+      "domain": "repubblica.it",
+      "name": "La Repubblica",
+      "aliases": [
+        "la Repubblica"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Italian Progressive Daily",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "GEDI Gruppo Editoriale (Exor / Agnelli Family)",
+      "countryCode": "IT",
+      "editorialNote": "Major Italian center-left national daily."
+    },
+    {
+      "domain": "zeit.de",
+      "name": "Die Zeit",
+      "aliases": [
+        "ZEIT ONLINE"
+      ],
+      "bias": "lean_left",
+      "biasContext": "German Liberal Intellectual Weekly",
+      "factuality": "very_high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Zeitverlag (Holtzbrinck Publishing Group & DvH Medien)",
+      "countryCode": "DE",
+      "editorialNote": "Prestigious German weekly newspaper renowned for long-form debate and analysis."
+    },
+    {
+      "domain": "sueddeutsche.de",
+      "name": "Süddeutsche Zeitung",
+      "aliases": [
+        "SZ"
+      ],
+      "bias": "lean_left",
+      "biasContext": "German Investigative & Liberal Daily",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Südwestdeutsche Medien Holding (SWMH)",
+      "countryCode": "DE",
+      "editorialNote": "Major German national daily famed for co-leading the Panama Papers investigations."
+    },
+    {
+      "domain": "welt.de",
+      "name": "DIE WELT",
+      "aliases": [
+        "WELT"
+      ],
+      "bias": "lean_right",
+      "biasContext": "German Conservative / Transatlantic Daily",
+      "factuality": "high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Axel Springer SE",
+      "countryCode": "DE",
+      "editorialNote": "German national broadsheet with liberal-conservative and transatlantic editorial principles."
+    },
+    {
+      "domain": "bild.de",
+      "name": "BILD",
+      "aliases": [
+        "Bild"
+      ],
+      "bias": "right",
+      "biasContext": "German Commercial Tabloid",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Axel Springer SE",
+      "countryCode": "DE",
+      "editorialNote": "Europe's largest-circulation tabloid newspaper."
+    },
+    {
+      "domain": "lesechos.fr",
+      "name": "Les Echos",
+      "aliases": [
+        "Les Échos"
+      ],
+      "bias": "lean_right",
+      "biasContext": "French Financial Daily",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Groupe Les Echos-Le Parisien (LVMH / Bernard Arnault)",
+      "countryCode": "FR",
+      "editorialNote": "France's leading daily financial and economic newspaper."
+    },
+    {
+      "domain": "liberation.fr",
+      "name": "Libération",
+      "aliases": [
+        "Liberation"
+      ],
+      "bias": "left",
+      "biasContext": "French Social-Left Daily",
+      "factuality": "high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "Fonds de Dotation pour une Presse Indépendante (Non-Profit Endowment)",
+      "countryCode": "FR",
+      "editorialNote": "French progressive daily placed under a non-profit endowment structure."
+    },
+    {
+      "domain": "irishtimes.com",
+      "name": "The Irish Times",
+      "aliases": [
+        "Irish Times"
+      ],
+      "bias": "center",
+      "biasContext": "Trust-Owned Newspaper of Record",
+      "factuality": "very_high",
+      "ownershipType": "non_profit",
+      "ownerLabel": "The Irish Times Trust CLG (Non-Dividend Civic Trust)",
+      "countryCode": "IE",
+      "editorialNote": "Governed by a non-profit civic trust with no private beneficial shareholders."
+    },
+    {
+      "domain": "telex.hu",
+      "name": "Telex",
+      "aliases": [
+        "Telex.hu"
+      ],
+      "bias": "center",
+      "biasContext": "Reader-Funded Central European Independent",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Van Másik Zrt. (Journalist-Owned & Reader-Crowdfunded)",
+      "countryCode": "HU",
+      "editorialNote": "Hungary's largest independent reader-crowdfunded newsroom."
+    },
+    {
+      "domain": "nikkei.com",
+      "name": "Nikkei Asia",
+      "aliases": [
+        "asia.nikkei.com",
+        "Nikkei"
+      ],
+      "bias": "center",
+      "biasContext": "Asian Markets & Supply Chain Newspaper of Record",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Nikkei Inc. (Employee-Majority Shareholding)",
+      "countryCode": "JP",
+      "editorialNote": "Employee-owned Japanese financial publishing powerhouse covering Asian tech and markets."
+    },
+    {
+      "domain": "scmp.com",
+      "name": "South China Morning Post",
+      "aliases": [
+        "SCMP"
+      ],
+      "bias": "center",
+      "biasContext": "Hong Kong & China Business Desk",
+      "factuality": "mixed",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Alibaba Group",
+      "countryCode": "HK",
+      "editorialNote": "English-language Hong Kong daily with deep China tech/trade reporting under Alibaba ownership."
+    },
+    {
+      "domain": "timesofisrael.com",
+      "name": "The Times of Israel",
+      "aliases": [
+        "Times of Israel"
+      ],
+      "bias": "center",
+      "biasContext": "Independent Israeli English Desk",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "The Times of Israel Ltd. (David Horovitz & Seth Klarman)",
+      "countryCode": "IL",
+      "editorialNote": "English-language Middle East and Israeli domestic political newsroom."
+    },
+    {
+      "domain": "haaretz.com",
+      "name": "Haaretz",
+      "aliases": [
+        "Haaretz"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Israeli Liberal Newspaper of Record",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Haaretz Group (Schocken Family)",
+      "countryCode": "IL",
+      "editorialNote": "Israel's oldest daily newspaper, recognized for liberal commentary and investigative reporting."
+    },
+    {
+      "domain": "latimes.com",
+      "name": "Los Angeles Times",
+      "aliases": [
+        "LA Times"
+      ],
+      "bias": "lean_left",
+      "biasContext": "West Coast Regional Daily",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Nant Capital (Dr. Patrick Soon-Shiong)",
+      "countryCode": "US",
+      "editorialNote": "Major West Coast daily owned by biotech entrepreneur Patrick Soon-Shiong."
+    },
+    {
+      "domain": "bostonglobe.com",
+      "name": "The Boston Globe",
+      "aliases": [
+        "Boston Globe"
+      ],
+      "bias": "lean_left",
+      "biasContext": "New England Regional Investigative",
+      "factuality": "high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Boston Globe Media Partners (John W. Henry)",
+      "countryCode": "US",
+      "editorialNote": "Pulitzer-winning New England daily home to the Spotlight investigative team."
+    },
+    {
+      "domain": "statnews.com",
+      "name": "STAT",
+      "aliases": [
+        "STAT News"
+      ],
+      "bias": "center",
+      "biasContext": "Biotech, Pharma & Medical Science",
+      "factuality": "very_high",
+      "ownershipType": "billionaire_individual",
+      "ownerLabel": "Boston Globe Media Partners (John W. Henry)",
+      "countryCode": "US",
+      "editorialNote": "Authoritative health, clinical trial, FDA, and biotechnology newsroom."
+    },
+    {
+      "domain": "finance.yahoo.com",
+      "name": "Yahoo Finance",
+      "aliases": [
+        "Yahoo Finance",
+        "news.yahoo.com",
+        "Yahoo News"
+      ],
+      "bias": "center",
+      "biasContext": "Retail Markets & Syndicated Wire",
+      "factuality": "high",
+      "ownershipType": "private_equity",
+      "ownerLabel": "Yahoo Inc. (Apollo Global Management)",
+      "countryCode": "US",
+      "editorialNote": "High-reach market data and financial journalism desk."
+    },
+    {
+      "domain": "zdnet.com",
+      "name": "ZDNET",
+      "aliases": [
+        "ZDNet"
+      ],
+      "bias": "center",
+      "biasContext": "Enterprise Tech & Productivity",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Ziff Davis, Inc.",
+      "countryCode": "US",
+      "editorialNote": "Enterprise hardware, AI tooling, and IT buyer journalism."
+    },
+    {
+      "domain": "cnet.com",
+      "name": "CNET",
+      "aliases": [
+        "CNET"
+      ],
+      "bias": "center",
+      "biasContext": "Consumer Tech Reviews",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Ziff Davis, Inc.",
+      "countryCode": "US",
+      "editorialNote": "Consumer electronics and broadband news and reviews."
+    },
+    {
+      "domain": "venturebeat.com",
+      "name": "VentureBeat",
+      "aliases": [
+        "VentureBeat"
+      ],
+      "bias": "center",
+      "biasContext": "Enterprise AI & Data Infrastructure",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "VentureBeat (Matt Marshall / Independent)",
+      "countryCode": "US",
+      "editorialNote": "Enterprise AI deployment, ML infrastructure, and gaming industry coverage."
+    },
+    {
+      "domain": "scientificamerican.com",
+      "name": "Scientific American",
+      "aliases": [
+        "Scientific American"
+      ],
+      "bias": "lean_left",
+      "biasContext": "Popular Science & Evidence-Based Policy",
+      "factuality": "very_high",
+      "ownershipType": "corporation",
+      "ownerLabel": "Springer Nature Group",
+      "countryCode": "US",
+      "editorialNote": "Oldest continuously published U.S. science magazine featuring researchers and science journalists."
+    },
+    {
+      "domain": "newscientist.com",
+      "name": "New Scientist",
+      "aliases": [
+        "New Scientist"
+      ],
+      "bias": "center",
+      "biasContext": "Weekly Science & Technology",
+      "factuality": "very_high",
+      "ownershipType": "conglomerate",
+      "ownerLabel": "Daily Mail and General Trust (Academic/Science Division with Independent Editors)",
+      "countryCode": "GB",
+      "editorialNote": "Weekly international science and technology news magazine."
+    },
+    {
+      "domain": "phys.org",
+      "name": "Phys.org",
+      "aliases": [
+        "Science X"
+      ],
+      "bias": "center",
+      "biasContext": "University & Lab Research Wire",
+      "factuality": "high",
+      "ownershipType": "independent",
+      "ownerLabel": "Science X Network (Independent)",
+      "countryCode": "IM",
+      "editorialNote": "Daily physics, nanotechnology, earth science, and academic press release aggregator."
+    },
+    {
+      "domain": "slate.com",
+      "name": "Slate",
+      "aliases": [
+        "Slate Magazine"
+      ],
+      "bias": "left",
+      "biasContext": "Progressive Legal, Tech & Cultural Commentary",
+      "factuality": "high",
+      "ownershipType": "corporation",
+      "ownerLabel": "The Slate Group (Graham Holdings Company)",
+      "countryCode": "US",
+      "editorialNote": "Online magazine noted for Supreme Court jurisprudence analysis and cultural essays."
+    },
+    {
+      "domain": "thedailybeast.com",
+      "name": "The Daily Beast",
+      "aliases": [
+        "Daily Beast"
+      ],
+      "bias": "left",
+      "biasContext": "Sharp Political Scoops & Tabloid Framing",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "IAC / Ben Sherwood & Joanna Coles",
+      "countryCode": "US",
+      "editorialNote": "Fast-paced political scoops and culture site with punchy, left-leaning headlines."
+    },
+    {
+      "domain": "washingtontimes.com",
+      "name": "The Washington Times",
+      "aliases": [
+        "Washington Times"
+      ],
+      "bias": "right",
+      "biasContext": "Conservative National Politics",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Operations Holdings Inc.",
+      "countryCode": "US",
+      "editorialNote": "Conservative daily newspaper covering Washington politics and national security."
+    },
+    {
+      "domain": "dailycaller.com",
+      "name": "The Daily Caller",
+      "aliases": [
+        "Daily Caller"
+      ],
+      "bias": "right",
+      "biasContext": "Conservative Political Digital",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "The Daily Caller Inc. (Neil Patel)",
+      "countryCode": "US",
+      "editorialNote": "Right-wing political news and opinion site."
+    },
+    {
+      "domain": "freebeacon.com",
+      "name": "Washington Free Beacon",
+      "aliases": [
+        "Free Beacon"
+      ],
+      "bias": "right",
+      "biasContext": "Conservative Investigative Reporting",
+      "factuality": "mixed",
+      "ownershipType": "corporation",
+      "ownerLabel": "Center for American Freedom",
+      "countryCode": "US",
+      "editorialNote": "Conservative online newspaper producing opposition research and document-driven reporting."
+    }
+  ]
+}

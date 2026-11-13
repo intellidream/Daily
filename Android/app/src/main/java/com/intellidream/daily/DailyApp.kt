@@ -123,8 +123,18 @@ class DailyApp : Application() {
                 return combined
             }
             override fun hasAuthenticatedSubstackSession(): Boolean = substackBridge.hasAuthenticatedSession()
+            override suspend fun pullOutletDeltas(watermarkIso: String) = newsRemoteService.pullOutletDeltas(watermarkIso)
+            override suspend fun fetchPerspectiveCache(clusterHash: String) = newsRemoteService.fetchPerspectiveCache(clusterHash)
+            override suspend fun savePerspectiveCache(comparison: com.intellidream.daily.model.PerspectiveComparison) = newsRemoteService.savePerspectiveCache(comparison)
+            override suspend fun pullReadingStats(userId: String, yearMonth: String) = newsRemoteService.pullReadingStats(userId, yearMonth)
+            override suspend fun pushReadingStats(row: com.intellidream.daily.model.RemoteNewsReadingStatsRow) = newsRemoteService.pushReadingStats(row)
+            override suspend fun generateGeminiPerspectiveComparison(
+                cluster: com.intellidream.daily.model.StoryCluster,
+                languageCode: String,
+                apiKey: String
+            ) = newsRemoteService.generateGeminiPerspectiveComparison(cluster, languageCode, apiKey)
         }
-        newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao(), syncHandler = newsHandler)
+        newsRepository = com.intellidream.daily.database.NewsRepository(dailyDatabase.newsDao(), syncHandler = newsHandler, appContext = this)
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)
         cosmosCatalogRepository = com.intellidream.daily.cosmos.CosmosCatalogRepository.getInstance(this)
         cosmosLiveRepository = com.intellidream.daily.cosmos.CosmosLiveRepository.getInstance(this)

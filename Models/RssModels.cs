@@ -151,6 +151,10 @@ namespace Daily.Models
 
         public string? PublicationName { get; set; }
         public string? PublicationIconUrl { get; set; }
+
+        // Optional unpacked Google News RSS siblings (<ol><li><a>...</a> <font>Publisher</font></li></ol>)
+        public System.Collections.Generic.List<ClusterSibling>? GoogleNewsSiblings { get; set; }
+        public string? SourcePublisherUrl { get; set; }
     }
 
     public class FeedSearchResult

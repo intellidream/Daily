@@ -153,6 +153,36 @@
                                        FontWeight="SemiBold"
                                        Foreground="{ThemeResource AppFgColorBrush}"
                                        VerticalAlignment="Center"/>
+
+                            <!-- Variant A: Ultra-Discreet Source Bias & Factuality Micro-Pill -->
+                            <Button Click="CardOutletBadge_Click"
+                                    Visibility="{Binding HasOutletBadge, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Background="{Binding OutletBadgeBackground}"
+                                    BorderThickness="0"
+                                    CornerRadius="9"
+                                    Padding="7,2"
+                                    MinHeight="0"
+                                    MinWidth="0"
+                                    VerticalAlignment="Center"
+                                    ToolTipService.ToolTip="View Source Transparency (Bias, Factuality &amp; Ownership)">
+                                <TextBlock Text="{Binding OutletBadgeText}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{Binding OutletBadgeForeground}"/>
+                            </Button>
+
+                            <!-- Non-Standard Framing Tag (Opinion / Investigation / Analysis / Sensational) -->
+                            <Border Visibility="{Binding HasFramingBadge, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Background="#22FFFFFF"
+                                    CornerRadius="8"
+                                    Padding="6,2"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding FramingBadgeText}"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{Binding FramingBadgeForeground}"/>
+                            </Border>
+
                             <TextBlock Text="•" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding PublishDate}"
                                        FontSize="13"
@@ -174,6 +204,62 @@
                                    MaxLines="3"
                                    TextTrimming="CharacterEllipsis"
                                    LineHeight="22"/>
+
+                        <!-- Variant A: Conditional Multi-Source Bias Spectrum Bar (shown ONLY when >= 2 outlets cover story) -->
+                        <Grid Visibility="{Binding HasMultipleSources, Converter={StaticResource BooleanToVisibilityConverter}}"
+                              Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Spacing="5" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <Border CornerRadius="3" Height="6" Background="#22FFFFFF">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="{Binding LeftStarWidth}"/>
+                                            <ColumnDefinition Width="{Binding CenterStarWidth}"/>
+                                            <ColumnDefinition Width="{Binding RightStarWidth}"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Background="#FF3B82F6"/>
+                                        <Border Grid.Column="1" Background="#FF94A3B8"/>
+                                        <Border Grid.Column="2" Background="#FFF43F5E"/>
+                                    </Grid>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding BiasSummaryLabel}"
+                                               FontSize="11"
+                                               Foreground="{ThemeResource AppFgMutedColorBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <Border Visibility="{Binding HasBlindspot, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            Background="#33F59E0B"
+                                            BorderBrush="#66F59E0B"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="6,1">
+                                        <TextBlock Text="{Binding BlindspotBadgeText}"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#FFFBBF24"/>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Click="CardPerspectivesButton_Click"
+                                    Background="#2438BDF8"
+                                    BorderBrush="#5538BDF8"
+                                    BorderThickness="1"
+                                    CornerRadius="13"
+                                    Padding="11,4"
+                                    MinHeight="0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding PerspectivesPillLabel}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="#FF38BDF8"/>
+                            </Button>
+                        </Grid>
                     </StackPanel>
 
                     <!-- Quick Action Buttons -->
@@ -224,6 +310,91 @@
                                       Foreground="{ThemeResource SystemControlForegroundAccentBrush}"/>
                         </Button>
                     </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="StoryClusterTemplate" x:DataType="vm:StoryClusterCardViewModel">
+            <Border Background="{ThemeResource AppGlassColorBrush}"
+                    BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                    BorderThickness="1"
+                    Style="{StaticResource GlassPanelStyle}" Translation="0,0,18"
+                    CornerRadius="18"
+                    Padding="20"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Stretch">
+                <Grid ColumnSpacing="20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Visibility="{Binding HasHeroImage, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            Width="168" Height="110"
+                            CornerRadius="10"
+                            Background="{ThemeResource AppGlassSubColorBrush}">
+                        <Image Source="{Binding HeroImageUrl}" Stretch="UniformToFill"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Background="#2438BDF8" CornerRadius="9" Padding="8,2">
+                                <TextBlock Text="{Binding UniqueOutletCountLabel}" FontSize="11" FontWeight="SemiBold" Foreground="#FF38BDF8"/>
+                            </Border>
+                            <Border Visibility="{Binding HasBlindspot, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Background="#33F59E0B"
+                                    BorderBrush="#66F59E0B"
+                                    BorderThickness="1"
+                                    CornerRadius="9"
+                                    Padding="8,2">
+                                <TextBlock Text="{Binding BlindspotBadgeText}" FontSize="11" FontWeight="Bold" Foreground="#FFFBBF24"/>
+                            </Border>
+                            <TextBlock Text="{Binding LatestPublishedText}" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding CanonicalTitle}"
+                                   FontSize="19"
+                                   FontWeight="Bold"
+                                   Foreground="{ThemeResource AppFgColorBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxLines="2"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <Border CornerRadius="4" Height="7" Background="#22FFFFFF" Margin="0,2,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="{Binding LeftStarWidth}"/>
+                                    <ColumnDefinition Width="{Binding CenterStarWidth}"/>
+                                    <ColumnDefinition Width="{Binding RightStarWidth}"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Background="#FF3B82F6"/>
+                                <Border Grid.Column="1" Background="#FF94A3B8"/>
+                                <Border Grid.Column="2" Background="#FFF43F5E"/>
+                            </Grid>
+                        </Border>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding BiasSummaryLabel}" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding TopOutletsSummary}" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis" MaxLines="1"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Button Grid.Column="2"
+                            Click="ClusterCompareButton_Click"
+                            Background="#2438BDF8"
+                            BorderBrush="#5538BDF8"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            Padding="14,8"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="Compare →" FontSize="13" FontWeight="SemiBold" Foreground="#FF38BDF8"/>
+                    </Button>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -312,6 +483,11 @@
                             <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
                         </Button>
 
+                        <!-- Media Diet Analytics Button -->
+                        <Button x:Name="MediaDietButton" Click="MediaDietButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Width="36" Height="36" Padding="0" Margin="6,0,0,0" ToolTipService.ToolTip="Media Diet &amp; Spectrum Balance">
+                            <FontIcon Glyph="&#xEB05;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF38BDF8"/>
+                        </Button>
+
                         <!-- Pop-out Window Button -->
                         <Button x:Name="ListViewPopOutButton" Click="PopOutButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Width="36" Height="36" Padding="0" Margin="6,0,0,0" ToolTipService.ToolTip="Pop out to separate window">
                             <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{ThemeResource AppFgColorBrush}"/>
@@ -343,6 +519,103 @@
                                   Padding="0,16,20,20"
                                   ItemContainerStyle="{StaticResource RssItemContainerStyle}"
                                   ItemTemplate="{StaticResource RssItemTemplate}"/>
+                    </Grid>
+                </PivotItem>
+
+                <!-- Tab 2: Perspectives & Blindspots -->
+                <PivotItem>
+                    <PivotItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Perspectives" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Background="#FF0284C7" CornerRadius="10" MinWidth="20" Height="20" Padding="6,0" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind PerspectiveClusters.Count, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </PivotItem.Header>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Sub-section Filter Chips (Multi-Source Stories | Blindspots | Expand External Spectrum | Media Diet) -->
+                        <Grid Grid.Row="0" Margin="0,14,20,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <Button x:Name="PerspectivesAllFilterBtn"
+                                        Click="PerspectivesAllFilterBtn_Click"
+                                        Background="#3338BDF8"
+                                        BorderBrush="#7738BDF8"
+                                        BorderThickness="1"
+                                        CornerRadius="15"
+                                        Padding="14,6">
+                                    <TextBlock Text="Multi-Source Stories" FontSize="13" FontWeight="SemiBold" Foreground="#FF38BDF8"/>
+                                </Button>
+                                <Button x:Name="PerspectivesBlindspotsFilterBtn"
+                                        Click="PerspectivesBlindspotsFilterBtn_Click"
+                                        Background="{ThemeResource AppGlassColorBrush}"
+                                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="15"
+                                        Padding="14,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE7BA;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FFFBBF24"/>
+                                        <TextBlock Text="Blindspots" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <ProgressRing x:Name="PerspectivesExpandProgress" IsActive="False" Visibility="Collapsed" Width="18" Height="18"/>
+                                <Button x:Name="PerspectivesExpandBtn"
+                                        Click="PerspectivesExpandBtn_Click"
+                                        Background="{ThemeResource AppGlassColorBrush}"
+                                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="15"
+                                        Padding="12,6"
+                                        ToolTipService.ToolTip="Discover cross-spectrum coverage from Google News &amp; GDELT on demand">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF38BDF8"/>
+                                        <TextBlock Text="Expand Spectrum" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Click="MediaDietButton_Click"
+                                        Background="{ThemeResource AppGlassColorBrush}"
+                                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="15"
+                                        Padding="12,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xEB05;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF2DD4BF"/>
+                                        <TextBlock Text="Media Diet" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Grid.Row="1"
+                                   x:Name="NoPerspectivesTextBlock"
+                                   Text="Select 'All News' or click 'Expand Spectrum' to surface multi-source story clusters and Blindspots."
+                                   Foreground="{ThemeResource AppFgMutedColorBrush}"
+                                   FontSize="15"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"/>
+
+                        <ListView Grid.Row="1"
+                                  x:Name="PerspectivesClustersListView"
+                                  SelectionMode="None"
+                                  ShowsScrollingPlaceholders="False"
+                                  IsItemClickEnabled="True"
+                                  ItemClick="PerspectivesClustersListView_ItemClick"
+                                  Padding="0,4,20,20"
+                                  ItemContainerStyle="{StaticResource RssItemContainerStyle}"
+                                  ItemTemplate="{StaticResource StoryClusterTemplate}"/>
                     </Grid>
                 </PivotItem>
 
@@ -489,6 +762,74 @@
                         </StackPanel>
                     </Button>
 
+                    <!-- Source Transparency Button (Bias, Factuality & Ownership Flyout) -->
+                    <Button x:Name="ReaderSourceInfoButton"
+                            Background="{ThemeResource AppGlassColorBrush}"
+                            BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                            BorderThickness="1"
+                            Translation="0,0,18"
+                            CornerRadius="18"
+                            Height="36"
+                            Padding="11,0"
+                            ToolTipService.ToolTip="Source Transparency (Bias, Factuality &amp; Ownership)">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE946;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF38BDF8"/>
+                            <TextBlock x:Name="ReaderSourceBadgeText" Text="Source" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight">
+                                <StackPanel Width="320" Spacing="10" Padding="4">
+                                    <TextBlock x:Name="FlyoutOutletNameText" Text="Publication" FontSize="17" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <TextBlock x:Name="FlyoutOutletDomainText" Text="domain.com" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                    <Border Height="1" Background="{ThemeResource AppGlassBorderColorBrush}" Margin="0,2"/>
+                                    <Grid ColumnSpacing="10" RowSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Editorial Bias:" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="FlyoutBiasText" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Factuality:" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="FlyoutFactualityText" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Ownership:" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="FlyoutOwnerText" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Category:" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="FlyoutOwnershipCatText" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                    <Border Background="#18FFFFFF" CornerRadius="8" Padding="10,8">
+                                        <TextBlock x:Name="FlyoutFundingText" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" TextWrapping="Wrap"/>
+                                    </Border>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <!-- Perspectives Split-Pane Toggle Button -->
+                    <Button x:Name="ReaderPerspectivesToggleButton"
+                            Click="ReaderPerspectivesToggleButton_Click"
+                            Background="#2438BDF8"
+                            BorderBrush="#5538BDF8"
+                            BorderThickness="1"
+                            Translation="0,0,18"
+                            CornerRadius="18"
+                            Height="36"
+                            Padding="12,0"
+                            ToolTipService.ToolTip="Compare Cross-Spectrum Perspectives (Ctrl+Shift+P)">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF38BDF8"/>
+                            <TextBlock x:Name="ReaderPerspectivesBtnText" Text="Perspectives" FontSize="12" FontWeight="SemiBold" Foreground="#FF38BDF8" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
                     <!-- Open in Prism Studio Button -->
                     <Button x:Name="ReaderOpenInPrismButton"
                             AutomationProperties.Name="Open Article in Prism Studio"
@@ -523,15 +864,149 @@
             <!-- Color Ribbon Separator - matches darkest tones from SVG gradients -->
             <Border Grid.Row="1" Height="3" Background="{ThemeResource AppReaderRibbonBrush}"/>
 
-            <!-- Reader Loading State -->
-            <StackPanel Grid.Row="2" x:Name="ReaderLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                <ProgressRing x:Name="ReaderProgressRing" IsActive="True" Width="56" Height="56"/>
-                <TextBlock x:Name="ReaderLoadingText" Text="Extracting article..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
-            </StackPanel>
+            <!-- Reader Main Split Container (65% Article WebView2 / 35% Perspectives Companion Pane) -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition x:Name="ReaderPerspectivesCol" Width="0"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- WebView2 for Reader Content -->
-            <WebView2 x:Name="ReaderWebView" Grid.Row="2" Margin="0" Visibility="Collapsed"/>
-            <WebView2 x:Name="BackgroundWebView" Grid.Row="2" Margin="0" Width="0" Height="0" Opacity="0" Visibility="Visible"/>
+                <Grid Grid.Column="0">
+                    <!-- Reader Loading State -->
+                    <StackPanel x:Name="ReaderLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                        <ProgressRing x:Name="ReaderProgressRing" IsActive="True" Width="56" Height="56"/>
+                        <TextBlock x:Name="ReaderLoadingText" Text="Extracting article..." Foreground="{ThemeResource AppFgMutedColorBrush}" FontSize="16"/>
+                    </StackPanel>
+
+                    <!-- WebView2 for Reader Content -->
+                    <WebView2 x:Name="ReaderWebView" Margin="0" Visibility="Collapsed"/>
+                    <WebView2 x:Name="BackgroundWebView" Margin="0" Width="0" Height="0" Opacity="0" Visibility="Visible"/>
+                </Grid>
+
+                <!-- Side-by-Side Perspectives & Framing Comparison Pane -->
+                <Border Grid.Column="1"
+                        x:Name="ReaderPerspectivesPane"
+                        Visibility="Collapsed"
+                        Background="{ThemeResource AppGlassColorBrush}"
+                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                        BorderThickness="1,0,0,0"
+                        Padding="18,16">
+                    <Grid RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="Perspectives" FontSize="17" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <Border Background="#2438BDF8" CornerRadius="8" Padding="7,2">
+                                        <TextBlock x:Name="ReaderPerspectiveEngineBadge" Text="Lens" FontSize="10" FontWeight="SemiBold" Foreground="#FF38BDF8"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock x:Name="ReaderPerspectiveSubtitle" Text="Cross-spectrum framing &amp; source coverage" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Click="CloseReaderPerspectivesBtn_Click"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Width="30" Height="30" Padding="0"
+                                    CornerRadius="15">
+                                <FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                            </Button>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="14" Padding="0,0,4,16">
+                                <!-- Loading indicator while discovering external coverage / NPU framing -->
+                                <StackPanel x:Name="ReaderPerspectivesLoadingRow" Orientation="Horizontal" Spacing="10" Visibility="Collapsed">
+                                    <ProgressRing IsActive="True" Width="16" Height="16"/>
+                                    <TextBlock Text="Discovering cross-spectrum coverage..." FontSize="12" Foreground="{ThemeResource AppFgMutedColorBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- Spectrum Distribution Bar -->
+                                <Border Background="#18FFFFFF" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="12">
+                                    <StackPanel Spacing="8">
+                                        <Border CornerRadius="4" Height="8" Background="#22FFFFFF">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition x:Name="ReaderLeftCol" Width="1*"/>
+                                                    <ColumnDefinition x:Name="ReaderCenterCol" Width="1*"/>
+                                                    <ColumnDefinition x:Name="ReaderRightCol" Width="1*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Background="#FF3B82F6"/>
+                                                <Border Grid.Column="1" Background="#FF94A3B8"/>
+                                                <Border Grid.Column="2" Background="#FFF43F5E"/>
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock x:Name="ReaderSpectrumSummaryText" Text="Spectrum Distribution" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <Border x:Name="ReaderBlindspotBanner" Visibility="Collapsed" Background="#2BF59E0B" BorderBrush="#66F59E0B" BorderThickness="1" CornerRadius="8" Padding="8,6">
+                                            <TextBlock x:Name="ReaderBlindspotBannerText" FontSize="11" Foreground="#FFFBBF24" TextWrapping="Wrap"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Shared Facts -->
+                                <Border Background="#18FFFFFF" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="12">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="COMMON FACTS ACROSS OUTLETS" FontSize="11" FontWeight="Bold" Foreground="#FF2DD4BF"/>
+                                        <StackPanel x:Name="ReaderSharedFactsStack" Spacing="6"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Framing & Tone Differences -->
+                                <Border Background="#18FFFFFF" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="12" Padding="12">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="FRAMING &amp; EMPHASIS DIFFERENCES" FontSize="11" FontWeight="Bold" Foreground="#FF38BDF8"/>
+                                        <StackPanel x:Name="ReaderFramingDiffsStack" Spacing="8"/>
+                                        <TextBlock x:Name="ReaderOmissionsNoteText" Visibility="Collapsed" FontSize="11" FontStyle="Italic" Foreground="#FFFBBF24" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- All Outlets Covering This Story -->
+                                <StackPanel Spacing="8">
+                                    <TextBlock x:Name="ReaderCoverageHeader" Text="OUTLETS COVERING THIS STORY" FontSize="11" FontWeight="Bold" Foreground="{ThemeResource AppFgMutedColorBrush}"/>
+                                    <ItemsControl x:Name="ReaderCoverageItemsControl">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ReaderCoverageRowViewModel">
+                                                <Button Click="ReaderCoverageRow_Click"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        Background="#16FFFFFF"
+                                                        BorderBrush="{ThemeResource AppGlassBorderColorBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="10"
+                                                        Padding="10,8"
+                                                        Margin="0,0,0,8">
+                                                    <StackPanel Spacing="4">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding OutletName}" FontSize="12" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" TextTrimming="CharacterEllipsis"/>
+                                                            <Border Grid.Column="1" Background="{Binding BiasBadgeBackground}" CornerRadius="7" Padding="6,1">
+                                                                <TextBlock Text="{Binding BiasBadgeText}" FontSize="10" FontWeight="SemiBold" Foreground="{Binding BiasBadgeForeground}"/>
+                                                            </Border>
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding Headline}" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding OwnerSummary}" FontSize="10" Foreground="{ThemeResource AppFgMutedColorBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </Page>

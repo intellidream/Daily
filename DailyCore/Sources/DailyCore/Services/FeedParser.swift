@@ -14,6 +14,8 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
     private var currentPublishedStr = ""
     private var currentDcDateStr = ""
     private var currentUpdatedStr = ""
+    private var currentSourceName = ""
+    private var currentSourceUrl = ""
     private var currentImageUrl: String?
     private var channelImageUrl: String?
     private var lastParsedArticleDate: Date?
@@ -77,6 +79,8 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             currentPublishedStr = ""
             currentDcDateStr = ""
             currentUpdatedStr = ""
+            currentSourceName = ""
+            currentSourceUrl = ""
             currentImageUrl = nil
             return
         }
@@ -101,6 +105,10 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
         } else if name == "updated" || qualified == "atom:updated" {
             currentElement = "updated"
             currentUpdatedStr = ""
+        } else if name == "source" {
+            currentElement = "source"
+            currentSourceName = ""
+            currentSourceUrl = attributeDict["url"] ?? ""
         }
         
         // Atom link element: <link href="..." rel="alternate"/>
@@ -166,6 +174,8 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             currentUpdatedStr += string
         case "creator", "author", "name":
             currentAuthor += string
+        case "source":
+            currentSourceName += string
         default:
             break
         }
@@ -192,6 +202,8 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             currentUpdatedStr += str
         case "creator", "author", "name":
             currentAuthor += str
+        case "source":
+            currentSourceName += str
         default:
             break
         }
@@ -213,8 +225,9 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
         if name == "item" || name == "entry" {
             isInsideItem = false
             
-            let title = decodeHtmlEntities(currentTitle.trimmingCharacters(in: .whitespacesAndNewlines))
+            var title = decodeHtmlEntities(currentTitle.trimmingCharacters(in: .whitespacesAndNewlines))
             let link = currentLink.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isGoogleNews = feed.url.lowercased().contains("news.google.com") || link.lowercased().contains("news.google.com")
             
             // Priority resolution:
             // 1. pubDate (RSS 2.0 original publication date)
@@ -256,21 +269,50 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
                 currentImageUrl = extractFirstImage(from: currentContentEncoded) ?? extractFirstImage(from: currentDescription)
             }
             
-            let finalImageUrl = optimizeSubstackImageUrl(optimizeMediumImageUrl(currentImageUrl ?? channelImageUrl ?? feed.iconUrl))
+            // Format Author, Publication & Google News pre-clustered siblings
+            var authorName = currentAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
+            var pubName = feed.name
+            var pubIconUrl = feed.iconUrl
+            var unpackedSiblings: [ClusterSibling]? = nil
+            
+            if isGoogleNews {
+                let srcName = decodeHtmlEntities(currentSourceName.trimmingCharacters(in: .whitespacesAndNewlines))
+                if !srcName.isEmpty {
+                    pubName = srcName
+                    let suffix = " - \(srcName)"
+                    if title.hasSuffix(suffix) {
+                        title = String(title.dropLast(suffix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+                if !currentSourceUrl.isEmpty, let srcHost = URL(string: currentSourceUrl)?.host, !srcHost.isEmpty {
+                    pubIconUrl = "https://www.google.com/s2/favicons?domain=\(srcHost)&sz=64"
+                }
+                let siblings = Self.extractGoogleNewsSiblings(from: currentDescription, publishDate: date)
+                if !siblings.isEmpty {
+                    unpackedSiblings = siblings
+                }
+            } else if let inRange = authorName.range(of: " in ") {
+                pubName = String(authorName[inRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                authorName = String(authorName[..<inRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            
+            let finalImageUrl = optimizeSubstackImageUrl(optimizeMediumImageUrl(currentImageUrl ?? channelImageUrl ?? pubIconUrl))
             
             // Clean description snippet
-            var cleanDesc = stripHtmlTags(currentDescription)
+            var cleanDesc: String
+            if isGoogleNews, let siblings = unpackedSiblings, siblings.count >= 2 {
+                let otherPubs = Array(Set(siblings.map(\.publicationName).filter { !$0.isEmpty && $0 != pubName })).sorted()
+                if !otherPubs.isEmpty {
+                    cleanDesc = "Also covered by \(otherPubs.prefix(4).joined(separator: ", "))"
+                } else {
+                    cleanDesc = stripHtmlTags(currentDescription)
+                }
+            } else {
+                cleanDesc = stripHtmlTags(currentDescription)
+            }
             if cleanDesc.isEmpty && !currentContentEncoded.isEmpty {
                 let contentClean = stripHtmlTags(currentContentEncoded)
                 cleanDesc = contentClean.count > 280 ? String(contentClean.prefix(280)) + "..." : contentClean
-            }
-            
-            // Format Author & Publication
-            var authorName = currentAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
-            var pubName = feed.name
-            if let inRange = authorName.range(of: " in ") {
-                pubName = String(authorName[inRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                authorName = String(authorName[..<inRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
             }
             
             let article = NewsArticle(
@@ -283,8 +325,9 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
                 content: currentContentEncoded.isEmpty ? currentDescription : currentContentEncoded,
                 author: authorName.isEmpty ? nil : authorName,
                 publicationName: pubName,
-                publicationIconUrl: feed.iconUrl,
-                category: feed.category
+                publicationIconUrl: pubIconUrl,
+                category: feed.category,
+                googleNewsSiblings: unpackedSiblings
             )
             
             articles.append(article)
@@ -539,5 +582,76 @@ public final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable 
             return url.replacingOccurrences(of: pattern, with: "w_1200", options: .regularExpression)
         }
         return url
+    }
+    
+    /// Unpacks pre-clustered `<ol><li><a href="...">Title</a> <font>Publisher</font></li></ol>` siblings embedded in Google News RSS `<description>`.
+    public static func extractGoogleNewsSiblings(from rawHtml: String, publishDate: Date? = nil) -> [ClusterSibling] {
+        guard rawHtml.localizedCaseInsensitiveContains("<li") || rawHtml.localizedCaseInsensitiveContains("&lt;li") else {
+            return []
+        }
+        var html = rawHtml
+        if html.contains("&lt;") {
+            html = html
+                .replacingOccurrences(of: "&lt;", with: "<")
+                .replacingOccurrences(of: "&gt;", with: ">")
+                .replacingOccurrences(of: "&quot;", with: "\"")
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .replacingOccurrences(of: "&nbsp;", with: " ")
+        }
+        
+        let liPattern = #"<li[^>]*>([\s\S]*?)</li>"#
+        let linkPattern = #"<a[^>]+href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)</a>"#
+        let fontPattern = #"<font[^>]*>([\s\S]*?)</font>"#
+        
+        guard let liRegex = try? NSRegularExpression(pattern: liPattern, options: .caseInsensitive),
+              let linkRegex = try? NSRegularExpression(pattern: linkPattern, options: .caseInsensitive),
+              let fontRegex = try? NSRegularExpression(pattern: fontPattern, options: .caseInsensitive) else {
+            return []
+        }
+        
+        let nsHtml = html as NSString
+        let liMatches = liRegex.matches(in: html, range: NSRange(location: 0, length: nsHtml.length))
+        guard liMatches.count >= 2 else { return [] }
+        
+        var siblings: [ClusterSibling] = []
+        var seenLinks = Set<String>()
+        
+        for liMatch in liMatches {
+            let block = nsHtml.substring(with: liMatch.range(at: 1))
+            let nsBlock = block as NSString
+            let fullRange = NSRange(location: 0, length: nsBlock.length)
+            
+            guard let aMatch = linkRegex.firstMatch(in: block, range: fullRange) else { continue }
+            let href = nsBlock.substring(with: aMatch.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawTitle = nsBlock.substring(with: aMatch.range(at: 2))
+                .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "&nbsp;", with: " ")
+                .replacingOccurrences(of: "&quot;", with: "\"")
+                .replacingOccurrences(of: "&apos;", with: "'")
+                .replacingOccurrences(of: "&#39;", with: "'")
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            guard !href.isEmpty, !rawTitle.isEmpty, seenLinks.insert(href).inserted else { continue }
+            
+            var publisher = ""
+            if let fMatch = fontRegex.firstMatch(in: block, range: fullRange) {
+                publisher = nsBlock.substring(with: fMatch.range(at: 1))
+                    .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "&nbsp;", with: " ")
+                    .replacingOccurrences(of: "&amp;", with: "&")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if !publisher.isEmpty, !rawTitle.lowercased().contains("view full coverage") {
+                siblings.append(ClusterSibling(
+                    title: rawTitle,
+                    link: href,
+                    publicationName: publisher,
+                    publishDate: publishDate
+                ))
+            }
+        }
+        
+        return siblings
     }
 }

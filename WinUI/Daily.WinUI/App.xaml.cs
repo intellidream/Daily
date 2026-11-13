@@ -652,6 +652,7 @@ public partial class App : Application
 
         // Prism Assisted Web Studio Service
         services.AddSingleton<Daily_WinUI.Services.IPrismService, Daily_WinUI.Services.PrismService>();
+        services.AddSingleton<Daily_WinUI.Services.NewsPerspectiveService>();
         
         // Calendar Service
         services.AddHttpClient<Daily_WinUI.Services.ICalendarService, Daily_WinUI.Services.CalendarService>();

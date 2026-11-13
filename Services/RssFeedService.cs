@@ -781,6 +781,28 @@ namespace Daily.Services
                         authorName = authorName.Substring(0, inIdx).Trim();
                     }
 
+                    // Google News RSS <source url="https://reuters.com">Reuters</source> + <ol><li> unpacked siblings
+                    string? sourcePublisherUrl = null;
+                    var sourceEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "source");
+                    if (sourceEl != null)
+                    {
+                        sourcePublisherUrl = sourceEl.Attribute("url")?.Value;
+                        var sourceText = (sourceEl.Value ?? string.Empty).Trim();
+                        if (!string.IsNullOrEmpty(sourceText) &&
+                            (pubName.Contains("Google News", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(pubName)))
+                        {
+                            pubName = sourceText;
+                        }
+                    }
+
+                    List<ClusterSibling>? googleSiblings = null;
+                    if (!string.IsNullOrEmpty(description) &&
+                        description.Contains("<ol>", StringComparison.OrdinalIgnoreCase) &&
+                        description.Contains("<li", StringComparison.OrdinalIgnoreCase))
+                    {
+                        googleSiblings = UnpackGoogleNewsSiblings(description, DateTime.TryParse(pubDateStr, out var dSib) ? dSib : (DateTime?)null);
+                    }
+
                     // Clean description of HTML tags and fall back to content snippet if needed
                     string cleanDescription = StripHtmlTags(description ?? string.Empty);
                     if (string.IsNullOrWhiteSpace(cleanDescription) && !string.IsNullOrEmpty(contentEncoded))
@@ -802,7 +824,9 @@ namespace Daily.Services
                         Content = contentEncoded,
                         Author = authorName,
                         PublicationName = pubName,
-                        PublicationIconUrl = feed.IconUrl
+                        PublicationIconUrl = feed.IconUrl,
+                        GoogleNewsSiblings = googleSiblings,
+                        SourcePublisherUrl = sourcePublisherUrl
                     };
                 }).ToList();
             }
@@ -1114,6 +1138,56 @@ namespace Daily.Services
             Items.Clear();
             Items.AddRange(items);
             OnItemsUpdated?.Invoke();
+        }
+
+        public static List<ClusterSibling>? UnpackGoogleNewsSiblings(string htmlDescription, DateTime? fallbackDate)
+        {
+            if (string.IsNullOrWhiteSpace(htmlDescription)) return null;
+            var liMatches = Regex.Matches(htmlDescription, @"<li[^>]*>(.*?)</li>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            if (liMatches.Count == 0) return null;
+
+            var list = new List<ClusterSibling>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (Match li in liMatches)
+            {
+                string block = li.Groups[1].Value;
+                var linkMatch = Regex.Match(block, @"<a[^>]+href\s*=\s*[""']([^""']+)[""'][^>]*>(.*?)</a>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                if (!linkMatch.Success) continue;
+
+                string href = System.Net.WebUtility.HtmlDecode(linkMatch.Groups[1].Value).Trim();
+                string rawTitle = StripHtmlTags(linkMatch.Groups[2].Value);
+                if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(rawTitle)) continue;
+                if (rawTitle.Contains("View Full Coverage", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!seen.Add(href)) continue;
+
+                string pubName = string.Empty;
+                var fontMatch = Regex.Match(block, @"<font[^>]*>(.*?)</font>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                if (fontMatch.Success)
+                {
+                    pubName = StripHtmlTags(fontMatch.Groups[1].Value);
+                }
+
+                // Strip trailing " - Publisher" from Google News title if redundant
+                if (!string.IsNullOrEmpty(pubName))
+                {
+                    string suffix = " - " + pubName;
+                    if (rawTitle.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && rawTitle.Length > suffix.Length + 8)
+                    {
+                        rawTitle = rawTitle.Substring(0, rawTitle.Length - suffix.Length).Trim();
+                    }
+                }
+
+                list.Add(new ClusterSibling
+                {
+                    Title = rawTitle,
+                    Url = href,
+                    PublisherName = pubName,
+                    PublishedAt = fallbackDate
+                });
+            }
+
+            return list.Count > 0 ? list : null;
         }
 
         public static string StripHtmlTags(string html)

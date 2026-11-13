@@ -11,6 +11,9 @@ public final class NewsService: ObservableObject {
     @Published public var selectedCategory: FeedCategory = .all
     @Published public private(set) var articles: [NewsArticle] = []
     @Published public private(set) var topHeadline: NewsArticle?
+    @Published public private(set) var storyClusters: [StoryCluster] = []
+    @Published public private(set) var blindspotClusters: [StoryCluster] = []
+    @Published public private(set) var clusterByArticleLink: [String: StoryCluster] = [:]
     @Published public private(set) var isLoading: Bool = false
     @Published public private(set) var isSyncingSubstack: Bool = false
     @Published public private(set) var errorMessage: String?
@@ -25,7 +28,7 @@ public final class NewsService: ObservableObject {
         displayOrder: -1
     )
     
-    private var feedCache: [String: (articles: [NewsArticle], timestamp: Date)] = [:]
+    private var feedCache: [String: (articles: [NewsArticle], clustering: StoryClusterEngine.ClusteringOutput, timestamp: Date)] = [:]
     private let cacheDuration: TimeInterval = 15 * 60 // 15 minutes
     private let feedsStorageKey = "dayone_custom_feeds_cache_v1"
     private let urlSession: URLSession
@@ -43,6 +46,8 @@ public final class NewsService: ObservableObject {
         
         loadFeeds()
         Task {
+            await MediaIntelligenceRegistry.shared.syncDeltasIfNeeded()
+            await MediaDietStore.shared.syncWithSupabaseIfNeeded()
             await syncSubscriptionsWithSupabase()
             if let subUser = SettingsService.shared.settings.newsSubstackUsername, !subUser.isEmpty {
                 _ = await syncSubstackSubscriptions()
@@ -117,6 +122,7 @@ public final class NewsService: ObservableObject {
         if !forceRefresh, let cached = feedCache[feed.url], !cached.articles.isEmpty, Date().timeIntervalSince(cached.timestamp) < cacheDuration {
             self.articles = cached.articles
             self.topHeadline = cached.articles.first
+            applyClusteringOutput(cached.clustering)
             return
         }
         
@@ -174,9 +180,16 @@ public final class NewsService: ObservableObject {
         }
         
         if !fetchedArticles.isEmpty {
-            feedCache[feed.url] = (articles: fetchedArticles, timestamp: Date())
+            // Cluster against All News pool if available so single-feed cards still show multi-source Perspectives
+            let allPool = feedCache["all_news"]?.articles ?? []
+            let combinedPool = fetchedArticles + allPool
+            let clustering = await Task.detached(priority: .userInitiated) {
+                StoryClusterEngine.clusterArticles(combinedPool)
+            }.value
+            feedCache[feed.url] = (articles: fetchedArticles, clustering: clustering, timestamp: Date())
             self.articles = fetchedArticles
             self.topHeadline = fetchedArticles.first
+            applyClusteringOutput(clustering)
         } else if self.articles.isEmpty {
             self.errorMessage = "Failed to load \(feed.name)."
         }
@@ -188,6 +201,7 @@ public final class NewsService: ObservableObject {
         if !forceRefresh, let cached = feedCache["all_news"], !cached.articles.isEmpty, Date().timeIntervalSince(cached.timestamp) < cacheDuration {
             self.articles = cached.articles
             self.topHeadline = cached.articles.first
+            applyClusteringOutput(cached.clustering)
             return
         }
         
@@ -205,7 +219,7 @@ public final class NewsService: ObservableObject {
         let mediumUser = SettingsService.shared.settings.newsMediumUsername
         let mediumUrl = SettingsService.shared.settings.newsMediumReadingListUrl
         
-        let fetchedArticles: [NewsArticle] = await Task.detached(priority: .userInitiated) {
+        let (fetchedArticles, clustering): ([NewsArticle], StoryClusterEngine.ClusteringOutput) = await Task.detached(priority: .userInitiated) {
             var aggregated: [NewsArticle] = []
             await withTaskGroup(of: [NewsArticle].self) { group in
                 for f in activeFeeds {
@@ -224,26 +238,59 @@ public final class NewsService: ObservableObject {
                 }
                 
                 for await items in group {
-                    // Take top 3 from each feed for a rich, balanced briefing
-                    let sample = items.prefix(3)
+                    // Take top 5 from each feed for rich cross-outlet event clustering
+                    let sample = items.prefix(5)
                     aggregated.append(contentsOf: sample)
                 }
             }
             
             // Sort chronologically descending
             aggregated.sort { $0.publishDate > $1.publishDate }
-            return aggregated
+            let clustered = StoryClusterEngine.clusterArticles(aggregated)
+            return (aggregated, clustered)
         }.value
         
         if !fetchedArticles.isEmpty {
-            feedCache["all_news"] = (articles: fetchedArticles, timestamp: Date())
+            feedCache["all_news"] = (articles: fetchedArticles, clustering: clustering, timestamp: Date())
             self.articles = fetchedArticles
             self.topHeadline = fetchedArticles.first
+            applyClusteringOutput(clustering)
         } else if self.articles.isEmpty {
             self.errorMessage = "Unable to load latest news briefings."
         }
         
         isLoading = false
+    }
+    
+    // MARK: - Story Clusters & Perspectives Accessors
+    
+    private func applyClusteringOutput(_ output: StoryClusterEngine.ClusteringOutput) {
+        self.storyClusters = output.clusters
+        self.clusterByArticleLink = output.byArticleLink
+        self.blindspotClusters = output.clusters.filter { $0.blindspot.isBlindspot }
+    }
+    
+    public func cluster(for article: NewsArticle) -> StoryCluster? {
+        if let existing = clusterByArticleLink[article.link] {
+            return existing
+        }
+        if let siblings = article.googleNewsSiblings, siblings.count >= 2 {
+            return StoryClusterEngine.makeSeedCluster(for: article)
+        }
+        return nil
+    }
+    
+    public func updateCluster(_ updated: StoryCluster) {
+        if let idx = storyClusters.firstIndex(where: { $0.id == updated.id }) {
+            storyClusters[idx] = updated
+        } else {
+            storyClusters.insert(updated, at: 0)
+        }
+        for item in updated.items {
+            clusterByArticleLink[item.article.link] = updated
+        }
+        clusterByArticleLink[updated.leadArticle.link] = updated
+        blindspotClusters = storyClusters.filter { $0.blindspot.isBlindspot }
     }
     
     // MARK: - Medium Integration (WinUI Parity)

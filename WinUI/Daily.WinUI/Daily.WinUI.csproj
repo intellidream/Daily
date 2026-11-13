@@ -164,6 +164,9 @@
     <Compile Include="..\..\Services\RssArticleService.cs" Link="Services\RssArticleService.cs" />
     <Compile Include="..\..\Services\IRssFeedService.cs" Link="Services\IRssFeedService.cs" />
     <Compile Include="..\..\Services\RssFeedService.cs" Link="Services\RssFeedService.cs" />
+    <Compile Include="..\..\Services\MediaIntelligenceRegistry.cs" Link="Services\MediaIntelligenceRegistry.cs" />
+    <Compile Include="..\..\Services\StoryClusterEngine.cs" Link="Services\StoryClusterEngine.cs" />
+    <EmbeddedResource Include="..\..\Models\Resources\media_intelligence_seed.json" LogicalName="media_intelligence_seed.json" />
     <Compile Include="..\..\Services\SeederService.cs" Link="Services\SeederService.cs" />
     <Compile Include="..\..\Services\Mappers.cs" Link="Services\Mappers.cs" />
     <Compile Include="..\..\Services\DebugLogger.cs" Link="Services\DebugLogger.cs" />

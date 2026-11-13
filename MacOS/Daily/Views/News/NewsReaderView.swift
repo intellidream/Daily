@@ -15,6 +15,8 @@ public struct NewsReaderView: View {
     @State private var recommendations: [NewsArticle] = []
     @State private var isRecommendationsExpanded: Bool = false
     @State private var isHoveringBubble: Bool = false
+    @State private var showPerspectivesSplit: Bool = false
+    @State private var showSourcePopover: Bool = false
     
     @ObservedObject private var newsService = NewsService.shared
     @ObservedObject private var savedService = SavedArticlesService.shared
@@ -52,6 +54,23 @@ public struct NewsReaderView: View {
         savedService.isFavorite(url: currentArticle.link)
     }
     
+    private var currentOutletProfile: MediaOutletProfile {
+        MediaIntelligenceRegistry.shared.resolve(for: currentArticle)
+    }
+    
+    private var currentFraming: ArticleFramingTag {
+        ArticleFramingAnalyzer.classify(
+            title: currentArticle.title,
+            description: currentArticle.description,
+            link: currentArticle.link,
+            profile: currentOutletProfile
+        )
+    }
+    
+    private var activeCluster: StoryCluster {
+        newsService.cluster(for: currentArticle) ?? StoryClusterEngine.makeSeedCluster(for: currentArticle)
+    }
+    
     public var body: some View {
         ZStack {
             // Background Canvas matching Liquid Glass theme
@@ -62,41 +81,79 @@ public struct NewsReaderView: View {
                 // Top Glass Toolbar
                 readerToolbar
                 
-                // Article Content Canvas
-                ZStack(alignment: .bottom) {
-                    if isLoadingFullArticle {
-                        VStack(spacing: 16) {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                                .tint(ThemeColors.accentCyan)
-                            Text("Extracting Distraction-Free Article...")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(ThemeColors.fgMutedDark)
+                // Main Content Area (100% Article OR 65% Article / 35% Perspectives Split)
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        // Left / Primary Distraction-Free Article Canvas
+                        ZStack(alignment: .bottom) {
+                            if isLoadingFullArticle {
+                                VStack(spacing: 16) {
+                                    ProgressView()
+                                        .scaleEffect(1.2)
+                                        .tint(ThemeColors.accentCyan)
+                                    Text("Extracting Distraction-Free Article...")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(ThemeColors.fgMutedDark)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            } else {
+                                ArticleWebView(
+                                    article: currentArticle,
+                                    isDark: isDark,
+                                    fontSizeMultiplier: fontSizeMultiplier
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            
+                            // Floating Bottom Recommendations Bar / Sleek Docked Bubble
+                            if !recommendations.isEmpty {
+                                if isRecommendationsExpanded {
+                                    expandedRecommendationsBar
+                                        .transition(.asymmetric(
+                                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                                            removal: .move(edge: .bottom).combined(with: .opacity)
+                                        ))
+                                } else {
+                                    recommendationsBubble
+                                        .transition(.asymmetric(
+                                            insertion: .scale(scale: 0.85).combined(with: .opacity),
+                                            removal: .scale(scale: 0.85).combined(with: .opacity)
+                                        ))
+                                }
+                            }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        ArticleWebView(
-                            article: currentArticle,
-                            isDark: isDark,
-                            fontSizeMultiplier: fontSizeMultiplier
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                    
-                    // Floating Bottom Recommendations Bar / Sleek Docked Bubble
-                    if !recommendations.isEmpty {
-                        if isRecommendationsExpanded {
-                            expandedRecommendationsBar
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                                    removal: .move(edge: .bottom).combined(with: .opacity)
-                                ))
-                        } else {
-                            recommendationsBubble
-                                .transition(.asymmetric(
-                                    insertion: .scale(scale: 0.85).combined(with: .opacity),
-                                    removal: .scale(scale: 0.85).combined(with: .opacity)
-                                ))
+                        .frame(width: showPerspectivesSplit ? max(360, geo.size.width * 0.64) : geo.size.width)
+                        
+                        // Right 36% Perspectives Split Pane
+                        if showPerspectivesSplit {
+                            Divider()
+                                .background(Color.white.opacity(0.14))
+                            
+                            PerspectivesComparisonPane(
+                                cluster: activeCluster,
+                                activeArticleLink: currentArticle.link,
+                                isSplitPane: true,
+                                onSelectArticle: { nextArticle in
+                                    loadArticle(nextArticle)
+                                },
+                                onOpenInPrism: { targetArticle in
+                                    PrismStore.shared.requestOpenInPrism(url: targetArticle.link, title: targetArticle.title)
+                                    if isInSeparateWindow {
+                                        onDismiss()
+                                        MacOSWindowManager.shared.activateMainWindow(selectingTab: .prism)
+                                    } else {
+                                        onDismiss()
+                                        NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+                                    }
+                                },
+                                onClose: {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                                        showPerspectivesSplit = false
+                                    }
+                                }
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
                 }
@@ -153,10 +210,24 @@ public struct NewsReaderView: View {
                         }
                     }
                     
-                    Text(currentArticle.publicationName ?? "Reader")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .fixedSize(horizontal: true, vertical: false)
+                    Button {
+                        showSourcePopover = true
+                    } label: {
+                        Text(currentArticle.publicationName ?? currentOutletProfile.name)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showSourcePopover) {
+                        SourceTransparencyPopover(profile: currentOutletProfile) {
+                            showSourcePopover = false
+                        }
+                    }
+                    
+                    OutletMicroBadge(profile: currentOutletProfile, framing: currentFraming, compact: true) {
+                        showSourcePopover = true
+                    }
                     
                     if let substackInfo = extractSubstackInfo(from: currentArticle) {
                         let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
@@ -191,6 +262,42 @@ public struct NewsReaderView: View {
             }
             
             Spacer(minLength: 4)
+
+            // Perspectives Side-by-Side Split Toggle
+            Button {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    showPerspectivesSplit.toggle()
+                }
+                triggerHaptic()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "scale.3d")
+                        .font(.system(size: 12.5, weight: .bold))
+                    Text("Perspectives")
+                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                    if activeCluster.uniqueOutletCount >= 2 {
+                        Text("\(activeCluster.uniqueOutletCount)")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.white.opacity(0.18)))
+                    }
+                }
+                .foregroundColor(showPerspectivesSplit ? .black : ThemeColors.accentCyan)
+                .padding(.horizontal, 10)
+                .frame(height: 32)
+                .background(
+                    Capsule()
+                        .fill(showPerspectivesSplit ? ThemeColors.accentCyan : ThemeColors.accentCyan.opacity(0.14))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(ThemeColors.accentCyan.opacity(0.40), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .help("Compare Multi-Source Perspectives (⇧⌘P)")
 
             // Open Live Article in Prism Studio Button
             Button {
@@ -564,6 +671,7 @@ public struct NewsReaderView: View {
     private func loadArticle(_ article: NewsArticle) {
         currentArticle = article
         isLoadingFullArticle = true
+        MediaDietStore.shared.recordArticleRead(article, cluster: newsService.cluster(for: article))
         
         // Compute smart recommendations
         let pool = candidatePool.isEmpty ? NewsService.shared.articles : candidatePool

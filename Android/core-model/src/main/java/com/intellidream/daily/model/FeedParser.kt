@@ -37,6 +37,8 @@ class FeedParser(private val feed: FeedSource) {
             var currentPublishedStr = ""
             var currentDcDateStr = ""
             var currentUpdatedStr = ""
+            var currentSourceName = ""
+            var currentSourceUrl = ""
             var currentImageUrl: String? = null
             var channelImageUrl: String? = null
 
@@ -59,6 +61,8 @@ class FeedParser(private val feed: FeedSource) {
                             currentPublishedStr = ""
                             currentDcDateStr = ""
                             currentUpdatedStr = ""
+                            currentSourceName = ""
+                            currentSourceUrl = ""
                             currentImageUrl = null
                         } else if (!isInsideItem) {
                             if (name == "image" || name == "logo" || name == "icon") {
@@ -73,6 +77,9 @@ class FeedParser(private val feed: FeedSource) {
                                 currentDcDateStr = ""
                             } else if (name == "updated" || name == "atom:updated") {
                                 currentUpdatedStr = ""
+                            } else if (name == "source") {
+                                currentSourceName = ""
+                                currentSourceUrl = parser.getAttributeValue(null, "url") ?: ""
                             }
                             // Atom link: <link href="..." rel="alternate"/>
                             if (name == "link") {
@@ -123,6 +130,7 @@ class FeedParser(private val feed: FeedSource) {
                                 "date" -> currentDcDateStr += text
                                 "updated" -> currentUpdatedStr += text
                                 "creator", "author", "name" -> currentAuthor += text
+                                "source" -> currentSourceName += text
                             }
                         }
                     }
@@ -134,8 +142,10 @@ class FeedParser(private val feed: FeedSource) {
                         } else if (name == "item" || name == "entry") {
                             isInsideItem = false
 
-                            val title = decodeHtmlEntities(currentTitle.trim())
+                            var title = decodeHtmlEntities(currentTitle.trim())
                             val link = currentLink.trim()
+                            val isGoogleNews = feed.url.contains("news.google.com", ignoreCase = true) ||
+                                link.contains("news.google.com", ignoreCase = true)
                             
                             // Priority resolution:
                             // 1. pubDate (RSS 2.0 original publication date)
@@ -167,12 +177,56 @@ class FeedParser(private val feed: FeedSource) {
                                     ?: extractFirstImage(currentDescription)
                             }
 
-                            val finalImageUrl = optimizeMediumImageUrl(
-                                currentImageUrl ?: channelImageUrl ?: feed.iconUrl
+                            // Format Author, Publication & Google News pre-clustered siblings
+                            var authorName = currentAuthor.trim()
+                            var pubName = feed.name
+                            var pubIconUrl = feed.iconUrl
+                            var unpackedSiblings: List<ClusterSibling>? = null
+
+                            if (isGoogleNews) {
+                                val srcName = decodeHtmlEntities(currentSourceName.trim())
+                                if (srcName.isNotEmpty()) {
+                                    pubName = srcName
+                                    val suffix = " - $srcName"
+                                    if (title.endsWith(suffix)) {
+                                        title = title.dropLast(suffix.length).trim()
+                                    }
+                                }
+                                if (currentSourceUrl.isNotBlank()) {
+                                    val srcHost = try { java.net.URI(currentSourceUrl).host ?: "" } catch (_: Exception) { "" }
+                                    if (srcHost.isNotBlank()) {
+                                        pubIconUrl = "https://www.google.com/s2/favicons?domain=$srcHost&sz=64"
+                                    }
+                                }
+                                val siblings = extractGoogleNewsSiblings(currentDescription, date)
+                                if (siblings.isNotEmpty()) {
+                                    unpackedSiblings = siblings
+                                }
+                            } else if (authorName.contains(" in ")) {
+                                val parts = authorName.split(" in ", limit = 2)
+                                authorName = parts[0].trim()
+                                pubName = parts[1].trim()
+                            }
+
+                            val finalImageUrl = optimizeSubstackImageUrl(
+                                optimizeMediumImageUrl(currentImageUrl ?: channelImageUrl ?: pubIconUrl)
                             )
 
                             // Clean description snippet
-                            var cleanDesc = stripHtmlTags(currentDescription)
+                            var cleanDesc = if (isGoogleNews && (unpackedSiblings?.size ?: 0) >= 2) {
+                                val otherPubs = unpackedSiblings!!
+                                    .map { it.publicationName }
+                                    .filter { it.isNotBlank() && it != pubName }
+                                    .distinct()
+                                    .sorted()
+                                if (otherPubs.isNotEmpty()) {
+                                    "Also covered by ${otherPubs.take(4).joinToString(", ")}"
+                                } else {
+                                    stripHtmlTags(currentDescription)
+                                }
+                            } else {
+                                stripHtmlTags(currentDescription)
+                            }
                             if (cleanDesc.isEmpty() && currentContentEncoded.isNotEmpty()) {
                                 val contentClean = stripHtmlTags(currentContentEncoded)
                                 cleanDesc = if (contentClean.length > 280) {
@@ -180,15 +234,6 @@ class FeedParser(private val feed: FeedSource) {
                                 } else {
                                     contentClean
                                 }
-                            }
-
-                            // Author in Publication splitting (WinUI / iOS parity)
-                            var authorName = currentAuthor.trim()
-                            var pubName = feed.name
-                            if (authorName.contains(" in ")) {
-                                val parts = authorName.split(" in ", limit = 2)
-                                authorName = parts[0].trim()
-                                pubName = parts[1].trim()
                             }
 
                             articles.add(
@@ -202,8 +247,9 @@ class FeedParser(private val feed: FeedSource) {
                                     content = if (currentContentEncoded.isNotEmpty()) currentContentEncoded else currentDescription,
                                     author = authorName.ifBlank { null },
                                     publicationName = pubName,
-                                    publicationIconUrl = feed.iconUrl,
-                                    category = feed.category
+                                    publicationIconUrl = pubIconUrl,
+                                    category = feed.category,
+                                    googleNewsSiblings = unpackedSiblings
                                 )
                             )
                         }
@@ -283,19 +329,49 @@ class FeedParser(private val feed: FeedSource) {
                 System.currentTimeMillis()
             }
 
+            var cleanTitle = decodeHtmlEntities(title)
+            val isGoogleNews = feed.url.contains("news.google.com", ignoreCase = true) ||
+                link.contains("news.google.com", ignoreCase = true)
+            var pubName = feed.name
+            var pubIconUrl = feed.iconUrl
+            var unpackedSiblings: List<ClusterSibling>? = null
+
+            if (isGoogleNews) {
+                val srcName = decodeHtmlEntities(extractTagValue("source", itemContent))
+                val srcUrl = extractAttribute("url", "source", itemContent)
+                if (srcName.isNotBlank()) {
+                    pubName = srcName
+                    val suffix = " - $srcName"
+                    if (cleanTitle.endsWith(suffix)) {
+                        cleanTitle = cleanTitle.dropLast(suffix.length).trim()
+                    }
+                }
+                if (srcUrl.isNotBlank()) {
+                    val srcHost = try { java.net.URI(srcUrl).host ?: "" } catch (_: Exception) { "" }
+                    if (srcHost.isNotBlank()) {
+                        pubIconUrl = "https://www.google.com/s2/favicons?domain=$srcHost&sz=64"
+                    }
+                }
+                val siblings = extractGoogleNewsSiblings(desc, date)
+                if (siblings.isNotEmpty()) {
+                    unpackedSiblings = siblings
+                }
+            }
+
             results.add(
                 NewsArticle(
                     id = if (link.isNotBlank()) link else UUID.randomUUID().toString(),
-                    title = decodeHtmlEntities(title),
+                    title = cleanTitle,
                     link = link,
                     publishDate = date,
-                    imageUrl = optimizeMediumImageUrl(if (imageUrl.isNotBlank()) imageUrl else feed.iconUrl),
+                    imageUrl = optimizeMediumImageUrl(if (imageUrl.isNotBlank()) imageUrl else pubIconUrl),
                     description = cleanDesc,
                     content = if (contentEncoded.isNotEmpty()) contentEncoded else desc,
                     author = author.ifBlank { null },
-                    publicationName = feed.name,
-                    publicationIconUrl = feed.iconUrl,
-                    category = feed.category
+                    publicationName = pubName,
+                    publicationIconUrl = pubIconUrl,
+                    category = feed.category,
+                    googleNewsSiblings = unpackedSiblings
                 )
             )
         }
@@ -441,6 +517,72 @@ class FeedParser(private val feed: FeedSource) {
         fun optimizeMediumImageUrl(url: String): String {
             if (!url.contains("miro.medium.com")) return url
             return url.replace(Regex("v2/resize:[^/]+(/format:[^/]+)?"), "v2/resize:fit:800")
+        }
+
+        fun extractGoogleNewsSiblings(rawHtml: String, publishDateMillis: Long? = null): List<ClusterSibling> {
+            if (!rawHtml.contains("<li", ignoreCase = true) && !rawHtml.contains("&lt;li", ignoreCase = true)) {
+                return emptyList()
+            }
+            val html = if (rawHtml.contains("&lt;")) {
+                rawHtml
+                    .replace("&lt;", "<")
+                    .replace("&gt;", ">")
+                    .replace("&quot;", "\"")
+                    .replace("&amp;", "&")
+                    .replace("&nbsp;", " ")
+            } else {
+                rawHtml
+            }
+
+            val liMatcher = Pattern.compile("<li[^>]*>([\\s\\S]*?)</li>", Pattern.CASE_INSENSITIVE).matcher(html)
+            val linkPattern = Pattern.compile("<a[^>]+href\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>([\\s\\S]*?)</a>", Pattern.CASE_INSENSITIVE)
+            val fontPattern = Pattern.compile("<font[^>]*>([\\s\\S]*?)</font>", Pattern.CASE_INSENSITIVE)
+
+            val blocks = ArrayList<String>()
+            while (liMatcher.find()) {
+                liMatcher.group(1)?.let { blocks.add(it) }
+            }
+            if (blocks.size < 2) return emptyList()
+
+            val siblings = ArrayList<ClusterSibling>()
+            val seenLinks = HashSet<String>()
+
+            for (block in blocks) {
+                val aMatch = linkPattern.matcher(block)
+                if (!aMatch.find()) continue
+                val href = (aMatch.group(1) ?: "").trim()
+                val rawTitle = (aMatch.group(2) ?: "")
+                    .replace(Regex("<[^>]+>"), "")
+                    .replace("&nbsp;", " ")
+                    .replace("&quot;", "\"")
+                    .replace("&apos;", "'")
+                    .replace("&#39;", "'")
+                    .replace("&amp;", "&")
+                    .trim()
+
+                if (href.isEmpty() || rawTitle.isEmpty() || !seenLinks.add(href)) continue
+
+                val fMatch = fontPattern.matcher(block)
+                val publisher = if (fMatch.find()) {
+                    (fMatch.group(1) ?: "")
+                        .replace(Regex("<[^>]+>"), "")
+                        .replace("&nbsp;", " ")
+                        .replace("&amp;", "&")
+                        .trim()
+                } else ""
+
+                if (publisher.isNotEmpty() && !rawTitle.contains("view full coverage", ignoreCase = true)) {
+                    siblings.add(
+                        ClusterSibling(
+                            title = rawTitle,
+                            link = href,
+                            publicationName = publisher,
+                            publishDateMillis = publishDateMillis
+                        )
+                    )
+                }
+            }
+            return siblings
         }
     }
 }

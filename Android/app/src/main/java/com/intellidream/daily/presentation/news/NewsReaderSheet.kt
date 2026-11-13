@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TextFields
@@ -94,8 +95,12 @@ import kotlin.math.roundToInt
 import com.intellidream.daily.database.NewsRepository
 import com.intellidream.daily.designsystem.DailyAsyncImage
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.model.ArticleFramingAnalyzer
+import com.intellidream.daily.model.MediaIntelligenceRegistry
+import com.intellidream.daily.model.MediaOutletProfile
 import com.intellidream.daily.model.NewsArticle
 import com.intellidream.daily.model.SmartRecommendationEngine
+import com.intellidream.daily.model.StoryClusterEngine
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -106,6 +111,7 @@ fun NewsReaderSheet(
     article: NewsArticle,
     candidatePool: List<NewsArticle>,
     repository: NewsRepository,
+    geminiApiKey: String? = null,
     isDark: Boolean = true,
     onOpenInPrism: ((String, String?) -> Unit)? = null,
     onDismiss: () -> Unit
@@ -115,6 +121,8 @@ fun NewsReaderSheet(
     var fontSizeMultiplier by remember { mutableDoubleStateOf(1.0) }
     var recommendations by remember { mutableStateOf<List<NewsArticle>>(emptyList()) }
     var showRecommendations by remember { mutableStateOf(true) }
+    var showPerspectives by remember { mutableStateOf(false) }
+    var inspectingProfile by remember { mutableStateOf<MediaOutletProfile?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showTextSizeSubmenu by remember { mutableStateOf(false) }
 
@@ -122,6 +130,16 @@ fun NewsReaderSheet(
     val haptic = LocalHapticFeedback.current
 
     val feeds by repository.feeds.collectAsState()
+    val clusterByLink by repository.clusterByLink.collectAsState()
+    val currentCluster = remember(currentArticle.link, clusterByLink) {
+        clusterByLink[currentArticle.link] ?: StoryClusterEngine.makeSeedCluster(currentArticle)
+    }
+    val outletProfile = remember(currentArticle.link, currentArticle.publicationName) {
+        MediaIntelligenceRegistry.shared.resolve(currentArticle)
+    }
+    val framingTag = remember(currentArticle.link, currentArticle.title) {
+        ArticleFramingAnalyzer.classify(currentArticle.title, currentArticle.description, currentArticle.link, outletProfile)
+    }
     val isReadLater = repository.isReadLater(currentArticle.link)
     val isFavorite = repository.isFavorite(currentArticle.link)
     val isSubstackSubscribed = remember(currentArticle, feeds) {
@@ -151,6 +169,7 @@ fun NewsReaderSheet(
 
     LaunchedEffect(currentArticle.link) {
         isLoadingFull = true
+        repository.recordArticleRead(currentArticle)
         recommendations = SmartRecommendationEngine.shared.getRecommendations(
             currentArticle = currentArticle,
             candidatePool = if (candidatePool.isNotEmpty()) candidatePool else repository.articles.value,
@@ -189,10 +208,14 @@ fun NewsReaderSheet(
             val configuration = androidx.compose.ui.platform.LocalConfiguration.current
             val isFoldable = configuration.screenWidthDp >= 600
 
-            // Sheet Card (iOS page sheet style: 95% height, rounded top corners)
+            // Sheet Card (iOS page sheet style: 95% height, rounded top corners; expands to 1060dp on RADAR when Perspectives split is open)
             Box(
                 modifier = Modifier
-                    .widthIn(max = if (isFoldable) 700.dp else androidx.compose.ui.unit.Dp.Unspecified)
+                    .widthIn(
+                        max = if (isFoldable) {
+                            if (showPerspectives) 1060.dp else 700.dp
+                        } else androidx.compose.ui.unit.Dp.Unspecified
+                    )
                     .fillMaxWidth()
                     .fillMaxHeight(0.95f)
                     .align(Alignment.BottomCenter)
@@ -258,11 +281,23 @@ fun NewsReaderSheet(
                         // Top Glass Toolbar
                         ReaderTopToolbar(
                             article = currentArticle,
+                            outletProfile = outletProfile,
+                            framingTag = framingTag,
+                            outletCount = currentCluster.uniqueOutletCount,
+                            isPerspectivesActive = showPerspectives,
                             isReadLater = isReadLater,
                             isFavorite = isFavorite,
                             isSubstackSubscribed = isSubstackSubscribed,
                             fontSizeMultiplier = fontSizeMultiplier,
                             onDismiss = { dismissWithAnimation() },
+                            onInspectSource = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                inspectingProfile = outletProfile
+                            },
+                            onTogglePerspectives = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                showPerspectives = !showPerspectives
+                            },
                             onToggleReadLater = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
@@ -320,13 +355,18 @@ fun NewsReaderSheet(
                         )
                     }
 
-                    // Article Body Content
-                    Box(
+                    // Article Body Content (+ Side-by-Side Perspectives Split on Unfolded Foldables like RADAR)
+                    Row(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        if (isLoadingFull) {
+                        Box(
+                            modifier = Modifier
+                                .weight(if (isFoldable && showPerspectives) 0.62f else 1f)
+                                .fillMaxHeight()
+                        ) {
+                            if (isLoadingFull) {
                             DailyLiquidLoadingIndicator(
                                 color = ThemeColors.accentCyan,
                                 size = 44.dp,
@@ -435,12 +475,58 @@ fun NewsReaderSheet(
                                     .padding(horizontal = 16.dp, vertical = 12.dp)
                             )
                         }
+                        }
+
+                        if (isFoldable && showPerspectives) {
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .background(Color.White.copy(alpha = 0.12f))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.38f)
+                                    .fillMaxHeight()
+                            ) {
+                                PerspectivesComparisonPane(
+                                    initialCluster = currentCluster,
+                                    repository = repository,
+                                    geminiApiKey = geminiApiKey,
+                                    onSelectArticle = { currentArticle = it },
+                                    onInspectProfile = { inspectingProfile = it },
+                                    onClose = { showPerspectives = false }
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+
+        if (!LocalConfigurationIsFoldable() && showPerspectives) {
+            PerspectivesComparisonSheet(
+                initialCluster = currentCluster,
+                repository = repository,
+                geminiApiKey = geminiApiKey,
+                onSelectArticle = { currentArticle = it },
+                onInspectProfile = { inspectingProfile = it },
+                onDismiss = { showPerspectives = false }
+            )
+        }
+
+        inspectingProfile?.let { prof ->
+            SourceTransparencySheet(
+                profile = prof,
+                onDismiss = { inspectingProfile = null }
+            )
+        }
     }
 }
+
+@Composable
+private fun LocalConfigurationIsFoldable(): Boolean =
+    androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
 
 @Composable
 private fun ReaderActionButton(
@@ -473,11 +559,17 @@ private fun ReaderActionButton(
 @Composable
 private fun ReaderTopToolbar(
     article: NewsArticle,
+    outletProfile: MediaOutletProfile,
+    framingTag: com.intellidream.daily.model.ArticleFramingTag,
+    outletCount: Int,
+    isPerspectivesActive: Boolean,
     isReadLater: Boolean,
     isFavorite: Boolean,
     isSubstackSubscribed: Boolean = false,
     fontSizeMultiplier: Double,
     onDismiss: () -> Unit,
+    onInspectSource: () -> Unit,
+    onTogglePerspectives: () -> Unit,
     onToggleReadLater: () -> Unit,
     onToggleFavorite: () -> Unit,
     onSelectFontSize: (Double) -> Unit,
@@ -535,7 +627,14 @@ private fun ReaderTopToolbar(
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.clickable { onInspectSource() }
+            )
+
+            OutletMicroBadge(
+                profile = outletProfile,
+                framing = framingTag,
+                onClick = onInspectSource
             )
 
             if (substackTarget != null) {
@@ -577,11 +676,23 @@ private fun ReaderTopToolbar(
             }
         }
 
-        // Action Buttons Row (Grouped with explicit 10.dp spacing to prevent overlap)
+        // Action Buttons Row (Grouped with explicit 8.dp spacing to prevent overlap)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Perspectives Toggle Button
+            ReaderActionButton(
+                onClick = onTogglePerspectives,
+                icon = Icons.Rounded.Balance,
+                contentDescription = "Perspectives ($outletCount sources)",
+                backgroundColor = if (isPerspectivesActive) ThemeColors.accentCyan.copy(alpha = 0.28f)
+                else Color.White.copy(alpha = 0.10f),
+                iconTint = if (isPerspectivesActive || outletCount >= 2) ThemeColors.accentCyan
+                else Color.White.copy(alpha = 0.85f),
+                iconSize = 16.dp
+            )
+
             if (onOpenInPrism != null) {
                 ReaderActionButton(
                     onClick = onOpenInPrism,

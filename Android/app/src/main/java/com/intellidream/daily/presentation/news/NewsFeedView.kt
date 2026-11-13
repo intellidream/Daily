@@ -49,6 +49,8 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Balance
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,13 +91,22 @@ import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.AppSettings
 import com.intellidream.daily.model.FeedCategory
 import com.intellidream.daily.model.FeedSource
+import com.intellidream.daily.model.MediaDietSnapshot
+import com.intellidream.daily.model.MediaOutletProfile
 import com.intellidream.daily.model.NewsArticle
+import com.intellidream.daily.model.StoryCluster
 import kotlinx.coroutines.launch
 
 enum class NewsSubTab(val displayName: String) {
-    Live("Live Feed"),
-    ReadLater("Read Later"),
+    Live("Live"),
+    Perspectives("Perspectives"),
+    ReadLater("Saved"),
     Favorites("Favorites")
+}
+
+private enum class PerspectivesLens(val label: String) {
+    MultiSource("All Stories"),
+    Blindspots("Blindspots")
 }
 
 fun categoryIcon(category: FeedCategory): androidx.compose.ui.graphics.vector.ImageVector = when (category) {
@@ -124,23 +135,33 @@ fun NewsFeedView(
     val liveArticles by repository.articles.collectAsState()
     val readLaterArticles by repository.readLaterArticles.collectAsState()
     val favoriteArticles by repository.favoriteArticles.collectAsState()
+    val storyClusters by repository.storyClusters.collectAsState()
+    val blindspotClusters by repository.blindspotClusters.collectAsState()
+    val clusterByLink by repository.clusterByLink.collectAsState()
+    val mediaDietSnapshot by repository.mediaDietSnapshot.collectAsState()
     val isLoading by repository.isLoading.collectAsState()
 
     var activeSubTab by remember { mutableStateOf(NewsSubTab.Live) }
+    var perspectivesLens by remember { mutableStateOf(PerspectivesLens.MultiSource) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var selectedArticleForReader by remember { mutableStateOf<NewsArticle?>(null) }
+    var selectedClusterForSheet by remember { mutableStateOf<StoryCluster?>(null) }
+    var selectedProfileForSheet by remember { mutableStateOf<MediaOutletProfile?>(null) }
+    var showMediaDietSheet by remember { mutableStateOf(false) }
     var showManageFeedsSheet by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     val liveListState = rememberLazyListState()
+    val perspectivesListState = rememberLazyListState()
     val readLaterListState = rememberLazyListState()
     val favoritesListState = rememberLazyListState()
 
     val currentListState = when (activeSubTab) {
         NewsSubTab.Live -> liveListState
+        NewsSubTab.Perspectives -> perspectivesListState
         NewsSubTab.ReadLater -> readLaterListState
         NewsSubTab.Favorites -> favoritesListState
     }
@@ -153,9 +174,23 @@ fun NewsFeedView(
 
     val currentArticles = remember(activeSubTab, liveArticles, readLaterArticles, favoriteArticles) {
         when (activeSubTab) {
-            NewsSubTab.Live -> liveArticles
+            NewsSubTab.Live, NewsSubTab.Perspectives -> liveArticles
             NewsSubTab.ReadLater -> readLaterArticles
             NewsSubTab.Favorites -> favoriteArticles
+        }
+    }
+
+    val displayedClusters = remember(storyClusters, blindspotClusters, perspectivesLens, searchQuery) {
+        val base = if (perspectivesLens == PerspectivesLens.Blindspots) {
+            blindspotClusters
+        } else {
+            val multi = storyClusters.filter { it.hasMultipleSources }
+            if (multi.isNotEmpty()) multi else storyClusters.take(15)
+        }
+        val q = searchQuery.trim().lowercase()
+        if (q.isBlank()) base else base.filter {
+            it.leadArticle.title.lowercase().contains(q) ||
+                it.anchorEntities.any { e -> e.lowercase().contains(q) }
         }
     }
 
@@ -221,6 +256,7 @@ fun NewsFeedView(
                 searchQuery = searchQuery,
                 isSearchExpanded = isSearchExpanded,
                 selectedCategory = selectedCategory,
+                mediaDietSnapshot = mediaDietSnapshot,
                 onSearchQueryChange = { searchQuery = it },
                 onSearchExpandedChange = { isSearchExpanded = it },
                 onNavigateBack = onNavigateBack,
@@ -230,14 +266,16 @@ fun NewsFeedView(
                         repository.selectCategory(cat)
                     }
                 },
+                onOpenMediaDiet = { showMediaDietSheet = true },
                 onOpenManageFeeds = { showManageFeedsSheet = true }
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Sub-Tab Switcher (Live Feed / Read Later / Favorites)
+            // Sub-Tab Switcher (Live / Perspectives / Saved / Favorites)
             SubTabSwitcher(
                 activeSubTab = activeSubTab,
+                perspectivesCount = storyClusters.count { it.hasMultipleSources },
                 readLaterCount = readLaterArticles.size,
                 favoritesCount = favoriteArticles.size,
                 onSelectSubTab = { tab ->
@@ -248,7 +286,7 @@ fun NewsFeedView(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Source Picker Row (Only visible when in Live Feed mode)
+            // Source Picker Row (Live) or Lens Filter Row (Perspectives)
             if (activeSubTab == NewsSubTab.Live) {
                 FeedPickerRow(
                     selectedFeed = selectedFeed,
@@ -265,6 +303,55 @@ fun NewsFeedView(
                         }
                     }
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+            } else if (activeSubTab == NewsSubTab.Perspectives) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PerspectivesLens.entries.forEach { lens ->
+                            val selected = perspectivesLens == lens
+                            val accent = if (lens == PerspectivesLens.Blindspots) PerspectivesPalette.blindspotAmber else ThemeColors.accentCyan
+                            Row(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(if (selected) accent.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.06f))
+                                    .border(1.dp, if (selected) accent else Color.White.copy(alpha = 0.12f), CircleShape)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        perspectivesLens = lens
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (lens == PerspectivesLens.Blindspots) Icons.Rounded.VisibilityOff else Icons.Rounded.Balance,
+                                    contentDescription = null,
+                                    tint = if (selected) accent else ThemeColors.textMuted,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = if (lens == PerspectivesLens.Blindspots && blindspotClusters.isNotEmpty()) {
+                                        "Blindspots (${blindspotClusters.size})"
+                                    } else lens.label,
+                                    color = if (selected) Color.White else ThemeColors.textMuted,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "${displayedClusters.size} clusters",
+                        color = ThemeColors.textMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -285,6 +372,39 @@ fun NewsFeedView(
                             size = 48.dp,
                             label = "Fetching latest briefings from sources..."
                         )
+                    }
+                } else if (activeSubTab == NewsSubTab.Perspectives) {
+                    if (displayedClusters.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            EmptyNewsState(
+                                subTab = activeSubTab,
+                                onRefresh = {
+                                    scope.launch { repository.loadAllNews(forceRefresh = true) }
+                                }
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            state = perspectivesListState,
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            contentPadding = PaddingValues(bottom = 90.dp)
+                        ) {
+                            items(
+                                items = displayedClusters,
+                                key = { cluster -> cluster.id }
+                            ) { cluster ->
+                                StoryClusterCard(
+                                    cluster = cluster,
+                                    onOpenArticle = { selectedArticleForReader = cluster.leadArticle },
+                                    onOpenPerspectives = { selectedClusterForSheet = cluster },
+                                    onInspectProfile = { selectedProfileForSheet = it }
+                                )
+                            }
+                        }
                     }
                 } else if (filteredArticles.isEmpty()) {
                     Box(
@@ -322,6 +442,7 @@ fun NewsFeedView(
                                 isSubstackSubscribed = if (article.isSubstackItem) {
                                     repository.isSubscribedToSubstack(article)
                                 } else false,
+                                storyCluster = clusterByLink[article.link],
                                 onTap = { selectedArticleForReader = article },
                                 onToggleReadLater = {
                                     scope.launch { repository.toggleReadLater(article) }
@@ -350,7 +471,9 @@ fun NewsFeedView(
                                             )
                                         }
                                     }
-                                }
+                                },
+                                onOpenPerspectives = { cluster -> selectedClusterForSheet = cluster },
+                                onInspectSource = { profile -> selectedProfileForSheet = profile }
                             )
                         }
                     }
@@ -374,9 +497,38 @@ fun NewsFeedView(
             article = article,
             candidatePool = filteredArticles,
             repository = repository,
+            geminiApiKey = settings.geminiApiKey,
             isDark = settings.theme != com.intellidream.daily.model.AppTheme.Light,
             onOpenInPrism = onOpenInPrism,
             onDismiss = { selectedArticleForReader = null }
+        )
+    }
+
+    // Perspectives Comparison Sheet
+    selectedClusterForSheet?.let { cluster ->
+        PerspectivesComparisonSheet(
+            initialCluster = cluster,
+            repository = repository,
+            geminiApiKey = settings.geminiApiKey,
+            onSelectArticle = { art -> selectedArticleForReader = art },
+            onInspectProfile = { prof -> selectedProfileForSheet = prof },
+            onDismiss = { selectedClusterForSheet = null }
+        )
+    }
+
+    // Source Transparency Sheet
+    selectedProfileForSheet?.let { profile ->
+        SourceTransparencySheet(
+            profile = profile,
+            onDismiss = { selectedProfileForSheet = null }
+        )
+    }
+
+    // Personal Media Diet Sheet
+    if (showMediaDietSheet) {
+        MediaDietSheet(
+            snapshot = mediaDietSnapshot,
+            onDismiss = { showMediaDietSheet = false }
         )
     }
 
@@ -396,10 +548,12 @@ private fun NewsHeaderBar(
     searchQuery: String,
     isSearchExpanded: Boolean,
     selectedCategory: FeedCategory,
+    mediaDietSnapshot: MediaDietSnapshot,
     onSearchQueryChange: (String) -> Unit,
     onSearchExpandedChange: (Boolean) -> Unit,
     onNavigateBack: () -> Unit,
     onSelectCategory: (FeedCategory) -> Unit,
+    onOpenMediaDiet: () -> Unit,
     onOpenManageFeeds: () -> Unit
 ) {
     var showCategoryMenu by remember { mutableStateOf(false) }
@@ -531,6 +685,12 @@ private fun NewsHeaderBar(
                     .padding(horizontal = 6.dp, vertical = 6.dp)
             )
         } else {
+            // Personal Media Diet Button
+            MediaDietHeaderButton(
+                snapshot = mediaDietSnapshot,
+                onClick = onOpenMediaDiet
+            )
+
             // Manage Feeds Button (exact 36dp Health Hub parity)
             Box(
                 modifier = Modifier
@@ -625,6 +785,7 @@ private fun NewsHeaderBar(
 @Composable
 private fun SubTabSwitcher(
     activeSubTab: NewsSubTab,
+    perspectivesCount: Int,
     readLaterCount: Int,
     favoritesCount: Int,
     onSelectSubTab: (NewsSubTab) -> Unit
@@ -639,7 +800,7 @@ private fun SubTabSwitcher(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             NewsSubTab.entries.forEach { tab ->
                 val isSelected = activeSubTab == tab
@@ -650,32 +811,47 @@ private fun SubTabSwitcher(
                         .clip(CircleShape)
                         .background(if (isSelected) Color.White.copy(alpha = 0.15f) else Color.Transparent)
                         .clickable { onSelectSubTab(tab) }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 8.dp, horizontal = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             text = tab.displayName,
                             color = if (isSelected) Color.White else Color.White.copy(alpha = 0.60f),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
                         )
 
                         // Count badges
-                        if (tab == NewsSubTab.ReadLater && readLaterCount > 0) {
+                        if (tab == NewsSubTab.Perspectives && perspectivesCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(ThemeColors.accentCyan.copy(alpha = 0.25f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text(
+                                    text = "$perspectivesCount",
+                                    color = ThemeColors.accentCyan,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (tab == NewsSubTab.ReadLater && readLaterCount > 0) {
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(ThemeColors.accentCyan)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
                             ) {
                                 Text(
                                     text = "$readLaterCount",
                                     color = Color.White,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -684,12 +860,12 @@ private fun SubTabSwitcher(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(Color(0xFFFFD700))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
                             ) {
                                 Text(
                                     text = "$favoritesCount",
                                     color = Color.Black,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -858,6 +1034,7 @@ private fun EmptyNewsState(
             Icon(
                 imageVector = when (subTab) {
                     NewsSubTab.Live -> Icons.Rounded.Newspaper
+                    NewsSubTab.Perspectives -> Icons.Rounded.Balance
                     NewsSubTab.ReadLater -> Icons.Rounded.BookmarkRemove
                     NewsSubTab.Favorites -> Icons.Rounded.StarBorder
                 },
@@ -869,6 +1046,7 @@ private fun EmptyNewsState(
             Text(
                 text = when (subTab) {
                     NewsSubTab.Live -> "No Articles Available"
+                    NewsSubTab.Perspectives -> "No Blindspots Detected Right Now"
                     NewsSubTab.ReadLater -> "No Read Later Articles"
                     NewsSubTab.Favorites -> "No Favorites Saved"
                 },
@@ -880,6 +1058,7 @@ private fun EmptyNewsState(
             Text(
                 text = when (subTab) {
                     NewsSubTab.Live -> "Try selecting another feed or pulling to refresh."
+                    NewsSubTab.Perspectives -> "Your subscribed feeds currently show balanced coverage, or switch to All Stories to explore multi-source clusters."
                     NewsSubTab.ReadLater, NewsSubTab.Favorites -> "Save articles while reading by tapping the bookmark or star button."
                 },
                 color = ThemeColors.textSecondary,

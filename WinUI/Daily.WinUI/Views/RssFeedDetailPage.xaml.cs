@@ -20,13 +20,22 @@ public sealed partial class RssFeedDetailPage : Page
 {
     private readonly Daily.Services.IRssFeedService _rssService;
     private readonly Daily.Services.IRssArticleService _articleService;
+    private readonly Daily_WinUI.Services.NewsPerspectiveService _perspectiveService;
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _articles = new();
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _readLaterArticles = new();
     private ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> _favoriteArticles = new();
+    private ObservableCollection<Daily_WinUI.ViewModels.StoryClusterCardViewModel> _perspectiveClusters = new();
+    private ObservableCollection<Daily_WinUI.ViewModels.ReaderCoverageRowViewModel> _readerCoverageItems = new();
+    private List<StoryCluster> _allComputedClusters = new();
+    private Dictionary<string, StoryCluster> _clusterByNormalizedUrl = new(StringComparer.OrdinalIgnoreCase);
+    private bool _blindspotsOnlyFilter;
+    private StoryCluster? _activeReaderCluster;
+    private bool _preserveActiveClusterOnNextOpen;
 
     public ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> Articles => _articles;
     public ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> ReadLaterArticles => _readLaterArticles;
     public ObservableCollection<Daily_WinUI.ViewModels.RssItemViewModel> FavoriteArticles => _favoriteArticles;
+    public ObservableCollection<Daily_WinUI.ViewModels.StoryClusterCardViewModel> PerspectiveClusters => _perspectiveClusters;
     private RssItem? _selectedItem;
     private RssItem? _currentRenderedArticle;
     private bool _isHeaderIconsMode;
@@ -56,10 +65,28 @@ public sealed partial class RssFeedDetailPage : Page
         InitializeComponent();
         _rssService = App.Current.Services.GetRequiredService<Daily.Services.IRssFeedService>();
         _articleService = App.Current.Services.GetRequiredService<Daily.Services.IRssArticleService>();
+        _perspectiveService = App.Current.Services.GetRequiredService<Daily_WinUI.Services.NewsPerspectiveService>();
         
         ArticlesListView.ItemsSource = _articles;
+        PerspectivesClustersListView.ItemsSource = _perspectiveClusters;
         ReadLaterListView.ItemsSource = _readLaterArticles;
         FavoritesListView.ItemsSource = _favoriteArticles;
+        ReaderCoverageItemsControl.ItemsSource = _readerCoverageItems;
+
+        var perspectivesShortcut = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
+        {
+            Key = Windows.System.VirtualKey.P,
+            Modifiers = Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift
+        };
+        perspectivesShortcut.Invoked += (_, args) =>
+        {
+            if (ReaderViewContainer.Visibility == Visibility.Visible)
+            {
+                ReaderPerspectivesToggleButton_Click(this, new RoutedEventArgs());
+                args.Handled = true;
+            }
+        };
+        this.KeyboardAccelerators.Add(perspectivesShortcut);
 
         Loaded += RssFeedDetailPage_Loaded;
         Unloaded += RssFeedDetailPage_Unloaded;
@@ -95,6 +122,8 @@ public sealed partial class RssFeedDetailPage : Page
 
         PopulateFeedMenu();
         PreFetchAllFeedsInBackground();
+        _ = _perspectiveService.RefreshOutletCatalogIfStaleAsync();
+        _ = _perspectiveService.PullRemoteDietIfAvailableAsync();
         
         // Put current feed items in cache if already loaded
         if (_rssService.CurrentFeed != null && 
@@ -228,6 +257,7 @@ public sealed partial class RssFeedDetailPage : Page
         }
 
         UpdateSavedLists();
+        RebuildStoryClustersFromCache();
     }
 
     public async Task RefreshFromTitleBarAsync()
@@ -370,7 +400,17 @@ public sealed partial class RssFeedDetailPage : Page
 
         _currentRenderedArticle = null;
         _selectedItem = item;
+        _perspectiveService.RecordArticleRead(item);
+        if (!_preserveActiveClusterOnNextOpen)
+        {
+            _activeReaderCluster = ResolveClusterForItem(item);
+        }
+        _preserveActiveClusterOnNextOpen = false;
         UpdateReaderToolbarStates();
+        if (ReaderPerspectivesPane.Visibility == Visibility.Visible)
+        {
+            _ = OpenReaderPerspectivesForClusterAsync(_activeReaderCluster ?? BuildSingleArticleCluster(item));
+        }
         PopulateRecommendations(item);
         ListViewContainer.Visibility = Visibility.Collapsed;
         ReaderViewContainer.Visibility = Visibility.Visible;
@@ -1437,6 +1477,8 @@ public sealed partial class RssFeedDetailPage : Page
                 ReaderSubscribeButton.Visibility = Visibility.Collapsed;
             }
         }
+
+        UpdateReaderIntelligenceControls();
     }
 
     private async void FavoriteButton_Click(object sender, RoutedEventArgs e)
@@ -1614,11 +1656,17 @@ public sealed partial class RssFeedDetailPage : Page
         }
         else if (index == 1)
         {
+            FeedSelectorContainer.Visibility = Visibility.Visible;
+            RssSubtitleTextBlock.Text = "Cross-spectrum story clusters, framing comparison & Blindspots";
+            RebuildStoryClustersFromCache();
+        }
+        else if (index == 2)
+        {
             FeedSelectorContainer.Visibility = Visibility.Collapsed;
             RssSubtitleTextBlock.Text = "Articles saved for reading later";
             UpdateSavedLists();
         }
-        else if (index == 2)
+        else if (index == 3)
         {
             FeedSelectorContainer.Visibility = Visibility.Collapsed;
             RssSubtitleTextBlock.Text = "Your starred favorite articles";
@@ -1935,25 +1983,28 @@ public sealed partial class RssFeedDetailPage : Page
         if (RssPivot == null || _isHeaderIconsMode == isSmall) return;
         _isHeaderIconsMode = isSmall;
 
-        if (RssPivot.Items.Count >= 3)
+        if (RssPivot.Items.Count >= 4)
         {
             var item1 = RssPivot.Items[0] as PivotItem;
             var item2 = RssPivot.Items[1] as PivotItem;
             var item3 = RssPivot.Items[2] as PivotItem;
+            var item4 = RssPivot.Items[3] as PivotItem;
 
-            if (item1 != null && item2 != null && item3 != null)
+            if (item1 != null && item2 != null && item3 != null && item4 != null)
             {
                 if (isSmall)
                 {
                     item1.Header = CreateHeaderIcon("\uE736"); // Live Feed icon
-                    item2.Header = CreateHeaderIcon("\uE8A4"); // Read Later icon
-                    item3.Header = CreateHeaderIcon("\uE734"); // Favorites icon
+                    item2.Header = CreateHeaderIcon("\uE8FD"); // Perspectives icon
+                    item3.Header = CreateHeaderIcon("\uE8A4"); // Read Later icon
+                    item4.Header = CreateHeaderIcon("\uE734"); // Favorites icon
                 }
                 else
                 {
                     item1.Header = "Live Feed";
-                    item2.Header = "Read Later";
-                    item3.Header = "Favorites";
+                    item2.Header = "Perspectives";
+                    item3.Header = "Read Later";
+                    item4.Header = "Favorites";
                 }
             }
         }
@@ -1971,6 +2022,7 @@ public sealed partial class RssFeedDetailPage : Page
         string toolTipText = glyph switch
         {
             "\uE736" => "Live Feed",
+            "\uE8FD" => "Perspectives",
             "\uE8A4" => "Read Later",
             "\uE734" => "Favorites",
             _ => ""
@@ -2553,9 +2605,10 @@ public sealed partial class RssFeedDetailPage : Page
                         _allFeedsCache[feed.Url] = items;
                     }
 
-                    // Refresh recommendations once loaded
+                    // Refresh recommendations & cross-outlet clusters once loaded
                     DispatcherQueue.TryEnqueue(() =>
                     {
+                        RebuildStoryClustersFromCache();
                         if (_selectedItem != null) PopulateRecommendations(_selectedItem);
                     });
                 }
@@ -2955,6 +3008,7 @@ public sealed partial class RssFeedDetailPage : Page
                     {
                         _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
                     }
+                    RebuildStoryClustersFromCache();
                     LoadingPanel.Visibility = Visibility.Collapsed;
                     ArticlesListView.Visibility = Visibility.Visible;
                 }
@@ -3051,6 +3105,7 @@ public sealed partial class RssFeedDetailPage : Page
         {
             _articles.Add(new Daily_WinUI.ViewModels.RssItemViewModel(item));
         }
+        AttachClustersToDisplayedArticles();
     }
 
     private void ArticleSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -3599,6 +3654,514 @@ public sealed partial class RssFeedDetailPage : Page
                 LoadingPanel.Visibility = Visibility.Collapsed;
                 ArticlesListView.Visibility = Visibility.Visible;
             }
+        }
+    }
+
+    // ── Perspectives, Blindspots, Source Transparency & Media Diet (Ground News Intelligence) ──
+
+    private void RebuildStoryClustersFromCache()
+    {
+        try
+        {
+            var pool = new List<RssItem>();
+            lock (_allFeedsCache)
+            {
+                foreach (var list in _allFeedsCache.Values)
+                {
+                    if (list != null) pool.AddRange(list);
+                }
+            }
+
+            foreach (var vm in _articles)
+            {
+                pool.Add(vm.Item);
+            }
+
+            if (pool.Count == 0)
+            {
+                _allComputedClusters.Clear();
+                _clusterByNormalizedUrl.Clear();
+                RefreshPerspectiveClustersCollection();
+                return;
+            }
+
+            var clusters = Daily.Services.StoryClusterEngine.ClusterArticles(pool);
+            _allComputedClusters = clusters;
+
+            var urlMap = new Dictionary<string, StoryCluster>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cluster in clusters)
+            {
+                foreach (var cov in cluster.Coverage)
+                {
+                    string norm = Daily.Services.StoryClusterEngine.NormalizeArticleUrl(cov.Article.Link);
+                    if (!string.IsNullOrEmpty(norm))
+                    {
+                        urlMap[norm] = cluster;
+                    }
+                }
+            }
+            _clusterByNormalizedUrl = urlMap;
+
+            AttachClustersToDisplayedArticles();
+            RefreshPerspectiveClustersCollection();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Perspectives] Cluster rebuild warning: {ex.Message}");
+        }
+    }
+
+    private void AttachClustersToDisplayedArticles()
+    {
+        foreach (var vm in _articles)
+        {
+            string norm = Daily.Services.StoryClusterEngine.NormalizeArticleUrl(vm.Link);
+            if (!string.IsNullOrEmpty(norm) && _clusterByNormalizedUrl.TryGetValue(norm, out var cluster))
+            {
+                vm.AttachCluster(cluster);
+            }
+            else
+            {
+                vm.AttachCluster(null);
+            }
+        }
+    }
+
+    private void RefreshPerspectiveClustersCollection()
+    {
+        var multiSource = _allComputedClusters
+            .Where(c => c.HasMultipleSources)
+            .Where(c => !_blindspotsOnlyFilter || c.IsBlindspot)
+            .ToList();
+
+        // If the user's current feed pool only has single-outlet stories so far, still surface top stories in Perspectives so Expand Spectrum works immediately
+        if (multiSource.Count == 0 && !_blindspotsOnlyFilter)
+        {
+            multiSource = _allComputedClusters.Take(12).ToList();
+        }
+
+        _perspectiveClusters.Clear();
+        foreach (var c in multiSource)
+        {
+            _perspectiveClusters.Add(new Daily_WinUI.ViewModels.StoryClusterCardViewModel(c));
+        }
+
+        if (NoPerspectivesTextBlock != null && PerspectivesClustersListView != null)
+        {
+            bool empty = _perspectiveClusters.Count == 0;
+            NoPerspectivesTextBlock.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+            PerspectivesClustersListView.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    private StoryCluster? ResolveClusterForItem(RssItem? item)
+    {
+        if (item == null) return null;
+        string norm = Daily.Services.StoryClusterEngine.NormalizeArticleUrl(item.Link);
+        if (!string.IsNullOrEmpty(norm) && _clusterByNormalizedUrl.TryGetValue(norm, out var cluster))
+        {
+            return cluster;
+        }
+        return null;
+    }
+
+    private static StoryCluster BuildSingleArticleCluster(RssItem item)
+    {
+        var list = Daily.Services.StoryClusterEngine.ClusterArticles(new[] { item });
+        return list.FirstOrDefault() ?? new StoryCluster
+        {
+            Id = Guid.NewGuid().ToString("N").Substring(0, 16),
+            CanonicalTitle = item.Title,
+            LatestPublishedAt = item.PublishDate,
+            LeadArticle = item,
+            UniqueOutletCount = 1
+        };
+    }
+
+    private void UpdateReaderIntelligenceControls()
+    {
+        var target = _currentRenderedArticle ?? _selectedItem;
+        if (target == null) return;
+
+        var profile = Daily.Services.MediaIntelligenceRegistry.Shared.ResolveArticle(target);
+        if (ReaderSourceBadgeText != null)
+        {
+            ReaderSourceBadgeText.Text = !string.IsNullOrEmpty(profile.CompactCardBadge)
+                ? profile.CompactCardBadge
+                : profile.DisplayName;
+        }
+
+        if (FlyoutOutletNameText != null) FlyoutOutletNameText.Text = profile.DisplayName;
+        if (FlyoutOutletDomainText != null) FlyoutOutletDomainText.Text = $"{profile.Domain} · {profile.CountryCode}";
+        if (FlyoutBiasText != null)
+        {
+            FlyoutBiasText.Text = !string.IsNullOrWhiteSpace(profile.BiasContext)
+                ? $"{profile.Bias.DisplayLabel()} — {profile.BiasContext}"
+                : profile.Bias.DisplayLabel();
+        }
+        if (FlyoutFactualityText != null)
+        {
+            FlyoutFactualityText.Text = $"{profile.Factuality.DisplayLabel()} ({profile.FactualityScore}/100)";
+        }
+        if (FlyoutOwnerText != null) FlyoutOwnerText.Text = profile.OwnerName;
+        if (FlyoutOwnershipCatText != null) FlyoutOwnershipCatText.Text = profile.OwnershipType.DisplayLabel();
+        if (FlyoutFundingText != null) FlyoutFundingText.Text = profile.FundingSummary;
+
+        if (ReaderPerspectivesBtnText != null)
+        {
+            var cluster = _activeReaderCluster ?? ResolveClusterForItem(target);
+            ReaderPerspectivesBtnText.Text = cluster is { UniqueOutletCount: >= 2 }
+                ? $"Perspectives ({cluster.UniqueOutletCount})"
+                : "Perspectives";
+        }
+    }
+
+    private async void CardOutletBadge_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.RssItemViewModel vm)
+        {
+            var p = vm.OutletProfile;
+            string biasLine = !string.IsNullOrWhiteSpace(p.BiasContext)
+                ? $"{p.Bias.DisplayLabel()} ({p.BiasContext})"
+                : p.Bias.DisplayLabel();
+
+            var body = new StackPanel { Spacing = 10, MaxWidth = 420 };
+            body.Children.Add(new TextBlock
+            {
+                Text = $"{p.Domain} · {p.CountryCode}",
+                FontSize = 12,
+                Opacity = 0.72
+            });
+            body.Children.Add(new TextBlock { Text = $"Editorial Bias: {biasLine}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            body.Children.Add(new TextBlock { Text = $"Factuality Rating: {p.Factuality.DisplayLabel()} ({p.FactualityScore}/100)", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            body.Children.Add(new TextBlock { Text = $"Owner: {p.OwnerName} ({p.OwnershipType.DisplayLabel()})", TextWrapping = TextWrapping.Wrap });
+            body.Children.Add(new TextBlock { Text = p.FundingSummary, Opacity = 0.85, TextWrapping = TextWrapping.Wrap });
+
+            var dlg = new ContentDialog
+            {
+                Title = p.DisplayName,
+                Content = body,
+                CloseButtonText = "Close",
+                XamlRoot = this.XamlRoot
+            };
+            await dlg.ShowAsync();
+        }
+    }
+
+    private async void CardPerspectivesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.RssItemViewModel vm)
+        {
+            var cluster = vm.AttachedCluster ?? BuildSingleArticleCluster(vm.Item);
+            _activeReaderCluster = cluster;
+            _preserveActiveClusterOnNextOpen = true;
+            await OpenReaderViewAsync(vm.Item);
+            await OpenReaderPerspectivesForClusterAsync(cluster);
+        }
+    }
+
+    private void PerspectivesAllFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _blindspotsOnlyFilter = false;
+        PerspectivesAllFilterBtn.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(51, 0x38, 0xBD, 0xF8));
+        PerspectivesBlindspotsFilterBtn.Background = (Brush)Application.Current.Resources["AppGlassColorBrush"];
+        RefreshPerspectiveClustersCollection();
+    }
+
+    private void PerspectivesBlindspotsFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _blindspotsOnlyFilter = true;
+        PerspectivesBlindspotsFilterBtn.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(56, 0xF5, 0x9E, 0x0B));
+        PerspectivesAllFilterBtn.Background = (Brush)Application.Current.Resources["AppGlassColorBrush"];
+        RefreshPerspectiveClustersCollection();
+    }
+
+    private async void PerspectivesExpandBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_allComputedClusters.Count == 0)
+        {
+            RebuildStoryClustersFromCache();
+        }
+        if (_allComputedClusters.Count == 0) return;
+
+        PerspectivesExpandBtn.IsEnabled = false;
+        PerspectivesExpandProgress.Visibility = Visibility.Visible;
+        PerspectivesExpandProgress.IsActive = true;
+
+        try
+        {
+            var targets = _allComputedClusters.Take(5).ToList();
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var expanded = await _perspectiveService.ExpandCoverageAsync(targets[i]);
+                int idx = _allComputedClusters.FindIndex(c => c.Id == targets[i].Id);
+                if (idx >= 0)
+                {
+                    _allComputedClusters[idx] = expanded;
+                    foreach (var cov in expanded.Coverage)
+                    {
+                        string norm = Daily.Services.StoryClusterEngine.NormalizeArticleUrl(cov.Article.Link);
+                        if (!string.IsNullOrEmpty(norm)) _clusterByNormalizedUrl[norm] = expanded;
+                    }
+                }
+            }
+
+            AttachClustersToDisplayedArticles();
+            RefreshPerspectiveClustersCollection();
+        }
+        finally
+        {
+            PerspectivesExpandProgress.IsActive = false;
+            PerspectivesExpandProgress.Visibility = Visibility.Collapsed;
+            PerspectivesExpandBtn.IsEnabled = true;
+        }
+    }
+
+    private async void PerspectivesClustersListView_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is Daily_WinUI.ViewModels.StoryClusterCardViewModel vm)
+        {
+            _activeReaderCluster = vm.Cluster;
+            _preserveActiveClusterOnNextOpen = true;
+            await OpenReaderViewAsync(vm.Cluster.LeadArticle);
+            await OpenReaderPerspectivesForClusterAsync(vm.Cluster);
+        }
+    }
+
+    private async void ClusterCompareButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.StoryClusterCardViewModel vm)
+        {
+            _activeReaderCluster = vm.Cluster;
+            _preserveActiveClusterOnNextOpen = true;
+            await OpenReaderViewAsync(vm.Cluster.LeadArticle);
+            await OpenReaderPerspectivesForClusterAsync(vm.Cluster);
+        }
+    }
+
+    private async void MediaDietButton_Click(object sender, RoutedEventArgs e)
+    {
+        var snap = _perspectiveService.GetCurrentDietSnapshot();
+        var dist = snap.Distribution;
+
+        var panel = new StackPanel { Spacing = 12, MinWidth = 380, MaxWidth = 440 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Period: {snap.PeriodMonth} · {snap.TotalArticlesCount} articles read",
+            FontSize = 13,
+            Opacity = 0.8
+        });
+
+        var barGrid = new Grid { Height = 10 };
+        barGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = Daily_WinUI.ViewModels.BiasPalette.GetStarWidth(dist, "left") });
+        barGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = Daily_WinUI.ViewModels.BiasPalette.GetStarWidth(dist, "center") });
+        barGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = Daily_WinUI.ViewModels.BiasPalette.GetStarWidth(dist, "right") });
+
+        var bLeft = new Border { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x3B, 0x82, 0xF6)) };
+        var bCenter = new Border { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x94, 0xA3, 0xB8)) };
+        var bRight = new Border { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xF4, 0x3F, 0x5E)) };
+        Grid.SetColumn(bLeft, 0);
+        Grid.SetColumn(bCenter, 1);
+        Grid.SetColumn(bRight, 2);
+        barGrid.Children.Add(bLeft);
+        barGrid.Children.Add(bCenter);
+        barGrid.Children.Add(bRight);
+
+        panel.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(5),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(34, 255, 255, 255)),
+            Child = barGrid
+        });
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = dist.SummaryLabel,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            FontSize = 13
+        });
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Breakdown: Left {snap.LeftCount} · Lean Left {snap.LeanLeftCount} · Center {snap.CenterCount} · Lean Right {snap.LeanRightCount} · Right {snap.RightCount} · Independent {snap.IndependentCount}",
+            FontSize = 12,
+            Opacity = 0.85,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"High / Very High Factuality Share: {snap.HighFactualityPercent}%",
+            FontSize = 13,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x2D, 0xD4, 0xBF))
+        });
+
+        if (!string.IsNullOrWhiteSpace(snap.BlindspotRecommendation))
+        {
+            panel.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 8, 12, 8),
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(36, 0x38, 0xBD, 0xF8)),
+                Child = new TextBlock
+                {
+                    Text = snap.BlindspotRecommendation,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap
+                }
+            });
+        }
+
+        var dlg = new ContentDialog
+        {
+            Title = "Your Monthly Media Diet",
+            Content = panel,
+            CloseButtonText = "Done",
+            XamlRoot = this.XamlRoot
+        };
+        await dlg.ShowAsync();
+    }
+
+    private async void ReaderPerspectivesToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ReaderPerspectivesPane.Visibility == Visibility.Visible)
+        {
+            CloseReaderPerspectivesPane();
+            return;
+        }
+
+        var target = _currentRenderedArticle ?? _selectedItem;
+        if (target == null) return;
+
+        var cluster = _activeReaderCluster ?? ResolveClusterForItem(target) ?? BuildSingleArticleCluster(target);
+        await OpenReaderPerspectivesForClusterAsync(cluster);
+    }
+
+    private void CloseReaderPerspectivesBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CloseReaderPerspectivesPane();
+    }
+
+    private void CloseReaderPerspectivesPane()
+    {
+        ReaderPerspectivesPane.Visibility = Visibility.Collapsed;
+        ReaderPerspectivesCol.Width = new GridLength(0, GridUnitType.Pixel);
+    }
+
+    private async void ReaderCoverageRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is Daily_WinUI.ViewModels.ReaderCoverageRowViewModel rowVm)
+        {
+            _preserveActiveClusterOnNextOpen = true;
+            await OpenReaderViewAsync(rowVm.Article);
+        }
+    }
+
+    private async Task OpenReaderPerspectivesForClusterAsync(StoryCluster initialCluster)
+    {
+        ReaderPerspectivesPane.Visibility = Visibility.Visible;
+        double paneWidth = this.ActualWidth >= 1220 ? 430 : 370;
+        ReaderPerspectivesCol.Width = new GridLength(paneWidth, GridUnitType.Pixel);
+        ReaderPerspectivesLoadingRow.Visibility = Visibility.Visible;
+
+        RenderReaderPerspectivesCluster(initialCluster, Daily_WinUI.Services.NewsPerspectiveService.BuildDeterministicComparison(initialCluster));
+
+        try
+        {
+            var expanded = await _perspectiveService.ExpandCoverageAsync(initialCluster);
+            _activeReaderCluster = expanded;
+            UpdateReaderIntelligenceControls();
+
+            var comparison = await _perspectiveService.ComparePerspectivesAsync(expanded);
+            RenderReaderPerspectivesCluster(expanded, comparison);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Perspectives] Reader pane load warning: {ex.Message}");
+        }
+        finally
+        {
+            ReaderPerspectivesLoadingRow.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void RenderReaderPerspectivesCluster(StoryCluster cluster, PerspectiveComparison comparison)
+    {
+        ReaderPerspectiveEngineBadge.Text = comparison.EngineBadge;
+        ReaderPerspectiveSubtitle.Text = $"{cluster.UniqueOutletCount} distinct publications covering this story";
+
+        ReaderLeftCol.Width = Daily_WinUI.ViewModels.BiasPalette.GetStarWidth(cluster.Distribution, "left");
+        ReaderCenterCol.Width = Daily_WinUI.ViewModels.BiasPalette.GetStarWidth(cluster.Distribution, "center");
+        ReaderRightCol.Width = Daily_WinUI.ViewModels.BiasPalette.GetStarWidth(cluster.Distribution, "right");
+        ReaderSpectrumSummaryText.Text = cluster.Distribution.SummaryLabel;
+
+        if (cluster.Blindspot.HasValue)
+        {
+            ReaderBlindspotBanner.Visibility = Visibility.Visible;
+            ReaderBlindspotBannerText.Text = $"{cluster.Blindspot.Value.BadgeTitle()}: {cluster.Blindspot.Value.Explanation()}";
+        }
+        else
+        {
+            ReaderBlindspotBanner.Visibility = Visibility.Collapsed;
+        }
+
+        ReaderSharedFactsStack.Children.Clear();
+        foreach (var fact in comparison.SharedFacts)
+        {
+            ReaderSharedFactsStack.Children.Add(new TextBlock
+            {
+                Text = "• " + fact,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+
+        ReaderFramingDiffsStack.Children.Clear();
+        foreach (var diff in comparison.FramingDifferences)
+        {
+            var card = new StackPanel { Spacing = 2 };
+            card.Children.Add(new TextBlock
+            {
+                Text = diff.Side,
+                FontSize = 11,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x38, 0xBD, 0xF8))
+            });
+            card.Children.Add(new TextBlock
+            {
+                Text = diff.Emphasis,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap
+            });
+            if (!string.IsNullOrWhiteSpace(diff.ToneNote))
+            {
+                card.Children.Add(new TextBlock
+                {
+                    Text = diff.ToneNote,
+                    FontSize = 11,
+                    Opacity = 0.72,
+                    TextWrapping = TextWrapping.Wrap
+                });
+            }
+            ReaderFramingDiffsStack.Children.Add(card);
+        }
+
+        if (!string.IsNullOrWhiteSpace(comparison.OmissionsNote))
+        {
+            ReaderOmissionsNoteText.Visibility = Visibility.Visible;
+            ReaderOmissionsNoteText.Text = comparison.OmissionsNote;
+        }
+        else
+        {
+            ReaderOmissionsNoteText.Visibility = Visibility.Collapsed;
+        }
+
+        ReaderCoverageHeader.Text = $"OUTLETS COVERING THIS STORY ({cluster.Coverage.Count})";
+        _readerCoverageItems.Clear();
+        foreach (var cov in cluster.Coverage)
+        {
+            _readerCoverageItems.Add(new Daily_WinUI.ViewModels.ReaderCoverageRowViewModel(cov));
         }
     }
 

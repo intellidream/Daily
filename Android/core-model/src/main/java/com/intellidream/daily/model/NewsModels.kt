@@ -78,7 +78,8 @@ data class NewsArticle(
     val author: String? = null,
     val publicationName: String? = null,
     val publicationIconUrl: String? = null,
-    val category: FeedCategory? = null
+    val category: FeedCategory? = null,
+    val googleNewsSiblings: List<ClusterSibling>? = null
 ) {
     val isMediumItem: Boolean
         get() = publicationName?.contains("Medium", ignoreCase = true) == true ||
