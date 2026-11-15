@@ -476,60 +476,102 @@ object SleepClusteringEngine {
         return 10
     }
 
+    private fun stageSpecificity(type: SleepStageType): Int = when (type) {
+        SleepStageType.DEEP, SleepStageType.REM, SleepStageType.AWAKE -> 2
+        SleepStageType.LIGHT -> 1
+        SleepStageType.UNKNOWN -> 0
+    }
+
     /**
-     * Normalizes and clips stage records within a cluster to prevent overlapping time spans.
-     * Guarantees that the sum of stage durations can mathematically never exceed the session's wall-clock duration.
+     * Resolves overlapping multi-pass Health Connect stage samples using painter's algorithm:
+     * older samples paint first and newer (createdAt) samples split/overwrite overlapping intervals,
+     * then drops sub-10s boundary artifacts and coalesces adjacent identical stages.
      */
     private fun normalizeAndDeduplicateStages(
         rawRecords: List<HealthTelemetryRecord>,
         sourceDevice: String
     ): List<SleepStageRecord> {
-        val sorted = rawRecords.sortedWith { a, b ->
-            if (a.startTime != b.startTime) {
-                a.startTime.compareTo(b.startTime)
-            } else {
+        val paintOrder = rawRecords
+            .filter { it.effectiveEndTime > it.startTime }
+            .sortedWith { a, b ->
+                val ca = a.createdAt ?: Long.MIN_VALUE
+                val cb = b.createdAt ?: Long.MIN_VALUE
+                if (ca != cb) return@sortedWith ca.compareTo(cb)
+                val sa = stageSpecificity(a.sleepStageType)
+                val sb = stageSpecificity(b.sleepStageType)
+                if (sa != sb) return@sortedWith sa.compareTo(sb)
+                if (a.startTime != b.startTime) return@sortedWith b.startTime.compareTo(a.startTime)
                 a.effectiveEndTime.compareTo(b.effectiveEndTime)
             }
-        }
 
-        val normalized = mutableListOf<SleepStageRecord>()
-        var lastEnd: Long? = null
+        data class PaintedSegment(
+            val id: String,
+            val stageType: SleepStageType,
+            var start: Long,
+            var end: Long
+        )
 
-        for (record in sorted) {
-            var start = record.startTime
-            val end = record.effectiveEndTime
-            if (end <= start) continue
+        var timeline = mutableListOf<PaintedSegment>()
 
-            val prevEnd = lastEnd
-            if (prevEnd != null) {
-                if (start < prevEnd) {
-                    if (end <= prevEnd) {
-                        // Completely subsumed by previous stage, ignore duplicate
-                        continue
-                    } else {
-                        // Partially overlapping: clip start to prevEnd
-                        start = prevEnd
+        for (record in paintOrder) {
+            val newStart = record.startTime
+            val newEnd = record.effectiveEndTime
+            val newType = record.sleepStageType
+
+            val nextTimeline = mutableListOf<PaintedSegment>()
+            var inserted = false
+
+            for (seg in timeline) {
+                if (seg.end <= newStart) {
+                    nextTimeline.add(seg)
+                } else if (seg.start >= newEnd) {
+                    if (!inserted) {
+                        nextTimeline.add(PaintedSegment(record.id, newType, newStart, newEnd))
+                        inserted = true
+                    }
+                    nextTimeline.add(seg)
+                } else {
+                    if (seg.start < newStart) {
+                        nextTimeline.add(PaintedSegment("${seg.id}#L", seg.stageType, seg.start, newStart))
+                    }
+                    if (!inserted) {
+                        nextTimeline.add(PaintedSegment(record.id, newType, newStart, newEnd))
+                        inserted = true
+                    }
+                    if (seg.end > newEnd) {
+                        nextTimeline.add(PaintedSegment("${seg.id}#R", seg.stageType, newEnd, seg.end))
                     }
                 }
             }
 
-            val dur = max(0.0, (end - start) / 1000.0)
-            if (dur < 10.0) continue // Ignore sub-10s artifacts
-
-            normalized.add(
-                SleepStageRecord(
-                    id = record.id,
-                    stageType = record.sleepStageType,
-                    startTime = start,
-                    endTime = end,
-                    durationSeconds = dur,
-                    sourceDevice = sourceDevice
-                )
-            )
-            lastEnd = end
+            if (!inserted) {
+                nextTimeline.add(PaintedSegment(record.id, newType, newStart, newEnd))
+            }
+            timeline = nextTimeline
         }
 
-        return normalized
+        val coalesced = mutableListOf<PaintedSegment>()
+        for (seg in timeline) {
+            val durSec = (seg.end - seg.start) / 1000.0
+            if (durSec < 10.0) continue
+            val prev = coalesced.lastOrNull()
+            if (prev != null && prev.stageType == seg.stageType && (seg.start - prev.end) <= 1000L) {
+                prev.end = max(prev.end, seg.end)
+            } else {
+                coalesced.add(seg)
+            }
+        }
+
+        return coalesced.map { seg ->
+            SleepStageRecord(
+                id = seg.id,
+                stageType = seg.stageType,
+                startTime = seg.start,
+                endTime = seg.end,
+                durationSeconds = max(0.0, (seg.end - seg.start) / 1000.0),
+                sourceDevice = sourceDevice
+            )
+        }
     }
 
     private fun isSameDay(time1: Long, time2: Long): Boolean {

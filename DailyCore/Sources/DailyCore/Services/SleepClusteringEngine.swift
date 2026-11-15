@@ -405,51 +405,109 @@ public enum SleepClusteringEngine {
     
     /// Normalizes and clips stage records within a cluster to prevent overlapping time spans.
     /// Guarantees that the sum of stage durations can mathematically never exceed the session's wall-clock duration.
+    private static func stageSpecificity(_ type: SleepStageType) -> Int {
+        switch type {
+        case .deep, .rem, .awake: return 2
+        case .light: return 1
+        case .unknown: return 0
+        }
+    }
+
+    /// Resolves overlapping multi-pass HealthKit/Health Connect stage samples using painter's algorithm:
+    /// older samples paint first and newer (`createdAt`) samples split/overwrite overlapping intervals,
+    /// then drops sub-10s boundary artifacts and coalesces adjacent identical stages.
     private static func normalizeAndDeduplicateStages(
         _ rawRecords: [HealthTelemetryRecord],
         sourceDevice: String
     ) -> [SleepStageRecord] {
-        let sorted = rawRecords.sorted {
-            if $0.startTime != $1.startTime {
-                return $0.startTime < $1.startTime
+        // Ascending paint order (lowest precedence first -> highest precedence paints last):
+        // 1. Oldest createdAt first (nil treated as distantPast so stamped writes override unstamped ones)
+        // 2. Coarser stage specificity first when createdAt ties (deep/rem/awake beat coarse light/unknown)
+        // 3. Later startTime first on full ties so earlier startTime retains precedence (legacy tie-break)
+        let paintOrder = rawRecords
+            .filter { $0.effectiveEndTime > $0.startTime }
+            .sorted { a, b in
+                let ca = a.createdAt ?? .distantPast
+                let cb = b.createdAt ?? .distantPast
+                if ca != cb { return ca < cb }
+                let sa = stageSpecificity(a.sleepStageType)
+                let sb = stageSpecificity(b.sleepStageType)
+                if sa != sb { return sa < sb }
+                if a.startTime != b.startTime { return a.startTime > b.startTime }
+                return a.effectiveEndTime < b.effectiveEndTime
             }
-            return $0.effectiveEndTime < $1.effectiveEndTime
+
+        struct PaintedSegment {
+            let id: String
+            let stageType: SleepStageType
+            var start: Date
+            var end: Date
         }
-        
-        var normalized: [SleepStageRecord] = []
-        var lastEnd: Date? = nil
-        
-        for record in sorted {
-            var start = record.startTime
-            let end = record.effectiveEndTime
-            guard end > start else { continue }
-            
-            if let prevEnd = lastEnd {
-                if start < prevEnd {
-                    if end <= prevEnd {
-                        // Completely subsumed by previous stage, ignore duplicate
-                        continue
-                    } else {
-                        // Partially overlapping: clip start to prevEnd
-                        start = prevEnd
+
+        var timeline: [PaintedSegment] = []
+
+        for record in paintOrder {
+            let newStart = record.startTime
+            let newEnd = record.effectiveEndTime
+            let newType = record.sleepStageType
+
+            var nextTimeline: [PaintedSegment] = []
+            nextTimeline.reserveCapacity(timeline.count + 2)
+            var inserted = false
+
+            for seg in timeline {
+                if seg.end <= newStart {
+                    nextTimeline.append(seg)
+                } else if seg.start >= newEnd {
+                    if !inserted {
+                        nextTimeline.append(PaintedSegment(id: record.id, stageType: newType, start: newStart, end: newEnd))
+                        inserted = true
+                    }
+                    nextTimeline.append(seg)
+                } else {
+                    if seg.start < newStart {
+                        nextTimeline.append(PaintedSegment(id: "\(seg.id)#L", stageType: seg.stageType, start: seg.start, end: newStart))
+                    }
+                    if !inserted {
+                        nextTimeline.append(PaintedSegment(id: record.id, stageType: newType, start: newStart, end: newEnd))
+                        inserted = true
+                    }
+                    if seg.end > newEnd {
+                        nextTimeline.append(PaintedSegment(id: "\(seg.id)#R", stageType: seg.stageType, start: newEnd, end: seg.end))
                     }
                 }
             }
-            
-            let dur = max(0, end.timeIntervalSince(start))
-            guard dur >= 10 else { continue } // Ignore sub-10s artifacts
-            
-            normalized.append(SleepStageRecord(
-                id: record.id,
-                stageType: record.sleepStageType,
-                startTime: start,
-                endTime: end,
-                durationSeconds: dur,
-                sourceDevice: sourceDevice
-            ))
-            lastEnd = end
+
+            if !inserted {
+                nextTimeline.append(PaintedSegment(id: record.id, stageType: newType, start: newStart, end: newEnd))
+            }
+            timeline = nextTimeline
         }
-        
-        return normalized
+
+        // Filter out sub-10s slivers caused by boundary misalignment, then coalesce adjacent identical stages
+        var coalesced: [PaintedSegment] = []
+        for seg in timeline {
+            let dur = seg.end.timeIntervalSince(seg.start)
+            guard dur >= 10 else { continue }
+            if var prev = coalesced.last,
+               prev.stageType == seg.stageType,
+               seg.start.timeIntervalSince(prev.end) <= 1.0 {
+                prev.end = max(prev.end, seg.end)
+                coalesced[coalesced.count - 1] = prev
+            } else {
+                coalesced.append(seg)
+            }
+        }
+
+        return coalesced.map { seg in
+            SleepStageRecord(
+                id: seg.id,
+                stageType: seg.stageType,
+                startTime: seg.start,
+                endTime: seg.end,
+                durationSeconds: max(0, seg.end.timeIntervalSince(seg.start)),
+                sourceDevice: sourceDevice
+            )
+        }
     }
 }

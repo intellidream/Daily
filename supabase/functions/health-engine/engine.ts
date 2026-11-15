@@ -44,12 +44,20 @@ export interface EngineInput {
 // 1. Time & Timezone Helper Utilities
 // ==========================================
 
+function normalizeIsoAsUtc(isoString: string): string {
+  const trimmed = isoString.trim();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)) {
+    return trimmed.replace(' ', 'T') + 'Z';
+  }
+  return trimmed.includes(' ') && !trimmed.includes('T') ? trimmed.replace(' ', 'T') : trimmed;
+}
+
 export function parseUtcDate(isoString: string): Date {
-  return new Date(isoString);
+  return new Date(normalizeIsoAsUtc(isoString));
 }
 
 export function toEpochMs(d: Date | string): number {
-  return typeof d === 'string' ? new Date(d).getTime() : d.getTime();
+  return typeof d === 'string' ? new Date(normalizeIsoAsUtc(d)).getTime() : d.getTime();
 }
 
 export function getLocalComponents(date: Date, tzOffsetMin: number): {

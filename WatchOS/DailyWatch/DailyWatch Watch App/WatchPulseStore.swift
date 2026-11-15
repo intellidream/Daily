@@ -374,8 +374,9 @@ public final class WatchPulseStore: ObservableObject {
 
         let sleepDurationFormatted: String
         if asleepSeconds > 0 {
-            let h = asleepSeconds / 3600
-            let m = (asleepSeconds % 3600) / 60
+            let totalMins = Int(round(Double(asleepSeconds) / 60.0))
+            let h = totalMins / 60
+            let m = totalMins % 60
             sleepDurationFormatted = h > 0 ? "\(h)h \(m)m" : "\(m)m"
         } else {
             sleepDurationFormatted = "--"

@@ -1747,10 +1747,8 @@ namespace Daily_WinUI.Services
                 return (null, new List<SleepSession>());
             }
 
-            DateTimeOffset.TryParse(primary.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var startDto);
-            DateTimeOffset.TryParse(primary.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var endDto);
-            var start = startDto != default ? startDto.LocalDateTime : (DateTime.TryParse(primary.StartTime, out var sParsed) ? sParsed : date.Date.AddHours(23));
-            var end = endDto != default ? endDto.LocalDateTime : (DateTime.TryParse(primary.EndTime, out var eParsed) ? eParsed : date.Date.AddDays(1).AddHours(7));
+            var start = HealthSleepSessionRecord.ParseUtcToLocal(primary.StartTime, date.Date.AddHours(23));
+            var end = HealthSleepSessionRecord.ParseUtcToLocal(primary.EndTime, date.Date.AddDays(1).AddHours(7));
 
             var session = new SleepSession
             {
@@ -1772,10 +1770,8 @@ namespace Daily_WinUI.Services
             {
                 session.Stages = primary.Stages.Select(st =>
                 {
-                    DateTimeOffset.TryParse(st.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var sTimeDto);
-                    DateTimeOffset.TryParse(st.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var eTimeDto);
-                    var sTime = sTimeDto != default ? sTimeDto.LocalDateTime : (DateTime.TryParse(st.StartTime, out var stp) ? stp : start);
-                    var eTime = eTimeDto != default ? eTimeDto.LocalDateTime : (DateTime.TryParse(st.EndTime, out var etp) ? etp : sTime.AddSeconds(st.DurationSeconds));
+                    var sTime = HealthSleepSessionRecord.ParseUtcToLocal(st.StartTime, start);
+                    var eTime = HealthSleepSessionRecord.ParseUtcToLocal(st.EndTime, sTime.AddSeconds(st.DurationSeconds));
                     var stageKey = st.Stage.ToLowerInvariant() switch
                     {
                         "deep" => "sleep_stage_deep",
@@ -1802,12 +1798,10 @@ namespace Daily_WinUI.Services
             {
                 foreach (var other in summary.Summary.Sleep.AllSessions.Where(s => s != primary))
                 {
-                    DateTimeOffset.TryParse(other.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var oStartDto);
-                    DateTimeOffset.TryParse(other.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var oEndDto);
                     all.Add(new SleepSession
                     {
-                        StartTime = oStartDto != default ? oStartDto.LocalDateTime : date.Date,
-                        EndTime = oEndDto != default ? oEndDto.LocalDateTime : date.Date,
+                        StartTime = HealthSleepSessionRecord.ParseUtcToLocal(other.StartTime, date.Date),
+                        EndTime = HealthSleepSessionRecord.ParseUtcToLocal(other.EndTime, date.Date),
                         IsNap = other.IsNap,
                         DurationSeconds = other.DurationSeconds,
                         AsleepSeconds = other.AsleepSeconds,

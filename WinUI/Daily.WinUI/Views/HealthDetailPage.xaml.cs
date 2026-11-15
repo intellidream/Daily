@@ -1493,27 +1493,23 @@ namespace Daily_WinUI.Views
                 {
                     if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0)
                     {
-                        var ts = TimeSpan.FromSeconds(_primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds);
-                        return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+                        return FormatSecondsToHoursMins(_primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds);
                     }
                     return "--";
                 }
                 if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0)
                 {
-                    var ts = TimeSpan.FromSeconds(_primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds);
-                    return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+                    return FormatSecondsToHoursMins(_primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds);
                 }
                 if (_currentSummary?.SleepAsleepS.HasValue == true && _currentSummary.SleepAsleepS.Value > 0)
                 {
-                    var ts = TimeSpan.FromSeconds(_currentSummary.SleepAsleepS.Value);
-                    return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+                    return FormatSecondsToHoursMins(_currentSummary.SleepAsleepS.Value);
                 }
                 var m = GetMetric(VitalType.SleepDuration);
                 if (m != null && m.Value > 0)
                 {
                     double mins = Daily_WinUI.Services.SettingsService.ConvertSleepToMinutes(m.Value, m.Unit);
-                    var ts = TimeSpan.FromMinutes(mins);
-                    return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+                    return FormatSecondsToHoursMins(mins * 60.0);
                 }
                 return "--";
             }
@@ -1816,12 +1812,14 @@ namespace Daily_WinUI.Views
         public string AwakeDurationText => FormatSecondsToHoursMins(_primarySleepSession?.AwakeSeconds ?? 0);
         public string AwakePercentText => CalculateStagePercent(_primarySleepSession?.AwakeSeconds ?? 0);
 
-        private string FormatSecondsToHoursMins(double seconds)
+        private static string FormatSecondsToHoursMins(double seconds)
         {
             if (seconds <= 0) return "--";
-            var ts = TimeSpan.FromSeconds(seconds);
-            if (ts.TotalMinutes < 60) return $"{(int)ts.TotalMinutes}m";
-            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+            int totalMins = (int)Math.Round(seconds / 60.0, MidpointRounding.AwayFromZero);
+            int hours = totalMins / 60;
+            int mins = totalMins % 60;
+            if (hours <= 0) return $"{mins}m";
+            return $"{hours}h {mins}m";
         }
 
         private string CalculateStagePercent(double stageSec)

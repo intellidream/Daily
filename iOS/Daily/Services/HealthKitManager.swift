@@ -412,16 +412,17 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         else { return [] }
         
         let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: windowEnd, options: [])
-        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
         
         return await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: sleepType,
+            // HKAnchoredObjectQuery returns samples in HealthKit insertion (anchor) order,
+            // letting SleepClusteringEngine prefer newer reclassifications over stale passes.
+            let query = HKAnchoredObjectQuery(
+                type: sleepType,
                 predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: [sortDescriptor]
-            ) { _, samples, _ in
-                guard let categorySamples = samples as? [HKCategorySample] else {
+                anchor: nil,
+                limit: HKObjectQueryNoLimit
+            ) { _, sampleObjects, _, _, _ in
+                guard let categorySamples = sampleObjects as? [HKCategorySample] else {
                     continuation.resume(returning: [])
                     return
                 }
@@ -431,7 +432,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                 let wakeDateStr = f.string(from: targetDate)
                 
                 var records: [HealthTelemetryRecord] = []
-                for sample in categorySamples {
+                for (index, sample) in categorySamples.enumerated() {
                     let typeName: String
                     if #available(iOS 16.0, *) {
                         switch sample.value {
@@ -462,6 +463,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                     let tzOffset = Calendar.current.timeZone.secondsFromGMT(for: sample.startDate) / 60
                     let durationMinutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
                     guard durationMinutes > 0 else { continue }
+                    let anchorOrderedCreatedAt = Date(timeIntervalSince1970: 1_700_000_000.0 + Double(index))
                     records.append(HealthTelemetryRecord(
                         id: sample.uuid.uuidString,
                         userId: "healthkit",
@@ -471,7 +473,9 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
                         startTime: sample.startDate,
                         endTime: sample.endDate,
                         sourceDevice: key,
+                        createdAt: anchorOrderedCreatedAt,
                         externalId: sample.uuid.uuidString,
+                        sourceId: sample.sourceRevision.source.bundleIdentifier,
                         semantics: "session_stage",
                         tzOffsetMin: tzOffset,
                         localDate: wakeDateStr,

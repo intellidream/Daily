@@ -42,6 +42,7 @@ import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.R
 import com.intellidream.daily.model.HealthMetricType
+import com.intellidream.daily.model.SleepSession
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -87,10 +88,10 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         val lightSec = if (hasData) (session?.lightSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
         val awakeSec = if (hasData) (session?.awakeSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
 
-        val deepFormatted = if (hasData && deepSec > 0) "${(deepSec / 3600).toInt()}h ${((deepSec % 3600) / 60).toInt()}m" else "--"
-        val remFormatted = if (hasData && remSec > 0) "${(remSec / 3600).toInt()}h ${((remSec % 3600) / 60).toInt()}m" else "--"
-        val lightFormatted = if (hasData && lightSec > 0) "${(lightSec / 3600).toInt()}h ${((lightSec % 3600) / 60).toInt()}m" else "--"
-        val awakeFormatted = if (hasData && awakeSec > 0) "${(awakeSec / 60).toInt()}m" else "--"
+        val deepFormatted = if (hasData && deepSec > 0) SleepSession.formatTimeSpan(deepSec) else "--"
+        val remFormatted = if (hasData && remSec > 0) SleepSession.formatTimeSpan(remSec) else "--"
+        val lightFormatted = if (hasData && lightSec > 0) SleepSession.formatTimeSpan(lightSec) else "--"
+        val awakeFormatted = if (hasData && awakeSec > 0) SleepSession.formatTimeSpan(awakeSec) else "--"
 
         val restingHr = app?.healthRepository?.restingBpm?.value?.takeIf { it > 0.0 } ?: 0.0
         val hrvMs = app?.healthRepository?.currentVitals?.value?.get(HealthMetricType.HRV_SDNN)?.value?.takeIf { it > 0.0 } ?: 0.0

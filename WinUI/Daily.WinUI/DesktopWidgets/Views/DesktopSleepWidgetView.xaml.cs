@@ -106,13 +106,13 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
                     // Real asleep minutes from Health Hub (excluding awakenings)
                     int asleepMins = primarySession != null && primarySession.AsleepSeconds > 0
-                        ? (int)(primarySession.AsleepSeconds / 60.0) 
-                        : ((summary?.SleepAsleepS ?? 0) / 60);
+                        ? (int)Math.Round(primarySession.AsleepSeconds / 60.0, MidpointRounding.AwayFromZero)
+                        : (int)Math.Round((summary?.SleepAsleepS ?? 0) / 60.0, MidpointRounding.AwayFromZero);
 
                     // Total time in bed from start to end
                     int inBedMins = primarySession != null && primarySession.DurationSeconds > 0
-                        ? (int)(primarySession.DurationSeconds / 60.0) 
-                        : (asleepMins > 0 ? (int)Math.Round(asleepMins / 0.92) : 486);
+                        ? (int)Math.Round(primarySession.DurationSeconds / 60.0, MidpointRounding.AwayFromZero)
+                        : (asleepMins > 0 ? (int)Math.Round(asleepMins / 0.92, MidpointRounding.AwayFromZero) : 486);
 
                     if (asleepMins <= 0) asleepMins = 448; // fallback: 7h 28m
                     if (inBedMins < asleepMins) inBedMins = (int)Math.Round(asleepMins / 0.92);
@@ -141,14 +141,14 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     }
 
                     int deepMins = primarySession != null && primarySession.DeepSeconds > 0 
-                        ? (int)(primarySession.DeepSeconds / 60.0) 
-                        : (int)(asleepMins * 0.22);
+                        ? (int)Math.Round(primarySession.DeepSeconds / 60.0, MidpointRounding.AwayFromZero)
+                        : (int)Math.Round(asleepMins * 0.22, MidpointRounding.AwayFromZero);
                     int remMins = primarySession != null && primarySession.RemSeconds > 0 
-                        ? (int)(primarySession.RemSeconds / 60.0) 
-                        : (int)(asleepMins * 0.25);
+                        ? (int)Math.Round(primarySession.RemSeconds / 60.0, MidpointRounding.AwayFromZero)
+                        : (int)Math.Round(asleepMins * 0.25, MidpointRounding.AwayFromZero);
                     int lightMins = primarySession != null && primarySession.LightSeconds > 0 
-                        ? (int)(primarySession.LightSeconds / 60.0) 
-                        : (int)(asleepMins * 0.45);
+                        ? (int)Math.Round(primarySession.LightSeconds / 60.0, MidpointRounding.AwayFromZero)
+                        : (int)Math.Round(asleepMins * 0.45, MidpointRounding.AwayFromZero);
 
                     DeepStageText.Text = $"Deep {deepMins / 60}h {deepMins % 60}m";
                     RemStageText.Text = $"REM {remMins / 60}h {remMins % 60}m";
@@ -183,7 +183,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     LargeRemStageText.Text = $"{remMins / 60}h {remMins % 60}m";
                     LargeLightStageText.Text = $"{lightMins / 60}h {lightMins % 60}m";
                     int awakeMins = primarySession != null && primarySession.AwakeSeconds > 0 
-                        ? (int)(primarySession.AwakeSeconds / 60.0) 
+                        ? (int)Math.Round(primarySession.AwakeSeconds / 60.0, MidpointRounding.AwayFromZero)
                         : Math.Max(15, inBedMins - (deepMins + remMins + lightMins));
                     LargeAwakeStageText.Text = $"{awakeMins}m";
 

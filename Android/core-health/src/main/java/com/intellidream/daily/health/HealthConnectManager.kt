@@ -220,6 +220,7 @@ class HealthConnectManager(private val context: Context) {
             extId: String?,
             semantics: String?,
             overrideLocalDate: String? = null,
+            createdAt: Long? = null,
             minValue: Double? = null,
             maxValue: Double? = null,
             sampleCount: Int? = null
@@ -237,7 +238,9 @@ class HealthConnectManager(private val context: Context) {
                 startTime = startTime,
                 endTime = endTime,
                 sourceDevice = sourceKey,
+                createdAt = createdAt,
                 externalId = deterministicExtId,
+                sourceId = rawPackage,
                 semantics = semantics,
                 hostDeviceName = hostName,
                 sensorSourceName = sourceKey,
@@ -371,6 +374,7 @@ class HealthConnectManager(private val context: Context) {
                 val endDateStr = recordDateFormatter.format(Date(record.endTime.toEpochMilli()))
                 if (endDateStr != targetDateStr) continue
                 val dev = record.metadata.dataOrigin.packageName
+                val modifiedMs = record.metadata.lastModifiedTime.toEpochMilli()
                 if (record.stages.isNotEmpty()) {
                     for (stage in record.stages) {
                         val stageTypeStr = when (stage.stage) {
@@ -395,7 +399,8 @@ class HealthConnectManager(private val context: Context) {
                             rawPackage = dev,
                             extId = stageExtId,
                             semantics = "session_stage",
-                            overrideLocalDate = targetDateStr
+                            overrideLocalDate = targetDateStr,
+                            createdAt = modifiedMs
                         )?.let { telemetry.add(it) }
                     }
                 } else {
@@ -410,7 +415,8 @@ class HealthConnectManager(private val context: Context) {
                         rawPackage = dev,
                         extId = record.metadata.id,
                         semantics = "session_stage",
-                        overrideLocalDate = targetDateStr
+                        overrideLocalDate = targetDateStr,
+                        createdAt = modifiedMs
                     )?.let { telemetry.add(it) }
                 }
             }

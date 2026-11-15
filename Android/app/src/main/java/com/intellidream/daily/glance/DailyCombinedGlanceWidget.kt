@@ -41,6 +41,7 @@ import androidx.glance.unit.ColorProvider
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.MainActivity
 import com.intellidream.daily.R
+import com.intellidream.daily.model.SleepSession
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,8 +77,8 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
         val sleepEff = if (hasSleepData) sleepSession!!.efficiencyPercent else 0
         val deepSec = if (hasSleepData) (sleepSession?.deepSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
         val remSec = if (hasSleepData) (sleepSession?.remSeconds?.takeIf { it > 0 } ?: 0.0) else 0.0
-        val deepFormatted = if (hasSleepData && deepSec > 0) "${(deepSec / 3600).toInt()}h ${((deepSec % 3600) / 60).toInt()}m" else "--"
-        val remFormatted = if (hasSleepData && remSec > 0) "${(remSec / 3600).toInt()}h ${((remSec % 3600) / 60).toInt()}m" else "--"
+        val deepFormatted = if (hasSleepData && deepSec > 0) SleepSession.formatTimeSpan(deepSec) else "--"
+        val remFormatted = if (hasSleepData && remSec > 0) SleepSession.formatTimeSpan(remSec) else "--"
 
         val parsedMoney = app?.smartLedgerRepository?.parsedLedger?.value
         val netWorthLei = parsedMoney?.netWorth ?: 127156.47

@@ -1245,6 +1245,207 @@ struct HealthServiceTests {
         #expect(uiSession.hasGranularHypnogram == true)
         #expect(uiSession.stages.count == 4)
     }
+
+    @Test("Recency-aware stage painting lets newer reclassified HealthKit samples override older passes and coalesces adjacent stages")
+    func testMultiPassRecencyAwareStageDeduplicationAndCoalescing() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let bedtime = cal.date(byAdding: .hour, value: -1, to: today)! // 23:00
+        let t1 = today.addingTimeInterval(3600)   // Pass #1 written at 01:00
+        let t2 = today.addingTimeInterval(18000)  // Pass #2 reclassified at 05:00
+
+        // Pass #1: coarse 3h Light + 1h Light adjacent
+        // Pass #2: newer reclassified 45m Deep inside [00:00..00:45], 45m REM inside [00:45..01:30] + 30m adjacent REM [01:30..02:00]
+        // Also an earlier 1h Light at [02:00..03:00] and adjacent [03:00..04:00 Light]
+        let telemetry: [HealthTelemetryRecord] = [
+            HealthTelemetryRecord(
+                id: "p1_block",
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 300,
+                unit: "minutes",
+                startTime: bedtime,
+                endTime: bedtime.addingTimeInterval(5 * 3600), // 23:00..04:00 (5h Light)
+                sourceDevice: "Oura Ring",
+                createdAt: t1
+            ),
+            HealthTelemetryRecord(
+                id: "p2_deep",
+                userId: "u1",
+                type: "sleep_stage_deep",
+                value: 45,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(3600),      // 00:00..00:45 Deep
+                endTime: bedtime.addingTimeInterval(3600 + 2700),
+                sourceDevice: "Oura Ring",
+                createdAt: t2
+            ),
+            HealthTelemetryRecord(
+                id: "p2_rem_1",
+                userId: "u1",
+                type: "sleep_stage_rem",
+                value: 45,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(3600 + 2700), // 00:45..01:30 REM
+                endTime: bedtime.addingTimeInterval(3600 + 5400),
+                sourceDevice: "Oura Ring",
+                createdAt: t2
+            ),
+            HealthTelemetryRecord(
+                id: "p2_rem_2",
+                userId: "u1",
+                type: "sleep_stage_rem",
+                value: 30,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(3600 + 5400), // 01:30..02:00 REM (adjacent!)
+                endTime: bedtime.addingTimeInterval(3600 + 7200),
+                sourceDevice: "Oura Ring",
+                createdAt: t2
+            ),
+            HealthTelemetryRecord(
+                id: "p2_light_tail",
+                userId: "u1",
+                type: "sleep_stage_light",
+                value: 120,
+                unit: "minutes",
+                startTime: bedtime.addingTimeInterval(3600 + 7200), // 02:00..04:00 Light
+                endTime: bedtime.addingTimeInterval(5 * 3600),
+                sourceDevice: "Oura Ring",
+                createdAt: t2
+            )
+        ]
+
+        let result = SleepClusteringEngine.clusterSleep(targetDate: today, telemetry: telemetry)
+        let primary = try #require(result.primarySession)
+
+        #expect(Int(primary.deepSeconds.rounded()) == 2700)   // 45m
+        #expect(Int(primary.remSeconds.rounded()) == 4500)    // 45m + 30m = 75m
+        #expect(Int(primary.lightSeconds.rounded()) == 10800) // Remaining 1h (23:00-00:00) + 2h (02:00-04:00) = 3h
+        #expect(Int(primary.asleepSeconds.rounded()) == 18000)
+        // Adjacent REM [00:45..01:30] + [01:30..02:00] must coalesce into 1 stage -> 4 total blocks (Light, Deep, REM, Light)
+        #expect(primary.stages.count == 4)
+    }
+
+    @Test("SleepStageRecord encodes explicit UTC Z and decodes timezone-naive ISO as UTC")
+    func testSleepStageRecordUtcZEncodingAndNaiveUtcDecoding() throws {
+        let fixed = Date(timeIntervalSince1970: 1794704641) // 2026-11-15T01:04:01Z
+        let stage = SleepStageRecord(
+            id: "st1",
+            stageType: .deep,
+            startTime: fixed,
+            endTime: fixed.addingTimeInterval(600),
+            sourceDevice: "Oura Ring"
+        )
+        let data = try JSONEncoder().encode(stage)
+        let encodedJson = String(data: data, encoding: .utf8) ?? ""
+        #expect(encodedJson.contains("2026-11-15T01:04:01.000Z"))
+
+        let naivePayload = """
+        {
+          "id": "st_naive",
+          "stage_type": "REM",
+          "start_time": "2026-11-15T01:04:01.000",
+          "end_time": "2026-11-15T01:14:01.000",
+          "duration_seconds": 600,
+          "source_device": "Oura Ring"
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SleepStageRecord.self, from: naivePayload)
+        #expect(abs(decoded.startTime.timeIntervalSince1970 - fixed.timeIntervalSince1970) < 0.001)
+        #expect(decoded.stageType == .rem)
+    }
+
+    @Test("mergeLeanSleepSessions accepts reclassified local stages when duration ties or coalesces while protecting against transient truncation")
+    func testMergeLeanSleepSessionsReclassificationAndTruncationGuard() throws {
+        let start = Date(timeIntervalSince1970: 1794704641)
+        let end = start.addingTimeInterval(38670)
+        let dummyStage = SleepStageRecord(id: "s1", stageType: .light, startTime: start, endTime: end)
+        let remoteStages = (0..<81).map { i in
+            SleepStageRecord(id: "r_\(i)", stageType: .light, startTime: start, endTime: start.addingTimeInterval(60))
+        }
+        let freshLocalStages = (0..<75).map { i in
+            SleepStageRecord(id: "l_\(i)", stageType: i < 20 ? .deep : .rem, startTime: start, endTime: start.addingTimeInterval(60))
+        }
+
+        let remote = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+            userId: "u1",
+            localDate: "2026-11-15",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Oura Ring",
+            hostDeviceName: "Schmitz",
+            startTime: start,
+            endTime: end,
+            durationSeconds: 35460,
+            timeInBedSeconds: 38670,
+            deepSeconds: 5310,
+            remSeconds: 5490,
+            lightSeconds: 24660,
+            awakeSeconds: 3210,
+            stages: remoteStages,
+            sourcePriority: 1,
+            isUserSelected: true
+        )
+
+        let freshReclassifiedLocal = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+            userId: "u1",
+            localDate: "2026-11-15",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Oura Ring",
+            hostDeviceName: "Schmitz",
+            startTime: start,
+            endTime: end,
+            durationSeconds: 35460,
+            timeInBedSeconds: 38670,
+            deepSeconds: 6480,
+            remSeconds: 6420,
+            lightSeconds: 22560,
+            awakeSeconds: 3210,
+            stages: freshLocalStages,
+            sourcePriority: 1,
+            isUserSelected: false
+        )
+
+        let merged = HealthDataService.mergeLeanSleepSessions(
+            remote: [remote],
+            local: [freshReclassifiedLocal],
+            preferFreshLocal: true
+        )
+        #expect(merged.count == 1)
+        #expect(merged[0].deepSeconds == 6480)
+        #expect(merged[0].remSeconds == 6420)
+        #expect(merged[0].stages.count == 75)
+        #expect(merged[0].isUserSelected == true)
+
+        // Guard: transient partial read (13 minutes) must NOT overwrite full remote session
+        let truncatedLocal = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+            userId: "u1",
+            localDate: "2026-11-15",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Oura Ring",
+            hostDeviceName: "Schmitz",
+            startTime: start,
+            endTime: start.addingTimeInterval(780),
+            durationSeconds: 780,
+            timeInBedSeconds: 780,
+            deepSeconds: 0,
+            remSeconds: 0,
+            lightSeconds: 780,
+            awakeSeconds: 0,
+            stages: [dummyStage],
+            sourcePriority: 1
+        )
+        let guarded = HealthDataService.mergeLeanSleepSessions(
+            remote: [remote],
+            local: [truncatedLocal],
+            preferFreshLocal: true
+        )
+        #expect(guarded.count == 1)
+        #expect(guarded[0].durationSeconds == 35460)
+        #expect(guarded[0].stages.count == 81)
+    }
 }
 
 

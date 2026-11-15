@@ -159,5 +159,47 @@ namespace Daily.Health.Tests
                 }
             }
         }
+
+        [Fact]
+        public void TestNaiveAndExplicitUtcIsoTimestampsParseEquivalently()
+        {
+            var fallback = new DateTime(2026, 11, 15, 0, 0, 0, DateTimeKind.Local);
+            var fromExplicitZ = HealthSleepSessionRecord.ParseUtcToLocal("2026-11-15T01:04:01.000Z", fallback);
+            var fromNaive = HealthSleepSessionRecord.ParseUtcToLocal("2026-11-15T01:04:01.000", fallback);
+
+            Assert.Equal(fromExplicitZ, fromNaive);
+
+            var expectedUtc = new DateTimeOffset(2026, 11, 15, 1, 4, 1, TimeSpan.Zero);
+            Assert.Equal(expectedUtc.LocalDateTime, fromNaive);
+
+            var lean = new HealthSleepSessionRecord
+            {
+                Id = "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+                UserId = "u1",
+                LocalDate = "2026-11-15",
+                SourceDeviceKey = "Oura Ring",
+                StartTime = "2026-11-15T01:04:01.000Z",
+                EndTime = "2026-11-15T11:48:31.000Z",
+                DurationSeconds = 35460,
+                DeepSeconds = 6480,
+                RemSeconds = 6420,
+                LightSeconds = 22560,
+                AwakeSeconds = 3210,
+                Stages = new List<SleepStageRecord>
+                {
+                    new SleepStageRecord
+                    {
+                        Stage = "deep",
+                        StartTime = "2026-11-15T01:04:01.000",
+                        EndTime = "2026-11-15T02:52:01.000",
+                        DurationSeconds = 6480
+                    }
+                }
+            };
+
+            var domain = lean.ToDomainSleepSession(new DateTime(2026, 11, 15));
+            Assert.Single(domain.Stages);
+            Assert.Equal(domain.StartTime, domain.Stages[0].StartTime);
+        }
     }
 }

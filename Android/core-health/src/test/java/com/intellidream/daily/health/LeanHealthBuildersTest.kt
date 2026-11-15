@@ -454,4 +454,143 @@ class LeanHealthBuildersTest {
         assertEquals(10420, summary.steps)
         assertEquals(24, summary.stressAvg)
     }
+
+    @Test
+    fun testMultiPassRecencyAwareStageDeduplicationAndCoalescing() {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val today = cal.time
+        val bedtimeMs = cal.timeInMillis - 3600_000L // 23:00
+        val pass1At = cal.timeInMillis + 3600_000L
+        val pass2At = cal.timeInMillis + 18000_000L
+
+        val telemetry = listOf(
+            HealthTelemetryRecord(
+                id = "p1_block",
+                userId = "u1",
+                type = "sleep_stage_light",
+                value = 300.0 * 60.0,
+                unit = "seconds",
+                startTime = bedtimeMs,
+                endTime = bedtimeMs + 5 * 3600_000L,
+                sourceDevice = "Oura Ring",
+                createdAt = pass1At
+            ),
+            HealthTelemetryRecord(
+                id = "p2_deep",
+                userId = "u1",
+                type = "sleep_stage_deep",
+                value = 2700.0,
+                unit = "seconds",
+                startTime = bedtimeMs + 3600_000L,
+                endTime = bedtimeMs + 3600_000L + 2700_000L,
+                sourceDevice = "Oura Ring",
+                createdAt = pass2At
+            ),
+            HealthTelemetryRecord(
+                id = "p2_rem_1",
+                userId = "u1",
+                type = "sleep_stage_rem",
+                value = 2700.0,
+                unit = "seconds",
+                startTime = bedtimeMs + 3600_000L + 2700_000L,
+                endTime = bedtimeMs + 3600_000L + 5400_000L,
+                sourceDevice = "Oura Ring",
+                createdAt = pass2At
+            ),
+            HealthTelemetryRecord(
+                id = "p2_rem_2",
+                userId = "u1",
+                type = "sleep_stage_rem",
+                value = 1800.0,
+                unit = "seconds",
+                startTime = bedtimeMs + 3600_000L + 5400_000L,
+                endTime = bedtimeMs + 3600_000L + 7200_000L,
+                sourceDevice = "Oura Ring",
+                createdAt = pass2At
+            ),
+            HealthTelemetryRecord(
+                id = "p2_light_tail",
+                userId = "u1",
+                type = "sleep_stage_light",
+                value = 7200.0,
+                unit = "seconds",
+                startTime = bedtimeMs + 3600_000L + 7200_000L,
+                endTime = bedtimeMs + 5 * 3600_000L,
+                sourceDevice = "Oura Ring",
+                createdAt = pass2At
+            )
+        )
+
+        val result = SleepClusteringEngine.clusterSleep(targetDate = today, telemetry = telemetry)
+        val primary = result.primarySession
+        assertNotNull(primary)
+        assertEquals(2700.0, primary!!.deepSeconds, 0.1)
+        assertEquals(4500.0, primary.remSeconds, 0.1)
+        assertEquals(10800.0, primary.lightSeconds, 0.1)
+        assertEquals(4, primary.stages.size)
+    }
+
+    @Test
+    fun testMergeLeanSleepSessionsAllowsReclassificationWhenFreshLocal() {
+        val start = 1794704641000L
+        val end = start + 38670_000L
+        val remoteStages = (0 until 81).map { i ->
+            SleepStageRecord(id = "r_$i", stageType = SleepStageType.LIGHT, startTime = start, endTime = start + 60_000L)
+        }
+        val localStages = (0 until 75).map { i ->
+            SleepStageRecord(id = "l_$i", stageType = if (i < 20) SleepStageType.DEEP else SleepStageType.REM, startTime = start, endTime = start + 60_000L)
+        }
+        val remote = HealthSleepSessionRecord(
+            id = "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+            userId = "u1",
+            localDate = "2026-11-15",
+            sessionType = "primary_sleep",
+            sourceDeviceKey = "Oura Ring",
+            hostDeviceName = "Schmitz",
+            startTime = start,
+            endTime = end,
+            durationSeconds = 35460,
+            timeInBedSeconds = 38670,
+            deepSeconds = 5310,
+            remSeconds = 5490,
+            lightSeconds = 24660,
+            awakeSeconds = 3210,
+            stages = remoteStages,
+            sourcePriority = 1,
+            isUserSelected = true
+        )
+        val reclassifiedLocal = remote.copy(
+            deepSeconds = 6480,
+            remSeconds = 6420,
+            lightSeconds = 22560,
+            stages = localStages,
+            isUserSelected = false
+        )
+
+        val merged = HealthDataRepository.mergeLeanSleepSessions(
+            remote = listOf(remote),
+            local = listOf(reclassifiedLocal),
+            preferFreshLocal = true
+        )
+        assertEquals(1, merged.size)
+        assertEquals(6480, merged[0].deepSeconds)
+        assertEquals(6420, merged[0].remSeconds)
+        assertEquals(75, merged[0].stages.size)
+        assertTrue(merged[0].isUserSelected)
+
+        // Guard against transient 13m partial read
+        val truncatedLocal = remote.copy(durationSeconds = 780, stages = listOf(localStages.first()))
+        val guarded = HealthDataRepository.mergeLeanSleepSessions(
+            remote = listOf(remote),
+            local = listOf(truncatedLocal),
+            preferFreshLocal = true
+        )
+        assertEquals(35460, guarded[0].durationSeconds)
+        assertEquals(81, guarded[0].stages.size)
+    }
 }

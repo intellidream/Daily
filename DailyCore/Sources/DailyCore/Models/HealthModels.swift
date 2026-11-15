@@ -510,6 +510,76 @@ public struct SleepStageRecord: Identifiable, Codable, Hashable, Sendable {
         case sourceDeviceCamel = "sourceDevice"
     }
     
+    nonisolated(unsafe) private static let utcIsoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        return f
+    }()
+
+    nonisolated(unsafe) private static let utcIsoStandard: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        return f
+    }()
+
+    private static let naiveUtcMillis: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS"
+        return f
+    }()
+
+    private static let naiveUtcStandard: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return f
+    }()
+
+    private static func parseStageDate(_ raw: String) -> Date? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let d = utcIsoFractional.date(from: trimmed) ?? utcIsoStandard.date(from: trimmed) {
+            return d
+        }
+        // Normalize space separator or microseconds (6+ fractional digits -> 3) for UTC fallback
+        let normalized = trimmed.replacingOccurrences(of: " ", with: "T")
+        if let dotIdx = normalized.firstIndex(of: ".") {
+            let afterDot = normalized[normalized.index(after: dotIdx)...]
+            let digits = afterDot.prefix(while: { $0.isNumber })
+            let rest = afterDot.dropFirst(digits.count)
+            if digits.count > 3 {
+                let truncated = "\(normalized[..<dotIdx]).\(digits.prefix(3))\(rest)"
+                if let d = utcIsoFractional.date(from: truncated) ?? naiveUtcMillis.date(from: truncated) {
+                    return d
+                }
+            }
+        }
+        return naiveUtcMillis.date(from: normalized) ?? naiveUtcStandard.date(from: normalized)
+    }
+
+    private static func decodeStageDate(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        primaryKey: CodingKeys,
+        fallbackKey: CodingKeys
+    ) throws -> Date {
+        if let raw = try? container.decode(String.self, forKey: primaryKey),
+           let parsed = parseStageDate(raw) {
+            return parsed
+        }
+        if let raw = try? container.decode(String.self, forKey: fallbackKey),
+           let parsed = parseStageDate(raw) {
+            return parsed
+        }
+        if let d = try? container.decode(Date.self, forKey: primaryKey) {
+            return d
+        }
+        return try container.decode(Date.self, forKey: fallbackKey)
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
@@ -520,16 +590,8 @@ public struct SleepStageRecord: Identifiable, Codable, Hashable, Sendable {
         } else {
             self.stageType = .unknown
         }
-        if let s = try? container.decode(Date.self, forKey: .startTime) {
-            self.startTime = s
-        } else {
-            self.startTime = try container.decode(Date.self, forKey: .startTimeCamel)
-        }
-        if let e = try? container.decode(Date.self, forKey: .endTime) {
-            self.endTime = e
-        } else {
-            self.endTime = try container.decode(Date.self, forKey: .endTimeCamel)
-        }
+        self.startTime = try Self.decodeStageDate(from: container, primaryKey: .startTime, fallbackKey: .startTimeCamel)
+        self.endTime = try Self.decodeStageDate(from: container, primaryKey: .endTime, fallbackKey: .endTimeCamel)
         if let d = try? container.decode(Double.self, forKey: .durationSeconds) {
             self.durationSeconds = d
         } else if let d = try? container.decode(Double.self, forKey: .durationSecondsCamel) {
@@ -544,8 +606,8 @@ public struct SleepStageRecord: Identifiable, Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(stageType, forKey: .stageType)
-        try container.encode(startTime, forKey: .startTime)
-        try container.encode(endTime, forKey: .endTime)
+        try container.encode(Self.utcIsoFractional.string(from: startTime), forKey: .startTime)
+        try container.encode(Self.utcIsoFractional.string(from: endTime), forKey: .endTime)
         try container.encode(durationSeconds, forKey: .durationSeconds)
         try container.encodeIfPresent(sourceDevice, forKey: .sourceDevice)
     }

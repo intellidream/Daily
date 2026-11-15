@@ -464,7 +464,7 @@ class HealthDataRepository(
                         groupIntradayHeartRateIntoBuckets(cachedTelemetry, currentUserId, dateKey)
                     } else emptyList()
 
-                    cachedLeanSleepSessions = mergeLeanSleepSessions(remote = remoteSleep, local = localSleep)
+                    cachedLeanSleepSessions = mergeLeanSleepSessions(remote = remoteSleep, local = localSleep, preferFreshLocal = true)
                     cachedLeanDailyVitals = mergeLeanDailyVitals(remote = remoteVitals, local = localVitals)
                     cachedLeanIntradayHeartRate = mergeLeanIntradayHr(remote = remoteHr, local = localHr)
 
@@ -711,7 +711,7 @@ class HealthDataRepository(
                     groupIntradayHeartRateIntoBuckets(localTelemetry, currentUserId, dateKey)
                 } else emptyList()
 
-                cachedLeanSleepSessions = mergeLeanSleepSessions(remote = remoteSleep, local = localLeanSleep)
+                cachedLeanSleepSessions = mergeLeanSleepSessions(remote = remoteSleep, local = localLeanSleep, preferFreshLocal = true)
                 cachedLeanDailyVitals = mergeLeanDailyVitals(remote = remoteVitals, local = localLeanVitals)
                 cachedLeanIntradayHeartRate = mergeLeanIntradayHr(remote = remoteHr, local = localLeanHr)
                 if (remoteSources.isNotEmpty()) {
@@ -811,32 +811,9 @@ class HealthDataRepository(
 
     private fun mergeLeanSleepSessions(
         remote: List<HealthSleepSessionRecord>,
-        local: List<HealthSleepSessionRecord>
-    ): List<HealthSleepSessionRecord> {
-        if (local.isEmpty()) return remote
-        if (remote.isEmpty()) return local
-        val map = LinkedHashMap<String, HealthSleepSessionRecord>()
-        for (r in remote) {
-            val canon = DeviceSource.from(r.sourceDeviceKey).displayName
-            val key = "${r.sessionType}_$canon"
-            val existing = map[key]
-            if (existing == null || r.durationSeconds >= existing.durationSeconds) {
-                map[key] = r
-            }
-        }
-        for (l in local) {
-            val canon = DeviceSource.from(l.sourceDeviceKey).displayName
-            val key = "${l.sessionType}_$canon"
-            val existing = map[key]
-            if (existing == null ||
-                (l.stages.isNotEmpty() && existing.stages.isEmpty()) ||
-                l.durationSeconds > existing.durationSeconds
-            ) {
-                map[key] = l
-            }
-        }
-        return map.values.toList()
-    }
+        local: List<HealthSleepSessionRecord>,
+        preferFreshLocal: Boolean = false
+    ): List<HealthSleepSessionRecord> = Companion.mergeLeanSleepSessions(remote, local, preferFreshLocal)
 
     private fun mergeLeanDailyVitals(
         remote: List<HealthDailyVitalsRecord>,
@@ -2718,7 +2695,7 @@ class HealthDataRepository(
         if (sessions.isEmpty()) return false
 
         val fp = sessions.sortedBy { it.id }.joinToString("|") {
-            "${it.id}:${it.durationSeconds}:${it.deepSeconds}:${it.remSeconds}:${it.lightSeconds}:${it.awakeSeconds}:${it.stages.size}:${it.isUserSelected}"
+            "${it.id}:${it.durationSeconds}:${it.deepSeconds}:${it.remSeconds}:${it.lightSeconds}:${it.awakeSeconds}:${it.stages.size}:${it.startTime}:${it.endTime}:${it.isUserSelected}"
         }
         if (lastUploadedSleepFpByDate[dateKey] == fp) return false
 
@@ -3377,6 +3354,85 @@ class HealthDataRepository(
                     sampleCount = agg.totalCount
                 )
             }.sortedBy { it.bucketMinute }
+        }
+
+        fun mergeLeanSleepSessions(
+            remote: List<HealthSleepSessionRecord>,
+            local: List<HealthSleepSessionRecord>,
+            preferFreshLocal: Boolean = false
+        ): List<HealthSleepSessionRecord> {
+            if (local.isEmpty()) return remote
+            if (remote.isEmpty()) return local
+            val map = LinkedHashMap<String, HealthSleepSessionRecord>()
+            for (r in remote) {
+                val canon = DeviceSource.from(r.sourceDeviceKey).displayName
+                val key = "${r.sessionType}_$canon"
+                val existing = map[key]
+                if (existing == null ||
+                    r.stages.size > existing.stages.size ||
+                    (r.stages.size == existing.stages.size && r.durationSeconds >= existing.durationSeconds)
+                ) {
+                    map[key] = r
+                }
+            }
+            for (l in local) {
+                val canon = DeviceSource.from(l.sourceDeviceKey).displayName
+                val key = "${l.sessionType}_$canon"
+                val existing = map[key]
+                if (existing == null) {
+                    map[key] = l
+                    continue
+                }
+                val architectureChanged =
+                    l.durationSeconds != existing.durationSeconds ||
+                    l.deepSeconds != existing.deepSeconds ||
+                    l.remSeconds != existing.remSeconds ||
+                    l.lightSeconds != existing.lightSeconds ||
+                    l.awakeSeconds != existing.awakeSeconds ||
+                    l.stages.size != existing.stages.size ||
+                    kotlin.math.abs(l.startTime - existing.startTime) > 1000L ||
+                    kotlin.math.abs(l.endTime - existing.endTime) > 1000L
+                val compatibleHost = l.hostDeviceName == null || existing.hostDeviceName == null || l.hostDeviceName == existing.hostDeviceName
+                val isValidReclassification = preferFreshLocal &&
+                    compatibleHost &&
+                    l.stages.isNotEmpty() &&
+                    architectureChanged &&
+                    (l.durationSeconds >= existing.durationSeconds - 600 ||
+                        (l.deepSeconds + l.remSeconds > existing.deepSeconds + existing.remSeconds &&
+                            l.durationSeconds * 10 >= existing.durationSeconds * 9))
+
+                if (existing.stages.isEmpty() && l.stages.isNotEmpty()) {
+                    map[key] = l
+                } else if ((l.durationSeconds > existing.durationSeconds && (preferFreshLocal || l.stages.size >= existing.stages.size)) ||
+                    isValidReclassification
+                ) {
+                    map[key] = HealthSleepSessionRecord(
+                        id = existing.id,
+                        userId = existing.userId,
+                        localDate = existing.localDate,
+                        sessionType = existing.sessionType,
+                        sourceDeviceKey = canon,
+                        hostDeviceName = l.hostDeviceName ?: existing.hostDeviceName,
+                        startTime = l.startTime,
+                        endTime = l.endTime,
+                        durationSeconds = l.durationSeconds,
+                        timeInBedSeconds = maxOf(existing.timeInBedSeconds, l.timeInBedSeconds),
+                        efficiencyPercent = l.efficiencyPercent ?: existing.efficiencyPercent,
+                        sleepScore = l.sleepScore ?: existing.sleepScore,
+                        deepSeconds = l.deepSeconds,
+                        remSeconds = l.remSeconds,
+                        lightSeconds = l.lightSeconds,
+                        awakeSeconds = l.awakeSeconds,
+                        latencySeconds = existing.latencySeconds,
+                        qualityRating = l.qualityRating ?: existing.qualityRating,
+                        stages = l.stages,
+                        sourcePriority = minOf(existing.sourcePriority, l.sourcePriority),
+                        isUserSelected = existing.isUserSelected || l.isUserSelected,
+                        ingestedAt = l.ingestedAt ?: existing.ingestedAt
+                    )
+                }
+            }
+            return map.values.toList()
         }
 
         fun buildLeanSleepSessionRecords(

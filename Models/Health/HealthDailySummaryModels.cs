@@ -995,13 +995,31 @@ namespace Daily.Models.Health
             (Stages != null && Stages.Count > 0) ||
             ((DeepSeconds ?? 0) + (RemSeconds ?? 0) + (LightSeconds ?? 0)) > 0;
 
+        internal static DateTime ParseUtcToLocal(string? raw, DateTime fallback)
+        {
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                if (DateTimeOffset.TryParse(
+                    raw.Trim(),
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var dto))
+                {
+                    return dto.LocalDateTime;
+                }
+                if (DateTime.TryParse(raw.Trim(), out var parsed))
+                {
+                    return parsed.Kind == DateTimeKind.Utc ? parsed.ToLocalTime() : parsed;
+                }
+            }
+            return fallback;
+        }
+
         public SleepSession ToDomainSleepSession(DateTime fallbackDate)
         {
             var canonDevice = DeviceSource.From(SourceDeviceKey).DisplayName;
-            DateTimeOffset.TryParse(StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var sDto);
-            DateTimeOffset.TryParse(EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var eDto);
-            var start = sDto != default ? sDto.LocalDateTime : (DateTime.TryParse(StartTime, out var sp) ? sp : fallbackDate.Date.AddHours(-1));
-            var end = eDto != default ? eDto.LocalDateTime : (DateTime.TryParse(EndTime, out var ep) ? ep : fallbackDate.Date.AddHours(7));
+            var start = ParseUtcToLocal(StartTime, fallbackDate.Date.AddHours(-1));
+            var end = ParseUtcToLocal(EndTime, fallbackDate.Date.AddHours(7));
 
             int asleepS = DurationSeconds;
             int inBedS = Math.Max(asleepS, TimeInBedSeconds ?? (asleepS + (AwakeSeconds ?? 0)));
@@ -1027,10 +1045,8 @@ namespace Daily.Models.Health
             {
                 session.Stages = Stages!.Select(st =>
                 {
-                    DateTimeOffset.TryParse(st.StartTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var stS);
-                    DateTimeOffset.TryParse(st.EndTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var stE);
-                    var sLocal = stS != default ? stS.LocalDateTime : (DateTime.TryParse(st.StartTime, out var sLocalP) ? sLocalP : start);
-                    var eLocal = stE != default ? stE.LocalDateTime : (DateTime.TryParse(st.EndTime, out var eLocalP) ? eLocalP : sLocal.AddSeconds(st.DurationSeconds));
+                    var sLocal = ParseUtcToLocal(st.StartTime, start);
+                    var eLocal = ParseUtcToLocal(st.EndTime, sLocal.AddSeconds(st.DurationSeconds));
                     var stageKey = st.Stage.ToLowerInvariant() switch
                     {
                         "deep" => "sleep_stage_deep",

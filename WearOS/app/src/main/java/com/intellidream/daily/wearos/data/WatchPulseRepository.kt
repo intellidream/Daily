@@ -361,8 +361,9 @@ class WatchPulseRepository private constructor(private val context: Context) {
         val hasSleepData = asleepSeconds > 0 && sleepScore > 0
 
         val sleepDurationFormatted = if (asleepSeconds > 0) {
-            val h = asleepSeconds / 3600
-            val m = (asleepSeconds % 3600) / 60
+            val totalMins = (asleepSeconds / 60.0).roundToInt()
+            val h = totalMins / 60
+            val m = totalMins % 60
             if (h > 0) "${h}h ${m}m" else "${m}m"
         } else {
             "--"

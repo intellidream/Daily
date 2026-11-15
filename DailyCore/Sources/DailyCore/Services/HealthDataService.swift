@@ -471,7 +471,7 @@ public final class HealthDataService: ObservableObject {
                 }
             }
             
-            self.currentLeanSleepSessions = Self.mergeLeanSleepSessions(remote: sleepRows, local: self.currentLeanSleepSessions.filter { $0.localDate == dateKey }, sources: self.currentLeanSources)
+            self.currentLeanSleepSessions = Self.mergeLeanSleepSessions(remote: sleepRows, local: self.currentLeanSleepSessions.filter { $0.localDate == dateKey }, sources: self.currentLeanSources, preferFreshLocal: false)
             self.currentLeanDailyVitals = Self.mergeLeanDailyVitals(remote: vitalsRows, local: self.currentLeanDailyVitals.filter { $0.localDate == dateKey }, sources: self.currentLeanSources)
             self.currentLeanIntradayHeartRate = Self.mergeLeanIntradayHr(remote: hrRows, local: self.currentLeanIntradayHeartRate.filter { $0.localDate == dateKey })
             
@@ -839,7 +839,7 @@ public final class HealthDataService: ObservableObject {
             )
         }
         
-        let mergedSleep = Self.mergeLeanSleepSessions(remote: leanSleep, local: localSleepRecs, sources: self.currentLeanSources)
+        let mergedSleep = Self.mergeLeanSleepSessions(remote: leanSleep, local: localSleepRecs, sources: self.currentLeanSources, preferFreshLocal: true)
         let mergedVitals = Self.mergeLeanDailyVitals(remote: leanVitals, local: localVitalsRecs, sources: self.currentLeanSources)
         let mergedHr = Self.mergeLeanIntradayHr(remote: leanHr, local: localHrRecs)
         
@@ -1393,10 +1393,11 @@ public final class HealthDataService: ObservableObject {
     
     // MARK: - Lean Merge & Source Helpers
     
-    nonisolated private static func mergeLeanSleepSessions(
+    nonisolated static func mergeLeanSleepSessions(
         remote: [HealthSleepSessionRecord],
         local: [HealthSleepSessionRecord],
-        sources: [HealthSourceRecord] = []
+        sources: [HealthSourceRecord] = [],
+        preferFreshLocal: Bool = false
     ) -> [HealthSleepSessionRecord] {
         var map: [String: HealthSleepSessionRecord] = [:]
         for r in remote {
@@ -1414,9 +1415,27 @@ public final class HealthDataService: ObservableObject {
             let canon = DeviceSource.from(name: l.sourceDeviceKey).displayName
             let key = "\(l.sessionType)|\(canon)"
             if let prev = map[key] {
+                let architectureChanged =
+                    l.durationSeconds != prev.durationSeconds ||
+                    l.deepSeconds != prev.deepSeconds ||
+                    l.remSeconds != prev.remSeconds ||
+                    l.lightSeconds != prev.lightSeconds ||
+                    l.awakeSeconds != prev.awakeSeconds ||
+                    l.stages.count != prev.stages.count ||
+                    abs(l.startTime.timeIntervalSince(prev.startTime)) > 1.0 ||
+                    abs(l.endTime.timeIntervalSince(prev.endTime)) > 1.0
+                let compatibleHost = l.hostDeviceName == nil || prev.hostDeviceName == nil || l.hostDeviceName == prev.hostDeviceName
+                let isValidReclassification = preferFreshLocal &&
+                    compatibleHost &&
+                    !l.stages.isEmpty &&
+                    architectureChanged &&
+                    (l.durationSeconds >= prev.durationSeconds - 600 ||
+                     (l.deepSeconds + l.remSeconds > prev.deepSeconds + prev.remSeconds &&
+                      l.durationSeconds * 10 >= prev.durationSeconds * 9))
+
                 if prev.stages.isEmpty && !l.stages.isEmpty {
                     map[key] = l
-                } else if l.durationSeconds > prev.durationSeconds && l.stages.count >= prev.stages.count {
+                } else if (l.durationSeconds > prev.durationSeconds && (preferFreshLocal || l.stages.count >= prev.stages.count)) || isValidReclassification {
                     map[key] = HealthSleepSessionRecord(
                         id: prev.id,
                         userId: prev.userId,
@@ -2961,7 +2980,15 @@ public final class HealthDataService: ObservableObject {
         for (dateKey, dateRecords) in recordsByDate {
             let totalVal = dateRecords.compactMap(\.value).reduce(0.0, +)
             let maxEnd = dateRecords.map { ($0.endTime ?? $0.startTime).timeIntervalSince1970 }.max() ?? 0
-            let signature = "\(dateRecords.count)_\(Int(round(totalVal)))_\(Int(maxEnd))"
+            let stageSignature = dateRecords
+                .filter { $0.isSleepStage || $0.isSleep }
+                .reduce(into: [String: Int]()) { acc, r in
+                    acc[r.type, default: 0] += Int(round((r.value ?? 0) * 10))
+                }
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key):\($0.value)" }
+                .joined(separator: ",")
+            let signature = "\(dateRecords.count)_\(Int(round(totalVal)))_\(Int(maxEnd))_\(stageSignature)"
             if let prev = lastSyncedSignatureByDate[dateKey],
                prev.signature == signature,
                now.timeIntervalSince(prev.timestamp) < 90 {
@@ -3048,7 +3075,7 @@ public final class HealthDataService: ObservableObject {
         guard !sessions.isEmpty else { return false }
         let sleepFp = sessions
             .sorted { $0.id < $1.id }
-            .map { "\($0.id):\($0.durationSeconds):\($0.stages.count):\($0.deepSeconds):\($0.remSeconds):\($0.lightSeconds)" }
+            .map { "\($0.id):\($0.durationSeconds):\($0.stages.count):\($0.deepSeconds):\($0.remSeconds):\($0.lightSeconds):\($0.awakeSeconds):\(Int($0.startTime.timeIntervalSince1970)):\(Int($0.endTime.timeIntervalSince1970))" }
             .joined(separator: "|")
         if lastUploadedSleepFpByDate[dateKey] == sleepFp {
             return false
