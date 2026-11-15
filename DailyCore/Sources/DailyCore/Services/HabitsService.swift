@@ -136,6 +136,10 @@ public final class HabitsService: ObservableObject {
     private let userDefaults: UserDefaults
     private let groupSuiteName = GroupDefaults.suiteName
     private var offlineLogQueue: [HabitLogRecord] = []
+    private var pendingInFlightRecords: [UUID: HabitLogRecord] = [:]
+    private var recentlyPushedRecords: [UUID: (record: HabitLogRecord, pushedAt: Date)] = [:]
+    private var pendingInFlightDeleteIds: Set<String> = []
+    private var lastWrittenBridgeUpdatedAt: Date = .distantPast
     private var lastForegroundRefreshAt: Date = .distantPast
     private var lastConsistencyAndPrefsFetchAt: Date = .distantPast
     private var lastKnownTodayStart: Date = Calendar.current.startOfDay(for: Date())
@@ -282,12 +286,37 @@ public final class HabitsService: ObservableObject {
     }
     
     // MARK: - Logging Actions
-    
+
+    private func cachedSyncUserId() -> UUID? {
+        for key in ["supabase_user_id", "authenticated_user_id", "current_user_id"] {
+            if let idStr = userDefaults.string(forKey: key),
+               !idStr.isEmpty,
+               idStr.lowercased() != "guest",
+               let uuid = UUID(uuidString: idStr) {
+                return uuid
+            }
+        }
+        return nil
+    }
+
+    private func computeLogDate(for targetDate: Date) -> Date {
+        let cal = Calendar.current
+        if cal.isDateInToday(targetDate) {
+            return Date()
+        }
+        let nowTime = cal.dateComponents([.hour, .minute, .second], from: Date())
+        var components = cal.dateComponents([.year, .month, .day], from: targetDate)
+        components.hour = nowTime.hour
+        components.minute = nowTime.minute
+        components.second = nowTime.second
+        return cal.date(from: components) ?? targetDate
+    }
+
     public func logWater(preset: WaterPreset, customAmount: Double? = nil, multiplier: Int = 1, customDrinkName: String? = nil) async {
         let safeMultiplier = max(1, multiplier)
         let baseAmount = customAmount ?? preset.defaultAmountMl
         let totalAmount = baseAmount * Double(safeMultiplier)
-        
+
         let drinkName = customDrinkName ?? preset.rawValue
         var metaDict: [String: String] = ["drink": drinkName]
         if safeMultiplier > 1 {
@@ -296,60 +325,50 @@ public final class HabitsService: ObservableObject {
         }
         let metaJson = (try? JSONSerialization.data(withJSONObject: metaDict, options: []))
             .flatMap { String(data: $0, encoding: .utf8) }
-        
-        let session = try? await supabase.auth.session
-        let userId = session?.user.id
-        
-        // Ensure proper date attribution if viewing a past date
-        let logDate: Date
-        if Calendar.current.isDateInToday(selectedDate) {
-            logDate = Date()
-        } else {
-            let cal = Calendar.current
-            let nowTime = cal.dateComponents([.hour, .minute, .second], from: Date())
-            var components = cal.dateComponents([.year, .month, .day], from: selectedDate)
-            components.hour = nowTime.hour
-            components.minute = nowTime.minute
-            components.second = nowTime.second
-            logDate = cal.date(from: components) ?? selectedDate
-        }
-        
+
+        let logDate = computeLogDate(for: selectedDate)
+        let isLogForToday = Calendar.current.isDateInToday(logDate)
+        let now = Date()
+
         let newRecord = HabitLogRecord(
             id: UUID(),
-            userId: userId,
+            userId: cachedSyncUserId(),
             habitType: "water",
             value: totalAmount,
             unit: "ml",
             loggedAt: logDate,
             metadata: metaJson,
-            createdAt: Date(),
-            updatedAt: Date(),
+            createdAt: now,
+            updatedAt: now,
             isDeleted: false
         )
-        
-        // 1. Update in-memory state immediately (0ms latency)
+
+        // 1. Protect against concurrent fetches and update in-memory + atomic App Group state synchronously (0ms latency)
+        pendingInFlightRecords[newRecord.id] = newRecord
         todaysWaterLogs.insert(newRecord, at: 0)
         recalculateDailyAggregates()
         saveLocalLogs()
-        
-        // 2. Update daily totals cache & precomputed histories
+
         let dateKey = isoDateFormatter.string(from: logDate)
         waterDailyTotals[dateKey, default: 0] += totalAmount
-        saveDailyTotals()
+        saveDailyTotals(reloadingKinds: isLogForToday ? [
+            WidgetDataCoordinator.WidgetKind.bubbles,
+            WidgetDataCoordinator.WidgetKind.combined
+        ] : [])
         recomputeAllHistoriesAndHeatmaps()
-        
-        // 3. Trigger HealthKit hook
+
+        // 2. Trigger HealthKit hook
         onWaterLogged?(totalAmount, logDate)
-        
-        // 4. Queue & Push to Supabase
+
+        // 3. Push to Supabase (pendingInFlightRecords protects until pushed or queued)
         await pushLogToSupabase(newRecord)
     }
-    
+
     public func logSmoke(preset: SmokePreset, customCount: Int? = nil, multiplier: Int = 1) async {
         let safeMultiplier = max(1, multiplier)
         let baseCount = customCount ?? preset.defaultCount
         let totalCount = baseCount * safeMultiplier
-        
+
         var metaDict: [String: String] = ["type": preset.rawValue]
         if safeMultiplier > 1 {
             metaDict["multiplier"] = "\(safeMultiplier)"
@@ -357,72 +376,71 @@ public final class HabitsService: ObservableObject {
         }
         let metaJson = (try? JSONSerialization.data(withJSONObject: metaDict, options: []))
             .flatMap { String(data: $0, encoding: .utf8) }
-        
-        let session = try? await supabase.auth.session
-        let userId = session?.user.id
-        
-        // Ensure proper date attribution if viewing a past date
-        let logDate: Date
-        if Calendar.current.isDateInToday(selectedDate) {
-            logDate = Date()
-        } else {
-            let cal = Calendar.current
-            let nowTime = cal.dateComponents([.hour, .minute, .second], from: Date())
-            var components = cal.dateComponents([.year, .month, .day], from: selectedDate)
-            components.hour = nowTime.hour
-            components.minute = nowTime.minute
-            components.second = nowTime.second
-            logDate = cal.date(from: components) ?? selectedDate
-        }
-        
+
+        let logDate = computeLogDate(for: selectedDate)
+        let isLogForToday = Calendar.current.isDateInToday(logDate)
+        let now = Date()
+
         let newRecord = HabitLogRecord(
             id: UUID(),
-            userId: userId,
+            userId: cachedSyncUserId(),
             habitType: "smokes",
             value: Double(totalCount),
             unit: "cigs",
             loggedAt: logDate,
             metadata: metaJson,
-            createdAt: Date(),
-            updatedAt: Date(),
+            createdAt: now,
+            updatedAt: now,
             isDeleted: false
         )
-        
-        // 1. Update in-memory state immediately
+
+        // 1. Protect against concurrent fetches and update in-memory + atomic App Group state synchronously (0ms latency)
+        pendingInFlightRecords[newRecord.id] = newRecord
         todaysSmokesLogs.insert(newRecord, at: 0)
         recalculateDailyAggregates()
         saveLocalLogs()
-        
-        // 2. Update daily totals cache & precomputed histories
+
         let dateKey = isoDateFormatter.string(from: logDate)
         smokesDailyTotals[dateKey, default: 0] += totalCount
-        saveDailyTotals()
+        saveDailyTotals(reloadingKinds: isLogForToday ? [
+            WidgetDataCoordinator.WidgetKind.smokes,
+            WidgetDataCoordinator.WidgetKind.combined
+        ] : [])
         recomputeAllHistoriesAndHeatmaps()
-        
-        // 3. Update smokes financials
-        await fetchSmokesFinancials(userId: userId?.uuidString.lowercased())
-        
-        // 4. Push to Supabase
+
+        // 2. Push to Supabase BEFORE RPC financials so server state & concurrent refreshes see the record immediately
         await pushLogToSupabase(newRecord)
+
+        // 3. Update smokes financials
+        let resolvedUserId: String?
+        if let cachedId = newRecord.userId?.uuidString.lowercased() {
+            resolvedUserId = cachedId
+        } else {
+            resolvedUserId = (try? await supabase.auth.session)?.user.id.uuidString.lowercased()
+        }
+        await fetchSmokesFinancials(userId: resolvedUserId)
     }
-    
+
     public func deleteLog(id: UUID) async {
         let idString = id.uuidString
-        
-        // 1. Record persistent tombstone in App Group storage
+
+        // 1. Record persistent tombstone + in-flight delete guard synchronously before awaiting
+        pendingInFlightDeleteIds.insert(idString)
+        pendingInFlightRecords.removeValue(forKey: id)
+        recentlyPushedRecords.removeValue(forKey: id)
         var deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
         deletedIds.insert(idString)
         if deletedIds.count > 1000 {
             deletedIds = Set(deletedIds.suffix(1000))
         }
         userDefaults.set(Array(deletedIds), forKey: "deleted_habit_log_ids")
-        
+
         // 2. Immediately purge from offlineLogQueue in memory & storage
         offlineLogQueue.removeAll { $0.id == id || deletedIds.contains($0.id.uuidString) }
         if let data = try? JSONEncoder().encode(offlineLogQueue) {
             userDefaults.set(data, forKey: "offline_habits_queue")
         }
-        
+
         // 3. Remove from in-memory arrays
         var deletedRecord: HabitLogRecord?
         if let idx = todaysWaterLogs.firstIndex(where: { $0.id == id }) {
@@ -430,10 +448,13 @@ public final class HabitsService: ObservableObject {
         } else if let idx = todaysSmokesLogs.firstIndex(where: { $0.id == id }) {
             deletedRecord = todaysSmokesLogs.remove(at: idx)
         }
-        
-        // 4. Recalculate daily totals and clean local cache
+
+        // 4. Recalculate daily totals, persist logs & atomic widget bridge cleanly
+        let isSelectedToday = Calendar.current.isDateInToday(selectedDate)
+        var reloadKinds: [String] = []
         if let rec = deletedRecord {
             let dateKey = isoDateFormatter.string(from: rec.loggedAt)
+            let isRecToday = Calendar.current.isDateInToday(rec.loggedAt)
             if rec.habitType == "water" {
                 waterDailyTotals[dateKey] = max(0, (waterDailyTotals[dateKey] ?? rec.value) - rec.value)
                 if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
@@ -442,6 +463,9 @@ public final class HabitsService: ObservableObject {
                     if let encoded = try? JSONEncoder().encode(logs) {
                         userDefaults.set(encoded, forKey: "local_water_logs_\(dateKey)")
                     }
+                }
+                if isRecToday {
+                    reloadKinds = [WidgetDataCoordinator.WidgetKind.bubbles, WidgetDataCoordinator.WidgetKind.combined]
                 }
             } else {
                 smokesDailyTotals[dateKey] = max(0, (smokesDailyTotals[dateKey] ?? Int(rec.value)) - Int(rec.value))
@@ -452,22 +476,30 @@ public final class HabitsService: ObservableObject {
                         userDefaults.set(encoded, forKey: "local_smokes_logs_\(dateKey)")
                     }
                 }
+                if isRecToday {
+                    reloadKinds = [WidgetDataCoordinator.WidgetKind.smokes, WidgetDataCoordinator.WidgetKind.combined]
+                }
             }
-            saveDailyTotals()
-        } else {
-            saveDailyTotals()
+        } else if isSelectedToday {
+            reloadKinds = [
+                WidgetDataCoordinator.WidgetKind.bubbles,
+                WidgetDataCoordinator.WidgetKind.smokes,
+                WidgetDataCoordinator.WidgetKind.combined
+            ]
         }
-        
+
         recalculateDailyAggregates()
         saveLocalLogs()
+        saveDailyTotals(reloadingKinds: reloadKinds)
         recomputeAllHistoriesAndHeatmaps()
-        
+
         if deletedRecord?.habitType == "smokes" {
             let session = try? await supabase.auth.session
             await fetchSmokesFinancials(userId: session?.user.id.uuidString.lowercased())
         }
-        
+
         // 5. Asynchronously mark deleted in Supabase (with offline fallback queue)
+        defer { pendingInFlightDeleteIds.remove(idString) }
         do {
             try await supabase.from("habits_logs")
                 .update(["is_deleted": true], returning: .minimal)
@@ -511,6 +543,10 @@ public final class HabitsService: ObservableObject {
         }
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
+        saveDailyTotals(reloadingKinds: [
+            WidgetDataCoordinator.WidgetKind.bubbles,
+            WidgetDataCoordinator.WidgetKind.combined
+        ])
     }
     
     public func updateSmokesSettings(_ newSettings: SmokesSettings) async {
@@ -556,18 +592,32 @@ public final class HabitsService: ObservableObject {
         }
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
+        saveDailyTotals(reloadingKinds: [
+            WidgetDataCoordinator.WidgetKind.smokes,
+            WidgetDataCoordinator.WidgetKind.combined
+        ])
         await fetchSmokesFinancials(userId: session?.user.id.uuidString.lowercased())
     }
     
     // MARK: - Data Fetching & Sync
     
     public func loadDataForSelectedDate(forceRefresh: Bool = false) async {
-        _ = checkMidnightRolloverIfNeeded()
+        let rolledOver = checkMidnightRolloverIfNeeded()
+        let requestDate = selectedDate
+        let requestKey = isoDateFormatter.string(from: requestDate)
+        let todayKey = isoDateFormatter.string(from: Date())
+        let prevTodayWater = waterDailyTotals[todayKey] ?? 0
+        let prevTodaySmokes = smokesDailyTotals[todayKey] ?? 0
+        let prevWaterGoal = waterGoal
+        let prevSmokesBaseline = smokesSettings.baselineCigsPerDay
+        let prevTodayWaterIds = Calendar.current.isDateInToday(selectedDate) ? todaysWaterLogs.map(\.id) : []
+        let prevTodaySmokesIds = Calendar.current.isDateInToday(selectedDate) ? todaysSmokesLogs.map(\.id) : []
+
         isLoading = true
         defer { isLoading = false }
         
         let cal = Calendar.current
-        let startOfDay = cal.startOfDay(for: selectedDate)
+        let startOfDay = cal.startOfDay(for: requestDate)
         guard let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay) else { return }
         
         let isoUtcFormatter = ISO8601DateFormatter()
@@ -684,33 +734,34 @@ public final class HabitsService: ObservableObject {
                 }
             }
             
-            let activeRemoteLogs = allDayRemoteLogs.filter { !$0.isDeleted && !deletedIds.contains($0.id.uuidString) }
+            let activeDeletedIds = deletedIds.union(pendingInFlightDeleteIds)
+            let activeRemoteLogs = allDayRemoteLogs.filter { !$0.isDeleted && !activeDeletedIds.contains($0.id.uuidString) }
             let remoteIds = Set(activeRemoteLogs.map(\.id))
-            
-            // Only genuinely un-synced offline logs from offlineLogQueue are candidates to be preserved
-            let pendingOfflineWater = offlineLogQueue.filter {
-                $0.habitType == "water" &&
-                !$0.isDeleted &&
-                !deletedIds.contains($0.id.uuidString) &&
-                cal.isDate($0.loggedAt, inSameDayAs: selectedDate) &&
-                !remoteIds.contains($0.id)
+            pruneConfirmedRecentlyPushed(confirmedIds: remoteIds)
+
+            let pendingWater = pendingRecords(habitType: "water", on: requestDate, excluding: remoteIds, deletedIds: activeDeletedIds)
+            let pendingSmokes = pendingRecords(habitType: "smokes", on: requestDate, excluding: remoteIds, deletedIds: activeDeletedIds)
+
+            let mergedWater = deduplicatedSortedLogs(pendingWater + activeRemoteLogs.filter { $0.habitType == "water" })
+            let mergedSmokes = deduplicatedSortedLogs(pendingSmokes + activeRemoteLogs.filter { $0.habitType == "smokes" })
+
+            if let wData = try? JSONEncoder().encode(mergedWater) {
+                userDefaults.set(wData, forKey: "local_water_logs_\(requestKey)")
             }
-            let pendingOfflineSmokes = offlineLogQueue.filter {
-                $0.habitType == "smokes" &&
-                !$0.isDeleted &&
-                !deletedIds.contains($0.id.uuidString) &&
-                cal.isDate($0.loggedAt, inSameDayAs: selectedDate) &&
-                !remoteIds.contains($0.id)
+            if let sData = try? JSONEncoder().encode(mergedSmokes) {
+                userDefaults.set(sData, forKey: "local_smokes_logs_\(requestKey)")
             }
-            
-            self.todaysWaterLogs = (pendingOfflineWater + activeRemoteLogs.filter { $0.habitType == "water" })
-                .sorted { $0.loggedAt > $1.loggedAt }
-            self.todaysSmokesLogs = (pendingOfflineSmokes + activeRemoteLogs.filter { $0.habitType == "smokes" })
-                .sorted { $0.loggedAt > $1.loggedAt }
-            saveLocalLogs()
+            if isoDateFormatter.string(from: selectedDate) == requestKey {
+                self.todaysWaterLogs = mergedWater
+                self.todaysSmokesLogs = mergedSmokes
+            }
+            self.waterDailyTotals[requestKey] = mergedWater.reduce(0.0) { $0 + $1.value }
+            self.smokesDailyTotals[requestKey] = mergedSmokes.reduce(0) { $0 + Int($1.value) }
         } catch {
             print("[HabitsService] Note: Could not fetch habits_logs: \(error.localizedDescription)")
-            loadLocalLogsForSelectedDate()
+            if isoDateFormatter.string(from: selectedDate) == requestKey {
+                loadLocalLogsForSelectedDate()
+            }
         }
         
         // 4. Batch query 112 days (16 full weeks) of consistency history (throttled to 15m unless forced)
@@ -806,11 +857,34 @@ public final class HabitsService: ObservableObject {
         }
         
         // Ensure currently selected date's raw logs update the totals
-        let selectedKey = isoDateFormatter.string(from: selectedDate)
-        self.waterDailyTotals[selectedKey] = todaysWaterLogs.reduce(0.0) { $0 + $1.value }
-        self.smokesDailyTotals[selectedKey] = todaysSmokesLogs.reduce(0) { $0 + Int($1.value) }
-        
-        saveDailyTotals()
+        let currentSelectedKey = isoDateFormatter.string(from: selectedDate)
+        if currentSelectedKey == requestKey {
+            self.waterDailyTotals[requestKey] = todaysWaterLogs.reduce(0.0) { $0 + $1.value }
+            self.smokesDailyTotals[requestKey] = todaysSmokesLogs.reduce(0) { $0 + Int($1.value) }
+        }
+
+        let isSelectedToday = Calendar.current.isDateInToday(selectedDate)
+        let waterChanged = rolledOver
+            || abs((waterDailyTotals[todayKey] ?? 0) - prevTodayWater) > 0.01
+            || abs(waterGoal - prevWaterGoal) > 0.01
+            || (isSelectedToday && todaysWaterLogs.map(\.id) != prevTodayWaterIds)
+        let smokesChanged = rolledOver
+            || (smokesDailyTotals[todayKey] ?? 0) != prevTodaySmokes
+            || smokesSettings.baselineCigsPerDay != prevSmokesBaseline
+            || (isSelectedToday && todaysSmokesLogs.map(\.id) != prevTodaySmokesIds)
+
+        var kindsToReload: [String] = []
+        if waterChanged {
+            kindsToReload.append(WidgetDataCoordinator.WidgetKind.bubbles)
+        }
+        if smokesChanged {
+            kindsToReload.append(WidgetDataCoordinator.WidgetKind.smokes)
+        }
+        if waterChanged || smokesChanged {
+            kindsToReload.append(WidgetDataCoordinator.WidgetKind.combined)
+        }
+
+        saveDailyTotals(reloadingKinds: kindsToReload)
         saveWeekCachesForWatch()
         
         // 5. Fetch Smokes Financials (throttled alongside consistency unless forced)
@@ -826,6 +900,7 @@ public final class HabitsService: ObservableObject {
     // MARK: - Offline Storage & Queue
     
     public func reloadFromLocalStorage() {
+        userDefaults.synchronize()
         if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
            let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
             self.offlineLogQueue = queue
@@ -838,6 +913,40 @@ public final class HabitsService: ObservableObject {
            let sDict = try? JSONDecoder().decode([String: Int].self, from: sData) {
             self.smokesDailyTotals = sDict
         }
+
+        // Adopt newer widget-side mutations from the atomic App Group bridge file
+        // so interactive widget taps sync cleanly back into the running app.
+        let today = Date()
+        let todayKey = isoDateFormatter.string(from: today)
+        if let bridge = WidgetDataCoordinator.shared.readHabitsBridgeState(for: todayKey),
+           bridge.updatedAt > lastWrittenBridgeUpdatedAt {
+            lastWrittenBridgeUpdatedAt = bridge.updatedAt
+            var deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+            deletedIds.formUnion(bridge.deletedIds)
+            deletedIds.formUnion(pendingInFlightDeleteIds)
+            if !bridge.deletedIds.isEmpty {
+                userDefaults.set(Array(deletedIds), forKey: "deleted_habit_log_ids")
+            }
+
+            let pendingWater = pendingRecords(habitType: "water", on: today, excluding: Set(bridge.waterLogs.map(\.id)), deletedIds: deletedIds)
+            let pendingSmokes = pendingRecords(habitType: "smokes", on: today, excluding: Set(bridge.smokesLogs.map(\.id)), deletedIds: deletedIds)
+            let mergedWater = deduplicatedSortedLogs(pendingWater + bridge.waterLogs.filter { !deletedIds.contains($0.id.uuidString) })
+            let mergedSmokes = deduplicatedSortedLogs(pendingSmokes + bridge.smokesLogs.filter { !deletedIds.contains($0.id.uuidString) })
+
+            if let wData = try? JSONEncoder().encode(mergedWater) {
+                userDefaults.set(wData, forKey: "local_water_logs_\(todayKey)")
+            }
+            if let sData = try? JSONEncoder().encode(mergedSmokes) {
+                userDefaults.set(sData, forKey: "local_smokes_logs_\(todayKey)")
+            }
+            self.waterDailyTotals[todayKey] = mergedWater.isEmpty
+                ? bridge.waterTotalMl
+                : mergedWater.reduce(0.0) { $0 + $1.value }
+            self.smokesDailyTotals[todayKey] = mergedSmokes.isEmpty
+                ? bridge.smokesTotal
+                : mergedSmokes.reduce(0) { $0 + Int($1.value) }
+        }
+
         loadLocalLogsForSelectedDate()
         recalculateDailyAggregates()
         recomputeAllHistoriesAndHeatmaps()
@@ -875,19 +984,59 @@ public final class HabitsService: ObservableObject {
     }
     
     public func saveDailyTotals() {
+        saveDailyTotals(reloadingKinds: [
+            WidgetDataCoordinator.WidgetKind.bubbles,
+            WidgetDataCoordinator.WidgetKind.smokes,
+            WidgetDataCoordinator.WidgetKind.combined
+        ])
+    }
+
+    public func saveDailyTotals(reloadingKinds: [String]) {
         if let wData = try? JSONEncoder().encode(waterDailyTotals) {
             userDefaults.set(wData, forKey: "habits_water_daily_totals")
         }
         if let sData = try? JSONEncoder().encode(smokesDailyTotals) {
             userDefaults.set(sData, forKey: "habits_smokes_daily_totals")
         }
-        let todayKey = isoDateFormatter.string(from: Date())
-        userDefaults.set(Int(waterDailyTotals[todayKey] ?? 0), forKey: "cached_water_total")
-        userDefaults.set(smokesDailyTotals[todayKey] ?? 0, forKey: "cached_smokes_total")
+        let today = Date()
+        let todayKey = isoDateFormatter.string(from: today)
+        let todayWaterTotal = waterDailyTotals[todayKey] ?? 0
+        let todaySmokesTotal = smokesDailyTotals[todayKey] ?? 0
+        userDefaults.set(Int(todayWaterTotal), forKey: "cached_water_total")
+        userDefaults.set(todaySmokesTotal, forKey: "cached_smokes_total")
         userDefaults.set(todayKey, forKey: "cached_habits_date")
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        userDefaults.synchronize()
+
+        let activeDeletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+            .union(pendingInFlightDeleteIds)
+        let todayWaterLogs: [HabitLogRecord]
+        let todaySmokesLogs: [HabitLogRecord]
+        if Calendar.current.isDateInToday(selectedDate) {
+            todayWaterLogs = self.todaysWaterLogs.filter { !activeDeletedIds.contains($0.id.uuidString) }
+            todaySmokesLogs = self.todaysSmokesLogs.filter { !activeDeletedIds.contains($0.id.uuidString) }
+        } else {
+            todayWaterLogs = cachedLocalLogs(forKey: todayKey, habitType: "water", on: today, deletedIds: activeDeletedIds)
+            todaySmokesLogs = cachedLocalLogs(forKey: todayKey, habitType: "smokes", on: today, deletedIds: activeDeletedIds)
+        }
+
+        let now = Date()
+        let bridgeState = HabitsWidgetBridgeState(
+            dateKey: todayKey,
+            waterTotalMl: todayWaterTotal,
+            waterGoalMl: waterGoal,
+            waterLogs: todayWaterLogs,
+            smokesTotal: todaySmokesTotal,
+            smokesBaseline: smokesSettings.baselineCigsPerDay,
+            smokesLogs: todaySmokesLogs,
+            deletedIds: Array(activeDeletedIds),
+            updatedAt: now
+        )
+        lastWrittenBridgeUpdatedAt = now
+        WidgetDataCoordinator.shared.writeHabitsBridgeState(bridgeState)
+
+        if !reloadingKinds.isEmpty {
+            WidgetDataCoordinator.shared.reloadTimelines(kinds: reloadingKinds)
+        }
     }
     
     public func saveWeekCachesForWatch() {
@@ -930,37 +1079,107 @@ public final class HabitsService: ObservableObject {
         }
     }
     
+    private func cachedLocalLogs(
+        forKey dateKey: String,
+        habitType: String,
+        on date: Date,
+        deletedIds: Set<String>
+    ) -> [HabitLogRecord] {
+        let storageKey = habitType == "water" ? "local_water_logs_\(dateKey)" : "local_smokes_logs_\(dateKey)"
+        let stored: [HabitLogRecord]
+        if let data = userDefaults.data(forKey: storageKey),
+           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: data) {
+            stored = decoded.filter { !deletedIds.contains($0.id.uuidString) }
+        } else {
+            stored = []
+        }
+        let pending = pendingRecords(habitType: habitType, on: date, excluding: Set(stored.map(\.id)), deletedIds: deletedIds)
+        return deduplicatedSortedLogs(pending + stored)
+    }
+
     private func loadLocalLogsForSelectedDate() {
         let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+            .union(pendingInFlightDeleteIds)
         let dateKey = isoDateFormatter.string(from: selectedDate)
-        if let wData = userDefaults.data(forKey: "local_water_logs_\(dateKey)"),
-           let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
-            self.todaysWaterLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
-        }
-        if let sData = userDefaults.data(forKey: "local_smokes_logs_\(dateKey)"),
-           let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
-            self.todaysSmokesLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+        self.todaysWaterLogs = cachedLocalLogs(forKey: dateKey, habitType: "water", on: selectedDate, deletedIds: deletedIds)
+        self.todaysSmokesLogs = cachedLocalLogs(forKey: dateKey, habitType: "smokes", on: selectedDate, deletedIds: deletedIds)
+    }
+
+    private func pruneConfirmedRecentlyPushed(confirmedIds: Set<UUID>) {
+        let cutoff = Date().addingTimeInterval(-15)
+        recentlyPushedRecords = recentlyPushedRecords.filter { id, entry in
+            !confirmedIds.contains(id) && entry.pushedAt > cutoff
         }
     }
-    
+
+    private func pendingRecords(
+        habitType: String,
+        on date: Date,
+        excluding remoteIds: Set<UUID>,
+        deletedIds: Set<String>
+    ) -> [HabitLogRecord] {
+        let targetKey = isoDateFormatter.string(from: date)
+        let cutoff = Date().addingTimeInterval(-15)
+        var result: [HabitLogRecord] = []
+        var seen = remoteIds
+
+        let recentRecords = recentlyPushedRecords.values
+            .filter { $0.pushedAt > cutoff }
+            .map(\.record)
+        for record in Array(pendingInFlightRecords.values) + offlineLogQueue + recentRecords {
+            guard record.habitType == habitType else { continue }
+            guard !deletedIds.contains(record.id.uuidString) else { continue }
+            guard isoDateFormatter.string(from: record.loggedAt) == targetKey else { continue }
+            if seen.insert(record.id).inserted {
+                result.append(record)
+            }
+        }
+        return result
+    }
+
+    private func deduplicatedSortedLogs(_ logs: [HabitLogRecord]) -> [HabitLogRecord] {
+        var seen = Set<UUID>()
+        var unique: [HabitLogRecord] = []
+        for log in logs {
+            if seen.insert(log.id).inserted {
+                unique.append(log)
+            }
+        }
+        return unique.sorted { $0.loggedAt > $1.loggedAt }
+    }
+
     private func pushLogToSupabase(_ record: HabitLogRecord) async {
+        defer { pendingInFlightRecords.removeValue(forKey: record.id) }
+
         let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+            .union(pendingInFlightDeleteIds)
         guard !deletedIds.contains(record.id.uuidString) else { return }
-        
+
         var toInsert = record
         if toInsert.userId == nil {
             let session = try? await supabase.auth.session
-            let currentUserId = session?.user.id ?? userDefaults.string(forKey: "current_user_id").flatMap { UUID(uuidString: $0) }
+            let currentUserId = session?.user.id ?? cachedSyncUserId()
             toInsert.userId = currentUserId
+            if let uid = currentUserId?.uuidString.lowercased() {
+                userDefaults.set(uid, forKey: "current_user_id")
+            }
         }
-        
+
         do {
             try await supabase.from("habits_logs").insert(toInsert, returning: .minimal).execute()
+            if !pendingInFlightDeleteIds.contains(toInsert.id.uuidString) {
+                recentlyPushedRecords[toInsert.id] = (toInsert, Date())
+            }
         } catch {
+            let latestDeleted = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+                .union(pendingInFlightDeleteIds)
+            guard !latestDeleted.contains(toInsert.id.uuidString) else { return }
             print("[HabitsService] Supabase insert failed (\(error.localizedDescription)). Queuing offline...")
-            offlineLogQueue.append(toInsert)
-            if let data = try? JSONEncoder().encode(offlineLogQueue) {
-                userDefaults.set(data, forKey: "offline_habits_queue")
+            if !offlineLogQueue.contains(where: { $0.id == toInsert.id }) {
+                offlineLogQueue.append(toInsert)
+                if let data = try? JSONEncoder().encode(offlineLogQueue) {
+                    userDefaults.set(data, forKey: "offline_habits_queue")
+                }
             }
         }
     }

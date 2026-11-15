@@ -21,10 +21,13 @@ class LogWaterActionCallback : ActionCallback {
             else -> if (amount >= 300.0) WaterPreset.LARGE_WATER else WaterPreset.SMALL_WATER
         }
 
-        app.habitsRepository.logWater(preset = preset, customAmount = amount)
+        app.habitsRepository.logWaterAndPersist(
+            preset = preset,
+            customAmount = amount,
+            notifyWidgets = false
+        )
 
-        runCatching { DailyBubblesGlanceWidget().updateAll(context) }
-        runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+        WidgetUpdateHelper.updateHabitsWidgets(context, "water")
     }
 
     companion object {
@@ -45,10 +48,12 @@ class LogSmokeActionCallback : ActionCallback {
             else -> SmokePreset.CIGARETTE
         }
 
-        app.habitsRepository.logSmoke(preset = preset)
+        app.habitsRepository.logSmokeAndPersist(
+            preset = preset,
+            notifyWidgets = false
+        )
 
-        runCatching { DailySmokesGlanceWidget().updateAll(context) }
-        runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+        WidgetUpdateHelper.updateHabitsWidgets(context, "smokes")
     }
 
     companion object {
@@ -84,6 +89,24 @@ class AdjustLedgerActionCallback : ActionCallback {
 }
 
 object WidgetUpdateHelper {
+    suspend fun updateHabitsWidgets(context: Context, habitType: String? = null) {
+        when (habitType) {
+            "water" -> {
+                runCatching { DailyBubblesGlanceWidget().updateAll(context) }
+                runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+            }
+            "smokes" -> {
+                runCatching { DailySmokesGlanceWidget().updateAll(context) }
+                runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+            }
+            else -> {
+                runCatching { DailyBubblesGlanceWidget().updateAll(context) }
+                runCatching { DailySmokesGlanceWidget().updateAll(context) }
+                runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+            }
+        }
+    }
+
     suspend fun updateAllWidgets(context: Context) {
         runCatching { DailyBubblesGlanceWidget().updateAll(context) }
         runCatching { DailySmokesGlanceWidget().updateAll(context) }

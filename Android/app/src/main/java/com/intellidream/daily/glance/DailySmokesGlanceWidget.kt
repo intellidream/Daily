@@ -57,8 +57,10 @@ class DailySmokesGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
-        val smokesLogs = app?.habitsRepository?.selectedDateSmokesLogs?.value ?: emptyList()
-        val todayTotal = app?.habitsRepository?.smokesTotalToday?.value ?: smokesLogs.sumOf { it.value.toInt() }
+        val smokesLogs = app?.habitsRepository?.getTodayLogsOnce("smokes")
+            ?: app?.habitsRepository?.selectedDateSmokesLogs?.value
+            ?: emptyList()
+        val todayTotal = smokesLogs.sumOf { it.value.toInt() }
         val baseline = app?.habitsRepository?.smokesSettings?.value?.baselineDailyCount ?: 20
         val costPerCig = app?.habitsRepository?.smokesSettings?.value?.costPerCig ?: 1.325
 

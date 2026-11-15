@@ -17,6 +17,10 @@ public partial class App : Application
     public IServiceProvider Services { get; private set; } = null!;
     public static new App Current => (App)Application.Current;
     private Supabase.Gotrue.Interfaces.IGotrueClient<Supabase.Gotrue.User, Supabase.Gotrue.Session>.AuthEventHandler? _centralAuthListener;
+    private readonly object _widgetRefreshSync = new();
+    private System.Threading.CancellationTokenSource? _widgetRefreshCts;
+    private long _suppressWidgetRefreshUntilTicks;
+    private bool _widgetRefreshBridgesSubscribed;
 
     private readonly System.Collections.Generic.List<Window> _activeSecondaryWindows = new();
     public System.Collections.Generic.IReadOnlyList<Window> ActiveSecondaryWindows => _activeSecondaryWindows;
@@ -333,6 +337,24 @@ public partial class App : Application
                                     await app.MainWindow.TriggerCurrentViewRefreshAsync();
                                 });
                             }
+                        }
+                        else if (line.Equals("habits:external-changed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received habits:external-changed command");
+                            var app = App.Current;
+                            app?.DispatcherQueue?.TryEnqueue(() =>
+                            {
+                                app.SuppressWidgetRefreshTemporarily();
+                                if (app.Services?.GetService<Daily.Services.IHabitsService>() is Daily.Services.HabitsService concreteHabits)
+                                {
+                                    concreteHabits.NotifyExternalUpdate();
+                                }
+                                var syncService = app.Services?.GetService<Daily.Services.ISyncService>();
+                                if (syncService != null)
+                                {
+                                    _ = syncService.PushAsync(Daily.Services.SyncScope.Habits);
+                                }
+                            });
                         }
                         else if (line.Equals("companion", StringComparison.OrdinalIgnoreCase) ||
                                  line.Equals("quickdrop", StringComparison.OrdinalIgnoreCase) ||
@@ -770,6 +792,8 @@ public partial class App : Application
 
         LogDiagnostic("InitializeAsync: COMPLETED");
 
+        SubscribeWidgetRefreshBridges();
+
         // Refresh desktop widgets now that SQLite DB, Habits, Health, and Supabase session are initialized
         MainWindow?.DispatcherQueue.TryEnqueue(() =>
         {
@@ -821,6 +845,78 @@ public partial class App : Application
                 }
             });
         }
+    }
+
+    internal void SuppressWidgetRefreshTemporarily(int milliseconds = 700)
+    {
+        var untilTicks = DateTime.UtcNow.AddMilliseconds(milliseconds).Ticks;
+        System.Threading.Interlocked.Exchange(ref _suppressWidgetRefreshUntilTicks, untilTicks);
+    }
+
+    private void SubscribeWidgetRefreshBridges()
+    {
+        if (_widgetRefreshBridgesSubscribed || Services == null || DesktopWidgets.WidgetsHostIpc.IsRunningInHostProcess)
+            return;
+
+        _widgetRefreshBridgesSubscribed = true;
+
+        if (Services.GetService<Daily.Services.IHabitsService>() is { } habitsService)
+        {
+            habitsService.OnHabitsUpdated += ScheduleDesktopWidgetsRefresh;
+        }
+        if (Services.GetService<Daily.Services.Finances.IFinancesService>() is { } financesService)
+        {
+            financesService.OnSmartLedgerUpdated += ScheduleDesktopWidgetsRefresh;
+        }
+        if (Services.GetService<Daily_WinUI.Services.IHealthHubService>() is { } healthHubService)
+        {
+            healthHubService.OnDailySummaryChanged += _ => ScheduleDesktopWidgetsRefresh();
+        }
+        if (Services.GetService<Daily.Services.ITagdosService>() is { } tagdosService)
+        {
+            tagdosService.DataChanged += (_, _) => ScheduleDesktopWidgetsRefresh();
+        }
+        if (Services.GetService<Daily.Services.ISyncService>() is { } syncService)
+        {
+            syncService.OnHabitsPulled += ScheduleDesktopWidgetsRefresh;
+            syncService.OnFinancesPulled += ScheduleDesktopWidgetsRefresh;
+            syncService.OnTagdosPulled += ScheduleDesktopWidgetsRefresh;
+            syncService.OnPreferencesPulled += ScheduleDesktopWidgetsRefresh;
+        }
+    }
+
+    private void ScheduleDesktopWidgetsRefresh()
+    {
+        if (DesktopWidgets.WidgetsHostIpc.IsRunningInHostProcess)
+            return;
+
+        var suppressUntilTicks = System.Threading.Interlocked.Read(ref _suppressWidgetRefreshUntilTicks);
+        if (DateTime.UtcNow.Ticks < suppressUntilTicks)
+            return;
+
+        System.Threading.CancellationToken token;
+        lock (_widgetRefreshSync)
+        {
+            _widgetRefreshCts?.Cancel();
+            _widgetRefreshCts?.Dispose();
+            _widgetRefreshCts = new System.Threading.CancellationTokenSource();
+            token = _widgetRefreshCts.Token;
+        }
+
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(120, token);
+                if (token.IsCancellationRequested) return;
+                DesktopWidgets.DesktopWidgetManager.Instance.RefreshAllWidgets();
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Scheduled widget refresh failed: {ex.Message}");
+            }
+        });
     }
 
     /// <summary>

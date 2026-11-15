@@ -295,5 +295,142 @@ struct HabitsServiceTests {
         #expect(WaterPreset.matching("Large")?.hexColor == "#00E5FF")
         #expect(WaterPreset.matching("Coffee")?.hexColor == "#F59E0B")
     }
+
+    @Test("Atomic Habits Widget Bridge Overrides Stale UserDefaults (N-1 Lag Prevention)")
+    func testAtomicBridgeOverridesStaleDefaults() throws {
+        let suiteName = "test.daily.bridge.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let bridgeURL = tempDir.appendingPathComponent("daily_habits_widget_bridge_v1.json")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone.current
+        df.dateFormat = "yyyy-MM-dd"
+        let todayKey = df.string(from: Date())
+
+        // Simulate stale cfprefsd cache still holding N-1 (4 smokes, 750ml water)
+        defaults.set(4, forKey: "cached_smokes_total")
+        defaults.set(750, forKey: "cached_water_total")
+        defaults.set(todayKey, forKey: "cached_habits_date")
+        defaults.set("20", forKey: "smokes_baseline")
+        defaults.set("2000", forKey: "water_goal")
+
+        let now = Date()
+        let latestSmoke = HabitLogRecord(
+            id: UUID(),
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            loggedAt: now,
+            metadata: "{\"type\":\"Cigarette\"}"
+        )
+        let priorSmokes = HabitLogRecord(
+            id: UUID(),
+            habitType: "smokes",
+            value: 4,
+            unit: "cigs",
+            loggedAt: now.addingTimeInterval(-600),
+            metadata: "{\"type\":\"Cigarette\"}"
+        )
+        let waterLog = HabitLogRecord(
+            id: UUID(),
+            habitType: "water",
+            value: 1000,
+            unit: "ml",
+            loggedAt: now,
+            metadata: "{\"drink\":\"Water\"}"
+        )
+
+        let bridgeState = HabitsWidgetBridgeState(
+            dateKey: todayKey,
+            waterTotalMl: 1000,
+            waterGoalMl: 2500,
+            waterLogs: [waterLog],
+            smokesTotal: 5,
+            smokesBaseline: 15,
+            smokesLogs: [latestSmoke, priorSmokes],
+            deletedIds: [],
+            updatedAt: now
+        )
+        WidgetDataCoordinator.shared.writeHabitsBridgeState(bridgeState, bridgeFileURL: bridgeURL)
+
+        let smokesSnapshot = WidgetDataCoordinator.shared.fetchSmokesSnapshot(bridgeFileURL: bridgeURL, defaults: defaults)
+        #expect(smokesSnapshot.todayTotal == 5)
+        #expect(smokesSnapshot.cigsCount == 5)
+        #expect(smokesSnapshot.baseline == 15)
+        #expect(smokesSnapshot.lastSmokeDate != nil)
+
+        let bubblesSnapshot = WidgetDataCoordinator.shared.fetchBubblesSnapshot(bridgeFileURL: bridgeURL, defaults: defaults)
+        #expect(bubblesSnapshot.todayMl == 1000)
+        #expect(bubblesSnapshot.goalMl == 2500)
+        #expect(bubblesSnapshot.waterMl == 1000)
+    }
+
+    @Test("Atomic Habits Widget Bridge Filters Deleted Logs & Ignores Stale Dates")
+    func testAtomicBridgeTombstonesAndDateRollover() throws {
+        let suiteName = "test.daily.bridge.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let bridgeURL = tempDir.appendingPathComponent("daily_habits_widget_bridge_v1.json")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone.current
+        df.dateFormat = "yyyy-MM-dd"
+        let todayKey = df.string(from: Date())
+
+        let deletedId = UUID()
+        let activeId = UUID()
+        let bridgeWithTombstone = HabitsWidgetBridgeState(
+            dateKey: todayKey,
+            waterTotalMl: 250,
+            waterGoalMl: 2000,
+            waterLogs: [],
+            smokesTotal: 1,
+            smokesBaseline: 20,
+            smokesLogs: [
+                HabitLogRecord(id: deletedId, habitType: "smokes", value: 1, unit: "cigs", loggedAt: Date(), metadata: "{\"type\":\"Heated Tobacco\"}"),
+                HabitLogRecord(id: activeId, habitType: "smokes", value: 1, unit: "cigs", loggedAt: Date(), metadata: "{\"type\":\"Cigarette\"}")
+            ],
+            deletedIds: [deletedId.uuidString],
+            updatedAt: Date()
+        )
+        WidgetDataCoordinator.shared.writeHabitsBridgeState(bridgeWithTombstone, bridgeFileURL: bridgeURL)
+
+        let smokesSnapshot = WidgetDataCoordinator.shared.fetchSmokesSnapshot(bridgeFileURL: bridgeURL, defaults: defaults)
+        #expect(smokesSnapshot.todayTotal == 1)
+        #expect(smokesSnapshot.cigsCount == 1)
+        #expect(smokesSnapshot.heatedCount == 0)
+
+        // Now verify stale yesterday bridge + yesterday cached defaults reset cleanly to 0 for Today
+        defaults.set(9, forKey: "cached_smokes_total")
+        defaults.set("2020-01-01", forKey: "cached_habits_date")
+        let staleBridge = HabitsWidgetBridgeState(
+            dateKey: "2020-01-01",
+            waterTotalMl: 1500,
+            waterGoalMl: 2000,
+            waterLogs: [],
+            smokesTotal: 9,
+            smokesBaseline: 20,
+            smokesLogs: [],
+            deletedIds: [],
+            updatedAt: Date()
+        )
+        WidgetDataCoordinator.shared.writeHabitsBridgeState(staleBridge, bridgeFileURL: bridgeURL)
+
+        let rolledOverSnapshot = WidgetDataCoordinator.shared.fetchSmokesSnapshot(bridgeFileURL: bridgeURL, defaults: defaults)
+        #expect(rolledOverSnapshot.todayTotal == 0)
+    }
 }
 

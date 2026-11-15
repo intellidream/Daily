@@ -55,6 +55,7 @@ class HabitsRepository(
     var syncHandler: HabitSyncHandler? = null
     var currentUserId: String = "guest"
     var onWaterLogged: ((amountMl: Double, timestamp: Long) -> Unit)? = null
+    var onHabitsChanged: ((habitType: String?) -> Unit)? = null
 
     // Daily aggregate dictionaries cached locally for 0ms instant rendering (mirroring iOS HabitsService)
     private val _waterDailyTotals = MutableStateFlow<Map<String, Double>>(emptyMap())
@@ -356,8 +357,13 @@ class HabitsRepository(
                         .filter { !it.isDeleted && !allDeletedIds.contains(it.id) }
                         .map { HabitLogEntity.fromRecord(it, syncedAt = System.currentTimeMillis()) }
                     
+                    val hadRemoteDeletes = remoteDeletedLogs.isNotEmpty()
                     if (activeEntities.isNotEmpty()) {
                         dao.insertAll(activeEntities)
+                    }
+                    if (activeEntities.isNotEmpty() || hadRemoteDeletes) {
+                        refreshTodayCachedTotals()
+                        onHabitsChanged?.invoke(null)
                     }
                 }
             } catch (_: Exception) {}
@@ -398,6 +404,8 @@ class HabitsRepository(
                         .map { HabitLogEntity.fromRecord(it, syncedAt = System.currentTimeMillis()) }
                     if (activeEntities.isNotEmpty()) {
                         dao.insertAll(activeEntities)
+                        refreshTodayCachedTotals()
+                        onHabitsChanged?.invoke(null)
                     }
                 }
             } catch (_: Exception) {}
@@ -448,14 +456,51 @@ class HabitsRepository(
 
     fun setWaterGoal(goal: Double) {
         _waterGoal.value = goal
+        onHabitsChanged?.invoke("water")
     }
 
     fun updateSmokesSettings(settings: SmokesSettings) {
         _smokesSettings.value = settings
+        onHabitsChanged?.invoke("smokes")
+    }
+
+    suspend fun getTodayLogsOnce(habitType: String): List<HabitLogRecord> {
+        val now = System.currentTimeMillis()
+        return dao.getLogsForDateOnce(habitType, getStartOfDay(now), getEndOfDay(now))
+            .map { it.toRecord() }
+    }
+
+    private suspend fun refreshTodayCachedTotals() {
+        val now = System.currentTimeMillis()
+        val start = getStartOfDay(now)
+        val end = getEndOfDay(now)
+        val todayWater = dao.getLogsForDateOnce("water", start, end).sumOf { it.value }
+        val todaySmokes = dao.getLogsForDateOnce("smokes", start, end).sumOf { it.value.toInt() }
+        val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val todayKey = sdfDate.format(Date(now))
+        _waterDailyTotals.value = _waterDailyTotals.value.toMutableMap().apply { put(todayKey, todayWater) }
+        _smokesDailyTotals.value = _smokesDailyTotals.value.toMutableMap().apply { put(todayKey, todaySmokes) }
+        saveCachedDailyTotals()
     }
 
     // Logging Actions
     fun logWater(preset: WaterPreset, multiplier: Int = 1, customAmount: Double? = null) {
+        scope.launch {
+            logWaterAndPersist(
+                preset = preset,
+                multiplier = multiplier,
+                customAmount = customAmount,
+                notifyWidgets = true
+            )
+        }
+    }
+
+    suspend fun logWaterAndPersist(
+        preset: WaterPreset,
+        multiplier: Int = 1,
+        customAmount: Double? = null,
+        notifyWidgets: Boolean = true
+    ) {
         val safeMultiplier = multiplier.coerceAtLeast(1)
         val baseAmount = customAmount ?: preset.amountMl
         val totalAmount = baseAmount * safeMultiplier
@@ -487,14 +532,33 @@ class HabitsRepository(
         _waterDailyTotals.value = updatedWater
         saveCachedDailyTotals()
 
+        dao.insert(HabitLogEntity.fromRecord(record))
+        onWaterLogged?.invoke(totalAmount, logTime)
+        if (notifyWidgets) {
+            onHabitsChanged?.invoke("water")
+        }
         scope.launch {
-            dao.insert(HabitLogEntity.fromRecord(record))
             syncHandler?.pushLog(record)
-            onWaterLogged?.invoke(totalAmount, logTime)
         }
     }
 
     fun logSmoke(preset: SmokePreset, multiplier: Int = 1, customCount: Int? = null) {
+        scope.launch {
+            logSmokeAndPersist(
+                preset = preset,
+                multiplier = multiplier,
+                customCount = customCount,
+                notifyWidgets = true
+            )
+        }
+    }
+
+    suspend fun logSmokeAndPersist(
+        preset: SmokePreset,
+        multiplier: Int = 1,
+        customCount: Int? = null,
+        notifyWidgets: Boolean = true
+    ) {
         val safeMultiplier = multiplier.coerceAtLeast(1)
         val baseCount = customCount ?: preset.count
         val totalCount = baseCount * safeMultiplier
@@ -526,8 +590,11 @@ class HabitsRepository(
         _smokesDailyTotals.value = updatedSmokes
         saveCachedDailyTotals()
 
+        dao.insert(HabitLogEntity.fromRecord(record))
+        if (notifyWidgets) {
+            onHabitsChanged?.invoke("smokes")
+        }
         scope.launch {
-            dao.insert(HabitLogEntity.fromRecord(record))
             syncHandler?.pushLog(record)
         }
     }
@@ -535,7 +602,8 @@ class HabitsRepository(
     fun deleteLog(id: String) {
         scope.launch {
             dao.softDelete(id)
-            saveCachedDailyTotals()
+            refreshTodayCachedTotals()
+            onHabitsChanged?.invoke(null)
             syncHandler?.deleteLog(id)
         }
     }

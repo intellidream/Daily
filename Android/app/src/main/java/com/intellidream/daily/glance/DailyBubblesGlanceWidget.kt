@@ -58,8 +58,10 @@ class DailyBubblesGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
-        val waterLogs = app?.habitsRepository?.selectedDateWaterLogs?.value ?: emptyList()
-        val todayMl = app?.habitsRepository?.waterTotalToday?.value ?: waterLogs.sumOf { it.value }
+        val waterLogs = app?.habitsRepository?.getTodayLogsOnce("water")
+            ?: app?.habitsRepository?.selectedDateWaterLogs?.value
+            ?: emptyList()
+        val todayMl = waterLogs.sumOf { it.value }
         val goalMl = app?.habitsRepository?.waterGoal?.value ?: 2000.0
         val progressPercent = if (goalMl > 0) min(todayMl / goalMl, 1.0) else 0.0
 

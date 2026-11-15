@@ -22,6 +22,14 @@ interface HabitLogDao {
     @Query("""
         SELECT * FROM habits_logs 
         WHERE habit_type = :habitType AND is_deleted = 0 
+          AND logged_at >= :startOfDay AND logged_at <= :endOfDay 
+        ORDER BY logged_at DESC
+    """)
+    suspend fun getLogsForDateOnce(habitType: String, startOfDay: Long, endOfDay: Long): List<HabitLogEntity>
+
+    @Query("""
+        SELECT * FROM habits_logs 
+        WHERE habit_type = :habitType AND is_deleted = 0 
           AND logged_at >= :start AND logged_at <= :end 
         ORDER BY logged_at ASC
     """)

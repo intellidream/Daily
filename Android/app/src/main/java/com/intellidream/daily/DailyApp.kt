@@ -95,6 +95,11 @@ class DailyApp : Application() {
                 com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
             }
         }
+        habitsRepository.onHabitsChanged = { habitType ->
+            appScope.launch {
+                com.intellidream.daily.glance.WidgetUpdateHelper.updateHabitsWidgets(this@DailyApp, habitType)
+            }
+        }
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
         val mediumBridge = com.intellidream.daily.news.MediumWebViewBridge(this)

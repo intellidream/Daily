@@ -30,14 +30,16 @@ struct DailyApp: App {
                     SmartLedgerStore.shared.reloadFromStorage()
                     TagdosStore.shared.loadFromStorage()
                     TagdosStore.shared.syncWithWidgets()
-                    _ = HabitsService.shared.checkMidnightRolloverIfNeeded()
-                    HealthDataService.shared.checkMidnightRolloverIfNeeded()
+                    let habitsRolledOver = HabitsService.shared.checkMidnightRolloverIfNeeded()
+                    let healthRolledOver = HealthDataService.shared.checkMidnightRolloverIfNeeded()
                     HabitsService.shared.reloadFromLocalStorage()
                     await HabitsService.shared.flushOfflineQueue()
-                    await HabitsService.shared.loadDataForSelectedDate()
+                    await HabitsService.shared.loadDataForSelectedDate(forceRefresh: habitsRolledOver)
                     await HealthDataService.shared.refreshIfStale()
                     #if canImport(WidgetKit)
-                    WidgetCenter.shared.reloadAllTimelines()
+                    if habitsRolledOver || healthRolledOver {
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
                     #endif
                 }
             }

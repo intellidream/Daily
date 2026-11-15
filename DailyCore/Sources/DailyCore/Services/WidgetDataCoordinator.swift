@@ -108,6 +108,42 @@ public struct MoneyWidgetSnapshot: Sendable {
     }
 }
 
+/// Atomic App Group bridge payload keeping in-app habit logs/totals and WidgetKit extensions
+/// synchronized without UserDefaults/cfprefsd cross-process flush lag.
+public struct HabitsWidgetBridgeState: Codable, Sendable {
+    public let dateKey: String
+    public let waterTotalMl: Double
+    public let waterGoalMl: Double
+    public let waterLogs: [HabitLogRecord]
+    public let smokesTotal: Int
+    public let smokesBaseline: Int
+    public let smokesLogs: [HabitLogRecord]
+    public let deletedIds: [String]
+    public let updatedAt: Date
+
+    public init(
+        dateKey: String,
+        waterTotalMl: Double,
+        waterGoalMl: Double,
+        waterLogs: [HabitLogRecord],
+        smokesTotal: Int,
+        smokesBaseline: Int,
+        smokesLogs: [HabitLogRecord],
+        deletedIds: [String],
+        updatedAt: Date = Date()
+    ) {
+        self.dateKey = dateKey
+        self.waterTotalMl = waterTotalMl
+        self.waterGoalMl = waterGoalMl
+        self.waterLogs = waterLogs
+        self.smokesTotal = smokesTotal
+        self.smokesBaseline = smokesBaseline
+        self.smokesLogs = smokesLogs
+        self.deletedIds = deletedIds
+        self.updatedAt = updatedAt
+    }
+}
+
 /// Briefing summary snippet model for the Combined Widget morning mode
 public struct BriefingSummarySnippet: Sendable, Codable {
     public let greeting: String
@@ -684,12 +720,84 @@ public struct WeatherWidgetSnapshot: Sendable, Codable {
 
 /// Central data coordinator managing 0ms read/write between the Main App and WidgetKit Extension.
 public final class WidgetDataCoordinator: @unchecked Sendable {
+    public enum WidgetKind {
+        public static let combined = "com.intellidream.daily.widget.combined"
+        public static let bubbles = "com.intellidream.daily.BubblesWidget"
+        public static let smokes = "com.intellidream.daily.SmokesWidget"
+        public static let money = "com.intellidream.daily.MoneyWidget"
+        public static let sleep = "com.intellidream.daily.SleepWidget"
+        public static let stress = "com.intellidream.daily.widget.stress"
+        public static let tagdos = "com.intellidream.daily.TagdosWidget"
+        public static let cosmos = "DailyCosmosWidget"
+        public static let weather = "com.intellidream.daily.WeatherWidget"
+    }
+
     public static let shared = WidgetDataCoordinator()
     public static let darwinMutationNotificationName = "com.intellidream.daily.widgetDidMutateData"
-    
+    private static let habitsBridgeFilename = "daily_habits_widget_bridge_v1.json"
+
     private let groupSuiteName = GroupDefaults.suiteName
+    private let bridgeLock = NSLock()
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: groupSuiteName) ?? UserDefaults.standard
+    }
+
+    public var habitsBridgeFileURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupSuiteName)?
+            .appendingPathComponent(Self.habitsBridgeFilename)
+    }
+
+    public func synchronizeDefaults() {
+        groupDefaults.synchronize()
+    }
+
+    public func reloadTimelines(kinds: [String]) {
+        #if canImport(WidgetKit)
+        var seen = Set<String>()
+        for kind in kinds where seen.insert(kind).inserted {
+            WidgetCenter.shared.reloadTimelines(ofKind: kind)
+        }
+        #endif
+    }
+
+    private func persistEncodedSnapshot(_ data: Data?, forKey key: String, reloadingKinds kinds: [String]) {
+        if let data {
+            groupDefaults.set(data, forKey: key)
+            groupDefaults.synchronize()
+            UserDefaults.standard.set(data, forKey: key)
+        }
+        reloadTimelines(kinds: kinds)
+    }
+
+    public func writeHabitsBridgeState(_ state: HabitsWidgetBridgeState, bridgeFileURL: URL? = nil) {
+        guard let url = bridgeFileURL ?? habitsBridgeFileURL else { return }
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        writeHabitsBridgeStateLocked(state, to: url)
+    }
+
+    public func readHabitsBridgeState(for dateKey: String, bridgeFileURL: URL? = nil) -> HabitsWidgetBridgeState? {
+        guard let url = bridgeFileURL ?? habitsBridgeFileURL else { return nil }
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        return readHabitsBridgeStateLocked(for: dateKey, from: url)
+    }
+
+    private func writeHabitsBridgeStateLocked(_ state: HabitsWidgetBridgeState, to url: URL) {
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(state) {
+            try? data.write(to: url, options: [.atomic])
+        }
+    }
+
+    private func readHabitsBridgeStateLocked(for dateKey: String, from url: URL) -> HabitsWidgetBridgeState? {
+        guard let data = try? Data(contentsOf: url),
+              let state = try? JSONDecoder().decode(HabitsWidgetBridgeState.self, from: data),
+              state.dateKey == dateKey else {
+            return nil
+        }
+        return state
     }
 
     private func postCrossProcessMutationNotification() {
@@ -717,36 +825,109 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         isoDateFormatter.string(from: Date())
     }
     
+    // MARK: - Shared Habit Cache Helpers
+
+    private func mergedDeletedIds(store: UserDefaults, bridge: HabitsWidgetBridgeState?) -> Set<String> {
+        var ids = Set(store.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+        if let bridgeDeleted = bridge?.deletedIds {
+            ids.formUnion(bridgeDeleted)
+        }
+        return ids
+    }
+
+    private func cachedWaterGoal(store: UserDefaults, bridge: HabitsWidgetBridgeState?) -> Double {
+        if let bg = bridge?.waterGoalMl, bg > 0 { return bg }
+        let goalStr = store.string(forKey: "water_goal") ?? "2000"
+        return Double(goalStr) ?? (store.value(forKey: "water_goal") as? Double ?? 2000)
+    }
+
+    private func cachedSmokesBaseline(store: UserDefaults, bridge: HabitsWidgetBridgeState?) -> Int {
+        if let bb = bridge?.smokesBaseline, bb > 0 { return bb }
+        let baselineStr = store.string(forKey: "smokes_baseline") ?? "20"
+        return Int(baselineStr) ?? (store.value(forKey: "smokes_baseline") as? Int ?? 20)
+    }
+
+    private func cachedWaterTotal(store: UserDefaults, key: String) -> Double {
+        if let wData = store.data(forKey: "habits_water_daily_totals"),
+           let dict = try? JSONDecoder().decode([String: Double].self, from: wData),
+           let val = dict[key] {
+            return val
+        }
+        if store.string(forKey: "cached_habits_date") == key || store.string(forKey: "cached_habits_date") == nil {
+            return Double(store.integer(forKey: "cached_water_total"))
+        }
+        return 0
+    }
+
+    private func cachedSmokesTotal(store: UserDefaults, key: String) -> Int {
+        if let sData = store.data(forKey: "habits_smokes_daily_totals"),
+           let dict = try? JSONDecoder().decode([String: Int].self, from: sData),
+           let val = dict[key] {
+            return val
+        }
+        if store.string(forKey: "cached_habits_date") == key || store.string(forKey: "cached_habits_date") == nil {
+            return store.integer(forKey: "cached_smokes_total")
+        }
+        return 0
+    }
+
+    private func appendOfflineHabitQueue(_ record: HabitLogRecord, store: UserDefaults) {
+        var queue: [HabitLogRecord] = []
+        if let qData = store.data(forKey: "offline_habits_queue"),
+           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: qData) {
+            queue = decoded
+        }
+        queue.append(record)
+        if let encoded = try? JSONEncoder().encode(queue) {
+            store.set(encoded, forKey: "offline_habits_queue")
+        }
+    }
+
     // MARK: - Bubbles (Hydration)
-    
+
     public func fetchBubblesSnapshot() -> BubblesWidgetSnapshot {
+        fetchBubblesSnapshot(bridgeFileURL: nil, defaults: nil)
+    }
+
+    public func fetchBubblesSnapshot(bridgeFileURL: URL?, defaults: UserDefaults?) -> BubblesWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
         let key = todayKey
-        
-        // 1. Goal
-        let goalStr = groupDefaults.string(forKey: "water_goal") ?? "2000"
-        let goal = Double(goalStr) ?? (groupDefaults.value(forKey: "water_goal") as? Double ?? 2000)
-        
-        // 2. Today's total
-        var totalMl = 0.0
-        if let wData = groupDefaults.data(forKey: "habits_water_daily_totals"),
-           let dict = try? JSONDecoder().decode([String: Double].self, from: wData) {
-            totalMl = dict[key] ?? 0
+        let targetBridgeURL = bridgeFileURL ?? habitsBridgeFileURL
+        let bridge = readHabitsBridgeState(for: key, bridgeFileURL: targetBridgeURL)
+        let deletedIds = mergedDeletedIds(store: store, bridge: bridge)
+        let goal = cachedWaterGoal(store: store, bridge: bridge)
+
+        let totalMl: Double
+        let activeLogs: [HabitLogRecord]?
+        if let bridge {
+            totalMl = bridge.waterTotalMl
+            activeLogs = bridge.waterLogs.filter { !deletedIds.contains($0.id.uuidString) }
+        } else {
+            totalMl = cachedWaterTotal(store: store, key: key)
+            if let logsData = store.data(forKey: "local_water_logs_\(key)"),
+               let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
+                activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+            } else {
+                activeLogs = nil
+            }
         }
-        if totalMl == 0 {
-            totalMl = Double(groupDefaults.integer(forKey: "cached_water_total"))
-        }
-        
-        // 3. Breakdown from local logs
+
+        return buildBubblesSnapshot(totalMl: totalMl, goal: goal, activeLogs: activeLogs)
+    }
+
+    private func buildBubblesSnapshot(
+        totalMl: Double,
+        goal: Double,
+        activeLogs: [HabitLogRecord]?
+    ) -> BubblesWidgetSnapshot {
         var waterMl = 0.0
         var coffeeMl = 0.0
         var teaMl = 0.0
         var otherDrinks: [String: Double] = [:]
         var lastLogged: Date? = nil
-        
-        let deletedIds = Set(groupDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
-        if let logsData = groupDefaults.data(forKey: "local_water_logs_\(key)"),
-           let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
-            let activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+
+        if let activeLogs {
             lastLogged = activeLogs.first?.loggedAt
             for log in activeLogs {
                 let rawDrink = log.parsedDrink ?? ""
@@ -778,7 +959,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         } else {
             waterMl = totalMl
         }
-        
+
         var breakdown: [(name: String, amount: Double, hexColor: String)] = []
         if waterMl > 0 { breakdown.append(("Water", waterMl, "#00E5FF")) }
         if coffeeMl > 0 { breakdown.append(("Coffee", coffeeMl, "#F59E0B")) }
@@ -791,7 +972,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         if breakdown.isEmpty && totalMl > 0 {
             breakdown.append(("Water", totalMl, "#00E5FF"))
         }
-        
+
         let progress = goal > 0 ? min(max(totalMl / goal, 0.0), 1.0) : 0.0
         return BubblesWidgetSnapshot(
             todayMl: totalMl,
@@ -804,7 +985,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastLoggedAt: lastLogged
         )
     }
-    
+
     private var cachedUserId: UUID? {
         for key in ["supabase_user_id", "authenticated_user_id", "current_user_id"] {
             if let idStr = groupDefaults.string(forKey: key), !idStr.isEmpty, idStr.lowercased() != "guest",
@@ -814,28 +995,16 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         }
         return nil
     }
-    
+
     public func logWater(amountMl: Double, drinkType: String = "Water") {
         let key = todayKey
         let now = Date()
-        
-        // 1. Update daily totals
-        var totals: [String: Double] = [:]
-        if let wData = groupDefaults.data(forKey: "habits_water_daily_totals"),
-           let decoded = try? JSONDecoder().decode([String: Double].self, from: wData) {
-            totals = decoded
-        }
-        totals[key, default: 0] += amountMl
-        if let encoded = try? JSONEncoder().encode(totals) {
-            groupDefaults.set(encoded, forKey: "habits_water_daily_totals")
-        }
-        groupDefaults.set(Int(totals[key] ?? 0), forKey: "cached_water_total")
-        
-        // 2. Append to local logs
+        let store = groupDefaults
+
         let metaDict = ["drink": drinkType]
         let metaJson = (try? JSONSerialization.data(withJSONObject: metaDict, options: []))
             .flatMap { String(data: $0, encoding: .utf8) }
-        
+
         let newRecord = HabitLogRecord(
             id: UUID(),
             userId: cachedUserId,
@@ -848,65 +1017,119 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             updatedAt: now,
             isDeleted: false
         )
-        
-        var logs: [HabitLogRecord] = []
-        if let logsData = groupDefaults.data(forKey: "local_water_logs_\(key)"),
-           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
-            logs = decoded
+
+        bridgeLock.lock()
+        store.synchronize()
+        let existingBridge = habitsBridgeFileURL.flatMap { readHabitsBridgeStateLocked(for: key, from: $0) }
+        let deletedSet = mergedDeletedIds(store: store, bridge: existingBridge)
+
+        // 1. Update daily totals
+        var totals: [String: Double] = [:]
+        if let wData = store.data(forKey: "habits_water_daily_totals"),
+           let decoded = try? JSONDecoder().decode([String: Double].self, from: wData) {
+            totals = decoded
         }
+        let baseTotal = existingBridge?.waterTotalMl ?? cachedWaterTotal(store: store, key: key)
+        let newWaterTotal = baseTotal + amountMl
+        totals[key] = newWaterTotal
+        if let encoded = try? JSONEncoder().encode(totals) {
+            store.set(encoded, forKey: "habits_water_daily_totals")
+        }
+        store.set(Int(newWaterTotal), forKey: "cached_water_total")
+        store.set(key, forKey: "cached_habits_date")
+
+        // 2. Append to local logs
+        var logs: [HabitLogRecord] = existingBridge?.waterLogs ?? {
+            if let logsData = store.data(forKey: "local_water_logs_\(key)"),
+               let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
+                return decoded
+            }
+            return []
+        }()
+        logs.removeAll { deletedSet.contains($0.id.uuidString) }
         logs.insert(newRecord, at: 0)
         if let encoded = try? JSONEncoder().encode(logs) {
-            groupDefaults.set(encoded, forKey: "local_water_logs_\(key)")
+            store.set(encoded, forKey: "local_water_logs_\(key)")
         }
-        
-        // 3. Queue for Supabase background sync
-        var queue: [HabitLogRecord] = []
-        if let qData = groupDefaults.data(forKey: "offline_habits_queue"),
-           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: qData) {
-            queue = decoded
+
+        // 3. Queue for Supabase background sync & synchronize defaults
+        appendOfflineHabitQueue(newRecord, store: store)
+        store.synchronize()
+
+        // 4. Write atomic App Group bridge preserving sibling Smokes state
+        if let url = habitsBridgeFileURL {
+            let smokesLogs: [HabitLogRecord] = existingBridge?.smokesLogs ?? {
+                if let sData = store.data(forKey: "local_smokes_logs_\(key)"),
+                   let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: sData) {
+                    return decoded.filter { !deletedSet.contains($0.id.uuidString) }
+                }
+                return []
+            }()
+            let bridgeState = HabitsWidgetBridgeState(
+                dateKey: key,
+                waterTotalMl: newWaterTotal,
+                waterGoalMl: cachedWaterGoal(store: store, bridge: existingBridge),
+                waterLogs: logs,
+                smokesTotal: existingBridge?.smokesTotal ?? cachedSmokesTotal(store: store, key: key),
+                smokesBaseline: cachedSmokesBaseline(store: store, bridge: existingBridge),
+                smokesLogs: smokesLogs,
+                deletedIds: Array(deletedSet),
+                updatedAt: now
+            )
+            writeHabitsBridgeStateLocked(bridgeState, to: url)
         }
-        queue.append(newRecord)
-        if let encoded = try? JSONEncoder().encode(queue) {
-            groupDefaults.set(encoded, forKey: "offline_habits_queue")
-        }
-        
-        // 4. Reload Widget Timelines & notify running app process
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        bridgeLock.unlock()
+
+        // 5. Reload Widget Timelines & notify running app process
+        reloadTimelines(kinds: [WidgetKind.bubbles, WidgetKind.combined])
         postCrossProcessMutationNotification()
     }
-    
+
     // MARK: - Smokes (Tobacco & Cessation)
-    
+
     public func fetchSmokesSnapshot() -> SmokesWidgetSnapshot {
+        fetchSmokesSnapshot(bridgeFileURL: nil, defaults: nil)
+    }
+
+    public func fetchSmokesSnapshot(bridgeFileURL: URL?, defaults: UserDefaults?) -> SmokesWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
         let key = todayKey
-        
-        // 1. Baseline
-        let baselineStr = groupDefaults.string(forKey: "smokes_baseline") ?? "20"
-        let baseline = Int(baselineStr) ?? (groupDefaults.value(forKey: "smokes_baseline") as? Int ?? 20)
-        
-        // 2. Today's total
-        var totalSmokes = 0
-        if let sData = groupDefaults.data(forKey: "habits_smokes_daily_totals"),
-           let dict = try? JSONDecoder().decode([String: Int].self, from: sData) {
-            totalSmokes = dict[key] ?? 0
+        let targetBridgeURL = bridgeFileURL ?? habitsBridgeFileURL
+        let bridge = readHabitsBridgeState(for: key, bridgeFileURL: targetBridgeURL)
+        let deletedIds = mergedDeletedIds(store: store, bridge: bridge)
+        let baseline = cachedSmokesBaseline(store: store, bridge: bridge)
+
+        let totalSmokes: Int
+        let activeLogs: [HabitLogRecord]?
+        if let bridge {
+            totalSmokes = bridge.smokesTotal
+            activeLogs = bridge.smokesLogs.filter { !deletedIds.contains($0.id.uuidString) }
+        } else {
+            totalSmokes = cachedSmokesTotal(store: store, key: key)
+            if let logsData = store.data(forKey: "local_smokes_logs_\(key)"),
+               let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
+                activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+            } else {
+                activeLogs = nil
+            }
         }
-        if totalSmokes == 0 {
-            totalSmokes = groupDefaults.integer(forKey: "cached_smokes_total")
-        }
-        
-        // 3. Breakdown from local logs
+
+        return buildSmokesSnapshot(totalSmokes: totalSmokes, baseline: baseline, activeLogs: activeLogs)
+    }
+
+    private func buildSmokesSnapshot(
+        totalSmokes: Int,
+        baseline: Int,
+        activeLogs: [HabitLogRecord]?
+    ) -> SmokesWidgetSnapshot {
         var cigsCount = 0
         var heatedCount = 0
         var rolledCount = 0
         var cigarilloCount = 0
         var lastSmokeDate: Date? = nil
-        
-        let deletedIds = Set(groupDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
-        if let logsData = groupDefaults.data(forKey: "local_smokes_logs_\(key)"),
-           let logs = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
-            let activeLogs = logs.filter { !deletedIds.contains($0.id.uuidString) }
+
+        if let activeLogs {
             lastSmokeDate = activeLogs.first?.loggedAt
             for log in activeLogs {
                 let type = (log.smokeType).lowercased()
@@ -926,7 +1149,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         } else {
             cigsCount = totalSmokes
         }
-        
+
         var breakdown: [(name: String, count: Int, hexColor: String)] = []
         if cigsCount > 0 { breakdown.append(("Cigarette", cigsCount, "#EF4444")) }
         if heatedCount > 0 { breakdown.append(("Heated", heatedCount, "#3B82F6")) }
@@ -935,10 +1158,10 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         if breakdown.isEmpty && totalSmokes > 0 {
             breakdown.append(("Cigarette", totalSmokes, "#EF4444"))
         }
-        
+
         // Standard pack price ~25 Lei for 20 sticks = 1.25 Lei per smoke
         let spent = Double(totalSmokes) * 1.25
-        
+
         return SmokesWidgetSnapshot(
             todayTotal: totalSmokes,
             baseline: baseline,
@@ -951,28 +1174,16 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             spentTodayLei: spent
         )
     }
-    
+
     public func logSmoke(preset: SmokePreset = .cigarette) {
         let key = todayKey
         let now = Date()
-        
-        // 1. Update daily totals
-        var totals: [String: Int] = [:]
-        if let sData = groupDefaults.data(forKey: "habits_smokes_daily_totals"),
-           let decoded = try? JSONDecoder().decode([String: Int].self, from: sData) {
-            totals = decoded
-        }
-        totals[key, default: 0] += 1
-        if let encoded = try? JSONEncoder().encode(totals) {
-            groupDefaults.set(encoded, forKey: "habits_smokes_daily_totals")
-        }
-        groupDefaults.set(totals[key] ?? 0, forKey: "cached_smokes_total")
-        
-        // 2. Append to local logs
+        let store = groupDefaults
+
         let metaDict = ["type": preset.rawValue]
         let metaJson = (try? JSONSerialization.data(withJSONObject: metaDict, options: []))
             .flatMap { String(data: $0, encoding: .utf8) }
-        
+
         let newRecord = HabitLogRecord(
             id: UUID(),
             userId: cachedUserId,
@@ -985,32 +1196,71 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             updatedAt: now,
             isDeleted: false
         )
-        
-        var logs: [HabitLogRecord] = []
-        if let logsData = groupDefaults.data(forKey: "local_smokes_logs_\(key)"),
-           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
-            logs = decoded
+
+        bridgeLock.lock()
+        store.synchronize()
+        let existingBridge = habitsBridgeFileURL.flatMap { readHabitsBridgeStateLocked(for: key, from: $0) }
+        let deletedSet = mergedDeletedIds(store: store, bridge: existingBridge)
+
+        // 1. Update daily totals
+        var totals: [String: Int] = [:]
+        if let sData = store.data(forKey: "habits_smokes_daily_totals"),
+           let decoded = try? JSONDecoder().decode([String: Int].self, from: sData) {
+            totals = decoded
         }
+        let baseTotal = existingBridge?.smokesTotal ?? cachedSmokesTotal(store: store, key: key)
+        let newSmokesTotal = baseTotal + 1
+        totals[key] = newSmokesTotal
+        if let encoded = try? JSONEncoder().encode(totals) {
+            store.set(encoded, forKey: "habits_smokes_daily_totals")
+        }
+        store.set(newSmokesTotal, forKey: "cached_smokes_total")
+        store.set(key, forKey: "cached_habits_date")
+
+        // 2. Append to local logs
+        var logs: [HabitLogRecord] = existingBridge?.smokesLogs ?? {
+            if let logsData = store.data(forKey: "local_smokes_logs_\(key)"),
+               let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: logsData) {
+                return decoded
+            }
+            return []
+        }()
+        logs.removeAll { deletedSet.contains($0.id.uuidString) }
         logs.insert(newRecord, at: 0)
         if let encoded = try? JSONEncoder().encode(logs) {
-            groupDefaults.set(encoded, forKey: "local_smokes_logs_\(key)")
+            store.set(encoded, forKey: "local_smokes_logs_\(key)")
         }
-        
-        // 3. Queue for Supabase background sync
-        var queue: [HabitLogRecord] = []
-        if let qData = groupDefaults.data(forKey: "offline_habits_queue"),
-           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: qData) {
-            queue = decoded
+
+        // 3. Queue for Supabase background sync & synchronize defaults
+        appendOfflineHabitQueue(newRecord, store: store)
+        store.synchronize()
+
+        // 4. Write atomic App Group bridge preserving sibling Water state
+        if let url = habitsBridgeFileURL {
+            let waterLogs: [HabitLogRecord] = existingBridge?.waterLogs ?? {
+                if let wData = store.data(forKey: "local_water_logs_\(key)"),
+                   let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: wData) {
+                    return decoded.filter { !deletedSet.contains($0.id.uuidString) }
+                }
+                return []
+            }()
+            let bridgeState = HabitsWidgetBridgeState(
+                dateKey: key,
+                waterTotalMl: existingBridge?.waterTotalMl ?? cachedWaterTotal(store: store, key: key),
+                waterGoalMl: cachedWaterGoal(store: store, bridge: existingBridge),
+                waterLogs: waterLogs,
+                smokesTotal: newSmokesTotal,
+                smokesBaseline: cachedSmokesBaseline(store: store, bridge: existingBridge),
+                smokesLogs: logs,
+                deletedIds: Array(deletedSet),
+                updatedAt: now
+            )
+            writeHabitsBridgeStateLocked(bridgeState, to: url)
         }
-        queue.append(newRecord)
-        if let encoded = try? JSONEncoder().encode(queue) {
-            groupDefaults.set(encoded, forKey: "offline_habits_queue")
-        }
-        
-        // 4. Reload Widget Timelines & notify running app process
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        bridgeLock.unlock()
+
+        // 5. Reload Widget Timelines & notify running app process
+        reloadTimelines(kinds: [WidgetKind.smokes, WidgetKind.combined])
         postCrossProcessMutationNotification()
     }
     
@@ -1074,11 +1324,10 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
         groupDefaults.set(updatedText, forKey: ledgerStorageKey)
         groupDefaults.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
+        groupDefaults.synchronize()
         UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
         
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        reloadTimelines(kinds: [WidgetKind.money, WidgetKind.combined])
         postCrossProcessMutationNotification()
     }
     
@@ -1094,11 +1343,10 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
         groupDefaults.set(updatedText, forKey: ledgerStorageKey)
         groupDefaults.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
+        groupDefaults.synchronize()
         UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
         
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        reloadTimelines(kinds: [WidgetKind.money, WidgetKind.combined])
         postCrossProcessMutationNotification()
     }
     
@@ -1144,14 +1392,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             snapshot = SleepWidgetSnapshot.empty
         }
         
-        if let data = try? JSONEncoder().encode(snapshot) {
-            groupDefaults.set(data, forKey: sleepSnapshotKey)
-            UserDefaults.standard.set(data, forKey: sleepSnapshotKey)
-        }
-        
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        persistEncodedSnapshot(
+            try? JSONEncoder().encode(snapshot),
+            forKey: sleepSnapshotKey,
+            reloadingKinds: [WidgetKind.sleep, WidgetKind.combined]
+        )
     }
     
     public func fetchSleepSnapshot() -> SleepWidgetSnapshot {
@@ -1211,14 +1456,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     private let tagdosSnapshotKey = "daily_tagdos_widget_snapshot_v1"
     
     public func updateTagdosSnapshot(_ snapshot: TagdosWidgetSnapshot) {
-        if let data = try? JSONEncoder().encode(snapshot) {
-            groupDefaults.set(data, forKey: tagdosSnapshotKey)
-            UserDefaults.standard.set(data, forKey: tagdosSnapshotKey)
-        }
-        
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        persistEncodedSnapshot(
+            try? JSONEncoder().encode(snapshot),
+            forKey: tagdosSnapshotKey,
+            reloadingKinds: [WidgetKind.tagdos, WidgetKind.combined]
+        )
     }
     
     public func fetchTagdosSnapshot() -> TagdosWidgetSnapshot {
@@ -1307,26 +1549,20 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastUpdated: Date()
         )
         
-        if let data = try? JSONEncoder().encode(snapshot) {
-            groupDefaults.set(data, forKey: stressSnapshotKey)
-            UserDefaults.standard.set(data, forKey: stressSnapshotKey)
-        }
-        
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        persistEncodedSnapshot(
+            try? JSONEncoder().encode(snapshot),
+            forKey: stressSnapshotKey,
+            reloadingKinds: [WidgetKind.stress, WidgetKind.combined]
+        )
     }
     
     public func clearStressSnapshot() {
         let snapshot = StressWidgetSnapshot.empty
-        if let data = try? JSONEncoder().encode(snapshot) {
-            groupDefaults.set(data, forKey: stressSnapshotKey)
-            UserDefaults.standard.set(data, forKey: stressSnapshotKey)
-        }
-        
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        persistEncodedSnapshot(
+            try? JSONEncoder().encode(snapshot),
+            forKey: stressSnapshotKey,
+            reloadingKinds: [WidgetKind.stress, WidgetKind.combined]
+        )
     }
     
     public func fetchStressSnapshot() -> StressWidgetSnapshot {
@@ -1419,14 +1655,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastUpdated: now
         )
 
-        if let data = try? JSONEncoder().encode(snapshot) {
-            groupDefaults.set(data, forKey: cosmosSnapshotKey)
-            UserDefaults.standard.set(data, forKey: cosmosSnapshotKey)
-        }
-
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        persistEncodedSnapshot(
+            try? JSONEncoder().encode(snapshot),
+            forKey: cosmosSnapshotKey,
+            reloadingKinds: [WidgetKind.cosmos, WidgetKind.combined]
+        )
     }
 
     public func fetchCosmosSnapshot() -> CosmosWidgetSnapshot {
@@ -1558,14 +1791,11 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastUpdated: Date()
         )
 
-        if let data = try? JSONEncoder().encode(snapshot) {
-            groupDefaults.set(data, forKey: weatherSnapshotKey)
-            UserDefaults.standard.set(data, forKey: weatherSnapshotKey)
-        }
-
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        persistEncodedSnapshot(
+            try? JSONEncoder().encode(snapshot),
+            forKey: weatherSnapshotKey,
+            reloadingKinds: [WidgetKind.weather, WidgetKind.combined]
+        )
     }
 
     public func fetchWeatherSnapshot() -> WeatherWidgetSnapshot {

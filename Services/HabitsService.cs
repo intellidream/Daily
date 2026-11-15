@@ -285,6 +285,12 @@ namespace Daily.Services
             OnHabitsUpdated?.Invoke();
         }
 
+        public void NotifyExternalUpdate()
+        {
+            InvalidateRpcCache();
+            OnHabitsUpdated?.Invoke();
+        }
+
         // Helper methods (kept compatible with interface)
         public async Task<double> GetDailyProgressAsync(string habitType, DateTime date)
         {

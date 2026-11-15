@@ -215,7 +215,8 @@ public final class HealthDataService: ObservableObject {
     /// Automatically advances `selectedDate` to the new day across midnight if the user was viewing "Today",
     /// or if the user had manually selected a past date (e.g. "Yesterday" late at night after 00:00) and more than 30 minutes have elapsed,
     /// while flushing yesterday's final local telemetry once in the background.
-    public func checkMidnightRolloverIfNeeded() {
+    @discardableResult
+    public func checkMidnightRolloverIfNeeded() -> Bool {
         let cal = Calendar.current
         let now = Date()
         let currentTodayStart = cal.startOfDay(for: now)
@@ -237,17 +238,20 @@ public final class HealthDataService: ObservableObject {
                     }
                 }
             }
-            return
+            return true
         }
         
         if !cal.isDateInToday(selectedDate) {
             if let navAt = lastPastDateNavigationAt, now.timeIntervalSince(navAt) > 1800 {
                 selectedDate = now
                 lastPastDateNavigationAt = nil
+                return true
             } else if lastPastDateNavigationAt == nil {
                 selectedDate = now
+                return true
             }
         }
+        return false
     }
     
     public func startActiveSyncLoop() {

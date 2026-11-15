@@ -151,7 +151,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         LargeHydrationPercentText.Text = $"{(int)waterPct}% of daily goal";
 
                         var smokes = await _habitsService.GetLogsAsync("smokes", DateTime.Today);
-                        int smokeCount = smokes?.Count ?? 0;
+                        int smokeCount = smokes?.Sum(l => (int)Math.Max(1, Math.Round(l.Value))) ?? 0;
                         var settingsService = App.Current.Services?.GetService<Daily.Services.ISettingsService>();
                         int maxSmokes = (settingsService?.Settings?.SmokesBaselineDaily > 0) ? settingsService.Settings.SmokesBaselineDaily : 40;
                         

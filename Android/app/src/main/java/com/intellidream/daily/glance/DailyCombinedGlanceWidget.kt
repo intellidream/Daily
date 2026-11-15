@@ -59,13 +59,17 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
-        val waterLogs = app?.habitsRepository?.selectedDateWaterLogs?.value ?: emptyList()
-        val waterMl = app?.habitsRepository?.waterTotalToday?.value ?: waterLogs.sumOf { it.value }
+        val waterLogs = app?.habitsRepository?.getTodayLogsOnce("water")
+            ?: app?.habitsRepository?.selectedDateWaterLogs?.value
+            ?: emptyList()
+        val waterMl = waterLogs.sumOf { it.value }
         val goalMl = app?.habitsRepository?.waterGoal?.value ?: 2000.0
         val waterPercent = if (goalMl > 0) min(waterMl / goalMl, 1.0) else 0.0
 
-        val smokesLogs = app?.habitsRepository?.selectedDateSmokesLogs?.value ?: emptyList()
-        val smokesCount = app?.habitsRepository?.smokesTotalToday?.value ?: smokesLogs.sumOf { it.value.toInt() }
+        val smokesLogs = app?.habitsRepository?.getTodayLogsOnce("smokes")
+            ?: app?.habitsRepository?.selectedDateSmokesLogs?.value
+            ?: emptyList()
+        val smokesCount = smokesLogs.sumOf { it.value.toInt() }
         val smokesBase = app?.habitsRepository?.smokesSettings?.value?.baselineDailyCount ?: 20
         val smokesRingColorInt = WidgetVisualGraphics.getSmokeRingColor(smokesCount, smokesBase)
 

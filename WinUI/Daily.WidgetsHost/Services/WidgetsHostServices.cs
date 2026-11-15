@@ -123,6 +123,26 @@ namespace Daily_WinUI.WidgetsHost.Services
                 await _db.Connection.UpdateAsync(localGoal);
             }
             OnHabitsUpdated?.Invoke();
+            NotifyMainAppHabitsChanged();
+        }
+
+        private static void NotifyMainAppHabitsChanged()
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var client = new System.IO.Pipes.NamedPipeClientStream(".", "DailyWinUI_ProtocolPipe", System.IO.Pipes.PipeDirection.Out);
+                    using var cts = new System.Threading.CancellationTokenSource(400);
+                    await client.ConnectAsync(cts.Token);
+                    using var writer = new System.IO.StreamWriter(client) { AutoFlush = true };
+                    await writer.WriteLineAsync("habits:external-changed".AsMemory(), cts.Token);
+                }
+                catch
+                {
+                    // Main app may not be running; SQLite already contains the committed row.
+                }
+            });
         }
 
         public async Task<Dictionary<string, double>> GetDailyBreakdownAsync(string habitType, DateTime date)
@@ -177,6 +197,7 @@ namespace Daily_WinUI.WidgetsHost.Services
             };
             await _db.Connection.InsertAsync(log);
             OnHabitsUpdated?.Invoke();
+            NotifyMainAppHabitsChanged();
         }
 
         public async Task DeleteLogAsync(Guid logId)
@@ -191,6 +212,7 @@ namespace Daily_WinUI.WidgetsHost.Services
                 item.UpdatedAt = DateTime.UtcNow;
                 await _db.Connection.UpdateAsync(item);
                 OnHabitsUpdated?.Invoke();
+                NotifyMainAppHabitsChanged();
             }
         }
 

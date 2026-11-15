@@ -220,11 +220,13 @@ public final class SmartLedgerStore: ObservableObject {
         
         let now = Date().timeIntervalSince1970
         groupDefaults.set(now, forKey: localModifiedKey)
+        groupDefaults.synchronize()
         
         self.parsedLedger = SmartLedgerParser.shared.parse(textToSave)
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
+        WidgetDataCoordinator.shared.reloadTimelines(kinds: [
+            WidgetDataCoordinator.WidgetKind.money,
+            WidgetDataCoordinator.WidgetKind.combined
+        ])
         
         if triggerCloudSync {
             scheduleSupabasePush()

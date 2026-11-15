@@ -91,9 +91,10 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 var today = DateTime.Today;
                 var logs = await _habitsService.GetLogsAsync("smokes", today);
 
-                int totalSmokes = logs?.Count ?? 0;
-                int cigarettes = logs?.Count(l => (l.Metadata?.ToLowerInvariant().Contains("heated") != true) && (l.Unit?.ToLowerInvariant() != "heated")) ?? 0;
-                int heated = totalSmokes - cigarettes;
+                int totalSmokes = logs?.Sum(l => (int)Math.Max(1, Math.Round(l.Value))) ?? 0;
+                int heated = logs?.Where(l => (l.Metadata?.ToLowerInvariant().Contains("heated") == true) || string.Equals(l.Unit, "heated", StringComparison.OrdinalIgnoreCase))
+                    .Sum(l => (int)Math.Max(1, Math.Round(l.Value))) ?? 0;
+                int cigarettes = Math.Max(0, totalSmokes - heated);
 
                 var settingsService = App.Current.Services?.GetService<ISettingsService>();
                 int maxSmokes = (settingsService?.Settings?.SmokesBaselineDaily > 0) ? settingsService.Settings.SmokesBaselineDaily : 40;
