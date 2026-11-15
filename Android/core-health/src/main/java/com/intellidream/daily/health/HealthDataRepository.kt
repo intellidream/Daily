@@ -1,6 +1,7 @@
 package com.intellidream.daily.health
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.intellidream.daily.database.DailyDatabase
 import com.intellidream.daily.database.dao.HealthDailySummaryDao
 import com.intellidream.daily.database.dao.HealthTelemetryDao
@@ -31,6 +32,7 @@ import com.intellidream.daily.model.SleepAIContext
 import com.intellidream.daily.model.SleepActionableTip
 import com.intellidream.daily.model.SleepRecoveryVerdict
 import com.intellidream.daily.model.SleepSession
+import com.intellidream.daily.model.SleepStageRecord
 import com.intellidream.daily.model.IntradayStressPoint
 import com.intellidream.daily.model.StressAnalysisResult
 import com.intellidream.daily.model.StressLevel
@@ -57,6 +59,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
@@ -105,6 +108,11 @@ class HealthDataRepository(
     @Volatile private var lastLocalUploadCompletedAtMs: Long = 0L
     @Volatile private var lastSourcesFetchAtMs: Long = 0L
     private val lastUploadedSleepFpByDate = java.util.concurrent.ConcurrentHashMap<String, String>()
+    @Volatile private var loadedSleepFpUserId: String? = null
+    private val sleepFingerprintLock = Any()
+    private val sleepFingerprintPrefs: SharedPreferences by lazy {
+        context.getSharedPreferences(SleepUploadFingerprintStore.PREFS_NAME, Context.MODE_PRIVATE)
+    }
     private val lastUploadedVitalsFpByDate = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val lastUploadedHrFpByDate = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val registeredSourceIdsInSession = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -126,9 +134,17 @@ class HealthDataRepository(
                 trendsRemoteCache = null
                 lastSourcesFetchAtMs = 0L
                 registeredSourceIdsInSession.clear()
-                lastUploadedSleepFpByDate.clear()
+                synchronized(sleepFingerprintLock) {
+                    lastUploadedSleepFpByDate.clear()
+                    loadedSleepFpUserId = null
+                }
                 lastUploadedVitalsFpByDate.clear()
                 lastUploadedHrFpByDate.clear()
+                if (value == "local_user") {
+                    SleepUploadFingerprintStore.clear(sleepFingerprintPrefs)
+                } else {
+                    ensureSleepFingerprintsLoaded(value)
+                }
             }
             if (changed && value != "local_user") {
                 setupRealtimeSubscription()
@@ -658,9 +674,9 @@ class HealthDataRepository(
 
                 val remoteSleepDeferred = async(Dispatchers.IO) {
                     if (currentUserId != "local_user") {
-                        remoteService.fetchSleepSessions(currentUserId, dateKey)
+                        remoteService.fetchSleepSessionsOrNull(currentUserId, dateKey)
                     } else {
-                        emptyList()
+                        null
                     }
                 }
 
@@ -694,7 +710,8 @@ class HealthDataRepository(
 
                 val localTelemetry = localTelemetryDeferred.await()
                 val remoteSummary = remoteSummaryDeferred.await()
-                val remoteSleep = remoteSleepDeferred.await()
+                val remoteSleepResult = remoteSleepDeferred.await()
+                val remoteSleep = remoteSleepResult ?: emptyList()
                 val remoteVitals = remoteVitalsDeferred.await()
                 val remoteHr = remoteHrDeferred.await()
                 val remoteSources = remoteSourcesDeferred.await()
@@ -725,6 +742,12 @@ class HealthDataRepository(
                         telemetryDao.insertRecords(localTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
                     }
                     if (currentUserId != "local_user") {
+                        if (remoteSleepResult != null && remoteSleepResult.isEmpty() && localLeanSleep.isNotEmpty()) {
+                            ensureSleepFingerprintsLoaded(currentUserId)
+                            if (lastUploadedSleepFpByDate.containsKey(dateKey)) {
+                                invalidateSleepFingerprint(dateKey, currentUserId)
+                            }
+                        }
                         scope.launch(Dispatchers.IO) {
                             syncTelemetryToSupabase(localTelemetry)
                         }
@@ -2694,9 +2717,8 @@ class HealthDataRepository(
         )
         if (sessions.isEmpty()) return false
 
-        val fp = sessions.sortedBy { it.id }.joinToString("|") {
-            "${it.id}:${it.durationSeconds}:${it.deepSeconds}:${it.remSeconds}:${it.lightSeconds}:${it.awakeSeconds}:${it.stages.size}:${it.startTime}:${it.endTime}:${it.isUserSelected}"
-        }
+        val fp = SleepUploadFingerprintStore.computeFingerprint(sessions)
+        ensureSleepFingerprintsLoaded(currentUserId)
         if (lastUploadedSleepFpByDate[dateKey] == fp) return false
 
         var success = true
@@ -2705,10 +2727,50 @@ class HealthDataRepository(
             if (!ok) success = false
         }
         if (success) {
-            lastUploadedSleepFpByDate[dateKey] = fp
+            synchronized(sleepFingerprintLock) {
+                val updated = SleepUploadFingerprintStore.saveEntry(
+                    dateKey = dateKey,
+                    fingerprint = fp,
+                    existing = lastUploadedSleepFpByDate,
+                    prefs = sleepFingerprintPrefs,
+                    userId = currentUserId
+                )
+                lastUploadedSleepFpByDate.clear()
+                lastUploadedSleepFpByDate.putAll(updated)
+                loadedSleepFpUserId = SleepUploadFingerprintStore.normalizeUserId(currentUserId)
+            }
             lastLocalUploadCompletedAtMs = System.currentTimeMillis()
         }
         return success
+    }
+
+    private fun ensureSleepFingerprintsLoaded(userId: String) {
+        val normalizedUid = SleepUploadFingerprintStore.normalizeUserId(userId)
+        if (normalizedUid.isEmpty() || normalizedUid == "local_user") return
+        if (loadedSleepFpUserId == normalizedUid) return
+        synchronized(sleepFingerprintLock) {
+            if (loadedSleepFpUserId == normalizedUid) return
+            val loaded = SleepUploadFingerprintStore.load(sleepFingerprintPrefs, normalizedUid)
+            lastUploadedSleepFpByDate.clear()
+            lastUploadedSleepFpByDate.putAll(loaded)
+            loadedSleepFpUserId = normalizedUid
+        }
+    }
+
+    private fun invalidateSleepFingerprint(dateKey: String, userId: String) {
+        val normalizedUid = SleepUploadFingerprintStore.normalizeUserId(userId)
+        if (normalizedUid.isEmpty() || normalizedUid == "local_user") return
+        synchronized(sleepFingerprintLock) {
+            val updated = SleepUploadFingerprintStore.removeEntry(
+                dateKey = dateKey,
+                existing = lastUploadedSleepFpByDate,
+                prefs = sleepFingerprintPrefs,
+                userId = normalizedUid
+            )
+            lastUploadedSleepFpByDate.clear()
+            lastUploadedSleepFpByDate.putAll(updated)
+            loadedSleepFpUserId = normalizedUid
+        }
     }
 
     private suspend fun syncLeanDailyVitals(
@@ -3735,5 +3797,201 @@ class HealthDataRepository(
                     ?: lastPt?.sourceDevice?.let { DeviceSource.from(it).displayName }
             )
         }
+    }
+}
+
+/**
+ * Persistent per-user cache of uploaded sleep session fingerprints so cold app launches skip
+ * redundant `health_sleep_sessions` UPSERTs and `health-engine` wakes when local sleep is unchanged.
+ */
+internal object SleepUploadFingerprintStore {
+    const val PREFS_NAME = "daily_health_sleep_fp_v1"
+    const val STORAGE_KEY = "sleep_fp_payload_v1"
+    const val SCHEMA_VERSION = "v2"
+    const val RETENTION_DAYS = 14
+
+    @Serializable
+    internal data class CachePayload(
+        val userId: String,
+        val entries: Map<String, String> = emptyMap()
+    )
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun normalizeUserId(userId: String): String = userId.trim().lowercase(Locale.US)
+
+    fun computeFingerprint(sessions: List<HealthSleepSessionRecord>): String {
+        val body = sessions
+            .sortedBy { it.id }
+            .joinToString("|") { s ->
+                val stagesHash = hashStages(s.stages)
+                val selectedFlag = if (s.isUserSelected) 1 else 0
+                val startSec = round(s.startTime / 1000.0).toLong()
+                val endSec = round(s.endTime / 1000.0).toLong()
+                "${s.id}:${s.durationSeconds}:${s.timeInBedSeconds}:${s.stages.size}:${s.deepSeconds}:${s.remSeconds}:${s.lightSeconds}:${s.awakeSeconds}:$startSec:$endSec:$selectedFlag:$stagesHash"
+            }
+        return "$SCHEMA_VERSION|$body"
+    }
+
+    fun cutoffDateKey(
+        referenceTimeMs: Long = System.currentTimeMillis(),
+        retentionDays: Int = RETENTION_DAYS,
+        timeZone: java.util.TimeZone = java.util.TimeZone.getDefault()
+    ): String {
+        val cal = Calendar.getInstance(timeZone, Locale.US).apply {
+            timeInMillis = referenceTimeMs
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, -retentionDays)
+        }
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+            this.timeZone = timeZone
+        }
+        return fmt.format(cal.time)
+    }
+
+    fun prune(
+        entries: Map<String, String>,
+        referenceTimeMs: Long = System.currentTimeMillis(),
+        retentionDays: Int = RETENTION_DAYS,
+        timeZone: java.util.TimeZone = java.util.TimeZone.getDefault()
+    ): Map<String, String> {
+        val cutoff = cutoffDateKey(referenceTimeMs, retentionDays, timeZone)
+        val prefix = "$SCHEMA_VERSION|"
+        return entries.filter { (key, value) -> key >= cutoff && value.startsWith(prefix) }
+    }
+
+    fun loadFromJson(
+        rawJson: String?,
+        userId: String,
+        referenceTimeMs: Long = System.currentTimeMillis(),
+        timeZone: java.util.TimeZone = java.util.TimeZone.getDefault()
+    ): Pair<Map<String, String>, String?> {
+        val normalizedUid = normalizeUserId(userId)
+        if (normalizedUid.isEmpty() || rawJson.isNullOrBlank()) return emptyMap<String, String>() to null
+        val payload = try {
+            json.decodeFromString<CachePayload>(rawJson)
+        } catch (_: Exception) {
+            return emptyMap<String, String>() to null
+        }
+        if (normalizeUserId(payload.userId) != normalizedUid) {
+            return emptyMap<String, String>() to null
+        }
+        val pruned = prune(payload.entries, referenceTimeMs, RETENTION_DAYS, timeZone)
+        val rewrittenJson = if (pruned.size != payload.entries.size) {
+            encodePayload(pruned, normalizedUid)
+        } else {
+            rawJson
+        }
+        return pruned to rewrittenJson
+    }
+
+    fun saveEntryToJson(
+        dateKey: String,
+        fingerprint: String,
+        existing: Map<String, String>,
+        userId: String,
+        referenceTimeMs: Long = System.currentTimeMillis(),
+        timeZone: java.util.TimeZone = java.util.TimeZone.getDefault()
+    ): Pair<Map<String, String>, String?> {
+        val normalizedUid = normalizeUserId(userId)
+        val next = prune(existing, referenceTimeMs, RETENTION_DAYS, timeZone).toMutableMap()
+        val cutoff = cutoffDateKey(referenceTimeMs, RETENTION_DAYS, timeZone)
+        if (dateKey >= cutoff) {
+            next[dateKey] = fingerprint
+        }
+        return next to encodePayload(next, normalizedUid)
+    }
+
+    fun removeEntryToJson(
+        dateKey: String,
+        existing: Map<String, String>,
+        userId: String,
+        referenceTimeMs: Long = System.currentTimeMillis(),
+        timeZone: java.util.TimeZone = java.util.TimeZone.getDefault()
+    ): Pair<Map<String, String>, String?> {
+        val normalizedUid = normalizeUserId(userId)
+        val next = prune(existing, referenceTimeMs, RETENTION_DAYS, timeZone).toMutableMap()
+        next.remove(dateKey)
+        return next to encodePayload(next, normalizedUid)
+    }
+
+    fun load(
+        prefs: SharedPreferences,
+        userId: String,
+        referenceTimeMs: Long = System.currentTimeMillis()
+    ): Map<String, String> {
+        val raw = prefs.getString(STORAGE_KEY, null)
+        val (loaded, updatedJson) = loadFromJson(raw, userId, referenceTimeMs)
+        if (raw != null && updatedJson != raw) {
+            writeRaw(prefs, updatedJson)
+        }
+        return loaded
+    }
+
+    fun saveEntry(
+        dateKey: String,
+        fingerprint: String,
+        existing: Map<String, String>,
+        prefs: SharedPreferences,
+        userId: String,
+        referenceTimeMs: Long = System.currentTimeMillis()
+    ): Map<String, String> {
+        val (next, encoded) = saveEntryToJson(dateKey, fingerprint, existing, userId, referenceTimeMs)
+        writeRaw(prefs, encoded)
+        return next
+    }
+
+    fun removeEntry(
+        dateKey: String,
+        existing: Map<String, String>,
+        prefs: SharedPreferences,
+        userId: String,
+        referenceTimeMs: Long = System.currentTimeMillis()
+    ): Map<String, String> {
+        val (next, encoded) = removeEntryToJson(dateKey, existing, userId, referenceTimeMs)
+        writeRaw(prefs, encoded)
+        return next
+    }
+
+    fun clear(prefs: SharedPreferences) {
+        prefs.edit().remove(STORAGE_KEY).apply()
+    }
+
+    private fun encodePayload(entries: Map<String, String>, userId: String): String? {
+        if (userId.isEmpty() || entries.isEmpty()) return null
+        return json.encodeToString(CachePayload(userId = userId, entries = entries))
+    }
+
+    private fun writeRaw(prefs: SharedPreferences, rawJson: String?) {
+        prefs.edit().apply {
+            if (rawJson == null) remove(STORAGE_KEY) else putString(STORAGE_KEY, rawJson)
+        }.apply()
+    }
+
+    private fun hashStages(stages: List<SleepStageRecord>): String {
+        var hash = 0xcbf29ce484222325uL
+        val prime = 0x100000001b3uL
+        fun mix(byteVal: Int) {
+            hash = (hash xor byteVal.toUByte().toULong()) * prime
+        }
+        fun mixLong(value: Long) {
+            var v = value.toULong()
+            for (i in 0 until 8) {
+                mix((v and 0xffuL).toInt())
+                v = v shr 8
+            }
+        }
+        for (stage in stages) {
+            for (b in stage.stageType.rawValue.encodeToByteArray()) {
+                mix(b.toInt())
+            }
+            mix(0xff)
+            mixLong(round(stage.startTime / 1000.0).toLong())
+            mixLong(round(stage.endTime / 1000.0).toLong())
+        }
+        return hash.toString(16)
     }
 }

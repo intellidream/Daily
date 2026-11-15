@@ -44,7 +44,21 @@ When third-party companion apps (e.g., Oura App writing into Apple Health / Heal
 ---
 
 ## 3. Unit Tests & Verification
-- **`DailyCoreTests`**: `HealthServiceTests` (`29` tests, `0` failures) covering `testMultiPassRecencyAwareStageDeduplicationAndCoalescing`, `testSleepStageRecordUtcZEncodingAndNaiveUtcDecoding`, and `testMergeLeanSleepSessionsReclassificationAndTruncationGuard`.
-- **Android Unit Tests**: `:core-health:testDebugUnitTest` (`GoldenFixturesTest`: 2, `LeanHealthBuildersTest`: 11, `StressAnalysisEngineTest`: 6) and `:core-model:testDebugUnitTest` (`AstronomyServiceTest`: 5, `NewsParsersTest`: 21, `NewsPerspectivesTest`: 4, `PrismModelsTest`: 3, `SleepModelsTest`: 4, `SmartLedgerParserTest`: 1) all passing.
+- **`DailyCoreTests`**: `HealthServiceTests` (`30` tests, `0` failures) covering `testMultiPassRecencyAwareStageDeduplicationAndCoalescing`, `testSleepStageRecordUtcZEncodingAndNaiveUtcDecoding`, `testMergeLeanSleepSessionsReclassificationAndTruncationGuard`, and `testSleepUploadFingerprintPersistenceAndUserIsolation`.
+- **Android Unit Tests**: `:core-health:testDebugUnitTest` (`GoldenFixturesTest`: 2, `LeanHealthBuildersTest`: 11, `SleepUploadFingerprintStoreTest`: 1, `StressAnalysisEngineTest`: 6 — `20` tests, `0` failures) and `:core-model:testDebugUnitTest` (`AstronomyServiceTest`: 5, `NewsParsersTest`: 21, `NewsPerspectivesTest`: 4, `PrismModelsTest`: 3, `SleepModelsTest`: 4, `SmartLedgerParserTest`: 1 — `38` tests, `0` failures), plus `:app:assembleDebug` build passed.
 - **.NET Health Tests**: `Tests/Daily.Health.Tests/Daily.Health.Tests.csproj` (`15` tests passed, `0` failed, `0` skipped) including `TestNaiveAndExplicitUtcIsoTimestampsParseEquivalently`.
 - **Live Device E2E (iOS Physical Device `Schmitz` + Remote Supabase)**: Confirmed HealthKit re-ingestion pushed updated `2026-11-15` session metrics matching Oura Ring (`duration_seconds = 35310` / `9h 49m`, `rem_seconds = 6570` / `1h 50m`, `deep_seconds = 5970` / `1h 40m`, `92` coalesced stages with `0` adjacent duplicate stages and explicit UTC `Z` timestamps), reflected across iOS Simulator (`SimulaDuo`). Confirmed `trg_z_touch_sleep_ingested_at` refreshes `ingested_at` (`2026-11-15T14:57:58Z`) on `UPDATE` and deployed `health-engine` v17 persisted matching summary metrics (`computed_at = 2026-11-15T14:58:00Z`).
+
+---
+
+## 4. Egress, WAL & Cold-Launch Upload Optimizations (`20261115000002` + Persistent `sleepFp`)
+
+To eliminate redundant `health_sleep_sessions` writes, WAL/dead-tuple churn, `supabase_realtime` fan-out (`SELECT` storms across connected devices), and cold-launch upload re-evaluations after sleep synchronization:
+
+1. **Server-Side Conditional `ingested_at` & Redundant-Update Suppression (`supabase/migrations/20261115000002_sleep_conditional_ingested_at_and_suppress_noop.sql`)**:
+   - Replaces `public.trg_fn_touch_sleep_ingested_at()` (`BEFORE UPDATE`) so it compares all 20 content/priority/selection columns (`IS DISTINCT FROM`, executing alphabetically after `trg_guard_health_sleep_sessions`). If unchanged, it resets `NEW.ingested_at := OLD.ingested_at`; only genuine sleep/stage/priority modifications set `NEW.ingested_at := now()`.
+   - Adds `trg_zz_suppress_redundant_sleep_updates` (`BEFORE UPDATE FOR EACH ROW EXECUTE FUNCTION pg_catalog.suppress_redundant_updates_trigger()`) running alphabetically last so identical upserts short-circuit inside PostgreSQL with zero heap writes, zero dead tuples, and zero `supabase_realtime` broadcast events.
+   - *(Note: awaiting fresh Supabase Management PAT to execute `20261115000002` remotely.)*
+2. **Client-Side Persistent Sleep Upload Fingerprint Cache (`SleepUploadFingerprintStore`)**:
+   - **`DailyCore/Sources/DailyCore/Services/HealthDataService.swift`** (shared across `iOS` & `macOS`): Persists a schema-versioned (`v2|`) per-user `sleepFp` map (`health_sleep_upload_fp_cache_v1` in App Group `UserDefaults`), including duration, stage totals, boundary seconds, selection flag, and a 64-bit FNV-1a digest of stage types and boundaries. Automatically prunes entries older than `14` days, clears on `.unauthenticated` sign-out, isolates strictly by normalized `userId`, and self-heals if a confirmed online `remoteSleepFetch` returns `[]` while local sleep records exist.
+   - **`Android/core-health/.../HealthDataRepository.kt` & `Android/core-network/.../HealthRemoteService.kt`**: Mirrors the identical `v2|` + FNV-1a `SleepUploadFingerprintStore` backed by `SharedPreferences` (`daily_health_sleep_fp_v1`), preserving cold-launch hydration on `local_user -> <userId>` while clearing on sign-out and self-healing via `fetchSleepSessionsOrNull(...)` when a confirmed online server query returns empty.

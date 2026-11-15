@@ -1446,6 +1446,131 @@ struct HealthServiceTests {
         #expect(guarded[0].durationSeconds == 35460)
         #expect(guarded[0].stages.count == 81)
     }
+
+    @Test func testSleepUploadFingerprintPersistenceAndUserIsolation() throws {
+        let suiteName = "com.intellidream.daily.tests.sleepfp.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0)!
+        let refDate = Date(timeIntervalSince1970: 1794744000) // 2026-11-15T12:00:00Z
+        let start = Date(timeIntervalSince1970: 1794704640)
+        let mid = start.addingTimeInterval(3600)
+        let end = start.addingTimeInterval(7200)
+
+        let sessionA = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+            userId: "user-a",
+            localDate: "2026-11-15",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Oura Ring",
+            hostDeviceName: "Schmitz",
+            startTime: start,
+            endTime: end,
+            durationSeconds: 7200,
+            timeInBedSeconds: 7200,
+            deepSeconds: 3600,
+            remSeconds: 0,
+            lightSeconds: 3600,
+            awakeSeconds: 0,
+            stages: [
+                SleepStageRecord(id: "s1", stageType: .deep, startTime: start, endTime: mid),
+                SleepStageRecord(id: "s2", stageType: .light, startTime: mid, endTime: end)
+            ],
+            sourcePriority: 1
+        )
+
+        let fp1 = SleepUploadFingerprintStore.computeFingerprint(for: [sessionA])
+        #expect(fp1.hasPrefix("v2|"))
+        #expect(fp1 == SleepUploadFingerprintStore.computeFingerprint(for: [sessionA]))
+
+        // Saving today + stale 20-day-old entry prunes the stale one immediately
+        let saved = SleepUploadFingerprintStore.saveEntry(
+            dateKey: "2026-11-15",
+            fingerprint: fp1,
+            existing: ["2026-10-20": "v2|stale"],
+            userDefaults: defaults,
+            userId: "User-A",
+            referenceDate: refDate,
+            calendar: cal
+        )
+        #expect(saved["2026-11-15"] == fp1)
+        #expect(saved["2026-10-20"] == nil)
+
+        // Simulated cold launch loads persisted fingerprint for matching user (case-insensitive)
+        let reloaded = SleepUploadFingerprintStore.load(
+            userDefaults: defaults,
+            userId: "user-a",
+            referenceDate: refDate,
+            calendar: cal
+        )
+        #expect(reloaded["2026-11-15"] == fp1)
+
+        // User isolation: a different user never inherits cached fingerprints
+        let otherUserLoaded = SleepUploadFingerprintStore.load(
+            userDefaults: defaults,
+            userId: "user-b",
+            referenceDate: refDate,
+            calendar: cal
+        )
+        #expect(otherUserLoaded.isEmpty)
+
+        // Stage reclassification invalidates fingerprint even with identical duration & stage count
+        let sessionReclassified = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-15_primary_sleep_oura_ring",
+            userId: "user-a",
+            localDate: "2026-11-15",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Oura Ring",
+            hostDeviceName: "Schmitz",
+            startTime: start,
+            endTime: end,
+            durationSeconds: 7200,
+            timeInBedSeconds: 7200,
+            deepSeconds: 3600,
+            remSeconds: 3600,
+            lightSeconds: 0,
+            awakeSeconds: 0,
+            stages: [
+                SleepStageRecord(id: "s1", stageType: .deep, startTime: start, endTime: mid),
+                SleepStageRecord(id: "s2", stageType: .rem, startTime: mid, endTime: end)
+            ],
+            sourcePriority: 1
+        )
+        let fp2 = SleepUploadFingerprintStore.computeFingerprint(for: [sessionReclassified])
+        #expect(fp2 != fp1)
+
+        // Self-healing invalidation & sign-out clear
+        let afterRemove = SleepUploadFingerprintStore.removeEntry(
+            dateKey: "2026-11-15",
+            existing: reloaded,
+            userDefaults: defaults,
+            userId: "user-a",
+            referenceDate: refDate,
+            calendar: cal
+        )
+        #expect(afterRemove.isEmpty)
+
+        _ = SleepUploadFingerprintStore.saveEntry(
+            dateKey: "2026-11-15",
+            fingerprint: fp2,
+            existing: [:],
+            userDefaults: defaults,
+            userId: "user-a",
+            referenceDate: refDate,
+            calendar: cal
+        )
+        SleepUploadFingerprintStore.clear(userDefaults: defaults)
+        #expect(
+            SleepUploadFingerprintStore.load(
+                userDefaults: defaults,
+                userId: "user-a",
+                referenceDate: refDate,
+                calendar: cal
+            ).isEmpty
+        )
+    }
 }
 
 

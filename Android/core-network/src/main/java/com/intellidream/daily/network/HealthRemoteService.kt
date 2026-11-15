@@ -153,8 +153,17 @@ class HealthRemoteService(
     suspend fun fetchSleepSessions(
         userId: String,
         date: String
-    ): List<HealthSleepSessionRecord> = withContext(Dispatchers.IO) {
-        if (!clientManager.ensureSessionReady()) return@withContext emptyList()
+    ): List<HealthSleepSessionRecord> = fetchSleepSessionsOrNull(userId, date) ?: emptyList()
+
+    /**
+     * Fetches sleep sessions for `(userId, date)`, returning `null` when offline or unauthenticated
+     * so callers can distinguish a confirmed empty server result from a transient network failure.
+     */
+    suspend fun fetchSleepSessionsOrNull(
+        userId: String,
+        date: String
+    ): List<HealthSleepSessionRecord>? = withContext(Dispatchers.IO) {
+        if (!clientManager.ensureSessionReady()) return@withContext null
         try {
             clientManager.client.postgrest["health_sleep_sessions"]
                 .select {
@@ -167,7 +176,7 @@ class HealthRemoteService(
                 .decodeList<HealthSleepSessionRecord>()
         } catch (e: Exception) {
             android.util.Log.w("HealthRemoteService", "Failed to fetch sleep sessions: ${e.message}")
-            emptyList()
+            null
         }
     }
 

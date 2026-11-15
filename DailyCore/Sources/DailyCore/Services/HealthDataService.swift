@@ -97,6 +97,7 @@ public final class HealthDataService: ObservableObject {
     private var lastLocalUploadCompletedAt: Date = .distantPast
     private var lastSourcesFetchAt: Date = .distantPast
     private var lastUploadedSleepFpByDate: [String: String] = [:]
+    private var loadedSleepFpUserId: String?
     private var lastUploadedHrFpByDate: [String: String] = [:]
     private var lastUploadedVitalsFpByDate: [String: String] = [:]
     private var registeredSourceIdsInSession: Set<String> = []
@@ -183,7 +184,8 @@ public final class HealthDataService: ObservableObject {
         AuthService.shared.$sessionState
             .dropFirst()
             .sink { [weak self] state in
-                if case .authenticated = state {
+                switch state {
+                case .authenticated:
                     Task { [weak self] in
                         self?.setupRealtimeSubscription()
                         await self?.loadDataForSelectedDate(forceRefresh: true)
@@ -191,6 +193,10 @@ public final class HealthDataService: ObservableObject {
                     Task.detached(priority: .utility) { [weak self] in
                         await self?.syncMissingHistoricalDataIfNeeded()
                     }
+                case .unauthenticated:
+                    self?.resetSessionCachesOnSignOut()
+                default:
+                    break
                 }
             }
             .store(in: &cancellables)
@@ -711,10 +717,10 @@ public final class HealthDataService: ObservableObject {
             return nil
         }()
         
-        async let remoteSleepFetch: [HealthSleepSessionRecord] = {
-            guard let userId = userId else { return [] }
+        async let remoteSleepFetch: [HealthSleepSessionRecord]? = {
+            guard let userId = userId else { return nil }
             do {
-                return try await supabase
+                let rows: [HealthSleepSessionRecord] = try await supabase
                     .from("health_sleep_sessions")
                     .select()
                     .eq("user_id", value: userId)
@@ -722,8 +728,9 @@ public final class HealthDataService: ObservableObject {
                     .order("source_priority", ascending: true)
                     .execute()
                     .value
+                return rows
             } catch {
-                return []
+                return nil
             }
         }()
         
@@ -774,6 +781,12 @@ public final class HealthDataService: ObservableObject {
             }
         }()
         
+        var hadCachedSleepFpBeforeSync = false
+        if let uid = userId {
+            ensureSleepFingerprintsLoaded(for: uid)
+            hadCachedSleepFpBeforeSync = (lastUploadedSleepFpByDate[dateKey] != nil)
+        }
+
         var localTelemetry: [HealthTelemetryRecord] = []
         if let provider = localDataProvider {
             let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
@@ -789,7 +802,8 @@ public final class HealthDataService: ObservableObject {
         }
         
         let remotePayload = await remoteSummaryFetch
-        let leanSleep = await remoteSleepFetch
+        let remoteSleepResult = await remoteSleepFetch
+        let leanSleep = remoteSleepResult ?? []
         let leanVitals = await remoteVitalsFetch
         let leanHr = await remoteHrFetch
         let leanSources = await remoteSourcesFetch
@@ -839,6 +853,34 @@ public final class HealthDataService: ObservableObject {
             )
         }
         
+        if let uid = userId,
+           let confirmedRemoteSleep = remoteSleepResult,
+           confirmedRemoteSleep.isEmpty,
+           !localSleepRecs.isEmpty,
+           hadCachedSleepFpBeforeSync {
+            invalidateSleepFingerprint(forDateKey: dateKey, userId: uid)
+            lastSyncedSignatureByDate.removeValue(forKey: dateKey)
+            let sleepOnly = localTelemetry.filter { $0.isSleep || $0.isSleepStage }
+            Task { [weak self] in
+                guard let self = self else { return }
+                let uploaded = await self.syncLeanSleepSessions(
+                    records: sleepOnly,
+                    targetDate: targetDate,
+                    dateKey: dateKey,
+                    userId: uid,
+                    hostName: hostName
+                )
+                if uploaded {
+                    self.lastLocalUploadCompletedAt = Date()
+                    self.triggerCanonicalEngineIfNeeded(
+                        for: dateKey,
+                        userId: uid,
+                        fingerprint: self.lastUploadedSleepFpByDate[dateKey]
+                    )
+                }
+            }
+        }
+
         let mergedSleep = Self.mergeLeanSleepSessions(remote: leanSleep, local: localSleepRecs, sources: self.currentLeanSources, preferFreshLocal: true)
         let mergedVitals = Self.mergeLeanDailyVitals(remote: leanVitals, local: localVitalsRecs, sources: self.currentLeanSources)
         let mergedHr = Self.mergeLeanIntradayHr(remote: leanHr, local: localHrRecs)
@@ -3073,10 +3115,8 @@ public final class HealthDataService: ObservableObject {
         )
         
         guard !sessions.isEmpty else { return false }
-        let sleepFp = sessions
-            .sorted { $0.id < $1.id }
-            .map { "\($0.id):\($0.durationSeconds):\($0.stages.count):\($0.deepSeconds):\($0.remSeconds):\($0.lightSeconds):\($0.awakeSeconds):\(Int($0.startTime.timeIntervalSince1970)):\(Int($0.endTime.timeIntervalSince1970))" }
-            .joined(separator: "|")
+        let sleepFp = SleepUploadFingerprintStore.computeFingerprint(for: sessions)
+        ensureSleepFingerprintsLoaded(for: userId)
         if lastUploadedSleepFpByDate[dateKey] == sleepFp {
             return false
         }
@@ -3093,9 +3133,50 @@ public final class HealthDataService: ObservableObject {
             }
         }
         if success {
-            lastUploadedSleepFpByDate[dateKey] = sleepFp
+            lastUploadedSleepFpByDate = SleepUploadFingerprintStore.saveEntry(
+                dateKey: dateKey,
+                fingerprint: sleepFp,
+                existing: lastUploadedSleepFpByDate,
+                userDefaults: userDefaults,
+                userId: userId
+            )
+            loadedSleepFpUserId = SleepUploadFingerprintStore.normalizeUserId(userId)
         }
         return success
+    }
+
+    private func resetSessionCachesOnSignOut() {
+        loadedSleepFpUserId = nil
+        lastUploadedSleepFpByDate.removeAll()
+        lastUploadedHrFpByDate.removeAll()
+        lastUploadedVitalsFpByDate.removeAll()
+        lastSyncedSignatureByDate.removeAll()
+        registeredSourceIdsInSession.removeAll()
+        trendsRemoteCache.removeAll()
+        summaryCache.removeAll()
+        telemetryCache.removeAll()
+        subscribedRealtimeUserId = nil
+        SleepUploadFingerprintStore.clear(userDefaults: userDefaults)
+    }
+
+    private func ensureSleepFingerprintsLoaded(for userId: String) {
+        let normalizedUid = SleepUploadFingerprintStore.normalizeUserId(userId)
+        guard loadedSleepFpUserId != normalizedUid else { return }
+        lastUploadedSleepFpByDate = SleepUploadFingerprintStore.load(
+            userDefaults: userDefaults,
+            userId: normalizedUid
+        )
+        loadedSleepFpUserId = normalizedUid
+    }
+
+    private func invalidateSleepFingerprint(forDateKey dateKey: String, userId: String) {
+        ensureSleepFingerprintsLoaded(for: userId)
+        lastUploadedSleepFpByDate = SleepUploadFingerprintStore.removeEntry(
+            dateKey: dateKey,
+            existing: lastUploadedSleepFpByDate,
+            userDefaults: userDefaults,
+            userId: userId
+        )
     }
     
     private func syncLeanDailyVitals(
@@ -4388,5 +4469,157 @@ public final class HealthDataService: ObservableObject {
             }
         }
         return false
+    }
+}
+
+/// Persistent per-user cache of uploaded sleep session fingerprints so cold app launches skip
+/// redundant `health_sleep_sessions` UPSERTs and `health-engine` wakes when local sleep is unchanged.
+internal struct SleepUploadFingerprintStore: Sendable {
+    static let storageKey = "health_sleep_upload_fp_cache_v1"
+    static let schemaVersion = "v2"
+    static let retentionDays = 14
+
+    private struct CachePayload: Codable {
+        let userId: String
+        var entries: [String: String]
+    }
+
+    static func normalizeUserId(_ userId: String) -> String {
+        userId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    static func computeFingerprint(for sessions: [HealthSleepSessionRecord]) -> String {
+        let body = sessions
+            .sorted { $0.id < $1.id }
+            .map { session in
+                let stagesHash = hashStages(session.stages)
+                let selectedFlag = session.isUserSelected ? 1 : 0
+                return "\(session.id):\(session.durationSeconds):\(session.timeInBedSeconds):\(session.stages.count):\(session.deepSeconds):\(session.remSeconds):\(session.lightSeconds):\(session.awakeSeconds):\(Int(session.startTime.timeIntervalSince1970)):\(Int(session.endTime.timeIntervalSince1970)):\(selectedFlag):\(stagesHash)"
+            }
+            .joined(separator: "|")
+        return "\(schemaVersion)|\(body)"
+    }
+
+    static func cutoffDateKey(
+        referenceDate: Date = Date(),
+        retentionDays: Int = retentionDays,
+        calendar: Calendar = .current
+    ) -> String {
+        let todayStart = calendar.startOfDay(for: referenceDate)
+        let cutoff = calendar.date(byAdding: .day, value: -retentionDays, to: todayStart) ?? todayStart
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: cutoff)
+    }
+
+    static func prune(
+        _ entries: [String: String],
+        referenceDate: Date = Date(),
+        retentionDays: Int = retentionDays,
+        calendar: Calendar = .current
+    ) -> [String: String] {
+        let cutoff = cutoffDateKey(referenceDate: referenceDate, retentionDays: retentionDays, calendar: calendar)
+        return entries.filter { key, value in
+            key >= cutoff && value.hasPrefix("\(schemaVersion)|")
+        }
+    }
+
+    static func load(
+        userDefaults: UserDefaults,
+        userId: String,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [String: String] {
+        let normalizedUid = normalizeUserId(userId)
+        guard !normalizedUid.isEmpty,
+              let data = userDefaults.data(forKey: storageKey),
+              let payload = try? JSONDecoder().decode(CachePayload.self, from: data),
+              normalizeUserId(payload.userId) == normalizedUid else {
+            return [:]
+        }
+        let pruned = prune(payload.entries, referenceDate: referenceDate, calendar: calendar)
+        if pruned.count != payload.entries.count {
+            persist(pruned, userDefaults: userDefaults, userId: normalizedUid)
+        }
+        return pruned
+    }
+
+    @discardableResult
+    static func saveEntry(
+        dateKey: String,
+        fingerprint: String,
+        existing: [String: String],
+        userDefaults: UserDefaults,
+        userId: String,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [String: String] {
+        let normalizedUid = normalizeUserId(userId)
+        var next = prune(existing, referenceDate: referenceDate, calendar: calendar)
+        let cutoff = cutoffDateKey(referenceDate: referenceDate, calendar: calendar)
+        if dateKey >= cutoff {
+            next[dateKey] = fingerprint
+        }
+        persist(next, userDefaults: userDefaults, userId: normalizedUid)
+        return next
+    }
+
+    @discardableResult
+    static func removeEntry(
+        dateKey: String,
+        existing: [String: String],
+        userDefaults: UserDefaults,
+        userId: String,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [String: String] {
+        let normalizedUid = normalizeUserId(userId)
+        var next = prune(existing, referenceDate: referenceDate, calendar: calendar)
+        next.removeValue(forKey: dateKey)
+        persist(next, userDefaults: userDefaults, userId: normalizedUid)
+        return next
+    }
+
+    static func clear(userDefaults: UserDefaults) {
+        userDefaults.removeObject(forKey: storageKey)
+    }
+
+    private static func persist(_ entries: [String: String], userDefaults: UserDefaults, userId: String) {
+        guard !userId.isEmpty else { return }
+        if entries.isEmpty {
+            userDefaults.removeObject(forKey: storageKey)
+            return
+        }
+        let payload = CachePayload(userId: userId, entries: entries)
+        if let encoded = try? JSONEncoder().encode(payload) {
+            userDefaults.set(encoded, forKey: storageKey)
+        }
+    }
+
+    private static func hashStages(_ stages: [SleepStageRecord]) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        let prime: UInt64 = 1_099_511_628_211
+        @inline(__always) func mix(_ byte: UInt8) {
+            hash ^= UInt64(byte)
+            hash = hash &* prime
+        }
+        @inline(__always) func mixInt(_ val: Int64) {
+            var v = UInt64(bitPattern: val)
+            for _ in 0..<8 {
+                mix(UInt8(truncatingIfNeeded: v))
+                v >>= 8
+            }
+        }
+        for stage in stages {
+            for b in stage.stageType.rawValue.utf8 {
+                mix(b)
+            }
+            mix(0xff)
+            mixInt(Int64(stage.startTime.timeIntervalSince1970.rounded()))
+            mixInt(Int64(stage.endTime.timeIntervalSince1970.rounded()))
+        }
+        return String(hash, radix: 16)
     }
 }
