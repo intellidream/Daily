@@ -199,15 +199,15 @@ public final class SmartLedgerStore: ObservableObject {
     
     /// Reloads raw ledger text from shared App Group storage if changed externally.
     public func reloadFromStorage() {
-        let savedText = groupDefaults.string(forKey: storageKey) ?? UserDefaults.standard.string(forKey: storageKey)
-        let textToUse = (savedText != nil && !savedText!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? savedText! : Self.defaultLedgerText
+        let savedText = WidgetDataCoordinator.shared.readMoneyLedgerText()
+        let textToUse = !savedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? savedText : Self.defaultLedgerText
         if textToUse != self.rawText {
             self.rawText = textToUse
             self.parsedLedger = SmartLedgerParser.shared.parse(textToUse)
         }
     }
     
-    /// Updates the raw ledger text, saves to UserDefaults, triggers live re-parsing, and queues Supabase push.
+    /// Updates the raw ledger text, saves to UserDefaults + atomic bridge, triggers live re-parsing, and queues Supabase push.
     public func saveLedgerText(_ newText: String, triggerCloudSync: Bool = true) {
         let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         let textToSave = trimmed.isEmpty
@@ -215,18 +215,8 @@ public final class SmartLedgerStore: ObservableObject {
             : SmartLedgerParser.shared.normalizeLedgerText(newText)
         
         self.rawText = textToSave
-        groupDefaults.set(textToSave, forKey: storageKey)
-        UserDefaults.standard.set(textToSave, forKey: storageKey)
-        
-        let now = Date().timeIntervalSince1970
-        groupDefaults.set(now, forKey: localModifiedKey)
-        groupDefaults.synchronize()
-        
         self.parsedLedger = SmartLedgerParser.shared.parse(textToSave)
-        WidgetDataCoordinator.shared.reloadTimelines(kinds: [
-            WidgetDataCoordinator.WidgetKind.money,
-            WidgetDataCoordinator.WidgetKind.combined
-        ])
+        WidgetDataCoordinator.shared.updateMoneyLedgerBridge(textToSave, reloadWidgets: true)
         
         if triggerCloudSync {
             scheduleSupabasePush()

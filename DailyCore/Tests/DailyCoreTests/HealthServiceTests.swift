@@ -1571,6 +1571,276 @@ struct HealthServiceTests {
             ).isEmpty
         )
     }
+
+    @Test func testAtomicSleepBridgeOverridesStaleDefaultsAndRejectsYesterdaySummary() async throws {
+        let suiteName = "group.com.intellidream.daily.test.sleep.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sleep_bridge_test_\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let coordinator = WidgetDataCoordinator.shared
+        let cal = Calendar.current
+        let now = cal.date(bySettingHour: 9, minute: 30, second: 0, of: Date())!
+        let yesterday = cal.date(byAdding: .day, value: -1, to: now)!
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        let todayKey = f.string(from: now)
+        let yesterdayKey = f.string(from: yesterday)
+
+        // 1. Simulate yesterday's canonical health summary sitting in UserDefaults alongside an ISO8601 timestamp
+        let ySleep = SleepSession(
+            id: "y-sleep",
+            startTime: cal.date(byAdding: .hour, value: -31, to: now)!,
+            endTime: cal.date(byAdding: .hour, value: -24, to: now)!,
+            stages: [
+                SleepStageRecord(
+                    id: "ys1",
+                    stageType: .deep,
+                    startTime: cal.date(byAdding: .hour, value: -31, to: now)!,
+                    endTime: cal.date(byAdding: .hour, value: -29, to: now)!
+                )
+            ],
+            sourceDevice: "Oura Ring"
+        )
+        let yPayload = DailyHealthSummaryPayload(
+            date: yesterdayKey,
+            computedAt: yesterday,
+            sleep: CanonicalSleepSummary(primarySession: ySleep, allSessions: [ySleep], naps: []),
+            activity: CanonicalActivitySummary(totalSteps: 5000, activeCalories: 200),
+            cardiovascular: CanonicalCardiovascularSummary()
+        )
+        let isoEncoder = JSONEncoder()
+        isoEncoder.dateEncodingStrategy = .iso8601
+        defaults.set(try isoEncoder.encode(yPayload), forKey: "health_daily_summary_\(yesterdayKey)")
+
+        // Put a stale legacy sleep snapshot from yesterday in UserDefaults
+        let staleLegacySnap = SleepWidgetSnapshot.from(session: ySleep, lastUpdated: yesterday)
+        defaults.set(try JSONEncoder().encode(staleLegacySnap), forKey: "daily_sleep_widget_snapshot_v1")
+
+        // Before today's data arrives, fetchSleepSnapshot must NOT serve yesterday's sleep
+        let coldToday = coordinator.fetchSleepSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: now)
+        #expect(coldToday.hasData == false)
+
+        // 2. If today's ISO8601 canonical health summary exists in UserDefaults without a bridge file yet, decode succeeds
+        let tSleep = SleepSession(
+            id: "t-sleep",
+            startTime: cal.date(byAdding: .hour, value: -8, to: now)!,
+            endTime: cal.date(byAdding: .hour, value: -1, to: now)!,
+            stages: [
+                SleepStageRecord(
+                    id: "ts1",
+                    stageType: .deep,
+                    startTime: cal.date(byAdding: .hour, value: -8, to: now)!,
+                    endTime: cal.date(byAdding: .hour, value: -5, to: now)!
+                ),
+                SleepStageRecord(
+                    id: "ts2",
+                    stageType: .rem,
+                    startTime: cal.date(byAdding: .hour, value: -5, to: now)!,
+                    endTime: cal.date(byAdding: .hour, value: -3, to: now)!
+                ),
+                SleepStageRecord(
+                    id: "ts3",
+                    stageType: .light,
+                    startTime: cal.date(byAdding: .hour, value: -3, to: now)!,
+                    endTime: cal.date(byAdding: .hour, value: -1, to: now)!
+                )
+            ],
+            sourceDevice: "Apple Watch Ultra 2",
+            hasGranularHypnogram: true
+        )
+        let tPayload = DailyHealthSummaryPayload(
+            date: todayKey,
+            computedAt: now,
+            sleep: CanonicalSleepSummary(primarySession: tSleep, allSessions: [tSleep], naps: []),
+            activity: CanonicalActivitySummary(totalSteps: 1200, activeCalories: 60),
+            cardiovascular: CanonicalCardiovascularSummary()
+        )
+        defaults.set(try isoEncoder.encode(tPayload), forKey: "health_daily_summary_\(todayKey)")
+        let isoFallbackSnap = coordinator.fetchSleepSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: now)
+        #expect(isoFallbackSnap.hasData == true)
+        #expect(isoFallbackSnap.sourceDevice == "Apple Watch Ultra 2")
+        #expect(isoFallbackSnap.sleepScore == tSleep.sleepScore)
+
+        // 3. Atomic bridge file must override stale/older UserDefaults immediately
+        coordinator.updateSleepSnapshot(
+            from: tSleep,
+            restingHeartRate: 54,
+            hrvMs: 62,
+            bridgeDirectoryURL: tempDir,
+            defaults: defaults,
+            now: now
+        )
+        // Corrupt/downgrade UserDefaults to simulate lagging cfprefsd process view
+        defaults.set(try JSONEncoder().encode(SleepWidgetSnapshot.empty), forKey: "daily_sleep_widget_snapshot_v1")
+
+        let bridgedSnap = coordinator.fetchSleepSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: now)
+        #expect(bridgedSnap.hasData == true)
+        #expect(bridgedSnap.restingHeartRate == 54)
+        #expect(bridgedSnap.hrvMs == 62)
+        #expect(bridgedSnap.totalAsleepFormatted == tSleep.totalAsleepFormatted)
+    }
+
+    @Test func testMorningBriefRejectsStaleYesterdayOrWrongSlotBriefingAndUsesLiveSnapshots() async throws {
+        let suiteName = "group.com.intellidream.daily.test.brief.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("brief_bridge_test_\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let coordinator = WidgetDataCoordinator.shared
+        let cal = Calendar.current
+        let morningNow = cal.date(bySettingHour: 9, minute: 15, second: 0, of: Date())!
+        let yesterday = cal.date(byAdding: .day, value: -1, to: morningNow)!
+
+        // Write live Today Sleep
+        let todaySleep = SleepSession(
+            id: "live-sleep",
+            startTime: cal.date(byAdding: .hour, value: -8, to: morningNow)!,
+            endTime: cal.date(byAdding: .hour, value: -1, to: morningNow)!,
+            stages: [
+                SleepStageRecord(
+                    id: "s1",
+                    stageType: .deep,
+                    startTime: cal.date(byAdding: .hour, value: -8, to: morningNow)!,
+                    endTime: cal.date(byAdding: .hour, value: -1, to: morningNow)!
+                )
+            ],
+            sourceDevice: "Oura Ring",
+            hasGranularHypnogram: true
+        )
+        coordinator.updateSleepSnapshot(
+            from: todaySleep,
+            restingHeartRate: 51,
+            hrvMs: 74,
+            bridgeDirectoryURL: tempDir,
+            defaults: defaults,
+            now: morningNow
+        )
+
+        // Write live TagDoS
+        let tagdosSnap = TagdosWidgetSnapshot(
+            streams: [
+                TagdosWidgetSnapshotStream(
+                    id: "st1",
+                    title: "Work",
+                    drivingPillText: "Ship iOS sleep widget fix",
+                    drivingPillType: "urgent",
+                    activePillsCount: 2,
+                    reminderTimeFormatted: "10:00",
+                    pills: []
+                )
+            ],
+            totalActivePills: 2,
+            nextReminderFormatted: "10:00",
+            lastUpdated: morningNow
+        )
+        coordinator.updateTagdosSnapshot(tagdosSnap, bridgeDirectoryURL: tempDir, defaults: defaults)
+
+        // Simulate STALE yesterday SmartBriefingRecord lingering in UserDefaults
+        let staleYesterdayBrief = SmartBriefingRecord(
+            id: "old-brief",
+            userId: "u1",
+            timeSlot: BriefingTimeSlot.morning.rawValue,
+            dataHash: "old",
+            narrative: SmartBriefingNarrative(tagdosText: "Stale yesterday task"),
+            metrics: SmartBriefingMetrics(weatherTemp: 2.0, weatherCondition: "Old Snow", sleepScore: 41, sleepDurationFormatted: "4h 10m"),
+            isAiGenerated: false,
+            createdAt: yesterday,
+            updatedAt: yesterday
+        )
+        defaults.set(try JSONEncoder().encode(staleYesterdayBrief), forKey: "daily_smart_summary_cache_v4")
+
+        let combinedWithStale = coordinator.fetchCombinedSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: morningNow)
+        #expect(combinedWithStale.isMorningSlot == true)
+        #expect(combinedWithStale.sleep.hasData == true)
+        #expect(combinedWithStale.sleep.sleepScore == todaySleep.sleepScore)
+        #expect(combinedWithStale.morningSummary?.topFocusText == "Focus: Ship iOS sleep widget fix")
+        #expect(combinedWithStale.morningSummary?.sleepScore == todaySleep.sleepScore)
+        #expect(combinedWithStale.morningSummary?.weatherCondition != "Old Snow")
+
+        // Now write a valid today morning briefing atomically -> atomic bridge overrides UserDefaults
+        let freshMorningBrief = SmartBriefingRecord(
+            id: "fresh-brief",
+            userId: "u1",
+            timeSlot: BriefingTimeSlot.morning.rawValue,
+            dataHash: "fresh",
+            narrative: SmartBriefingNarrative(tagdosText: "Focus on iOS Sleep & Morning Brief"),
+            metrics: SmartBriefingMetrics(weatherTemp: 16.0, weatherCondition: "Sunny", weatherIcon: "01d"),
+            isAiGenerated: true,
+            createdAt: morningNow,
+            updatedAt: morningNow
+        )
+        coordinator.updateBriefingSnapshot(freshMorningBrief, bridgeDirectoryURL: tempDir, defaults: defaults)
+
+        let combinedFresh = coordinator.fetchCombinedSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: morningNow)
+        #expect(combinedFresh.morningSummary?.topFocusText == "Focus on iOS Sleep & Morning Brief")
+        #expect(combinedFresh.morningSummary?.weatherTemp == 16.0)
+        #expect(combinedFresh.morningSummary?.isAiGenerated == true)
+        // Sleep still overlaid cleanly from live sleep snapshot
+        #expect(combinedFresh.morningSummary?.sleepScore == todaySleep.sleepScore)
+    }
+
+    @Test func testBoundaryAlignedTimelineDatesAndRolloverTracker() async throws {
+        let cal = Calendar.current
+        let baseDay = cal.startOfDay(for: Date())
+
+        let preFive = cal.date(bySettingHour: 4, minute: 52, second: 0, of: baseDay)!
+        let nextFive = WidgetDataCoordinator.nextBoundaryAlignedDate(
+            after: preFive,
+            defaultIntervalMinutes: 15,
+            boundaryHours: [0, 5, 12, 17, 21],
+            calendar: cal
+        )
+        #expect(cal.component(.hour, from: nextFive) == 5)
+        #expect(cal.component(.minute, from: nextFive) == 0)
+
+        let preNoon = cal.date(bySettingHour: 11, minute: 53, second: 0, of: baseDay)!
+        let nextNoon = WidgetDataCoordinator.nextBoundaryAlignedDate(
+            after: preNoon,
+            defaultIntervalMinutes: 15,
+            boundaryHours: [0, 5, 12, 17, 21],
+            calendar: cal
+        )
+        #expect(cal.component(.hour, from: nextNoon) == 12)
+        #expect(cal.component(.minute, from: nextNoon) == 0)
+
+        let preMidnight = cal.date(bySettingHour: 23, minute: 50, second: 0, of: baseDay)!
+        let nextMidnight = WidgetDataCoordinator.nextBoundaryAlignedDate(
+            after: preMidnight,
+            defaultIntervalMinutes: 30,
+            boundaryHours: [0, 6, 8, 10],
+            calendar: cal
+        )
+        #expect(cal.component(.hour, from: nextMidnight) == 0)
+        #expect(cal.component(.minute, from: nextMidnight) == 0)
+        #expect(nextMidnight > preMidnight)
+
+        let suiteName = "group.com.intellidream.daily.test.rollover.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let nineAm = cal.date(bySettingHour: 9, minute: 0, second: 0, of: baseDay)!
+        let initial = WidgetDataCoordinator.shared.consumePendingWidgetRolloverReload(for: nineAm, defaults: defaults)
+        #expect(initial.dayChanged == false)
+        #expect(initial.slotChanged == false)
+
+        let onePmSameDay = cal.date(bySettingHour: 13, minute: 0, second: 0, of: baseDay)!
+        let afternoon = WidgetDataCoordinator.shared.consumePendingWidgetRolloverReload(for: onePmSameDay, defaults: defaults)
+        #expect(afternoon.dayChanged == false)
+        #expect(afternoon.slotChanged == true)
+
+        let nextMorning = cal.date(byAdding: .day, value: 1, to: nineAm)!
+        let rollover = WidgetDataCoordinator.shared.consumePendingWidgetRolloverReload(for: nextMorning, defaults: defaults)
+        #expect(rollover.dayChanged == true)
+        #expect(rollover.slotChanged == true)
+    }
 }
 
 

@@ -32,13 +32,19 @@ struct DailyApp: App {
                     TagdosStore.shared.syncWithWidgets()
                     let habitsRolledOver = HabitsService.shared.checkMidnightRolloverIfNeeded()
                     let healthRolledOver = HealthDataService.shared.checkMidnightRolloverIfNeeded()
+                    let rolloverState = WidgetDataCoordinator.shared.consumePendingWidgetRolloverReload()
+                    let effectiveDayRollover = habitsRolledOver || healthRolledOver || rolloverState.dayChanged
                     HabitsService.shared.reloadFromLocalStorage()
                     await HabitsService.shared.flushOfflineQueue()
-                    await HabitsService.shared.loadDataForSelectedDate(forceRefresh: habitsRolledOver)
+                    await HabitsService.shared.loadDataForSelectedDate(forceRefresh: effectiveDayRollover)
                     await HealthDataService.shared.refreshIfStale()
+                    await WeatherService.shared.refreshWeatherIfStale()
+                    await SmartBriefingService.shared.syncForForegroundTransition(dayOrSlotChanged: effectiveDayRollover || rolloverState.slotChanged)
                     #if canImport(WidgetKit)
-                    if habitsRolledOver || healthRolledOver {
+                    if effectiveDayRollover {
                         WidgetCenter.shared.reloadAllTimelines()
+                    } else if rolloverState.slotChanged {
+                        WidgetDataCoordinator.shared.reloadTimelines(kinds: [WidgetDataCoordinator.WidgetKind.combined])
                     }
                     #endif
                 }

@@ -27,6 +27,28 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
     }
     
     private var authTask: Task<Bool, Never>?
+    private var sleepObserverQuery: HKObserverQuery?
+
+    public func startObservingSleepIfNeeded() {
+        #if !targetEnvironment(simulator)
+        guard isAvailable, isAuthorized, sleepObserverQuery == nil,
+              let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return }
+        let query = HKObserverQuery(sampleType: sleepType, predicate: nil) { _, completionHandler, error in
+            completionHandler()
+            guard error == nil else { return }
+            Task { @MainActor in
+                HealthDataService.shared.markLocalHealthDataDirty()
+                #if canImport(UIKit)
+                if UIApplication.shared.applicationState == .active {
+                    await HealthDataService.shared.refreshFromLocalProviderIfNeeded()
+                }
+                #endif
+            }
+        }
+        sleepObserverQuery = query
+        healthStore.execute(query)
+        #endif
+    }
     
     public func ensureAuthorized() async -> Bool {
         if isAuthorized { return true }
@@ -91,6 +113,7 @@ public final class HealthKitManager: ObservableObject, LocalHealthDataProvider {
         do {
             try await healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead)
             self.isAuthorized = true
+            self.startObservingSleepIfNeeded()
             return true
         } catch {
             print("[HealthKitManager] Auth error: \(error.localizedDescription)")

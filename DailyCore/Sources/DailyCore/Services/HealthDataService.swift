@@ -121,6 +121,9 @@ public final class HealthDataService: ObservableObject {
     private var lastSyncedSignatureByDate: [String: (timestamp: Date, signature: String)] = [:]
     private var periodicActiveSyncTask: Task<Void, Never>?
     private var lastSuccessfulLoadTime: [String: Date] = [:]
+    private var hasPendingLocalHealthRefresh: Bool = false
+    private var lastLocalProviderSyncAt: Date = .distantPast
+    private var suppressWidgetSnapshotUpdates: Bool = false
     
     // Lean Cache for Selected Date
     private var currentLeanSleepSessions: [HealthSleepSessionRecord] = []
@@ -223,10 +226,13 @@ public final class HealthDataService: ObservableObject {
         if currentTodayStart > lastKnownTodayStart {
             let previousDay = lastKnownTodayStart
             lastKnownTodayStart = currentTodayStart
+            lastRefreshTimestamp = .distantPast
+            lastLocalProviderSyncAt = .distantPast
             
             if cal.isDate(selectedDate, inSameDayAs: previousDay) || !cal.isDateInToday(selectedDate) {
                 selectedDate = now
                 lastPastDateNavigationAt = nil
+                resetStaleDayStateForRollover()
                 if let provider = localDataProvider, AuthService.shared.isAuthenticated {
                     Task { [weak self] in
                         let finalTelem = await provider.fetchLocalTelemetry(for: previousDay)
@@ -245,13 +251,117 @@ public final class HealthDataService: ObservableObject {
             if let navAt = lastPastDateNavigationAt, now.timeIntervalSince(navAt) > 1800 {
                 selectedDate = now
                 lastPastDateNavigationAt = nil
+                lastRefreshTimestamp = .distantPast
+                resetStaleDayStateForRollover()
                 return true
             } else if lastPastDateNavigationAt == nil {
                 selectedDate = now
+                lastRefreshTimestamp = .distantPast
+                resetStaleDayStateForRollover()
                 return true
             }
         }
         return false
+    }
+
+    private func resetStaleDayStateForRollover() {
+        primarySleepSession = nil
+        allSleepSessions = []
+        daytimeNaps = []
+        currentLeanSleepSessions = []
+        canonicalSummary = nil
+        if selectedDeviceFilter == nil && !suppressWidgetSnapshotUpdates {
+            WidgetDataCoordinator.shared.updateSleepSnapshot(from: nil)
+            WidgetDataCoordinator.shared.clearStressSnapshot()
+        }
+    }
+
+    /// Marks local HealthKit telemetry as having new samples (e.g. Watch sleep transfer) so the next
+    /// foreground resume or stale check immediately bypasses cooldowns and syncs updated sleep/vitals.
+    public func markLocalHealthDataDirty() {
+        hasPendingLocalHealthRefresh = true
+        lastRefreshTimestamp = .distantPast
+        let todayKey = isoDateFormatter.string(from: Date())
+        lastSuccessfulLoadTime.removeValue(forKey: todayKey)
+    }
+
+    /// Lightweight, zero-Supabase-SELECT local HealthKit refresh for Today when HealthKit delivers new sleep
+    /// or vitals while the app is open or immediately on foreground resume.
+    public func refreshFromLocalProviderIfNeeded() async {
+        guard Calendar.current.isDateInToday(selectedDate),
+              let provider = localDataProvider else { return }
+        let now = Date()
+        guard hasPendingLocalHealthRefresh || now.timeIntervalSince(lastLocalProviderSyncAt) >= 20.0 else { return }
+        hasPendingLocalHealthRefresh = false
+        lastLocalProviderSyncAt = now
+
+        let targetDate = selectedDate
+        let dateKey = isoDateFormatter.string(from: targetDate)
+        let localTelem = await provider.fetchLocalTelemetry(for: targetDate)
+        let localSleep = await provider.fetchLocalSleepStages(for: targetDate)
+        let combined = localTelem + localSleep
+        guard !combined.isEmpty, Calendar.current.isDate(targetDate, inSameDayAs: self.selectedDate) else { return }
+
+        if AuthService.shared.isAuthenticated {
+            Task { [weak self] in
+                await self?.syncTelemetryToSupabase(telemetry: combined)
+            }
+        }
+
+        let userId = (try? await supabase.auth.session)?.user.id.uuidString.lowercased() ?? "local"
+        let hostName = provider.hostPhoneName
+        let sleepOnly = combined.filter { $0.isSleep || $0.isSleepStage }
+        if !sleepOnly.isEmpty {
+            let cluster = SleepClusteringEngine.clusterSleep(
+                targetDate: targetDate,
+                telemetry: sleepOnly,
+                vitalsSummary: [:],
+                preferredDevice: nil
+            )
+            let localSleepRecs = Self.buildLeanSleepSessionRecords(
+                primarySession: cluster.primarySession,
+                allSessions: cluster.allSessions,
+                naps: cluster.naps,
+                dateKey: dateKey,
+                userId: userId,
+                hostName: hostName
+            )
+            self.currentLeanSleepSessions = Self.mergeLeanSleepSessions(
+                remote: self.currentLeanSleepSessions.filter { $0.localDate == dateKey },
+                local: localSleepRecs,
+                sources: self.currentLeanSources,
+                preferFreshLocal: true
+            )
+        }
+        let localVitalsRecs = Self.buildLeanDailyVitalsRecords(
+            records: combined,
+            targetDate: targetDate,
+            dateKey: dateKey,
+            userId: userId,
+            hostName: hostName
+        )
+        if !localVitalsRecs.isEmpty {
+            self.currentLeanDailyVitals = Self.mergeLeanDailyVitals(
+                remote: self.currentLeanDailyVitals.filter { $0.localDate == dateKey },
+                local: localVitalsRecs,
+                sources: self.currentLeanSources
+            )
+        }
+        let localHrRecs = Self.groupIntradayHeartRateIntoBuckets(
+            records: combined,
+            userId: userId,
+            dateKey: dateKey
+        )
+        if !localHrRecs.isEmpty {
+            self.currentLeanIntradayHeartRate = Self.mergeLeanIntradayHr(
+                remote: self.currentLeanIntradayHeartRate.filter { $0.localDate == dateKey },
+                local: localHrRecs
+            )
+        }
+
+        rebuildAvailableSourcesForCurrentDate()
+        rebuildConfigurableSources()
+        reapplyCurrentDeviceFilter()
     }
     
     public func startActiveSyncLoop() {
@@ -605,9 +715,13 @@ public final class HealthDataService: ObservableObject {
         let isToday = Calendar.current.isDateInToday(selectedDate)
         let staleThreshold: TimeInterval = isToday ? 300 : 3600 // 5 min for today, 1 hour for past
         
-        if Date().timeIntervalSince(lastRefreshTimestamp) > staleThreshold {
+        if hasPendingLocalHealthRefresh || Date().timeIntervalSince(lastRefreshTimestamp) > staleThreshold {
+            hasPendingLocalHealthRefresh = false
             lastRefreshTimestamp = Date()
             await loadDataForSelectedDate(forceRefresh: true)
+        } else if isToday && localDataProvider != nil && primarySleepSession == nil {
+            // Re-check on-device HealthKit for newly arrived Watch sleep without hitting Supabase unless changed
+            await refreshFromLocalProviderIfNeeded()
         } else {
             // Already fresh, just reload from memory/local cache to trigger UI updates without network load
             await loadDataForSelectedDate(forceRefresh: false)
@@ -653,6 +767,7 @@ public final class HealthDataService: ObservableObject {
             isLoading = true
         }
         defer {
+            suppressWidgetSnapshotUpdates = false
             if shouldShowLoading {
                 isLoading = false
             }
@@ -690,7 +805,9 @@ public final class HealthDataService: ObservableObject {
                 if self.canonicalSummary != summary {
                     self.canonicalSummary = summary
                     summaryCache[dateKey] = (timestamp: Date(), summary: summary)
+                    suppressWidgetSnapshotUpdates = true
                     applyCanonicalSummary(summary, dateKey: dateKey)
+                    suppressWidgetSnapshotUpdates = false
                 }
             } else {
                 userDefaults.removeObject(forKey: "health_daily_summary_\(dateKey)")
@@ -909,7 +1026,9 @@ public final class HealthDataService: ObservableObject {
         // 4. Apply unified lean data + canonical summary cleanly with zero cross-device leakage
         if !mergedSleep.isEmpty || !mergedVitals.isEmpty || !mergedHr.isEmpty {
             if let payload = remotePayload, selectedDeviceFilter == nil {
+                suppressWidgetSnapshotUpdates = true
                 applyCanonicalSummary(payload, dateKey: dateKey)
+                suppressWidgetSnapshotUpdates = false
             }
             rebuildAvailableSourcesForCurrentDate()
             rebuildConfigurableSources()
@@ -1775,7 +1894,7 @@ public final class HealthDataService: ObservableObject {
         self.allSleepSessions = mapped
         self.daytimeNaps = naps
         
-        if selectedDeviceFilter == nil && Calendar.current.isDateInToday(selectedDate) {
+        if selectedDeviceFilter == nil && Calendar.current.isDateInToday(selectedDate) && !suppressWidgetSnapshotUpdates {
             WidgetDataCoordinator.shared.updateSleepSnapshot(
                 from: primary,
                 restingHeartRate: self.restingBpm > 0 ? self.restingBpm : nil,
@@ -2159,10 +2278,13 @@ public final class HealthDataService: ObservableObject {
             }
         }
         
+        let wasSuppressed = suppressWidgetSnapshotUpdates
+        suppressWidgetSnapshotUpdates = true
         applyLeanDailyVitals(currentLeanDailyVitals)
         applyLeanSleepSessions(currentLeanSleepSessions)
         applyLeanIntradayHeartRate(currentLeanIntradayHeartRate, targetDate: selectedDate)
         recalculateStressForCurrentDevice()
+        suppressWidgetSnapshotUpdates = wasSuppressed
         
         if let stressVal = stressAnalysis?.currentScore, stressVal > 0 {
             let dateKey = isoDateFormatter.string(from: selectedDate)
@@ -2189,7 +2311,7 @@ public final class HealthDataService: ObservableObject {
         }
         
         // Keep OS Widget snapshots in sync whenever All-Devices Today state is evaluated
-        if selectedDeviceFilter == nil && Calendar.current.isDateInToday(selectedDate) {
+        if !suppressWidgetSnapshotUpdates && selectedDeviceFilter == nil && Calendar.current.isDateInToday(selectedDate) {
             WidgetDataCoordinator.shared.updateSleepSnapshot(
                 from: self.primarySleepSession,
                 restingHeartRate: self.restingBpm > 0 ? self.restingBpm : nil,
@@ -2209,6 +2331,7 @@ public final class HealthDataService: ObservableObject {
             } else {
                 WidgetDataCoordinator.shared.clearStressSnapshot()
             }
+            SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
         }
     }
     
@@ -2445,7 +2568,7 @@ public final class HealthDataService: ObservableObject {
             )
             self.stressAnalysis = result
             
-            if Calendar.current.isDateInToday(selectedDate) {
+            if Calendar.current.isDateInToday(selectedDate) && !suppressWidgetSnapshotUpdates {
                 WidgetDataCoordinator.shared.updateStressSnapshot(
                     score: result.currentScore,
                     level: result.currentLevel,
@@ -2462,7 +2585,7 @@ public final class HealthDataService: ObservableObject {
             self.currentStressLevel = .calm
             self.intradayStress = []
             self.stressAnalysis = nil
-            if Calendar.current.isDateInToday(selectedDate) {
+            if Calendar.current.isDateInToday(selectedDate) && !suppressWidgetSnapshotUpdates {
                 WidgetDataCoordinator.shared.clearStressSnapshot()
             }
         }
@@ -2542,12 +2665,13 @@ public final class HealthDataService: ObservableObject {
         self.currentVitals = vitalsMap
         
         // 6. Update Sleep Snapshot for Widget
-        if Calendar.current.isDateInToday(selectedDate) {
+        if Calendar.current.isDateInToday(selectedDate) && !suppressWidgetSnapshotUpdates {
             WidgetDataCoordinator.shared.updateSleepSnapshot(
                 from: summary.sleep.primarySession,
                 restingHeartRate: self.restingBpm > 0 ? self.restingBpm : nil,
                 hrvMs: summary.vitals["hrv_sdnn"]?.value ?? summary.stress?.currentHrvMs
             )
+            SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
         }
     }
     

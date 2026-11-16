@@ -101,6 +101,7 @@ public struct DashboardView: View {
             async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
             _ = await (w, h, hab, n, f)
             TagdosStore.shared.syncWithWidgets()
+            SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
         }
         .task {
             async let w: () = WeatherService.shared.currentWeather == nil ? WeatherService.shared.refreshWeather() : ()

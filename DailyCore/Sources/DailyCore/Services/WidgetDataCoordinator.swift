@@ -448,6 +448,48 @@ extension SleepWidgetSnapshot {
     public static var placeholder: SleepWidgetSnapshot {
         empty
     }
+
+    public static func from(
+        session: SleepSession?,
+        restingHeartRate: Double? = nil,
+        hrvMs: Double? = nil,
+        lastUpdated: Date = Date()
+    ) -> SleepWidgetSnapshot {
+        guard let session, session.asleepSeconds > 0 else {
+            return SleepWidgetSnapshot.empty
+        }
+        let color = DeviceColorPalette.getColor(for: session.sourceDevice)
+        return SleepWidgetSnapshot(
+            hasData: true,
+            sleepScore: session.sleepScore,
+            sleepQualityRating: session.sleepQualityRating,
+            totalAsleepFormatted: session.totalAsleepFormatted,
+            asleepSeconds: session.asleepSeconds,
+            durationSeconds: session.durationSeconds,
+            timeInBedFormatted: session.timeInBedFormatted,
+            efficiencyPercent: session.efficiencyPercent,
+            deepSeconds: session.deepSeconds,
+            remSeconds: session.remSeconds,
+            lightSeconds: session.lightSeconds,
+            awakeSeconds: session.awakeSeconds,
+            deepPercent: session.deepPercent,
+            remPercent: session.remPercent,
+            lightPercent: session.lightPercent,
+            awakePercent: session.awakePercent,
+            deepFormatted: session.deepFormatted,
+            remFormatted: session.remFormatted,
+            lightFormatted: session.lightFormatted,
+            awakeFormatted: session.awakeFormatted,
+            bedtimeFormatted: session.bedtimeFormatted,
+            wakeTimeFormatted: session.wakeTimeFormatted,
+            restorativePercent: session.restorativePercent,
+            restingHeartRate: restingHeartRate,
+            hrvMs: hrvMs,
+            sourceDevice: session.sourceDevice,
+            sourceColor: color,
+            lastUpdated: lastUpdated
+        )
+    }
 }
 
 /// Snapshot model for Stress Level & Monkey Mascot Widget
@@ -718,6 +760,21 @@ public struct WeatherWidgetSnapshot: Sendable, Codable {
     }
 }
 
+private struct SleepWidgetBridgeEnvelope: Codable, Sendable {
+    let dateKey: String
+    let snapshot: SleepWidgetSnapshot
+}
+
+private struct StressWidgetBridgeEnvelope: Codable, Sendable {
+    let dateKey: String
+    let snapshot: StressWidgetSnapshot
+}
+
+private struct WeatherCoordsBridgeEnvelope: Codable, Sendable {
+    let latitude: Double
+    let longitude: Double
+}
+
 /// Central data coordinator managing 0ms read/write between the Main App and WidgetKit Extension.
 public final class WidgetDataCoordinator: @unchecked Sendable {
     public enum WidgetKind {
@@ -735,20 +792,104 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     public static let shared = WidgetDataCoordinator()
     public static let darwinMutationNotificationName = "com.intellidream.daily.widgetDidMutateData"
     private static let habitsBridgeFilename = "daily_habits_widget_bridge_v1.json"
+    private static let sleepBridgeFilename = "daily_sleep_widget_bridge_v1.json"
+    private static let stressBridgeFilename = "daily_stress_widget_bridge_v1.json"
+    private static let briefingBridgeFilename = "daily_briefing_widget_bridge_v1.json"
+    private static let weatherBridgeFilename = "daily_weather_widget_bridge_v1.json"
+    private static let weatherCoordsBridgeFilename = "daily_weather_coords_v1.json"
+    private static let tagdosBridgeFilename = "daily_tagdos_widget_bridge_v1.json"
+    private static let cosmosBridgeFilename = "daily_cosmos_widget_bridge_v1.json"
+    private static let moneyBridgeFilename = "daily_money_widget_bridge_v1.txt"
+
+    private let lastRolloverDateKeyStorageKey = "daily_widget_last_rollover_date_v1"
+    private let lastRolloverSlotStorageKey = "daily_widget_last_rollover_slot_v1"
+    private let userFirstNameStorageKey = "daily_user_first_name_v1"
 
     private let groupSuiteName = GroupDefaults.suiteName
     private let bridgeLock = NSLock()
+    private var lastSemanticDataByKey: [String: Data] = [:]
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: groupSuiteName) ?? UserDefaults.standard
     }
 
+    private func appGroupDirectoryURL(directory: URL? = nil) -> URL? {
+        directory ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupSuiteName)
+    }
+
+    private func bridgeFileURL(filename: String, directory: URL? = nil) -> URL? {
+        appGroupDirectoryURL(directory: directory)?.appendingPathComponent(filename)
+    }
+
     public var habitsBridgeFileURL: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupSuiteName)?
-            .appendingPathComponent(Self.habitsBridgeFilename)
+        bridgeFileURL(filename: Self.habitsBridgeFilename)
     }
 
     public func synchronizeDefaults() {
         groupDefaults.synchronize()
+    }
+
+    public func setCachedUserFirstName(_ firstName: String?, defaults: UserDefaults? = nil) {
+        let trimmed = firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return }
+        let store = defaults ?? groupDefaults
+        store.set(trimmed, forKey: userFirstNameStorageKey)
+        store.synchronize()
+    }
+
+    public func cachedUserFirstName(defaults: UserDefaults? = nil) -> String {
+        let store = defaults ?? groupDefaults
+        let stored = store.string(forKey: userFirstNameStorageKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (stored?.isEmpty == false) ? stored! : "Mihai"
+    }
+
+    /// Computes a boundary-aware timeline refresh date so WidgetKit transitions promptly at midnight
+    /// and diurnal brief cutoffs (e.g. 05:00 / 12:00) instead of drifting past those boundaries.
+    public static func nextBoundaryAlignedDate(
+        after date: Date = Date(),
+        defaultIntervalMinutes: Int,
+        boundaryHours: [Int],
+        calendar: Calendar = .current
+    ) -> Date {
+        let defaultNext = calendar.date(byAdding: .minute, value: defaultIntervalMinutes, to: date)
+            ?? date.addingTimeInterval(TimeInterval(defaultIntervalMinutes * 60))
+        let startOfToday = calendar.startOfDay(for: date)
+        var earliestBoundary: Date? = nil
+        for dayOffset in 0...1 {
+            guard let dayStart = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            for hour in boundaryHours {
+                guard let candidate = calendar.date(byAdding: .hour, value: hour, to: dayStart),
+                      candidate > date.addingTimeInterval(1) else { continue }
+                if earliestBoundary == nil || candidate < earliestBoundary! {
+                    earliestBoundary = candidate
+                }
+            }
+        }
+        if let earliestBoundary, earliestBoundary < defaultNext {
+            return earliestBoundary
+        }
+        return defaultNext
+    }
+
+    /// Atomically detects and records whether a calendar day rollover or diurnal BriefingTimeSlot transition
+    /// has occurred since widgets were last refreshed on this device, preventing races between service observers.
+    @discardableResult
+    public func consumePendingWidgetRolloverReload(
+        for date: Date = Date(),
+        defaults: UserDefaults? = nil
+    ) -> (dayChanged: Bool, slotChanged: Bool) {
+        let store = defaults ?? groupDefaults
+        let dKey = isoDateFormatter.string(from: date)
+        let slotKey = "\(dKey)_\(BriefingTimeSlot.current(for: date).rawValue)"
+        let prevDay = store.string(forKey: lastRolloverDateKeyStorageKey)
+        let prevSlot = store.string(forKey: lastRolloverSlotStorageKey)
+        let dayChanged = (prevDay != nil && prevDay != dKey)
+        let slotChanged = (prevSlot != nil && prevSlot != slotKey)
+        if prevDay != dKey || prevSlot != slotKey {
+            store.set(dKey, forKey: lastRolloverDateKeyStorageKey)
+            store.set(slotKey, forKey: lastRolloverSlotStorageKey)
+            store.synchronize()
+        }
+        return (dayChanged, slotChanged)
     }
 
     public func reloadTimelines(kinds: [String]) {
@@ -760,14 +901,111 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         #endif
     }
 
-    private func persistEncodedSnapshot(_ data: Data?, forKey key: String, reloadingKinds kinds: [String]) {
-        if let data {
-            groupDefaults.set(data, forKey: key)
-            groupDefaults.synchronize()
-            UserDefaults.standard.set(data, forKey: key)
+    private func writeAtomicBridgeData(_ data: Data, filename: String, directory: URL? = nil) {
+        guard let url = bridgeFileURL(filename: filename, directory: directory) else { return }
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        writeDataLocked(data, to: url)
+    }
+
+    private func readAtomicBridgeData(filename: String, directory: URL? = nil) -> Data? {
+        guard let url = bridgeFileURL(filename: filename, directory: directory) else { return nil }
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        return try? Data(contentsOf: url)
+    }
+
+    private func removeAtomicBridgeFile(filename: String, directory: URL? = nil) {
+        guard let url = bridgeFileURL(filename: filename, directory: directory) else { return }
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        try? FileManager.default.removeItem(at: url)
+        lastSemanticDataByKey.removeValue(forKey: url.path)
+    }
+
+    private func writeDataLocked(_ data: Data, to url: URL) {
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? data.write(to: url, options: [.atomic])
+    }
+
+    private func canonicalSemanticData<T: Encodable>(for value: T) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(value),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) else {
+            return nil
+        }
+        func stripTimestamps(_ node: Any) -> Any {
+            if var dict = node as? [String: Any] {
+                dict.removeValue(forKey: "lastUpdated")
+                dict.removeValue(forKey: "updatedAt")
+                for (k, v) in dict {
+                    dict[k] = stripTimestamps(v)
+                }
+                return dict
+            } else if let arr = node as? [Any] {
+                return arr.map { stripTimestamps($0) }
+            }
+            return node
+        }
+        return try? JSONSerialization.data(withJSONObject: stripTimestamps(obj), options: [.sortedKeys])
+    }
+
+    /// Writes both an atomic App Group container file and synchronized UserDefaults blob,
+    /// deduplicating semantically identical updates to preserve iOS WidgetKit reload budget.
+    private func persistBridgeValue<T: Encodable>(
+        _ value: T,
+        defaultsKey: String,
+        bridgeFilename: String,
+        reloadingKinds kinds: [String],
+        directory: URL? = nil,
+        defaults: UserDefaults? = nil
+    ) {
+        let store = defaults ?? groupDefaults
+        guard let encoded = try? JSONEncoder().encode(value) else { return }
+        let url = bridgeFileURL(filename: bridgeFilename, directory: directory)
+        let cacheKey = url?.path ?? defaultsKey
+        let semanticData = canonicalSemanticData(for: value) ?? encoded
+
+        bridgeLock.lock()
+        let fileExists = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? true
+        if lastSemanticDataByKey[cacheKey] == semanticData && fileExists {
+            bridgeLock.unlock()
+            return
+        }
+        lastSemanticDataByKey[cacheKey] = semanticData
+        if let url {
+            writeDataLocked(encoded, to: url)
+        }
+        bridgeLock.unlock()
+
+        store.set(encoded, forKey: defaultsKey)
+        store.synchronize()
+        if defaults == nil {
+            UserDefaults.standard.set(encoded, forKey: defaultsKey)
         }
         reloadTimelines(kinds: kinds)
     }
+
+    private let iso8601SummaryDecoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let ts = try? container.decode(Double.self) {
+                return Date(timeIntervalSinceReferenceDate: ts)
+            }
+            let str = try container.decode(String.self)
+            let f1 = ISO8601DateFormatter()
+            f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = f1.date(from: str) { return date }
+            let f2 = ISO8601DateFormatter()
+            f2.formatOptions = [.withInternetDateTime]
+            if let date = f2.date(from: str) { return date }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(str)")
+        }
+        return d
+    }()
 
     public func writeHabitsBridgeState(_ state: HabitsWidgetBridgeState, bridgeFileURL: URL? = nil) {
         guard let url = bridgeFileURL ?? habitsBridgeFileURL else { return }
@@ -784,10 +1022,8 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     }
 
     private func writeHabitsBridgeStateLocked(_ state: HabitsWidgetBridgeState, to url: URL) {
-        let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(state) {
-            try? data.write(to: url, options: [.atomic])
+            writeDataLocked(data, to: url)
         }
     }
 
@@ -1267,9 +1503,50 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     // MARK: - Money (SmartLedger)
     
     private let ledgerStorageKey = "daily_smart_ledger_raw_text_v1"
-    
+    private let ledgerLocalModifiedKey = "daily_smart_ledger_local_modified_at_v1"
+
+    public func updateMoneyLedgerBridge(_ rawText: String, reloadWidgets: Bool = true) {
+        updateMoneyLedgerBridge(rawText, reloadWidgets: reloadWidgets, bridgeDirectoryURL: nil, defaults: nil)
+    }
+
+    public func updateMoneyLedgerBridge(
+        _ rawText: String,
+        reloadWidgets: Bool,
+        bridgeDirectoryURL: URL?,
+        defaults: UserDefaults?
+    ) {
+        let store = defaults ?? groupDefaults
+        if let data = rawText.data(using: .utf8) {
+            writeAtomicBridgeData(data, filename: Self.moneyBridgeFilename, directory: bridgeDirectoryURL)
+        }
+        store.set(rawText, forKey: ledgerStorageKey)
+        store.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
+        store.synchronize()
+        if defaults == nil {
+            UserDefaults.standard.set(rawText, forKey: ledgerStorageKey)
+        }
+        if reloadWidgets {
+            reloadTimelines(kinds: [WidgetKind.money, WidgetKind.combined])
+        }
+    }
+
+    public func readMoneyLedgerText(bridgeDirectoryURL: URL? = nil, defaults: UserDefaults? = nil) -> String {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+        if let data = readAtomicBridgeData(filename: Self.moneyBridgeFilename, directory: bridgeDirectoryURL),
+           let bridgeText = String(data: data, encoding: .utf8),
+           !bridgeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return bridgeText
+        }
+        return store.string(forKey: ledgerStorageKey) ?? SmartLedgerStore.defaultLedgerText
+    }
+
     public func fetchMoneySnapshot() -> MoneyWidgetSnapshot {
-        let rawText = groupDefaults.string(forKey: ledgerStorageKey) ?? SmartLedgerStore.defaultLedgerText
+        fetchMoneySnapshot(bridgeDirectoryURL: nil, defaults: nil)
+    }
+
+    public func fetchMoneySnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?) -> MoneyWidgetSnapshot {
+        let rawText = readMoneyLedgerText(bridgeDirectoryURL: bridgeDirectoryURL, defaults: defaults)
         let ledger = SmartLedgerParser.shared.parse(rawText)
         
         var card = 0.0
@@ -1305,13 +1582,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             topOutgoingAllocations: topOutgoing
         )
     }
-    
-    private let ledgerLocalModifiedKey = "daily_smart_ledger_local_modified_at_v1"
 
-    /// Adjusts an account amount by a real currency amount (e.g. -100 Lei or +100 Lei).
-    /// Automatically converts to DSL units if the underlying section is scaled (1 unit = 100 Lei).
-    public func adjustLedgerAmount(accountName: String, deltaReal: Double) {
-        let rawText = groupDefaults.string(forKey: ledgerStorageKey) ?? SmartLedgerStore.defaultLedgerText
+    private func applyLedgerAdjustment(accountName: String, deltaAmount: Double, isRealAmount: Bool) {
+        let rawText = readMoneyLedgerText()
         let ledger = SmartLedgerParser.shared.parse(rawText)
         
         guard let incoming = ledger.sections.first(where: { $0.name.caseInsensitiveCompare("Incoming") == .orderedSame }),
@@ -1320,34 +1593,20 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         }
         
         // In scaled sections (e.g. Incoming where 1 unit = 100 Lei), deltaRaw = deltaReal / 100.0
-        let deltaRaw = item.isScaled ? (deltaReal / 100.0) : deltaReal
+        let deltaRaw = (isRealAmount && item.isScaled) ? (deltaAmount / 100.0) : deltaAmount
         let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
-        groupDefaults.set(updatedText, forKey: ledgerStorageKey)
-        groupDefaults.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
-        groupDefaults.synchronize()
-        UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
-        
-        reloadTimelines(kinds: [WidgetKind.money, WidgetKind.combined])
+        updateMoneyLedgerBridge(updatedText, reloadWidgets: true)
         postCrossProcessMutationNotification()
+    }
+
+    /// Adjusts an account amount by a real currency amount (e.g. -100 Lei or +100 Lei).
+    /// Automatically converts to DSL units if the underlying section is scaled (1 unit = 100 Lei).
+    public func adjustLedgerAmount(accountName: String, deltaReal: Double) {
+        applyLedgerAdjustment(accountName: accountName, deltaAmount: deltaReal, isRealAmount: true)
     }
     
     public func adjustLedgerAmount(accountName: String, deltaRaw: Double) {
-        let rawText = groupDefaults.string(forKey: ledgerStorageKey) ?? SmartLedgerStore.defaultLedgerText
-        let ledger = SmartLedgerParser.shared.parse(rawText)
-        
-        guard let incoming = ledger.sections.first(where: { $0.name.caseInsensitiveCompare("Incoming") == .orderedSame }),
-              let item = incoming.items.first(where: { $0.key.caseInsensitiveCompare(accountName) == .orderedSame }) else {
-            return
-        }
-        
-        let updatedText = SmartLedgerParser.shared.adjustItemAmount(in: rawText, lineIndex: item.lineIndex, deltaRaw: deltaRaw)
-        groupDefaults.set(updatedText, forKey: ledgerStorageKey)
-        groupDefaults.set(Date().timeIntervalSince1970, forKey: ledgerLocalModifiedKey)
-        groupDefaults.synchronize()
-        UserDefaults.standard.set(updatedText, forKey: ledgerStorageKey)
-        
-        reloadTimelines(kinds: [WidgetKind.money, WidgetKind.combined])
-        postCrossProcessMutationNotification()
+        applyLedgerAdjustment(accountName: accountName, deltaAmount: deltaRaw, isRealAmount: false)
     }
     
     // MARK: - Sleep (Sleep Studio)
@@ -1355,98 +1614,89 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     private let sleepSnapshotKey = "daily_sleep_widget_snapshot_v1"
     
     public func updateSleepSnapshot(from session: SleepSession?, restingHeartRate: Double? = nil, hrvMs: Double? = nil) {
-        let snapshot: SleepWidgetSnapshot
-        if let session = session, session.asleepSeconds > 0 {
-            let color = DeviceColorPalette.getColor(for: session.sourceDevice)
-            snapshot = SleepWidgetSnapshot(
-                hasData: true,
-                sleepScore: session.sleepScore,
-                sleepQualityRating: session.sleepQualityRating,
-                totalAsleepFormatted: session.totalAsleepFormatted,
-                asleepSeconds: session.asleepSeconds,
-                durationSeconds: session.durationSeconds,
-                timeInBedFormatted: session.timeInBedFormatted,
-                efficiencyPercent: session.efficiencyPercent,
-                deepSeconds: session.deepSeconds,
-                remSeconds: session.remSeconds,
-                lightSeconds: session.lightSeconds,
-                awakeSeconds: session.awakeSeconds,
-                deepPercent: session.deepPercent,
-                remPercent: session.remPercent,
-                lightPercent: session.lightPercent,
-                awakePercent: session.awakePercent,
-                deepFormatted: session.deepFormatted,
-                remFormatted: session.remFormatted,
-                lightFormatted: session.lightFormatted,
-                awakeFormatted: session.awakeFormatted,
-                bedtimeFormatted: session.bedtimeFormatted,
-                wakeTimeFormatted: session.wakeTimeFormatted,
-                restorativePercent: session.restorativePercent,
-                restingHeartRate: restingHeartRate,
-                hrvMs: hrvMs,
-                sourceDevice: session.sourceDevice,
-                sourceColor: color,
-                lastUpdated: Date()
-            )
-        } else {
-            snapshot = SleepWidgetSnapshot.empty
-        }
-        
-        persistEncodedSnapshot(
-            try? JSONEncoder().encode(snapshot),
-            forKey: sleepSnapshotKey,
-            reloadingKinds: [WidgetKind.sleep, WidgetKind.combined]
+        updateSleepSnapshot(
+            from: session,
+            restingHeartRate: restingHeartRate,
+            hrvMs: hrvMs,
+            bridgeDirectoryURL: nil,
+            defaults: nil,
+            now: Date()
+        )
+    }
+
+    public func updateSleepSnapshot(
+        from session: SleepSession?,
+        restingHeartRate: Double?,
+        hrvMs: Double?,
+        bridgeDirectoryURL: URL?,
+        defaults: UserDefaults?,
+        now: Date
+    ) {
+        let snapshot = SleepWidgetSnapshot.from(
+            session: session,
+            restingHeartRate: restingHeartRate,
+            hrvMs: hrvMs,
+            lastUpdated: now
+        )
+        let envelope = SleepWidgetBridgeEnvelope(
+            dateKey: isoDateFormatter.string(from: now),
+            snapshot: snapshot
+        )
+        persistBridgeValue(
+            envelope,
+            defaultsKey: sleepSnapshotKey,
+            bridgeFilename: Self.sleepBridgeFilename,
+            reloadingKinds: [WidgetKind.sleep, WidgetKind.combined],
+            directory: bridgeDirectoryURL,
+            defaults: defaults
         )
     }
     
     public func fetchSleepSnapshot() -> SleepWidgetSnapshot {
-        if let data = groupDefaults.data(forKey: sleepSnapshotKey),
-           let snapshot = try? JSONDecoder().decode(SleepWidgetSnapshot.self, from: data),
-           snapshot.hasData {
-            return snapshot
+        fetchSleepSnapshot(bridgeDirectoryURL: nil, defaults: nil, now: Date())
+    }
+
+    public func fetchSleepSnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?, now: Date) -> SleepWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+        let key = isoDateFormatter.string(from: now)
+        let decoder = JSONDecoder()
+
+        func decodeEnvelopeOrLegacy(from data: Data?) -> SleepWidgetSnapshot? {
+            guard let data else { return nil }
+            if let envelope = try? decoder.decode(SleepWidgetBridgeEnvelope.self, from: data) {
+                return envelope.dateKey == key ? envelope.snapshot : nil
+            }
+            if let legacy = try? decoder.decode(SleepWidgetSnapshot.self, from: data),
+               Calendar.current.isDate(legacy.lastUpdated, inSameDayAs: now),
+               legacy.hasData {
+                return legacy
+            }
+            return nil
+        }
+
+        // 1. Atomic App Group container bridge (bypasses cross-process cfprefsd lag on iOS)
+        if let bridgeSnap = decodeEnvelopeOrLegacy(
+            from: readAtomicBridgeData(filename: Self.sleepBridgeFilename, directory: bridgeDirectoryURL)
+        ) {
+            return bridgeSnap
+        }
+
+        // 2. Synchronized App Group UserDefaults fallback
+        if let defaultsSnap = decodeEnvelopeOrLegacy(from: store.data(forKey: sleepSnapshotKey)) {
+            return defaultsSnap
         }
         
-        // Resilient fallback: inspect recent canonical health summaries from local App Group
-        let cal = Calendar.current
-        for dayOffset in 0...2 {
-            if let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
-                let dKey = isoDateFormatter.string(from: date)
-                if let summaryData = groupDefaults.data(forKey: "health_daily_summary_\(dKey)"),
-                   let summary = try? JSONDecoder().decode(DailyHealthSummaryPayload.self, from: summaryData),
-                   let session = summary.sleep.primarySession, session.asleepSeconds > 0 {
-                    let color = DeviceColorPalette.getColor(for: session.sourceDevice)
-                    return SleepWidgetSnapshot(
-                        hasData: true,
-                        sleepScore: session.sleepScore,
-                        sleepQualityRating: session.sleepQualityRating,
-                        totalAsleepFormatted: session.totalAsleepFormatted,
-                        asleepSeconds: session.asleepSeconds,
-                        durationSeconds: session.durationSeconds,
-                        timeInBedFormatted: session.timeInBedFormatted,
-                        efficiencyPercent: session.efficiencyPercent,
-                        deepSeconds: session.deepSeconds,
-                        remSeconds: session.remSeconds,
-                        lightSeconds: session.lightSeconds,
-                        awakeSeconds: session.awakeSeconds,
-                        deepPercent: session.deepPercent,
-                        remPercent: session.remPercent,
-                        lightPercent: session.lightPercent,
-                        awakePercent: session.awakePercent,
-                        deepFormatted: session.deepFormatted,
-                        remFormatted: session.remFormatted,
-                        lightFormatted: session.lightFormatted,
-                        awakeFormatted: session.awakeFormatted,
-                        bedtimeFormatted: session.bedtimeFormatted,
-                        wakeTimeFormatted: session.wakeTimeFormatted,
-                        restorativePercent: session.restorativePercent,
-                        restingHeartRate: summary.vitals["resting_heart_rate"]?.value,
-                        hrvMs: summary.vitals["hrv_sdnn"]?.value ?? summary.stress?.currentHrvMs,
-                        sourceDevice: session.sourceDevice,
-                        sourceColor: color,
-                        lastUpdated: Date()
-                    )
-                }
-            }
+        // 3. Resilient fallback: inspect Today's canonical health summary ONLY (ISO-8601 decoded)
+        if let summaryData = store.data(forKey: "health_daily_summary_\(key)"),
+           let summary = try? iso8601SummaryDecoder.decode(DailyHealthSummaryPayload.self, from: summaryData),
+           let session = summary.sleep.primarySession, session.asleepSeconds > 0 {
+            return SleepWidgetSnapshot.from(
+                session: session,
+                restingHeartRate: summary.vitals["resting_heart_rate"]?.value,
+                hrvMs: summary.vitals["hrv_sdnn"]?.value ?? summary.stress?.currentHrvMs,
+                lastUpdated: now
+            )
         }
         return SleepWidgetSnapshot.empty
     }
@@ -1456,22 +1706,40 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     private let tagdosSnapshotKey = "daily_tagdos_widget_snapshot_v1"
     
     public func updateTagdosSnapshot(_ snapshot: TagdosWidgetSnapshot) {
-        persistEncodedSnapshot(
-            try? JSONEncoder().encode(snapshot),
-            forKey: tagdosSnapshotKey,
-            reloadingKinds: [WidgetKind.tagdos, WidgetKind.combined]
+        updateTagdosSnapshot(snapshot, bridgeDirectoryURL: nil, defaults: nil)
+    }
+
+    public func updateTagdosSnapshot(_ snapshot: TagdosWidgetSnapshot, bridgeDirectoryURL: URL?, defaults: UserDefaults?) {
+        persistBridgeValue(
+            snapshot,
+            defaultsKey: tagdosSnapshotKey,
+            bridgeFilename: Self.tagdosBridgeFilename,
+            reloadingKinds: [WidgetKind.tagdos, WidgetKind.combined],
+            directory: bridgeDirectoryURL,
+            defaults: defaults
         )
     }
     
     public func fetchTagdosSnapshot() -> TagdosWidgetSnapshot {
-        if let data = groupDefaults.data(forKey: tagdosSnapshotKey),
+        fetchTagdosSnapshot(bridgeDirectoryURL: nil, defaults: nil)
+    }
+
+    public func fetchTagdosSnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?) -> TagdosWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+        if let data = readAtomicBridgeData(filename: Self.tagdosBridgeFilename, directory: bridgeDirectoryURL),
+           let snapshot = try? JSONDecoder().decode(TagdosWidgetSnapshot.self, from: data) {
+            return snapshot
+        }
+
+        if let data = store.data(forKey: tagdosSnapshotKey),
            let snapshot = try? JSONDecoder().decode(TagdosWidgetSnapshot.self, from: data),
            !snapshot.streams.isEmpty {
             return snapshot
         }
         
         // Resilient fallback: decode raw streams if snapshot has not yet been triggered
-        if let streamsData = groupDefaults.data(forKey: "daily_tagdos_streams_v1"),
+        if let streamsData = store.data(forKey: "daily_tagdos_streams_v1"),
            let streams = try? JSONDecoder().decode([TagDoStream].self, from: streamsData),
            !streams.isEmpty {
             let snapshotStreams = streams.map { stream in
@@ -1525,6 +1793,26 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     // MARK: - Stress Level & Monkey Mascot
     
     private let stressSnapshotKey = "daily_stress_widget_snapshot_v1"
+
+    private func persistStressSnapshot(
+        _ snapshot: StressWidgetSnapshot,
+        bridgeDirectoryURL: URL?,
+        defaults: UserDefaults?,
+        now: Date
+    ) {
+        let envelope = StressWidgetBridgeEnvelope(
+            dateKey: isoDateFormatter.string(from: now),
+            snapshot: snapshot
+        )
+        persistBridgeValue(
+            envelope,
+            defaultsKey: stressSnapshotKey,
+            bridgeFilename: Self.stressBridgeFilename,
+            reloadingKinds: [WidgetKind.stress, WidgetKind.combined],
+            directory: bridgeDirectoryURL,
+            defaults: defaults
+        )
+    }
     
     public func updateStressSnapshot(
         score: Int,
@@ -1536,6 +1824,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         parasympathetic: Int,
         sympathetic: Int
     ) {
+        let now = Date()
         let snapshot = StressWidgetSnapshot(
             hasData: true,
             stressScore: score,
@@ -1546,55 +1835,65 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             restingHeartRate: restingHeartRate,
             parasympatheticPercent: parasympathetic,
             sympatheticPercent: sympathetic,
-            lastUpdated: Date()
+            lastUpdated: now
         )
-        
-        persistEncodedSnapshot(
-            try? JSONEncoder().encode(snapshot),
-            forKey: stressSnapshotKey,
-            reloadingKinds: [WidgetKind.stress, WidgetKind.combined]
-        )
+        persistStressSnapshot(snapshot, bridgeDirectoryURL: nil, defaults: nil, now: now)
     }
     
     public func clearStressSnapshot() {
-        let snapshot = StressWidgetSnapshot.empty
-        persistEncodedSnapshot(
-            try? JSONEncoder().encode(snapshot),
-            forKey: stressSnapshotKey,
-            reloadingKinds: [WidgetKind.stress, WidgetKind.combined]
-        )
+        persistStressSnapshot(StressWidgetSnapshot.empty, bridgeDirectoryURL: nil, defaults: nil, now: Date())
     }
     
     public func fetchStressSnapshot() -> StressWidgetSnapshot {
-        if let data = groupDefaults.data(forKey: stressSnapshotKey),
-           let snapshot = try? JSONDecoder().decode(StressWidgetSnapshot.self, from: data),
-           snapshot.hasData {
-            return snapshot
+        fetchStressSnapshot(bridgeDirectoryURL: nil, defaults: nil, now: Date())
+    }
+
+    public func fetchStressSnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?, now: Date) -> StressWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+        let key = isoDateFormatter.string(from: now)
+        let decoder = JSONDecoder()
+
+        func decodeEnvelopeOrLegacy(from data: Data?) -> StressWidgetSnapshot? {
+            guard let data else { return nil }
+            if let envelope = try? decoder.decode(StressWidgetBridgeEnvelope.self, from: data) {
+                return envelope.dateKey == key ? envelope.snapshot : nil
+            }
+            if let legacy = try? decoder.decode(StressWidgetSnapshot.self, from: data),
+               Calendar.current.isDate(legacy.lastUpdated, inSameDayAs: now),
+               legacy.hasData {
+                return legacy
+            }
+            return nil
+        }
+
+        if let bridgeSnap = decodeEnvelopeOrLegacy(
+            from: readAtomicBridgeData(filename: Self.stressBridgeFilename, directory: bridgeDirectoryURL)
+        ) {
+            return bridgeSnap
+        }
+
+        if let defaultsSnap = decodeEnvelopeOrLegacy(from: store.data(forKey: stressSnapshotKey)) {
+            return defaultsSnap
         }
         
-        // Resilient fallback: inspect recent canonical health summaries from local App Group
-        let cal = Calendar.current
-        for dayOffset in 0...1 {
-            if let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) {
-                let dKey = isoDateFormatter.string(from: date)
-                if let summaryData = groupDefaults.data(forKey: "health_daily_summary_\(dKey)"),
-                   let summary = try? JSONDecoder().decode(DailyHealthSummaryPayload.self, from: summaryData),
-                   let stress = summary.stress, stress.currentScore > 0 {
-                    let level = stress.currentLevel
-                    return StressWidgetSnapshot(
-                        hasData: true,
-                        stressScore: Int(stress.currentScore),
-                        levelRaw: level.rawValue,
-                        monkeyMoodRaw: stress.monkeyMood.rawValue,
-                        adviceSnippet: stress.adviceQuote,
-                        hrvMs: stress.currentHrvMs,
-                        restingHeartRate: summary.vitals["resting_heart_rate"]?.value,
-                        parasympatheticPercent: stress.parasympatheticPercent,
-                        sympatheticPercent: stress.sympatheticPercent,
-                        lastUpdated: Date()
-                    )
-                }
-            }
+        // Resilient fallback: inspect Today's canonical health summary ONLY (ISO-8601 decoded)
+        if let summaryData = store.data(forKey: "health_daily_summary_\(key)"),
+           let summary = try? iso8601SummaryDecoder.decode(DailyHealthSummaryPayload.self, from: summaryData),
+           let stress = summary.stress, stress.currentScore > 0 {
+            let level = stress.currentLevel
+            return StressWidgetSnapshot(
+                hasData: true,
+                stressScore: Int(stress.currentScore),
+                levelRaw: level.rawValue,
+                monkeyMoodRaw: stress.monkeyMood.rawValue,
+                adviceSnippet: stress.adviceQuote,
+                hrvMs: stress.currentHrvMs,
+                restingHeartRate: summary.vitals["resting_heart_rate"]?.value,
+                parasympatheticPercent: stress.parasympatheticPercent,
+                sympatheticPercent: stress.sympatheticPercent,
+                lastUpdated: now
+            )
         }
         return StressWidgetSnapshot.empty
     }
@@ -1655,17 +1954,30 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastUpdated: now
         )
 
-        persistEncodedSnapshot(
-            try? JSONEncoder().encode(snapshot),
-            forKey: cosmosSnapshotKey,
+        persistBridgeValue(
+            snapshot,
+            defaultsKey: cosmosSnapshotKey,
+            bridgeFilename: Self.cosmosBridgeFilename,
             reloadingKinds: [WidgetKind.cosmos, WidgetKind.combined]
         )
     }
 
     public func fetchCosmosSnapshot() -> CosmosWidgetSnapshot {
-        let now = Date()
-        let lat = groupDefaults.object(forKey: "weather_cached_lat") as? Double ?? 44.4268
-        let lon = groupDefaults.object(forKey: "weather_cached_lon") as? Double ?? 26.1025
+        fetchCosmosSnapshot(bridgeDirectoryURL: nil, defaults: nil, now: Date())
+    }
+
+    public func fetchCosmosSnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?, now: Date) -> CosmosWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+
+        var lat = store.object(forKey: "weather_cached_lat") as? Double ?? 44.4268
+        var lon = store.object(forKey: "weather_cached_lon") as? Double ?? 26.1025
+        if let coordsData = readAtomicBridgeData(filename: Self.weatherCoordsBridgeFilename, directory: bridgeDirectoryURL),
+           let coords = try? JSONDecoder().decode(WeatherCoordsBridgeEnvelope.self, from: coordsData) {
+            lat = coords.latitude
+            lon = coords.longitude
+        }
+
         let obs = (latitude: lat, longitude: lon)
         let obs3 = (latitude: lat, longitude: lon, elevation: 50.0)
         let moon = AstronomyService.shared.moonPhase(at: now, observer: obs)
@@ -1677,7 +1989,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         }
         let topSummary = visibleNames.isEmpty ? "Solar bodies below horizon" : visibleNames.prefix(3).joined(separator: " · ")
 
-        if let data = groupDefaults.data(forKey: cosmosSnapshotKey),
+        let rawData = readAtomicBridgeData(filename: Self.cosmosBridgeFilename, directory: bridgeDirectoryURL)
+            ?? store.data(forKey: cosmosSnapshotKey)
+        if let data = rawData,
            let snapshot = try? JSONDecoder().decode(CosmosWidgetSnapshot.self, from: data) {
             // If cached snapshot exists (< 24 hours), preserve honest weather/seeing score and Bortle
             // while recalculating real-time celestial positions (moon and visible planets).
@@ -1743,6 +2057,9 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         longitude: Double,
         isImperial: Bool = false
     ) {
+        if let coordsData = try? JSONEncoder().encode(WeatherCoordsBridgeEnvelope(latitude: latitude, longitude: longitude)) {
+            writeAtomicBridgeData(coordsData, filename: Self.weatherCoordsBridgeFilename)
+        }
         groupDefaults.set(latitude, forKey: "weather_cached_lat")
         groupDefaults.set(longitude, forKey: "weather_cached_lon")
 
@@ -1791,40 +2108,105 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             lastUpdated: Date()
         )
 
-        persistEncodedSnapshot(
-            try? JSONEncoder().encode(snapshot),
-            forKey: weatherSnapshotKey,
+        persistBridgeValue(
+            snapshot,
+            defaultsKey: weatherSnapshotKey,
+            bridgeFilename: Self.weatherBridgeFilename,
             reloadingKinds: [WidgetKind.weather, WidgetKind.combined]
         )
     }
 
     public func fetchWeatherSnapshot() -> WeatherWidgetSnapshot {
-        if let data = groupDefaults.data(forKey: weatherSnapshotKey),
+        fetchWeatherSnapshot(bridgeDirectoryURL: nil, defaults: nil)
+    }
+
+    public func fetchWeatherSnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?) -> WeatherWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+        let rawData = readAtomicBridgeData(filename: Self.weatherBridgeFilename, directory: bridgeDirectoryURL)
+            ?? store.data(forKey: weatherSnapshotKey)
+        if let data = rawData,
            let snapshot = try? JSONDecoder().decode(WeatherWidgetSnapshot.self, from: data) {
             return snapshot
         }
         return WeatherWidgetSnapshot.empty
     }
 
+    // MARK: - Smart Briefing Bridge
+
+    private let briefingCacheKey = "daily_smart_summary_cache_v4"
+
+    public func updateBriefingSnapshot(_ record: SmartBriefingRecord) {
+        updateBriefingSnapshot(record, bridgeDirectoryURL: nil, defaults: nil)
+    }
+
+    public func updateBriefingSnapshot(
+        _ record: SmartBriefingRecord,
+        bridgeDirectoryURL: URL?,
+        defaults: UserDefaults?
+    ) {
+        persistBridgeValue(
+            record,
+            defaultsKey: briefingCacheKey,
+            bridgeFilename: Self.briefingBridgeFilename,
+            reloadingKinds: [WidgetKind.combined],
+            directory: bridgeDirectoryURL,
+            defaults: defaults
+        )
+    }
+
+    public func clearBriefingSnapshot(bridgeDirectoryURL: URL? = nil, defaults: UserDefaults? = nil) {
+        let store = defaults ?? groupDefaults
+        removeAtomicBridgeFile(filename: Self.briefingBridgeFilename, directory: bridgeDirectoryURL)
+        store.removeObject(forKey: briefingCacheKey)
+        store.synchronize()
+        reloadTimelines(kinds: [WidgetKind.combined])
+    }
+
     // MARK: - Combined Executive Snapshot (5 Core Pillars + Briefing)
 
     public func fetchCombinedSnapshot() -> CombinedWidgetSnapshot {
-        let bubbles = fetchBubblesSnapshot()
-        let smokes = fetchSmokesSnapshot()
-        let money = fetchMoneySnapshot()
-        let sleep = fetchSleepSnapshot()
-        let tagdos = fetchTagdosSnapshot()
-        let stress = fetchStressSnapshot()
-        let cosmos = fetchCosmosSnapshot()
-        let weather = fetchWeatherSnapshot()
+        fetchCombinedSnapshot(bridgeDirectoryURL: nil, defaults: nil, now: Date())
+    }
 
-        let hour = Calendar.current.component(.hour, from: Date())
+    public func fetchCombinedSnapshot(
+        bridgeDirectoryURL: URL?,
+        defaults: UserDefaults?,
+        now: Date
+    ) -> CombinedWidgetSnapshot {
+        let store = defaults ?? groupDefaults
+        store.synchronize()
+
+        let habitsURL = bridgeFileURL(filename: Self.habitsBridgeFilename, directory: bridgeDirectoryURL)
+        let bubbles = fetchBubblesSnapshot(bridgeFileURL: habitsURL, defaults: store)
+        let smokes = fetchSmokesSnapshot(bridgeFileURL: habitsURL, defaults: store)
+        let money = fetchMoneySnapshot(bridgeDirectoryURL: bridgeDirectoryURL, defaults: store)
+        let sleep = fetchSleepSnapshot(bridgeDirectoryURL: bridgeDirectoryURL, defaults: store, now: now)
+        let tagdos = fetchTagdosSnapshot(bridgeDirectoryURL: bridgeDirectoryURL, defaults: store)
+        let stress = fetchStressSnapshot(bridgeDirectoryURL: bridgeDirectoryURL, defaults: store, now: now)
+        let cosmos = fetchCosmosSnapshot(bridgeDirectoryURL: bridgeDirectoryURL, defaults: store, now: now)
+        let weather = fetchWeatherSnapshot(bridgeDirectoryURL: bridgeDirectoryURL, defaults: store)
+
+        let cal = Calendar.current
+        let hour = cal.component(.hour, from: now)
+        let currentSlot = BriefingTimeSlot.current(for: now, calendar: cal)
         let isMorning = (hour >= 5 && hour < 12)
+        let firstName = cachedUserFirstName(defaults: store)
 
-        var snippet: BriefingSummarySnippet? = nil
-        let briefingCacheKey = "daily_smart_summary_cache_v4"
-        if let data = groupDefaults.data(forKey: briefingCacheKey),
-           let record = try? JSONDecoder().decode(SmartBriefingRecord.self, from: data) {
+        let weatherIsFresh = weather.hasData && (
+            cal.isDate(weather.lastUpdated, inSameDayAs: now) ||
+            abs(now.timeIntervalSince(weather.lastUpdated)) < 4 * 3600
+        )
+        let primaryPill = tagdos.streams.first?.drivingPillText
+
+        let rawBriefingData = readAtomicBridgeData(filename: Self.briefingBridgeFilename, directory: bridgeDirectoryURL)
+            ?? store.data(forKey: briefingCacheKey)
+
+        let snippet: BriefingSummarySnippet
+        if let data = rawBriefingData,
+           let record = try? JSONDecoder().decode(SmartBriefingRecord.self, from: data),
+           cal.isDate(record.createdAt, inSameDayAs: now),
+           record.slot == currentSlot {
             let m = record.metrics
             let n = record.narrative
 
@@ -1833,28 +2215,30 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
                     return n.tagdosText
                 } else if !n.healthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return n.healthText
+                } else if let primaryPill, !primaryPill.isEmpty {
+                    return "Focus: \(primaryPill)"
                 } else {
                     return nil
                 }
             }()
 
+            // Overlay fresher live Weather and Sleep snapshots onto today's briefing snippet
             snippet = BriefingSummarySnippet(
-                greeting: BriefingTimeSlot.current().diurnalGreeting(for: "Mihai"),
-                weatherTemp: m.weatherTemp ?? (weather.hasData ? weather.temp : nil),
-                weatherCondition: m.weatherCondition ?? (weather.hasData ? weather.conditionText : nil),
-                weatherIcon: m.weatherIcon ?? (weather.hasData ? weather.iconCode : nil),
-                sleepDurationFormatted: m.sleepDurationFormatted,
-                sleepScore: m.sleepScore,
+                greeting: currentSlot.diurnalGreeting(for: firstName),
+                weatherTemp: weatherIsFresh ? weather.temp : m.weatherTemp,
+                weatherCondition: weatherIsFresh ? weather.conditionText : m.weatherCondition,
+                weatherIcon: weatherIsFresh ? weather.iconCode : m.weatherIcon,
+                sleepDurationFormatted: sleep.hasData ? sleep.totalAsleepFormatted : m.sleepDurationFormatted,
+                sleepScore: sleep.hasData ? sleep.sleepScore : m.sleepScore,
                 topFocusText: focus,
                 isAiGenerated: record.isAiGenerated
             )
         } else {
-            let primaryPill = tagdos.streams.first?.drivingPillText
             snippet = BriefingSummarySnippet(
-                greeting: isMorning ? "Good Morning, Mihai" : "Welcome back, Mihai",
-                weatherTemp: weather.hasData ? weather.temp : nil,
-                weatherCondition: weather.hasData ? weather.conditionText : nil,
-                weatherIcon: weather.hasData ? weather.iconCode : nil,
+                greeting: isMorning ? "Good Morning, \(firstName)" : currentSlot.diurnalGreeting(for: firstName),
+                weatherTemp: weatherIsFresh ? weather.temp : nil,
+                weatherCondition: weatherIsFresh ? weather.conditionText : nil,
+                weatherIcon: weatherIsFresh ? weather.iconCode : nil,
                 sleepDurationFormatted: sleep.hasData ? sleep.totalAsleepFormatted : nil,
                 sleepScore: sleep.hasData ? sleep.sleepScore : nil,
                 topFocusText: primaryPill != nil ? "Focus: \(primaryPill!)" : nil,

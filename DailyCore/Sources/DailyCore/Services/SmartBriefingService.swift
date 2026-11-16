@@ -51,12 +51,13 @@ public final class SmartBriefingService: ObservableObject {
     // MARK: - Cache Management
 
     private func loadCachedBriefing() {
+        WidgetDataCoordinator.shared.setCachedUserFirstName(AuthService.shared.currentUser?.firstName)
         guard let data = groupDefaults.data(forKey: cacheStorageKey),
               let record = try? JSONDecoder().decode(SmartBriefingRecord.self, from: data) else {
             return
         }
         let currentSlot = BriefingTimeSlot.current()
-        // Strictly prevent loading stale records from a previous time slot or day into activeBriefing
+        // Strictly prevent loading stale records from a previous time slot or day into activeBriefing or widgets
         if record.slot == currentSlot && Calendar.current.isDateInToday(record.createdAt) {
             self.inMemoryCache[record.slot] = record
             self.activeBriefing = record
@@ -64,6 +65,9 @@ public final class SmartBriefingService: ObservableObject {
             self.lastGeneratedAt = record.updatedAt
             let lastRead = groupDefaults.string(forKey: lastReadDataHashKey)
             self.hasUnreadBrief = (lastRead != record.dataHash)
+            WidgetDataCoordinator.shared.updateBriefingSnapshot(record)
+        } else {
+            WidgetDataCoordinator.shared.clearBriefingSnapshot()
         }
     }
 
@@ -75,9 +79,85 @@ public final class SmartBriefingService: ObservableObject {
         let lastRead = groupDefaults.string(forKey: lastReadDataHashKey)
         self.hasUnreadBrief = (lastRead != record.dataHash)
 
-        if let data = try? JSONEncoder().encode(record) {
-            groupDefaults.set(data, forKey: cacheStorageKey)
+        WidgetDataCoordinator.shared.setCachedUserFirstName(AuthService.shared.currentUser?.firstName)
+        WidgetDataCoordinator.shared.updateBriefingSnapshot(record)
+    }
+
+    /// Synchronizes SmartBriefing state across foreground resumes, day rollovers, and diurnal slot transitions.
+    /// Avoids extra Gemini/Supabase API calls if a valid briefing for today's active slot already exists.
+    public func syncForForegroundTransition(dayOrSlotChanged: Bool = false) async {
+        let currentSlot = BriefingTimeSlot.current()
+        WidgetDataCoordinator.shared.setCachedUserFirstName(AuthService.shared.currentUser?.firstName)
+
+        let existingIsValidTodaySlot: Bool = {
+            guard let active = activeBriefing else { return false }
+            return Calendar.current.isDateInToday(active.createdAt) && active.slot == currentSlot
+        }()
+
+        if !existingIsValidTodaySlot || dayOrSlotChanged {
+            inMemoryCache = inMemoryCache.filter { (_, rec) in
+                Calendar.current.isDateInToday(rec.createdAt) && rec.slot == currentSlot
+            }
+            if !existingIsValidTodaySlot {
+                activeBriefing = nil
+                WidgetDataCoordinator.shared.clearBriefingSnapshot()
+            }
         }
+
+        if currentSlot == .morning && (inMemoryCache[.morning] == nil || !Calendar.current.isDateInToday(inMemoryCache[.morning]!.createdAt)) {
+            _ = await getOrGenerateBriefing(forceRefresh: false)
+        } else {
+            refreshLocalWidgetBriefingIfNeeded()
+        }
+    }
+
+    /// Zero-network local update that keeps an existing today/slot briefing's metrics & widget bridge
+    /// synchronized with freshly updated Health, Weather, and TagDoS state.
+    public func refreshLocalWidgetBriefingIfNeeded() {
+        let currentSlot = BriefingTimeSlot.current()
+        guard var current = activeBriefing,
+              Calendar.current.isDateInToday(current.createdAt),
+              current.slot == currentSlot else {
+            return
+        }
+
+        let metrics = collectCurrentMetrics()
+        let activeStreams = TagdosStore.shared.streams.map(\.title)
+        let newHash = computeDataHash(slot: currentSlot, metrics: metrics, streamCount: activeStreams.count)
+        guard newHash != current.dataHash else {
+            WidgetDataCoordinator.shared.updateBriefingSnapshot(current)
+            return
+        }
+
+        let topPills = extractTopPills()
+        let firstName = AuthService.shared.currentUser?.firstName ?? "Friend"
+        let refreshedLocal = synthesizeLocalNarrative(
+            slot: currentSlot,
+            userName: firstName,
+            metrics: metrics,
+            activeStreams: activeStreams,
+            topPills: topPills
+        )
+
+        var updatedNarrative = current.narrative
+        if current.metrics.weatherTemp == nil && metrics.weatherTemp != nil {
+            updatedNarrative.weatherText = refreshedLocal.weatherText
+        }
+        if current.metrics.sleepScore == nil && metrics.sleepScore != nil {
+            updatedNarrative.healthText = refreshedLocal.healthText
+        }
+        if !topPills.isEmpty {
+            updatedNarrative.tagdosText = refreshedLocal.tagdosText
+        }
+
+        current.metrics = metrics
+        current.narrative = updatedNarrative
+        current.dataHash = newHash
+        current.updatedAt = Date()
+
+        inMemoryCache[currentSlot] = current
+        activeBriefing = current
+        WidgetDataCoordinator.shared.updateBriefingSnapshot(current)
     }
 
     // MARK: - Public API

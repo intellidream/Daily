@@ -113,7 +113,11 @@ public struct CombinedTimelineProvider: TimelineProvider {
     public func getTimeline(in context: Context, completion: @escaping (Timeline<CombinedEntry>) -> Void) {
         let snapshot = WidgetDataCoordinator.shared.fetchCombinedSnapshot()
         let currentDate = Date()
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: currentDate) ?? currentDate.addingTimeInterval(900)
+        let nextUpdate = WidgetDataCoordinator.nextBoundaryAlignedDate(
+            after: currentDate,
+            defaultIntervalMinutes: 15,
+            boundaryHours: [0, 5, 12, 17, 21]
+        )
         let entry = CombinedEntry(date: currentDate, snapshot: snapshot)
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)

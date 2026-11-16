@@ -25,7 +25,11 @@ public struct SleepTimelineProvider: TimelineProvider {
     public func getTimeline(in context: Context, completion: @escaping (Timeline<SleepEntry>) -> Void) {
         let snapshot = WidgetDataCoordinator.shared.fetchSleepSnapshot()
         let currentDate = Date()
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: currentDate) ?? currentDate.addingTimeInterval(1800)
+        let nextUpdate = WidgetDataCoordinator.nextBoundaryAlignedDate(
+            after: currentDate,
+            defaultIntervalMinutes: 30,
+            boundaryHours: [0, 6, 8, 10]
+        )
         let entry = SleepEntry(date: currentDate, snapshot: snapshot)
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)

@@ -40,6 +40,7 @@ public final class WeatherService: ObservableObject {
 
     private let session: URLSession
     private var cancellables = Set<AnyCancellable>()
+    private var activeRefreshTask: Task<Void, Never>?
 
     public init(session: URLSession = .shared) {
         self.session = session
@@ -84,7 +85,12 @@ public final class WeatherService: ObservableObject {
             return (ipCoords.lat, ipCoords.lon, .ip, ipCoords.cityName)
         }
 
-        // 4. Default fallback: New York if all network/GPS fails
+        // 4. Cached last-known coordinates from App Group, or default Bucharest/New York fallback
+        let groupDefaults = UserDefaults(suiteName: GroupDefaults.suiteName) ?? .standard
+        if let cachedLat = groupDefaults.object(forKey: "weather_cached_lat") as? Double,
+           let cachedLon = groupDefaults.object(forKey: "weather_cached_lon") as? Double {
+            return (cachedLat, cachedLon, .unknown, nil)
+        }
         return (40.7128, -74.0060, .unknown, "New York")
     }
 
@@ -107,7 +113,33 @@ public final class WeatherService: ObservableObject {
 
     // MARK: - Weather Refreshing
 
+    public func refreshWeatherIfStale(maxAge: TimeInterval = 900) async {
+        if let lastFetchTime,
+           currentWeather != nil,
+           Calendar.current.isDateInToday(lastFetchTime),
+           Date().timeIntervalSince(lastFetchTime) < maxAge {
+            return
+        }
+        await refreshWeather(force: true)
+    }
+
     public func refreshWeather(force: Bool = false) async {
+        if let existing = activeRefreshTask {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performRefreshWeather(force: force)
+        }
+        activeRefreshTask = task
+        await task.value
+        if activeRefreshTask == task {
+            activeRefreshTask = nil
+        }
+    }
+
+    private func performRefreshWeather(force: Bool) async {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
@@ -168,6 +200,7 @@ public final class WeatherService: ObservableObject {
                 longitude: targetLon,
                 isImperial: SettingsService.shared.settings.weatherUnitSystem == .imperial
             )
+            SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
         } catch {
             self.errorMessage = error.localizedDescription
             print("[WeatherService] Weather fetch failed: \(error)")
