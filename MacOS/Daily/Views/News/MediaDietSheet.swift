@@ -36,7 +36,7 @@ public struct MediaDietSheet: View {
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("My Media Diet")
+                            Text("Spectrum")
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
                             Text("Monthly Reading Balance • \(snap.yearMonth)")
@@ -65,7 +65,7 @@ public struct MediaDietSheet: View {
                                     .foregroundColor(.white)
 
                                 Text(snap.totalArticlesRead == 0
-                                     ? "Open any article in the distraction-free reader to start calibrating your monthly Media Diet."
+                                     ? "Open any article in the reader to start calibrating your monthly Spectrum."
                                      : "Based on \(snap.totalArticlesRead) unique stories read across your feeds this month.")
                                     .font(.system(size: 12, weight: .regular))
                                     .foregroundColor(ThemeColors.fgMutedDark)

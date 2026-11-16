@@ -303,11 +303,13 @@ public struct BiasSpectrumBar: View {
                         HStack(spacing: 4) {
                             Image(systemName: "scale.3d")
                                 .font(.system(size: 10, weight: .bold))
-                            Text("\(cluster.uniqueOutletCount) sources • Perspectives")
+                            Text("\(cluster.uniqueOutletCount) sources · Lens")
                                 .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                                .lineLimit(1)
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 8.5, weight: .bold))
                         }
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundColor(ThemeColors.accentCyan)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
@@ -386,11 +388,11 @@ public struct MediaDietHeaderButton: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help("Media Diet & Reading Balance (\(snapshot.totalArticlesRead) read this month)")
+        .help("Spectrum · Reading Balance (\(snapshot.totalArticlesRead) read this month)")
     }
 }
 
-// MARK: - Dedicated Story Cluster Card (Perspectives & Blindspots Sub-Tab)
+// MARK: - Dedicated Story Cluster Card (Orbit Lens & Blindspots Sub-Tab)
 
 public struct StoryClusterCard: View {
     public let cluster: StoryCluster

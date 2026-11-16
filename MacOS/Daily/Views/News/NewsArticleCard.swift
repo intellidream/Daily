@@ -50,8 +50,8 @@ public struct NewsArticleCard: View {
     public var body: some View {
         GlassCard(cornerRadius: 20, padding: 16) {
             VStack(alignment: .leading, spacing: 14) {
-                    // Header: Publication, Category Pill & Timestamp
-                    HStack(alignment: .center, spacing: 8) {
+                    // Header: Publication, Source Badge, Category Pill & Timestamp
+                    HStack(alignment: .center, spacing: 6) {
                         // Publication Favicon
                         if let iconUrl = article.publicationIconUrl, let url = URL(string: iconUrl) {
                             AsyncImage(url: url) { phase in
@@ -67,6 +67,7 @@ public struct NewsArticleCard: View {
                                         .foregroundColor(ThemeColors.accentCyan)
                                 }
                             }
+                            .layoutPriority(2)
                         }
                         
                         Button {
@@ -76,6 +77,7 @@ public struct NewsArticleCard: View {
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
                                 .foregroundColor(ThemeColors.accentCyan)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                         .buttonStyle(.plain)
                         .popover(isPresented: $showSourceTransparency) {
@@ -87,12 +89,15 @@ public struct NewsArticleCard: View {
                         OutletMicroBadge(profile: outletProfile, framing: articleFraming, compact: true) {
                             showSourceTransparency = true
                         }
+                        .layoutPriority(2)
                         
                         if let category = article.category {
                             Text(category.displayName)
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.8))
-                                .padding(.horizontal, 7)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(
                                     Capsule()
@@ -101,11 +106,14 @@ public struct NewsArticleCard: View {
                                 )
                         }
                         
-                        Spacer()
+                        Spacer(minLength: 4)
                         
                         Text(article.relativeTimeFormatted)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(2)
                     }
                     
                     // Body: Title, Description & Thumbnail (Clickable Button)

@@ -3,7 +3,7 @@ import DailyCore
 
 public enum NewsSubTab: String, CaseIterable, Identifiable {
     case live = "Live Feed"
-    case perspectives = "Perspectives"
+    case perspectives = "Orbit Lens"
     case readLater = "Read Later"
     case favorites = "Favorites"
     
@@ -12,7 +12,7 @@ public enum NewsSubTab: String, CaseIterable, Identifiable {
     public var compactLabel: String {
         switch self {
         case .live: return "Live"
-        case .perspectives: return "Perspectives"
+        case .perspectives: return "Lens"
         case .readLater: return "Saved"
         case .favorites: return "Favorites"
         }
@@ -357,7 +357,20 @@ public struct NewsFeedView: View {
     // MARK: - Sub-Tab Switcher
     
     private var subTabSwitcher: some View {
-        HStack(spacing: 4) {
+        ViewThatFits(in: .horizontal) {
+            subTabRow(compact: false)
+            subTabRow(compact: true)
+        }
+        .padding(4)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.06))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        )
+    }
+
+    private func subTabRow(compact: Bool) -> some View {
+        HStack(spacing: compact ? 3 : 6) {
             ForEach(NewsSubTab.allCases) { tab in
                 let isSelected = activeSubTab == tab
                 Button {
@@ -366,10 +379,10 @@ public struct NewsFeedView: View {
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(tab.compactLabel)
-                            .font(.system(size: 12, weight: .semibold))
+                        Text(compact ? tab.compactLabel : tab.rawValue)
+                            .font(.system(size: compact ? 12 : 12.5, weight: .semibold))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.82)
+                            .fixedSize(horizontal: true, vertical: false)
                         
                         // Badge count
                         if tab == .perspectives && !multiSourceClusters.isEmpty {
@@ -379,6 +392,7 @@ public struct NewsFeedView: View {
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
                                 .background(Capsule().fill(ThemeColors.accentPurple))
+                                .fixedSize(horizontal: true, vertical: false)
                         } else if tab == .readLater && !savedService.readLaterArticles.isEmpty {
                             Text("\(savedService.readLaterArticles.count)")
                                 .font(.system(size: 9.5, weight: .bold))
@@ -386,6 +400,7 @@ public struct NewsFeedView: View {
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
                                 .background(Capsule().fill(ThemeColors.accentCyan))
+                                .fixedSize(horizontal: true, vertical: false)
                         } else if tab == .favorites && !savedService.favoriteArticles.isEmpty {
                             Text("\(savedService.favoriteArticles.count)")
                                 .font(.system(size: 9.5, weight: .bold))
@@ -393,9 +408,11 @@ public struct NewsFeedView: View {
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
                                 .background(Capsule().fill(Color(red: 1.0, green: 0.8, blue: 0.2)))
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                     }
                     .foregroundColor(isSelected ? .white : .white.opacity(0.6))
+                    .padding(.horizontal, compact ? 6 : 8)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background(
@@ -406,12 +423,6 @@ public struct NewsFeedView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
-        .background(
-            Capsule()
-                .fill(Color.white.opacity(0.06))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-        )
     }
     
     // MARK: - Feed Publication Picker
@@ -507,6 +518,7 @@ public struct NewsFeedView: View {
                                 .font(.system(size: 11, weight: .bold))
                             Text(lens.rawValue)
                                 .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                                .lineLimit(1)
                             if count > 0 {
                                 Text("\(count)")
                                     .font(.system(size: 10, weight: .bold))
@@ -515,6 +527,7 @@ public struct NewsFeedView: View {
                                     .background(Capsule().fill(Color.white.opacity(0.16)))
                             }
                         }
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundColor(isSelected ? .white : .white.opacity(0.65))
                         .padding(.horizontal, 11)
                         .padding(.vertical, 6)
@@ -573,7 +586,7 @@ public struct NewsFeedView: View {
                         .font(.system(size: 36))
                         .foregroundColor(ThemeColors.accentCyan.opacity(0.8))
 
-                    Text(perspectivesLens == .blindspots ? "No Asymmetric Blindspots Yet" : "Discover Multi-Source Perspectives")
+                    Text(perspectivesLens == .blindspots ? "No Asymmetric Blindspots Yet" : "Explore Orbit Lens Coverage")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)

@@ -67,7 +67,7 @@ public struct NewsReaderView: View {
     }
     
     private var supportsSideBySideSplit: Bool {
-        containerWidth >= 680
+        containerWidth >= 760
     }
     
     public var body: some View {
@@ -80,9 +80,9 @@ public struct NewsReaderView: View {
                 // Top Glass Toolbar
                 readerToolbar
                 
-                // Adaptive Article Canvas (Full-Width + Sheet on iPhone; 64% / 36% Split on SimulaDuo / iPad)
+                // Adaptive Article Canvas (Full-Width + Sheet on iPhone; 62% / 38% Split on SimulaDuo / iPad)
                 GeometryReader { geo in
-                    let isWide = geo.size.width >= 680
+                    let isWide = geo.size.width >= 760
                     HStack(spacing: 0) {
                         ZStack(alignment: .bottom) {
                             if isLoadingFullArticle {
@@ -109,7 +109,7 @@ public struct NewsReaderView: View {
                                 bottomRecommendationsBar
                             }
                         }
-                        .frame(width: (isWide && showPerspectivesSplit) ? max(340, geo.size.width * 0.63) : geo.size.width)
+                        .frame(width: (isWide && showPerspectivesSplit) ? (geo.size.width - max(320, geo.size.width * 0.38) - 1) : geo.size.width)
                         
                         if isWide && showPerspectivesSplit {
                             Divider().background(Color.white.opacity(0.14))
@@ -132,7 +132,8 @@ public struct NewsReaderView: View {
                                     }
                                 }
                             )
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(width: max(320, geo.size.width * 0.38))
+                            .frame(maxHeight: .infinity)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
@@ -176,7 +177,7 @@ public struct NewsReaderView: View {
     }
     
     private var readerToolbar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Dismiss Button
             Button {
                 onDismiss()
@@ -186,157 +187,119 @@ public struct NewsReaderView: View {
                     .foregroundColor(.white.opacity(0.8))
             }
             .buttonStyle(.plain)
+            .layoutPriority(3)
             
-            // Publication Branding (scrolls horizontally if long)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    if let icon = currentArticle.publicationIconUrl, let url = URL(string: icon) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable()
-                                    .scaledToFill()
-                                    .frame(width: 18, height: 18)
-                                    .clipShape(Circle())
-                            default:
-                                EmptyView()
-                            }
+            // Publication Branding + Inline Bias & Factuality Badge (non-collapsing single line)
+            HStack(spacing: 6) {
+                if let icon = currentArticle.publicationIconUrl, let url = URL(string: icon) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable()
+                                .scaledToFill()
+                                .frame(width: 18, height: 18)
+                                .clipShape(Circle())
+                        default:
+                            EmptyView()
                         }
                     }
-                    
+                    .layoutPriority(2)
+                }
+                
+                Button {
+                    showSourceSheet = true
+                    triggerHaptic()
+                } label: {
+                    Text(currentArticle.publicationName ?? currentOutletProfile.name)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .buttonStyle(.plain)
+                .layoutPriority(1)
+                
+                OutletMicroBadge(profile: currentOutletProfile, framing: currentFraming, compact: true) {
+                    showSourceSheet = true
+                    triggerHaptic()
+                }
+                .layoutPriority(2)
+                
+                if containerWidth >= 480, let substackInfo = extractSubstackInfo(from: currentArticle) {
+                    let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
                     Button {
-                        showSourceSheet = true
-                        triggerHaptic()
+                        if !isSubscribed {
+                            withAnimation {
+                                newsService.subscribeToSubstackPublication(
+                                    name: substackInfo.name,
+                                    feedUrl: substackInfo.feedUrl,
+                                    iconUrl: currentArticle.publicationIconUrl ?? ""
+                                )
+                            }
+                            triggerHaptic()
+                        }
                     } label: {
-                        Text(currentArticle.publicationName ?? currentOutletProfile.name)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .fixedSize(horizontal: true, vertical: false)
+                        HStack(spacing: 3) {
+                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                .font(.system(size: 11))
+                            Text(isSubscribed ? "Subscribed" : "Subscribe")
+                                .font(.system(size: 11, weight: .bold))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundColor(isSubscribed ? .white.opacity(0.65) : ThemeColors.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
+                        )
                     }
                     .buttonStyle(.plain)
-                    
-                    OutletMicroBadge(profile: currentOutletProfile, framing: currentFraming, compact: true) {
-                        showSourceSheet = true
-                        triggerHaptic()
-                    }
-                    
-                    if let substackInfo = extractSubstackInfo(from: currentArticle) {
-                        let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
-                        Button {
-                            if !isSubscribed {
-                                withAnimation {
-                                    newsService.subscribeToSubstackPublication(
-                                        name: substackInfo.name,
-                                        feedUrl: substackInfo.feedUrl,
-                                        iconUrl: currentArticle.publicationIconUrl ?? ""
-                                    )
-                                }
-                                triggerHaptic()
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
-                                    .font(.system(size: 11))
-                                Text(isSubscribed ? "Subscribed" : "Subscribe")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .foregroundColor(isSubscribed ? .white.opacity(0.65) : ThemeColors.accentCyan)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             
-            Spacer(minLength: 4)
-
-            // Perspectives Button (Split Pane on SimulaDuo/iPad, Bottom Sheet on iPhone)
-            Button {
-                triggerHaptic()
-                if supportsSideBySideSplit {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                        showPerspectivesSplit.toggle()
+            // Core Actions + Expandable Menu (Orbit Lens & Open in Prism moved into More menu with icons)
+            HStack(spacing: 8) {
+                // Read Later Bookmark Button
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        savedService.toggleReadLater(for: currentArticle)
                     }
-                } else {
-                    showPerspectivesSheet = true
+                    triggerHaptic()
+                } label: {
+                    Image(systemName: isReadLater ? "bookmark.fill" : "bookmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isReadLater ? ThemeColors.accentCyan : .white.opacity(0.8))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(isReadLater ? ThemeColors.accentCyan.opacity(0.2) : Color.white.opacity(0.08))
+                        )
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "scale.3d")
-                        .font(.system(size: 12.5, weight: .bold))
-                    if activeCluster.uniqueOutletCount >= 2 {
-                        Text("\(activeCluster.uniqueOutletCount)")
-                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                .buttonStyle(.plain)
+                
+                // Favorite Star Button
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        savedService.toggleFavorite(for: currentArticle)
                     }
+                    triggerHaptic()
+                } label: {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2) : .white.opacity(0.8))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2).opacity(0.2) : Color.white.opacity(0.08))
+                        )
                 }
-                .foregroundColor((supportsSideBySideSplit && showPerspectivesSplit) ? .black : ThemeColors.accentCyan)
-                .padding(.horizontal, activeCluster.uniqueOutletCount >= 2 ? 9 : 0)
-                .frame(minWidth: 32, minHeight: 32)
-                .background(
-                    Capsule()
-                        .fill((supportsSideBySideSplit && showPerspectivesSplit) ? ThemeColors.accentCyan : ThemeColors.accentCyan.opacity(0.15))
-                        .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.32), lineWidth: 1))
-                )
+                .buttonStyle(.plain)
+                
+                // Far-right Expandable Menu Button containing Orbit Lens, Open in Prism, Source Transparency & collapsed actions
+                moreOptionsMenu
             }
-            .buttonStyle(.plain)
-
-            // Open Live Article in Prism Studio
-            Button {
-                PrismStore.shared.requestOpenInPrism(url: currentArticle.link, title: currentArticle.title)
-                onDismiss()
-                NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
-            } label: {
-                Image(systemName: "safari.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(ThemeColors.accentCyan.opacity(0.15))
-                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.30), lineWidth: 1))
-                    )
-            }
-            .buttonStyle(.plain)
-            
-            // Read Later Bookmark Button
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    savedService.toggleReadLater(for: currentArticle)
-                }
-                triggerHaptic()
-            } label: {
-                Image(systemName: isReadLater ? "bookmark.fill" : "bookmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(isReadLater ? ThemeColors.accentCyan : .white.opacity(0.8))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(isReadLater ? ThemeColors.accentCyan.opacity(0.2) : Color.white.opacity(0.08))
-                    )
-            }
-            .buttonStyle(.plain)
-            
-            // Favorite Star Button
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    savedService.toggleFavorite(for: currentArticle)
-                }
-                triggerHaptic()
-            } label: {
-                Image(systemName: isFavorite ? "star.fill" : "star")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2) : .white.opacity(0.8))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2).opacity(0.2) : Color.white.opacity(0.08))
-                    )
-            }
-            .buttonStyle(.plain)
-            
-            // Far-right Expandable Menu Button containing collapsed actions
-            moreOptionsMenu
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(3)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -353,6 +316,40 @@ public struct NewsReaderView: View {
     
     private var moreOptionsMenu: some View {
         Menu {
+            // Orbit Lens (Split Pane on SimulaDuo/iPad, Bottom Sheet on iPhone)
+            Button {
+                triggerHaptic()
+                if supportsSideBySideSplit {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                        showPerspectivesSplit.toggle()
+                    }
+                } else {
+                    showPerspectivesSheet = true
+                }
+            } label: {
+                let suffix = activeCluster.uniqueOutletCount >= 2 ? " (\(activeCluster.uniqueOutletCount) sources)" : ""
+                Label("Orbit Lens\(suffix)", systemImage: "scale.3d")
+            }
+
+            // Open Live Article in Prism Studio
+            Button {
+                PrismStore.shared.requestOpenInPrism(url: currentArticle.link, title: currentArticle.title)
+                onDismiss()
+                NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+            } label: {
+                Label("Open in Prism Studio", systemImage: "safari.fill")
+            }
+
+            // Source Transparency Sheet
+            Button {
+                showSourceSheet = true
+                triggerHaptic()
+            } label: {
+                Label("Source Transparency", systemImage: "info.circle")
+            }
+
+            Divider()
+
             // Share Article
             if let url = URL(string: currentArticle.link) {
                 ShareLink(item: url, subject: Text(currentArticle.title), message: Text(currentArticle.title)) {

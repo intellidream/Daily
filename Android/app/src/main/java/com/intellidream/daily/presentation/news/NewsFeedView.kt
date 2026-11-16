@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -97,15 +98,15 @@ import com.intellidream.daily.model.NewsArticle
 import com.intellidream.daily.model.StoryCluster
 import kotlinx.coroutines.launch
 
-enum class NewsSubTab(val displayName: String) {
-    Live("Live"),
-    Perspectives("Perspectives"),
-    ReadLater("Saved"),
-    Favorites("Favorites")
+enum class NewsSubTab(val displayName: String, val compactName: String) {
+    Live("Live Feed", "Live"),
+    Perspectives("Orbit Lens", "Lens"),
+    ReadLater("Read Later", "Saved"),
+    Favorites("Favorites", "Favorites")
 }
 
 private enum class PerspectivesLens(val label: String) {
-    MultiSource("All Stories"),
+    MultiSource("Multi-Source"),
     Blindspots("Blindspots")
 }
 
@@ -339,7 +340,9 @@ fun NewsFeedView(
                                     } else lens.label,
                                     color = if (selected) Color.White else ThemeColors.textMuted,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
@@ -349,7 +352,9 @@ fun NewsFeedView(
                         text = "${displayedClusters.size} clusters",
                         color = ThemeColors.textMuted,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -790,7 +795,7 @@ private fun SubTabSwitcher(
     favoritesCount: Int,
     onSelectSubTab: (NewsSubTab) -> Unit
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .clip(CircleShape)
@@ -798,6 +803,7 @@ private fun SubTabSwitcher(
             .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
             .padding(4.dp)
     ) {
+        val useFullLabels = maxWidth >= 540.dp
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -819,11 +825,12 @@ private fun SubTabSwitcher(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = tab.displayName,
+                            text = if (useFullLabels) tab.displayName else tab.compactName,
                             color = if (isSelected) Color.White else Color.White.copy(alpha = 0.60f),
-                            fontSize = 11.5.sp,
+                            fontSize = if (useFullLabels) 12.sp else 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false
                         )
 
                         // Count badges
@@ -838,7 +845,9 @@ private fun SubTabSwitcher(
                                     text = "$perspectivesCount",
                                     color = ThemeColors.accentCyan,
                                     fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         } else if (tab == NewsSubTab.ReadLater && readLaterCount > 0) {
@@ -852,7 +861,9 @@ private fun SubTabSwitcher(
                                     text = "$readLaterCount",
                                     color = Color.White,
                                     fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         } else if (tab == NewsSubTab.Favorites && favoritesCount > 0) {
@@ -866,7 +877,9 @@ private fun SubTabSwitcher(
                                     text = "$favoritesCount",
                                     color = Color.Black,
                                     fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
@@ -1058,7 +1071,7 @@ private fun EmptyNewsState(
             Text(
                 text = when (subTab) {
                     NewsSubTab.Live -> "Try selecting another feed or pulling to refresh."
-                    NewsSubTab.Perspectives -> "Your subscribed feeds currently show balanced coverage, or switch to All Stories to explore multi-source clusters."
+                    NewsSubTab.Perspectives -> "Your subscribed feeds currently show balanced coverage, or switch to Multi-Source to explore Orbit Lens clusters."
                     NewsSubTab.ReadLater, NewsSubTab.Favorites -> "Save articles while reading by tapping the bookmark or star button."
                 },
                 color = ThemeColors.textSecondary,

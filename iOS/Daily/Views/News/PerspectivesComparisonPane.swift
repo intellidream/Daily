@@ -119,9 +119,11 @@ public struct PerspectivesComparisonPane: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(ThemeColors.accentCyan)
 
-                Text("Perspectives")
+                Text("Orbit Lens")
                     .font(.system(size: 15.5, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 if isExpandingSources || isSynthesizing {
                     ProgressView()

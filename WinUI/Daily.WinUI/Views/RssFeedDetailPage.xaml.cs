@@ -1657,7 +1657,7 @@ public sealed partial class RssFeedDetailPage : Page
         else if (index == 1)
         {
             FeedSelectorContainer.Visibility = Visibility.Visible;
-            RssSubtitleTextBlock.Text = "Cross-spectrum story clusters, framing comparison & Blindspots";
+            RssSubtitleTextBlock.Text = "Orbit Lens — cross-spectrum story clusters & Blindspots";
             RebuildStoryClustersFromCache();
         }
         else if (index == 2)
@@ -2002,7 +2002,7 @@ public sealed partial class RssFeedDetailPage : Page
                 else
                 {
                     item1.Header = "Live Feed";
-                    item2.Header = "Perspectives";
+                    item2.Header = "Orbit Lens";
                     item3.Header = "Read Later";
                     item4.Header = "Favorites";
                 }
@@ -2022,7 +2022,7 @@ public sealed partial class RssFeedDetailPage : Page
         string toolTipText = glyph switch
         {
             "\uE736" => "Live Feed",
-            "\uE8FD" => "Perspectives",
+            "\uE8FD" => "Orbit Lens",
             "\uE8A4" => "Read Later",
             "\uE734" => "Favorites",
             _ => ""
@@ -3807,12 +3807,12 @@ public sealed partial class RssFeedDetailPage : Page
         if (FlyoutOwnershipCatText != null) FlyoutOwnershipCatText.Text = profile.OwnershipType.DisplayLabel();
         if (FlyoutFundingText != null) FlyoutFundingText.Text = profile.FundingSummary;
 
-        if (ReaderPerspectivesBtnText != null)
+        if (ReaderMenuOrbitLensItem != null)
         {
             var cluster = _activeReaderCluster ?? ResolveClusterForItem(target);
-            ReaderPerspectivesBtnText.Text = cluster is { UniqueOutletCount: >= 2 }
-                ? $"Perspectives ({cluster.UniqueOutletCount})"
-                : "Perspectives";
+            ReaderMenuOrbitLensItem.Text = cluster is { UniqueOutletCount: >= 2 }
+                ? $"Orbit Lens ({cluster.UniqueOutletCount} sources)"
+                : "Orbit Lens";
         }
     }
 
@@ -4015,7 +4015,7 @@ public sealed partial class RssFeedDetailPage : Page
 
         var dlg = new ContentDialog
         {
-            Title = "Your Monthly Media Diet",
+            Title = "Monthly Spectrum",
             Content = panel,
             CloseButtonText = "Done",
             XamlRoot = this.XamlRoot
@@ -4061,7 +4061,9 @@ public sealed partial class RssFeedDetailPage : Page
     private async Task OpenReaderPerspectivesForClusterAsync(StoryCluster initialCluster)
     {
         ReaderPerspectivesPane.Visibility = Visibility.Visible;
-        double paneWidth = this.ActualWidth >= 1220 ? 430 : 370;
+        double paneWidth = this.ActualWidth >= 1220
+            ? 430
+            : (this.ActualWidth >= 900 ? 370 : Math.Max(300, this.ActualWidth * 0.42));
         ReaderPerspectivesCol.Width = new GridLength(paneWidth, GridUnitType.Pixel);
         ReaderPerspectivesLoadingRow.Visibility = Visibility.Visible;
 

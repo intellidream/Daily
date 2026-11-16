@@ -116,12 +116,19 @@ fun OutletMicroBadge(
                         .clip(CircleShape)
                         .background(biasColor)
                 )
+                val compactFactuality = when (profile.factuality) {
+                    FactualityTier.VeryHigh -> "V.High"
+                    FactualityTier.High -> "High"
+                    FactualityTier.Mixed -> "Mixed"
+                    FactualityTier.Low -> "Low"
+                }
                 Text(
-                    text = "${profile.bias.shortCode} · ${profile.factuality.displayName}",
+                    text = "${profile.bias.shortCode} · $compactFactuality",
                     color = Color.White.copy(alpha = 0.88f),
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -274,10 +281,12 @@ fun BiasSpectrumBar(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = "$uniqueOutlets sources · Perspectives",
+                            text = "$uniqueOutlets sources · Lens",
                             color = ThemeColors.accentCyan,
                             fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
                         )
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
@@ -309,7 +318,7 @@ fun MediaDietHeaderButton(
     ) {
         Icon(
             imageVector = Icons.Rounded.PieChart,
-            contentDescription = "Media Diet (${snapshot.totalArticlesRead} read)",
+            contentDescription = "Spectrum (${snapshot.totalArticlesRead} read)",
             tint = Color(0xFFD8B4FE),
             modifier = Modifier.size(17.dp)
         )
@@ -317,7 +326,7 @@ fun MediaDietHeaderButton(
 }
 
 /**
- * Rich multi-source event card displayed in the `Perspectives` & `Blindspots` sub-tab.
+ * Rich multi-source event card displayed in the `Orbit Lens` & `Blindspots` sub-tab.
  */
 @Composable
 fun StoryClusterCard(

@@ -57,7 +57,7 @@ fun MediaDietSheet(
             ) {
                 Column {
                     Text(
-                        text = "Personal Media Diet",
+                        text = "Spectrum",
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold

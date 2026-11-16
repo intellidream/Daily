@@ -3,15 +3,24 @@ import DailyCore
 
 public enum NewsSubTab: String, CaseIterable, Identifiable {
     case live = "Live Feed"
-    case perspectives = "Perspectives"
+    case perspectives = "Orbit Lens"
     case readLater = "Read Later"
     case favorites = "Favorites"
     
     public var id: String { rawValue }
+
+    public var compactLabel: String {
+        switch self {
+        case .live: return "Live"
+        case .perspectives: return "Lens"
+        case .readLater: return "Saved"
+        case .favorites: return "Favorites"
+        }
+    }
 }
 
 public enum PerspectivesLens: String, CaseIterable, Identifiable {
-    case allClusters = "Multi-Source Stories"
+    case allClusters = "Multi-Source"
     case blindspots = "Blindspots"
     
     public var id: String { rawValue }
@@ -121,21 +130,21 @@ public struct NewsFeedView: View {
                         } else if displayedArticles.isEmpty {
                             emptyStateView
                         } else {
-                            LazyVStack(spacing: 14) {
-                                ForEach(displayedArticles) { article in
-                                    NewsArticleCard(
-                                        article: article,
-                                        onOpenPerspectives: { _, cluster in
-                                            selectedClusterForSheet = cluster
-                                        }
-                                    ) {
-                                        withAnimation(.easeInOut(duration: 0.25)) {
-                                            selectedArticleForReader = article
-                                            isReadingArticle = true
-                                        }
+                        LazyVStack(spacing: 14) {
+                            ForEach(displayedArticles) { article in
+                                NewsArticleCard(
+                                    article: article,
+                                    onOpenPerspectives: { tappedArticle, cluster in
+                                        openOrbitLensWindow(for: cluster, activeLink: tappedArticle.link)
+                                    }
+                                ) {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        selectedArticleForReader = article
+                                        isReadingArticle = true
                                     }
                                 }
                             }
+                        }
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -382,7 +391,20 @@ public struct NewsFeedView: View {
     // MARK: - Sub-Tab Switcher
     
     private var subTabSwitcher: some View {
-        HStack(spacing: 8) {
+        ViewThatFits(in: .horizontal) {
+            subTabRow(compact: false)
+            subTabRow(compact: true)
+        }
+        .padding(4)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.06))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        )
+    }
+
+    private func subTabRow(compact: Bool) -> some View {
+        HStack(spacing: compact ? 4 : 6) {
             ForEach(NewsSubTab.allCases) { tab in
                 let isSelected = activeSubTab == tab
                 Button {
@@ -390,35 +412,41 @@ public struct NewsFeedView: View {
                         activeSubTab = tab
                     }
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(tab.rawValue)
-                            .font(.system(size: 13, weight: .semibold))
+                    HStack(spacing: compact ? 4 : 6) {
+                        Text(compact ? tab.compactLabel : tab.rawValue)
+                            .font(.system(size: compact ? 12 : 13, weight: .semibold))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                         
                         // Badge count
                         if tab == .perspectives && !multiSourceClusters.isEmpty {
                             Text("\(multiSourceClusters.count)")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 6)
+                                .padding(.horizontal, compact ? 5 : 6)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(ThemeColors.accentPurple))
+                                .fixedSize(horizontal: true, vertical: false)
                         } else if tab == .readLater && !savedService.readLaterArticles.isEmpty {
                             Text("\(savedService.readLaterArticles.count)")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 6)
+                                .padding(.horizontal, compact ? 5 : 6)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(ThemeColors.accentCyan))
+                                .fixedSize(horizontal: true, vertical: false)
                         } else if tab == .favorites && !savedService.favoriteArticles.isEmpty {
                             Text("\(savedService.favoriteArticles.count)")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 6)
+                                .padding(.horizontal, compact ? 5 : 6)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(Color(red: 1.0, green: 0.8, blue: 0.2)))
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                     }
                     .foregroundColor(isSelected ? .white : .white.opacity(0.6))
+                    .padding(.horizontal, compact ? 8 : 10)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background(
@@ -430,12 +458,6 @@ public struct NewsFeedView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
-        .background(
-            Capsule()
-                .fill(Color.white.opacity(0.06))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-        )
     }
     
     // MARK: - Feed Publication Picker
@@ -513,76 +535,80 @@ public struct NewsFeedView: View {
         }
     }
     
-    // MARK: - Perspectives & Blindspots Sub-Tab Views
+    // MARK: - Orbit Lens & Blindspots Sub-Tab Views
 
     private var perspectivesLensBar: some View {
-        HStack(spacing: 10) {
-            ForEach(PerspectivesLens.allCases) { lens in
-                let isSelected = perspectivesLens == lens
-                let count = lens == .blindspots ? newsService.blindspotClusters.count : multiSourceClusters.count
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(PerspectivesLens.allCases) { lens in
+                    let isSelected = perspectivesLens == lens
+                    let count = lens == .blindspots ? newsService.blindspotClusters.count : multiSourceClusters.count
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                            perspectivesLens = lens
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: lens == .blindspots ? "eye.trianglebadge.exclamationmark" : "scale.3d")
+                                .font(.system(size: 11, weight: .bold))
+                            Text(lens.rawValue)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .lineLimit(1)
+                            if count > 0 {
+                                Text("\(count)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1.5)
+                                    .background(Capsule().fill(Color.white.opacity(0.16)))
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundColor(isSelected ? .white : .white.opacity(0.65))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(isSelected ? ThemeColors.accentCyan.opacity(0.20) : Color.white.opacity(0.06))
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(isSelected ? ThemeColors.accentCyan.opacity(0.45) : Color.white.opacity(0.10), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                        perspectivesLens = lens
+                    Task {
+                        await discoverCrossSpectrumForTopStories()
                     }
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: lens == .blindspots ? "eye.trianglebadge.exclamationmark" : "scale.3d")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(lens.rawValue)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        if count > 0 {
-                            Text("\(count)")
-                                .font(.system(size: 10, weight: .bold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(Capsule().fill(Color.white.opacity(0.16)))
+                        if isDiscoveringTopPerspectives {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(ThemeColors.accentCyan)
+                        } else {
+                            Image(systemName: "globe.europe.africa.fill")
+                                .font(.system(size: 11, weight: .bold))
                         }
+                        Text(isDiscoveringTopPerspectives ? "Scanning..." : "Expand Spectrum")
+                            .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
                     }
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.65))
-                    .padding(.horizontal, 12)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .padding(.horizontal, 11)
                     .padding(.vertical, 6)
                     .background(
                         Capsule()
-                            .fill(isSelected ? ThemeColors.accentCyan.opacity(0.20) : Color.white.opacity(0.06))
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(isSelected ? ThemeColors.accentCyan.opacity(0.45) : Color.white.opacity(0.10), lineWidth: 1)
-                            )
+                            .fill(ThemeColors.accentCyan.opacity(0.12))
+                            .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.28), lineWidth: 1))
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(isDiscoveringTopPerspectives)
             }
-
-            Spacer()
-
-            Button {
-                Task {
-                    await discoverCrossSpectrumForTopStories()
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    if isDiscoveringTopPerspectives {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .tint(ThemeColors.accentCyan)
-                    } else {
-                        Image(systemName: "globe.europe.africa.fill")
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                    Text(isDiscoveringTopPerspectives ? "Scanning..." : "Expand Cross-Spectrum")
-                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                }
-                .foregroundColor(ThemeColors.accentCyan)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(ThemeColors.accentCyan.opacity(0.12))
-                        .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.28), lineWidth: 1))
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isDiscoveringTopPerspectives)
         }
     }
 
@@ -597,13 +623,13 @@ public struct NewsFeedView: View {
                         .font(.system(size: 38))
                         .foregroundColor(ThemeColors.accentCyan.opacity(0.8))
 
-                    Text(perspectivesLens == .blindspots ? "No Asymmetric Blindspots Detected Yet" : "Discover Multi-Source Perspectives")
+                    Text(perspectivesLens == .blindspots ? "No Asymmetric Blindspots Detected Yet" : "Explore Orbit Lens Coverage")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
 
                     Text(newsService.selectedFeed.id != newsService.allNewsFeedSource.id
-                         ? "You are currently viewing a single feed (\(newsService.selectedFeed.name)). Switch to All News or tap Expand Cross-Spectrum to compare how other outlets cover today's top stories."
-                         : "Tap Expand Cross-Spectrum to pull 15–25 global and Romanian perspectives across Left, Center, and Right newsrooms for your top headlines.")
+                         ? "You are currently viewing a single feed (\(newsService.selectedFeed.name)). Switch to All News or tap Expand Spectrum to compare how other outlets cover today's top stories."
+                         : "Tap Expand Spectrum to pull 15–25 global and Romanian perspectives across Left, Center, and Right newsrooms for your top headlines.")
                         .font(.system(size: 13))
                         .foregroundColor(ThemeColors.fgMutedDark)
                         .multilineTextAlignment(.center)
@@ -633,7 +659,7 @@ public struct NewsFeedView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 12, weight: .bold))
-                                Text(isDiscoveringTopPerspectives ? "Expanding..." : "Expand Cross-Spectrum")
+                                Text(isDiscoveringTopPerspectives ? "Expanding..." : "Expand Spectrum")
                                     .font(.system(size: 12.5, weight: .bold))
                             }
                             .foregroundColor(ThemeColors.accentCyan)
@@ -665,7 +691,7 @@ public struct NewsFeedView: View {
                             }
                         },
                         onOpenPerspectives: { tappedCluster in
-                            selectedClusterForSheet = tappedCluster
+                            openOrbitLensWindow(for: tappedCluster)
                         },
                         onInspectProfile: { profile in
                             inspectedProfileFromCluster = profile
@@ -674,6 +700,23 @@ public struct NewsFeedView: View {
                 }
             }
         }
+    }
+
+    private func openOrbitLensWindow(for cluster: StoryCluster, activeLink: String? = nil) {
+        OrbitLensWindowManager.shared.open(
+            cluster: cluster,
+            activeArticleLink: activeLink,
+            onSelectArticle: { chosenArticle in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    selectedArticleForReader = chosenArticle
+                    isReadingArticle = true
+                }
+            },
+            onOpenInPrism: { chosenArticle in
+                PrismStore.shared.requestOpenInPrism(url: chosenArticle.link, title: chosenArticle.title)
+                NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+            }
+        )
     }
 
     private func discoverCrossSpectrumForTopStories() async {

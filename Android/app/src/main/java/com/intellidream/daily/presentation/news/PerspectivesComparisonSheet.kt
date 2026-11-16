@@ -173,15 +173,19 @@ fun PerspectivesComparisonPane(
                 )
                 Column {
                     Text(
-                        text = "Perspectives",
+                        text = "Orbit Lens",
                         color = Color.White,
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
                     )
                     Text(
                         text = "${activeCluster.uniqueOutletCount} distinct sources",
                         color = ThemeColors.textMuted,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }

@@ -92,7 +92,7 @@ namespace Daily_WinUI.ViewModels
 
         public string BiasSummaryLabel => _attachedCluster?.Distribution.SummaryLabel ?? string.Empty;
         public string PerspectivesPillLabel => _attachedCluster != null
-            ? $"{_attachedCluster.UniqueOutletCount} sources · Perspectives →"
+            ? $"{_attachedCluster.UniqueOutletCount} sources · Lens →"
             : string.Empty;
 
         public bool HasBlindspot => _attachedCluster?.IsBlindspot == true;

@@ -483,8 +483,8 @@
                             <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppFgColorBrush}"/>
                         </Button>
 
-                        <!-- Media Diet Analytics Button -->
-                        <Button x:Name="MediaDietButton" Click="MediaDietButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Width="36" Height="36" Padding="0" Margin="6,0,0,0" ToolTipService.ToolTip="Media Diet &amp; Spectrum Balance">
+                        <!-- Spectrum Analytics Button -->
+                        <Button x:Name="MediaDietButton" Click="MediaDietButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="18" Width="36" Height="36" Padding="0" Margin="6,0,0,0" ToolTipService.ToolTip="Spectrum · Monthly Reading Balance">
                             <FontIcon Glyph="&#xEB05;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF38BDF8"/>
                         </Button>
 
@@ -522,11 +522,11 @@
                     </Grid>
                 </PivotItem>
 
-                <!-- Tab 2: Perspectives & Blindspots -->
+                <!-- Tab 2: Orbit Lens & Blindspots -->
                 <PivotItem>
                     <PivotItem.Header>
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="Perspectives" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="Orbit Lens" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <Border Background="#FF0284C7" CornerRadius="10" MinWidth="20" Height="20" Padding="6,0" VerticalAlignment="Center">
                                 <TextBlock Text="{x:Bind PerspectiveClusters.Count, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
@@ -592,7 +592,7 @@
                                         Padding="12,6">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xEB05;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF2DD4BF"/>
-                                        <TextBlock Text="Media Diet" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                        <TextBlock Text="Spectrum" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -813,37 +813,6 @@
                         </Button.Flyout>
                     </Button>
 
-                    <!-- Perspectives Split-Pane Toggle Button -->
-                    <Button x:Name="ReaderPerspectivesToggleButton"
-                            Click="ReaderPerspectivesToggleButton_Click"
-                            Background="#2438BDF8"
-                            BorderBrush="#5538BDF8"
-                            BorderThickness="1"
-                            Translation="0,0,18"
-                            CornerRadius="18"
-                            Height="36"
-                            Padding="12,0"
-                            ToolTipService.ToolTip="Compare Cross-Spectrum Perspectives (Ctrl+Shift+P)">
-                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#FF38BDF8"/>
-                            <TextBlock x:Name="ReaderPerspectivesBtnText" Text="Perspectives" FontSize="12" FontWeight="SemiBold" Foreground="#FF38BDF8" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-
-                    <!-- Open in Prism Studio Button -->
-                    <Button x:Name="ReaderOpenInPrismButton"
-                            AutomationProperties.Name="Open Article in Prism Studio"
-                            Click="ReaderOpenInPrismButton_Click"
-                            Background="#2400E5FF"
-                            BorderBrush="#5500E5FF"
-                            BorderThickness="1"
-                            Translation="0,0,18"
-                            CornerRadius="18"
-                            Width="36" Height="36" Padding="0"
-                            ToolTipService.ToolTip="Open in Prism Studio (Ctrl+0)">
-                        <FontIcon Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#FF00E5FF"/>
-                    </Button>
-
                     <!-- Reader Favorite Button -->
                     <Button x:Name="ReaderFavoriteButton" Click="ReaderFavoriteButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Toggle Favorite">
                         <FontIcon x:Name="ReaderFavoriteIcon" Glyph="&#xE734;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
@@ -857,6 +826,29 @@
                     <!-- Pop-out Window Button -->
                     <Button x:Name="ReaderPopOutButton" Click="PopOutButton_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="Pop out to separate window">
                         <FontIcon Glyph="&#xE8A7;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
+                    </Button>
+
+                    <!-- Expandable More Menu (Orbit Lens & Open in Prism Studio with icons) -->
+                    <Button x:Name="ReaderMoreOptionsButton" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" Translation="0,0,18" CornerRadius="18" Width="36" Height="36" Padding="0" ToolTipService.ToolTip="More Actions">
+                        <FontIcon Glyph="&#xE712;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource AppFgColorBrush}"/>
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem x:Name="ReaderMenuOrbitLensItem"
+                                                Text="Orbit Lens"
+                                                Click="ReaderPerspectivesToggleButton_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8FD;" FontFamily="Segoe Fluent Icons" Foreground="#FF38BDF8"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Name="ReaderMenuPrismItem"
+                                                Text="Open in Prism Studio"
+                                                Click="ReaderOpenInPrismButton_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE774;" FontFamily="Segoe Fluent Icons" Foreground="#FF00E5FF"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
                     </Button>
                 </StackPanel>
             </Grid>
@@ -904,7 +896,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="Perspectives" FontSize="17" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
+                                    <TextBlock Text="Orbit Lens" FontSize="17" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}"/>
                                     <Border Background="#2438BDF8" CornerRadius="8" Padding="7,2">
                                         <TextBlock x:Name="ReaderPerspectiveEngineBadge" Text="Lens" FontSize="10" FontWeight="SemiBold" Foreground="#FF38BDF8"/>
                                     </Border>

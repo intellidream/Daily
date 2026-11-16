@@ -8,8 +8,10 @@ public struct PerspectivesComparisonPane: View {
     public let initialCluster: StoryCluster
     public var activeArticleLink: String? = nil
     public var isSplitPane: Bool = false
+    public var isInSeparateWindow: Bool = false
     public let onSelectArticle: (NewsArticle) -> Void
     public let onOpenInPrism: (NewsArticle) -> Void
+    public var onPopOut: (() -> Void)? = nil
     public var onClose: (() -> Void)? = nil
 
     @ObservedObject private var settingsService = SettingsService.shared
@@ -36,15 +38,19 @@ public struct PerspectivesComparisonPane: View {
         cluster: StoryCluster,
         activeArticleLink: String? = nil,
         isSplitPane: Bool = false,
+        isInSeparateWindow: Bool = false,
         onSelectArticle: @escaping (NewsArticle) -> Void,
         onOpenInPrism: @escaping (NewsArticle) -> Void,
+        onPopOut: (() -> Void)? = nil,
         onClose: (() -> Void)? = nil
     ) {
         self.initialCluster = cluster
         self.activeArticleLink = activeArticleLink
         self.isSplitPane = isSplitPane
+        self.isInSeparateWindow = isInSeparateWindow
         self.onSelectArticle = onSelectArticle
         self.onOpenInPrism = onOpenInPrism
+        self.onPopOut = onPopOut
         self.onClose = onClose
         self._cluster = State(initialValue: cluster)
     }
@@ -120,14 +126,20 @@ public struct PerspectivesComparisonPane: View {
 
     private var paneHeader: some View {
         HStack(spacing: 10) {
+            if isInSeparateWindow {
+                Spacer().frame(width: 68)
+            }
+
             HStack(spacing: 7) {
                 Image(systemName: "scale.3d")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(ThemeColors.accentCyan)
 
-                Text("Perspectives")
+                Text("Orbit Lens")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 if isExpandingSources || isSynthesizing {
                     ProgressView()
@@ -137,6 +149,18 @@ public struct PerspectivesComparisonPane: View {
             }
 
             Spacer()
+
+            if let onPopOut = onPopOut, isSplitPane {
+                Button(action: onPopOut) {
+                    Image(systemName: "macwindow.badge.plus")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .help("Open Orbit Lens in Separate Window")
+            }
 
             Button {
                 Task {
@@ -162,7 +186,8 @@ public struct PerspectivesComparisonPane: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, isInSeparateWindow ? 18 : 12)
+        .padding(.bottom, 12)
         .background(Color.black.opacity(0.28))
         .overlay(alignment: .bottom) {
             Divider().background(Color.white.opacity(0.10))

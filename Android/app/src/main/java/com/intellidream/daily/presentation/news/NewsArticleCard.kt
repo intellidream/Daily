@@ -93,53 +93,59 @@ fun NewsArticleCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header: Publication, Category Pill & Relative Time
+            // Header: Publication, Source Badge & Relative Time (single line, no premature truncation)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Publication Favicon
-                if (!article.publicationIconUrl.isNullOrBlank()) {
-                    DailyAsyncImage(
-                        url = article.publicationIconUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Publication Favicon
+                    if (!article.publicationIconUrl.isNullOrBlank()) {
+                        DailyAsyncImage(
+                            url = article.publicationIconUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    Text(
+                        text = article.publicationName ?: "News",
+                        color = ThemeColors.accentCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    // Sleek Variant A Micro-Pill (Bias · Factuality + non-standard Framing)
+                    OutletMicroBadge(
+                        profile = outletProfile,
+                        framing = framingTag,
+                        onClick = if (onInspectSource != null) {
+                            {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onInspectSource(outletProfile)
+                            }
+                        } else null
                     )
                 }
-
-                Text(
-                    text = article.publicationName ?: "News",
-                    color = ThemeColors.accentCyan,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-
-                // Sleek Variant A Micro-Pill (Bias · Factuality + non-standard Framing)
-                OutletMicroBadge(
-                    profile = outletProfile,
-                    framing = framingTag,
-                    onClick = if (onInspectSource != null) {
-                        {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onInspectSource(outletProfile)
-                        }
-                    } else null
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
 
                 Text(
                     text = article.relativeTimeFormatted,
                     color = ThemeColors.textMuted,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
 

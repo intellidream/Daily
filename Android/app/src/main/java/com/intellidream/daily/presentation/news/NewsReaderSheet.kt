@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Balance
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.TextFields
@@ -604,13 +605,12 @@ private fun ReaderTopToolbar(
             iconSize = 18.dp
         )
 
-        // Publication Title + One-Tap Substack Subscribe Pill
+        // Publication Title + Source Transparency Micro-Badge (single non-collapsing row)
+        val isWideBar = LocalConfigurationIsFoldable()
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (!article.publicationIconUrl.isNullOrBlank()) {
                 DailyAsyncImage(
@@ -628,7 +628,10 @@ private fun ReaderTopToolbar(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                modifier = Modifier.clickable { onInspectSource() }
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clickable { onInspectSource() }
             )
 
             OutletMicroBadge(
@@ -637,7 +640,7 @@ private fun ReaderTopToolbar(
                 onClick = onInspectSource
             )
 
-            if (substackTarget != null) {
+            if (isWideBar && substackTarget != null) {
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
@@ -669,41 +672,19 @@ private fun ReaderTopToolbar(
                             color = if (isSubstackSubscribed) Color.White.copy(alpha = 0.75f) else ThemeColors.accentCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
             }
         }
 
-        // Action Buttons Row (Grouped with explicit 8.dp spacing to prevent overlap)
+        // Core Quick Actions + Expandable Menu (Orbit Lens & Open in Prism moved inside More menu with icons)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Perspectives Toggle Button
-            ReaderActionButton(
-                onClick = onTogglePerspectives,
-                icon = Icons.Rounded.Balance,
-                contentDescription = "Perspectives ($outletCount sources)",
-                backgroundColor = if (isPerspectivesActive) ThemeColors.accentCyan.copy(alpha = 0.28f)
-                else Color.White.copy(alpha = 0.10f),
-                iconTint = if (isPerspectivesActive || outletCount >= 2) ThemeColors.accentCyan
-                else Color.White.copy(alpha = 0.85f),
-                iconSize = 16.dp
-            )
-
-            if (onOpenInPrism != null) {
-                ReaderActionButton(
-                    onClick = onOpenInPrism,
-                    icon = Icons.Rounded.Language,
-                    contentDescription = "Open in Prism",
-                    backgroundColor = ThemeColors.accentCyan.copy(alpha = 0.16f),
-                    iconTint = ThemeColors.accentCyan,
-                    iconSize = 16.dp
-                )
-            }
-
             // Read Later Toggle
             ReaderActionButton(
                 onClick = onToggleReadLater,
@@ -726,7 +707,7 @@ private fun ReaderTopToolbar(
                 iconSize = 16.dp
             )
 
-            // More Options Menu
+            // More Options Menu (Orbit Lens, Open in Prism Studio, Source Transparency, Share, Text Size)
             Box {
                 ReaderActionButton(
                     onClick = { showMenu = true },
@@ -750,16 +731,24 @@ private fun ReaderTopToolbar(
                 DropdownMenuItem(
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Rounded.Share,
+                            imageVector = Icons.Rounded.Balance,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = ThemeColors.accentCyan,
                             modifier = Modifier.size(16.dp)
                         )
                     },
-                    text = { Text("Share Article", color = Color.White, fontSize = 13.sp) },
+                    text = {
+                        val suffix = if (outletCount >= 2) " ($outletCount sources)" else ""
+                        Text(
+                            text = if (isPerspectivesActive) "Hide Orbit Lens" else "Orbit Lens$suffix",
+                            color = ThemeColors.accentCyan,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
                     onClick = {
                         showMenu = false
-                        onShare()
+                        onTogglePerspectives()
                     }
                 )
 
@@ -780,6 +769,40 @@ private fun ReaderTopToolbar(
                         }
                     )
                 }
+
+                DropdownMenuItem(
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    text = { Text("Source Transparency", color = Color.White, fontSize = 13.sp) },
+                    onClick = {
+                        showMenu = false
+                        onInspectSource()
+                    }
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 4.dp))
+
+                DropdownMenuItem(
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Share,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    text = { Text("Share Article", color = Color.White, fontSize = 13.sp) },
+                    onClick = {
+                        showMenu = false
+                        onShare()
+                    }
+                )
 
                 DropdownMenuItem(
                     leadingIcon = {

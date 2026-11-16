@@ -17,6 +17,7 @@ public struct NewsReaderView: View {
     @State private var isHoveringBubble: Bool = false
     @State private var showPerspectivesSplit: Bool = false
     @State private var showSourcePopover: Bool = false
+    @State private var containerWidth: CGFloat = 600
     
     @ObservedObject private var newsService = NewsService.shared
     @ObservedObject private var savedService = SavedArticlesService.shared
@@ -81,8 +82,9 @@ public struct NewsReaderView: View {
                 // Top Glass Toolbar
                 readerToolbar
                 
-                // Main Content Area (100% Article OR 65% Article / 35% Perspectives Split)
+                // Main Content Area (100% Article OR 62% Article / 38% Orbit Lens Split on wide windows)
                 GeometryReader { geo in
+                    let isWideEnoughForSplit = geo.size.width >= 940
                     HStack(spacing: 0) {
                         // Left / Primary Distraction-Free Article Canvas
                         ZStack(alignment: .bottom) {
@@ -122,10 +124,10 @@ public struct NewsReaderView: View {
                                 }
                             }
                         }
-                        .frame(width: showPerspectivesSplit ? max(360, geo.size.width * 0.64) : geo.size.width)
+                        .frame(width: (showPerspectivesSplit && isWideEnoughForSplit) ? (geo.size.width - max(360, geo.size.width * 0.38) - 1) : geo.size.width)
                         
-                        // Right 36% Perspectives Split Pane
-                        if showPerspectivesSplit {
+                        // Right >= 360pt Orbit Lens Split Pane (ONLY shown inline on spacious separate/wide windows)
+                        if showPerspectivesSplit && isWideEnoughForSplit {
                             Divider()
                                 .background(Color.white.opacity(0.14))
                             
@@ -133,18 +135,18 @@ public struct NewsReaderView: View {
                                 cluster: activeCluster,
                                 activeArticleLink: currentArticle.link,
                                 isSplitPane: true,
+                                isInSeparateWindow: false,
                                 onSelectArticle: { nextArticle in
                                     loadArticle(nextArticle)
                                 },
                                 onOpenInPrism: { targetArticle in
-                                    PrismStore.shared.requestOpenInPrism(url: targetArticle.link, title: targetArticle.title)
-                                    if isInSeparateWindow {
-                                        onDismiss()
-                                        MacOSWindowManager.shared.activateMainWindow(selectingTab: .prism)
-                                    } else {
-                                        onDismiss()
-                                        NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+                                    openInPrism(url: targetArticle.link, title: targetArticle.title)
+                                },
+                                onPopOut: {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                                        showPerspectivesSplit = false
                                     }
+                                    openOrbitLensFloatingWindow()
                                 },
                                 onClose: {
                                     withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
@@ -152,8 +154,16 @@ public struct NewsReaderView: View {
                                     }
                                 }
                             )
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(width: max(360, geo.size.width * 0.38))
+                            .frame(maxHeight: .infinity)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
+                    }
+                    .onAppear { containerWidth = geo.size.width }
+                    .onChange(of: geo.size.width) { _, newW in
+                        containerWidth = newW
+                        if newW < 940 && showPerspectivesSplit {
+                            showPerspectivesSplit = false
                         }
                     }
                 }
@@ -165,7 +175,7 @@ public struct NewsReaderView: View {
     }
     
     private var readerToolbar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Dismiss / Back Button or Traffic lights spacer
             if isInSeparateWindow {
                 Spacer()
@@ -174,13 +184,15 @@ public struct NewsReaderView: View {
                 Button {
                     onDismiss()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 12.5, weight: .bold))
                         Text("Stories")
                             .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
                     }
-                    .foregroundColor(.white.opacity(0.9))
+                    .fixedSize(horizontal: true, vertical: false)
+                    .foregroundColor(.white.opacity(0.92))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
@@ -189,210 +201,168 @@ public struct NewsReaderView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .layoutPriority(3)
                 .keyboardShortcut(.escape, modifiers: [])
                 .help("Back to Feed (Esc)")
             }
             
-            // Publication Branding (scrolls horizontally if long)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    if let icon = currentArticle.publicationIconUrl, let url = URL(string: icon) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable()
-                                    .scaledToFill()
-                                    .frame(width: 18, height: 18)
-                                    .clipShape(Circle())
-                            default:
-                                EmptyView()
-                            }
+            // Publication Branding + Inline Bias & Factuality Badge (always visible on 1 crisp line)
+            HStack(spacing: 6) {
+                if let icon = currentArticle.publicationIconUrl, let url = URL(string: icon) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable()
+                                .scaledToFill()
+                                .frame(width: 18, height: 18)
+                                .clipShape(Circle())
+                        default:
+                            EmptyView()
                         }
                     }
-                    
+                    .layoutPriority(2)
+                }
+                
+                Button {
+                    showSourcePopover = true
+                } label: {
+                    Text(currentArticle.publicationName ?? currentOutletProfile.name)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .buttonStyle(.plain)
+                .layoutPriority(1)
+                .popover(isPresented: $showSourcePopover) {
+                    SourceTransparencyPopover(profile: currentOutletProfile) {
+                        showSourcePopover = false
+                    }
+                }
+                
+                OutletMicroBadge(profile: currentOutletProfile, framing: currentFraming, compact: true) {
+                    showSourcePopover = true
+                }
+                .layoutPriority(2)
+                
+                if containerWidth >= 540, let substackInfo = extractSubstackInfo(from: currentArticle) {
+                    let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
                     Button {
-                        showSourcePopover = true
+                        if !isSubscribed {
+                            withAnimation {
+                                newsService.subscribeToSubstackPublication(
+                                    name: substackInfo.name,
+                                    feedUrl: substackInfo.feedUrl,
+                                    iconUrl: currentArticle.publicationIconUrl ?? ""
+                                )
+                            }
+                            triggerHaptic()
+                        }
                     } label: {
-                        Text(currentArticle.publicationName ?? currentOutletProfile.name)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .fixedSize(horizontal: true, vertical: false)
+                        HStack(spacing: 3) {
+                            Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
+                                .font(.system(size: 11))
+                            Text(isSubscribed ? "Subscribed" : "Subscribe")
+                                .font(.system(size: 11, weight: .bold))
+                                .lineLimit(1)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundColor(isSubscribed ? .white.opacity(0.65) : ThemeColors.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
+                        )
                     }
                     .buttonStyle(.plain)
-                    .popover(isPresented: $showSourcePopover) {
-                        SourceTransparencyPopover(profile: currentOutletProfile) {
-                            showSourcePopover = false
-                        }
-                    }
-                    
-                    OutletMicroBadge(profile: currentOutletProfile, framing: currentFraming, compact: true) {
-                        showSourcePopover = true
-                    }
-                    
-                    if let substackInfo = extractSubstackInfo(from: currentArticle) {
-                        let isSubscribed = newsService.isSubscribedToSubstack(feedUrl: substackInfo.feedUrl)
-                        Button {
-                            if !isSubscribed {
-                                withAnimation {
-                                    newsService.subscribeToSubstackPublication(
-                                        name: substackInfo.name,
-                                        feedUrl: substackInfo.feedUrl,
-                                        iconUrl: currentArticle.publicationIconUrl ?? ""
-                                    )
-                                }
-                                triggerHaptic()
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: isSubscribed ? "checkmark.circle.fill" : "plus.circle.fill")
-                                    .font(.system(size: 11))
-                                Text(isSubscribed ? "Subscribed" : "Subscribe")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .foregroundColor(isSubscribed ? .white.opacity(0.65) : ThemeColors.accentCyan)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                }
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            
+            // Core Quick Actions + Expandable Menu (Orbit Lens & Open in Prism moved neatly into More menu)
+            HStack(spacing: 8) {
+                // Hidden keyboard shortcut bridge for ⇧⌘P
+                Button("") {
+                    toggleOrbitLens()
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+
+                // Open in Separate Window Button (shown in main window)
+                if !isInSeparateWindow, let onOpenInSeparateWindow = onOpenInSeparateWindow {
+                    Button {
+                        onOpenInSeparateWindow()
+                    } label: {
+                        Image(systemName: "macwindow.badge.plus")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 32, height: 32)
                             .background(
-                                Capsule().fill(isSubscribed ? Color.white.opacity(0.08) : ThemeColors.accentCyan.opacity(0.15))
+                                Circle().fill(Color.white.opacity(0.08))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                             )
-                        }
-                        .buttonStyle(.plain)
                     }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut("o", modifiers: [.command])
+                    .help("Open in Separate Window (⌘O)")
                 }
-            }
-            
-            Spacer(minLength: 4)
-
-            // Perspectives Side-by-Side Split Toggle
-            Button {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                    showPerspectivesSplit.toggle()
-                }
-                triggerHaptic()
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "scale.3d")
-                        .font(.system(size: 12.5, weight: .bold))
-                    Text("Perspectives")
-                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                    if activeCluster.uniqueOutletCount >= 2 {
-                        Text("\(activeCluster.uniqueOutletCount)")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(Color.white.opacity(0.18)))
-                    }
-                }
-                .foregroundColor(showPerspectivesSplit ? .black : ThemeColors.accentCyan)
-                .padding(.horizontal, 10)
-                .frame(height: 32)
-                .background(
-                    Capsule()
-                        .fill(showPerspectivesSplit ? ThemeColors.accentCyan : ThemeColors.accentCyan.opacity(0.14))
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(ThemeColors.accentCyan.opacity(0.40), lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut("p", modifiers: [.command, .shift])
-            .help("Compare Multi-Source Perspectives (⇧⌘P)")
-
-            // Open Live Article in Prism Studio Button
-            Button {
-                PrismStore.shared.requestOpenInPrism(url: currentArticle.link, title: currentArticle.title)
-                if isInSeparateWindow {
-                    onDismiss()
-                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .prism)
-                } else {
-                    onDismiss()
-                    NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
-                }
-            } label: {
-                Image(systemName: "safari.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(ThemeColors.accentCyan.opacity(0.14))
-                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.30), lineWidth: 1))
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("Open Live Web in Prism Studio")
-            
-            // Open in Separate Window Button (shown in main window)
-            if !isInSeparateWindow, let onOpenInSeparateWindow = onOpenInSeparateWindow {
+                
+                // Read Later Bookmark Button
                 Button {
-                    onOpenInSeparateWindow()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        savedService.toggleReadLater(for: currentArticle)
+                    }
+                    triggerHaptic()
                 } label: {
-                    Image(systemName: "macwindow.badge.plus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.85))
+                    Image(systemName: isReadLater ? "bookmark.fill" : "bookmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isReadLater ? ThemeColors.accentCyan : .white.opacity(0.8))
                         .frame(width: 32, height: 32)
                         .background(
-                            Circle().fill(Color.white.opacity(0.08))
-                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            Circle().fill(isReadLater ? ThemeColors.accentCyan.opacity(0.2) : Color.white.opacity(0.08))
                         )
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut("o", modifiers: [.command])
-                .help("Open in Separate Window (⌘O)")
-            }
-            
-            // Read Later Bookmark Button
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    savedService.toggleReadLater(for: currentArticle)
-                }
-                triggerHaptic()
-            } label: {
-                Image(systemName: isReadLater ? "bookmark.fill" : "bookmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(isReadLater ? ThemeColors.accentCyan : .white.opacity(0.8))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(isReadLater ? ThemeColors.accentCyan.opacity(0.2) : Color.white.opacity(0.08))
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("Save for Later")
-            
-            // Favorite Star Button
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    savedService.toggleFavorite(for: currentArticle)
-                }
-                triggerHaptic()
-            } label: {
-                Image(systemName: isFavorite ? "star.fill" : "star")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2) : .white.opacity(0.8))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle().fill(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2).opacity(0.2) : Color.white.opacity(0.08))
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("Favorite")
-            
-            // Far-right Expandable Menu Button containing collapsed actions
-            moreOptionsMenu
-            
-            // Trailing Close Button when in separate window
-            if isInSeparateWindow {
+                .help("Save for Later")
+                
+                // Favorite Star Button
                 Button {
-                    onDismiss()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        savedService.toggleFavorite(for: currentArticle)
+                    }
+                    triggerHaptic()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.white.opacity(0.75))
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2) : .white.opacity(0.8))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(isFavorite ? Color(red: 1.0, green: 0.8, blue: 0.2).opacity(0.2) : Color.white.opacity(0.08))
+                        )
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut(.escape, modifiers: [])
-                .help("Close Window (Esc)")
+                .help("Favorite")
+                
+                // Far-right Expandable Menu Button (Orbit Lens, Open in Prism, Source Transparency, Share, Safari, Text Size)
+                moreOptionsMenu
+                
+                // Trailing Close Button when in separate window
+                if isInSeparateWindow {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white.opacity(0.75))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.escape, modifiers: [])
+                    .help("Close Window (Esc)")
+                }
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(3)
         }
         .padding(.horizontal, 16)
         .padding(.top, isInSeparateWindow ? 18 : 12)
@@ -410,6 +380,30 @@ public struct NewsReaderView: View {
     
     private var moreOptionsMenu: some View {
         Menu {
+            // Orbit Lens (Compare Multi-Source Coverage)
+            Button {
+                toggleOrbitLens()
+            } label: {
+                let suffix = activeCluster.uniqueOutletCount >= 2 ? " (\(activeCluster.uniqueOutletCount) sources)" : ""
+                Label("Orbit Lens\(suffix)", systemImage: "scale.3d")
+            }
+
+            // Open Live Article in Prism Studio
+            Button {
+                openInPrism(url: currentArticle.link, title: currentArticle.title)
+            } label: {
+                Label("Open in Prism Studio", systemImage: "safari.fill")
+            }
+
+            // Source Transparency
+            Button {
+                showSourcePopover = true
+            } label: {
+                Label("Source Transparency", systemImage: "info.circle")
+            }
+
+            Divider()
+
             // Share Article
             if let url = URL(string: currentArticle.link) {
                 ShareLink(item: url, subject: Text(currentArticle.title), message: Text(currentArticle.title)) {
@@ -668,9 +662,45 @@ public struct NewsReaderView: View {
         .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
     }
     
+    private func toggleOrbitLens() {
+        triggerHaptic()
+        if containerWidth >= 940 {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                showPerspectivesSplit.toggle()
+            }
+        } else {
+            openOrbitLensFloatingWindow()
+        }
+    }
+
+    private func openOrbitLensFloatingWindow() {
+        OrbitLensWindowManager.shared.open(
+            cluster: activeCluster,
+            activeArticleLink: currentArticle.link,
+            onSelectArticle: { nextArticle in
+                loadArticle(nextArticle)
+            },
+            onOpenInPrism: { targetArticle in
+                openInPrism(url: targetArticle.link, title: targetArticle.title)
+            }
+        )
+    }
+
+    private func openInPrism(url: String, title: String) {
+        PrismStore.shared.requestOpenInPrism(url: url, title: title)
+        if isInSeparateWindow {
+            onDismiss()
+            MacOSWindowManager.shared.activateMainWindow(selectingTab: .prism)
+        } else {
+            onDismiss()
+            NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.prism)
+        }
+    }
+
     private func loadArticle(_ article: NewsArticle) {
         currentArticle = article
         isLoadingFullArticle = true
+        OrbitLensWindowManager.shared.updateActiveArticleLink(article.link)
         MediaDietStore.shared.recordArticleRead(article, cluster: newsService.cluster(for: article))
         
         // Compute smart recommendations
