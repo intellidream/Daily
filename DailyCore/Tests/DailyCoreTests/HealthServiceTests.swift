@@ -1572,6 +1572,60 @@ struct HealthServiceTests {
         )
     }
 
+    @Test func testSleepUploadFingerprintStaleRemoteSelfHeal() {
+        let start = Date(timeIntervalSince1970: 1794787560) // 2026-11-16T00:06:00Z
+        let staleEnd = start.addingTimeInterval(25680)
+        let fullEnd = start.addingTimeInterval(29160)
+
+        let fullLocal = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-16_primary_sleep_pixel_watch_5",
+            userId: "u1",
+            localDate: "2026-11-16",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Pixel Watch 5",
+            hostDeviceName: "Trapper",
+            startTime: start,
+            endTime: fullEnd,
+            durationSeconds: 28200,
+            timeInBedSeconds: 29160,
+            deepSeconds: 3660,
+            remSeconds: 7380,
+            lightSeconds: 17160,
+            awakeSeconds: 960,
+            stages: [
+                SleepStageRecord(id: "s1", stageType: .deep, startTime: start, endTime: start.addingTimeInterval(3660)),
+                SleepStageRecord(id: "s2", stageType: .rem, startTime: start.addingTimeInterval(3660), endTime: fullEnd)
+            ],
+            sourcePriority: 2
+        )
+
+        let staleRemote = HealthSleepSessionRecord(
+            id: "sleep_u1_2026-11-16_primary_sleep_pixel_watch_5",
+            userId: "u1",
+            localDate: "2026-11-16",
+            sessionType: "primary_sleep",
+            sourceDeviceKey: "Pixel Watch 5",
+            hostDeviceName: "Radar",
+            startTime: start,
+            endTime: staleEnd,
+            durationSeconds: 24540,
+            timeInBedSeconds: 25680,
+            deepSeconds: 3600,
+            remSeconds: 5700,
+            lightSeconds: 15240,
+            awakeSeconds: 1140,
+            stages: [
+                SleepStageRecord(id: "r1", stageType: .light, startTime: start, endTime: staleEnd)
+            ],
+            sourcePriority: 2
+        )
+
+        #expect(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(local: [fullLocal], remote: [fullLocal]) == false)
+        #expect(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(local: [fullLocal], remote: nil) == false)
+        #expect(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(local: [fullLocal], remote: []) == true)
+        #expect(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(local: [fullLocal], remote: [staleRemote]) == true)
+    }
+
     @Test func testAtomicSleepBridgeOverridesStaleDefaultsAndRejectsYesterdaySummary() async throws {
         let suiteName = "group.com.intellidream.daily.test.sleep.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

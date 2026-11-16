@@ -63,6 +63,8 @@ namespace Daily_WinUI.Views
 
         // Selected Stage Pill State for Hypnogram
         private HealthTelemetry? _selectedStage = null;
+        private bool _isLoadingData = false;
+        private bool _reloadPending = false;
 
         // Chart Data Collections
         public ObservableCollection<HealthChartData> HourlyStepsCollection { get; } = new();
@@ -243,68 +245,82 @@ namespace Daily_WinUI.Views
 
         public async Task LoadDataAsync()
         {
+            if (_isLoadingData)
+            {
+                _reloadPending = true;
+                return;
+            }
+            _isLoadingData = true;
             try
             {
-                // 1. Load canonical daily summary + lean per-device tables + health_sources from HealthHubService
-                if (_healthHubService != null)
+                do
                 {
-                    var summaryTask = _healthHubService.GetDailySummaryAsync(_selectedDate);
-                    var sleepTask = _healthHubService.GetLeanSleepSessionsAsync(_selectedDate);
-                    var vitalsTask = _healthHubService.GetLeanDailyVitalsAsync(_selectedDate);
-                    var hrTask = _healthHubService.GetLeanIntradayHeartRateAsync(_selectedDate);
-                    var sourcesTask = _healthHubService.GetHealthSourcesAsync();
-                    await Task.WhenAll(summaryTask, sleepTask, vitalsTask, hrTask, sourcesTask);
+                    _reloadPending = false;
+                    // 1. Load canonical daily summary + lean per-device tables + health_sources from HealthHubService
+                    if (_healthHubService != null)
+                    {
+                        var summaryTask = _healthHubService.GetDailySummaryAsync(_selectedDate);
+                        var sleepTask = _healthHubService.GetLeanSleepSessionsAsync(_selectedDate);
+                        var vitalsTask = _healthHubService.GetLeanDailyVitalsAsync(_selectedDate);
+                        var hrTask = _healthHubService.GetLeanIntradayHeartRateAsync(_selectedDate);
+                        var sourcesTask = _healthHubService.GetHealthSourcesAsync();
+                        await Task.WhenAll(summaryTask, sleepTask, vitalsTask, hrTask, sourcesTask);
 
-                    _currentSummary = summaryTask.Result;
-                    _leanSleepSessions = sleepTask.Result ?? new();
-                    _leanDailyVitals = vitalsTask.Result ?? new();
-                    _leanIntradayHr = hrTask.Result ?? new();
-                    _healthSources = sourcesTask.Result ?? new();
-                }
-                else
-                {
-                    _leanSleepSessions = new();
-                    _leanDailyVitals = new();
-                    _leanIntradayHr = new();
-                    _healthSources = new();
-                }
+                        _currentSummary = summaryTask.Result;
+                        _leanSleepSessions = sleepTask.Result ?? new();
+                        _leanDailyVitals = vitalsTask.Result ?? new();
+                        _leanIntradayHr = hrTask.Result ?? new();
+                        _healthSources = sourcesTask.Result ?? new();
+                    }
+                    else
+                    {
+                        _leanSleepSessions = new();
+                        _leanDailyVitals = new();
+                        _leanIntradayHr = new();
+                        _healthSources = new();
+                    }
 
-                // 2. Load metrics list
-                if (_healthService != null)
-                {
-                    _metrics = await _healthService.FetchMetricsForDateAsync(_selectedDate);
-                }
+                    // 2. Load metrics list
+                    if (_healthService != null)
+                    {
+                        _metrics = await _healthService.FetchMetricsForDateAsync(_selectedDate);
+                    }
 
-                // 3. Load sleep session & hypnogram
-                if (_healthService != null)
-                {
-                    var (primary, all) = await _healthService.GetSleepSessionsAsync(_selectedDate);
-                    _primarySleepSession = primary;
-                    _allSleepSessions = all;
-                }
+                    // 3. Load sleep session & hypnogram
+                    if (_healthService != null)
+                    {
+                        var (primary, all) = await _healthService.GetSleepSessionsAsync(_selectedDate);
+                        _primarySleepSession = primary;
+                        _allSleepSessions = all;
+                    }
 
-                // 4. Load intraday telemetry for continuous HR and steps
-                if (_healthService != null)
-                {
-                    var startOfDay = _selectedDate.Date;
-                    var endOfDay = startOfDay.AddDays(1).AddTicks(-1);
-                    _telemetryData = await _healthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
-                }
+                    // 4. Load intraday telemetry for continuous HR and steps
+                    if (_healthService != null)
+                    {
+                        var startOfDay = _selectedDate.Date;
+                        var endOfDay = startOfDay.AddDays(1).AddTicks(-1);
+                        _telemetryData = await _healthService.GetHealthTelemetryAsync(startOfDay, endOfDay);
+                    }
 
-                _rawMetrics = _metrics;
-                _rawSleepSessions = _allSleepSessions;
-                _rawPrimarySleepSession = _primarySleepSession;
+                    _rawMetrics = _metrics;
+                    _rawSleepSessions = _allSleepSessions;
+                    _rawPrimarySleepSession = _primarySleepSession;
 
-                // PopulateAvailableDevices FIRST so stale device filter auto-resets to All Devices when switching dates
-                PopulateAvailableDevices();
-                ApplyDeviceFilter();
-                await LoadTrendsHistoryAsync();
+                    // PopulateAvailableDevices FIRST so stale device filter auto-resets to All Devices when switching dates
+                    PopulateAvailableDevices();
+                    ApplyDeviceFilter();
+                    await LoadTrendsHistoryAsync();
 
-                await RefreshDerivedDataAsync();
+                    await RefreshDerivedDataAsync();
+                } while (_reloadPending);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[HealthDetailPage] LoadDataAsync error: {ex.Message}");
+            }
+            finally
+            {
+                _isLoadingData = false;
             }
         }
 

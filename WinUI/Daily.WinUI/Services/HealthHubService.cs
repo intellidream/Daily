@@ -28,9 +28,10 @@ namespace Daily_WinUI.Services
         private readonly Daily.Services.Auth.ISupabaseSessionGuardian? _sessionGuardian;
         private readonly ConcurrentDictionary<string, HealthDailySummaryRecord> _memoryCache = new();
         private readonly ConcurrentDictionary<string, byte> _fullSummaryAttemptedDates = new();
-        private readonly ConcurrentDictionary<string, List<HealthSleepSessionRecord>> _sleepCache = new();
-        private readonly ConcurrentDictionary<string, List<HealthDailyVitalsRecord>> _vitalsCache = new();
-        private readonly ConcurrentDictionary<string, List<HealthIntradayHeartRateRecord>> _hrCache = new();
+        private readonly ConcurrentDictionary<string, DateTime> _summaryRemoteFetchedUtc = new();
+        private readonly ConcurrentDictionary<string, (DateTime CachedUtc, List<HealthSleepSessionRecord> Rows)> _sleepCache = new();
+        private readonly ConcurrentDictionary<string, (DateTime CachedUtc, List<HealthDailyVitalsRecord> Rows)> _vitalsCache = new();
+        private readonly ConcurrentDictionary<string, (DateTime CachedUtc, List<HealthIntradayHeartRateRecord> Rows)> _hrCache = new();
         private readonly ConcurrentDictionary<string, Task<HealthDailySummaryRecord?>> _inFlightFetches = new();
         private readonly ConcurrentDictionary<string, Task<List<HealthSleepSessionRecord>>> _inFlightSleepFetches = new();
         private readonly ConcurrentDictionary<string, Task<List<HealthDailyVitalsRecord>>> _inFlightVitalsFetches = new();
@@ -329,6 +330,7 @@ namespace Daily_WinUI.Services
 
                 var resp = await fetchTask.ConfigureAwait(false);
                 _fullSummaryAttemptedDates[dateStr] = 1;
+                _summaryRemoteFetchedUtc[dateStr] = DateTime.UtcNow;
                 var record = resp.Models.FirstOrDefault();
                 if (record != null)
                 {
@@ -354,6 +356,46 @@ namespace Daily_WinUI.Services
             return _memoryCache.TryGetValue(dateStr, out var mem) ? mem : null;
         }
 
+        private bool IsRealtimeHealthy =>
+            _realtimeChannel?.IsJoined == true &&
+            _vitalsRealtimeChannel?.IsJoined == true &&
+            _sleepRealtimeChannel?.IsJoined == true;
+
+        private bool IsLeanCacheFresh(DateTime date, DateTime cachedUtc)
+        {
+            if (date.Date < DateTime.Today.AddDays(-1))
+            {
+                return true;
+            }
+            var ttl = IsRealtimeHealthy ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(30);
+            return (DateTime.UtcNow - cachedUtc) < ttl;
+        }
+
+        private void TriggerBackgroundSummaryRefreshIfStale(DateTime date)
+        {
+            if (date.Date < DateTime.Today.AddDays(-1))
+            {
+                return;
+            }
+            var dateStr = date.ToString("yyyy-MM-dd");
+            var ttl = IsRealtimeHealthy ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(30);
+            var now = DateTime.UtcNow;
+            if (_summaryRemoteFetchedUtc.TryGetValue(dateStr, out var lastRemote) && (now - lastRemote) < ttl)
+            {
+                return;
+            }
+            _summaryRemoteFetchedUtc[dateStr] = now;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SetupRealtimeSubscriptionAsync(forceRecreate: false).ConfigureAwait(false);
+                    await RefreshSummaryFromRemoteAsync(date).ConfigureAwait(false);
+                }
+                catch { }
+            });
+        }
+
         public async Task<HealthDailySummaryRecord?> GetDailySummaryAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
@@ -362,6 +404,10 @@ namespace Daily_WinUI.Services
             if (!forceRefresh && _memoryCache.TryGetValue(dateStr, out var cached) &&
                 (cached.Summary != null || !hasActiveSession || _fullSummaryAttemptedDates.ContainsKey(dateStr)))
             {
+                if (hasActiveSession)
+                {
+                    TriggerBackgroundSummaryRefreshIfStale(date);
+                }
                 return cached;
             }
 
@@ -379,6 +425,10 @@ namespace Daily_WinUI.Services
                         }
                         if (record.Summary != null || !hasActiveSession || _fullSummaryAttemptedDates.ContainsKey(dateStr))
                         {
+                            if (hasActiveSession)
+                            {
+                                TriggerBackgroundSummaryRefreshIfStale(date);
+                            }
                             return record;
                         }
                     }
@@ -410,16 +460,16 @@ namespace Daily_WinUI.Services
         public async Task<List<HealthSleepSessionRecord>> GetLeanSleepSessionsAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-            var hasCached = _sleepCache.TryGetValue(dateStr, out var cached);
-            if (!forceRefresh && hasCached && cached != null)
+            var hasCached = _sleepCache.TryGetValue(dateStr, out var cachedEntry);
+            if (!forceRefresh && hasCached && cachedEntry.Rows != null && IsLeanCacheFresh(date, cachedEntry.CachedUtc))
             {
-                return cached;
+                return cachedEntry.Rows;
             }
 
             var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
             if (string.IsNullOrEmpty(currentUserId))
             {
-                return cached ?? new List<HealthSleepSessionRecord>();
+                return cachedEntry.Rows ?? new List<HealthSleepSessionRecord>();
             }
 
             var key = dateStr + (forceRefresh ? "_force" : "");
@@ -444,7 +494,7 @@ namespace Daily_WinUI.Services
                         var list = resp.Models
                             .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.DurationSeconds > 0)
                             .ToList();
-                        _sleepCache[dateStr] = list;
+                        _sleepCache[dateStr] = (DateTime.UtcNow, list);
                         return list;
                     }
                 }
@@ -457,23 +507,23 @@ namespace Daily_WinUI.Services
                     _inFlightSleepFetches.TryRemove(key, out Task<List<HealthSleepSessionRecord>>? _);
                 }
 
-                return cached ?? new List<HealthSleepSessionRecord>();
+                return cachedEntry.Rows ?? new List<HealthSleepSessionRecord>();
             })).ConfigureAwait(false);
         }
 
         public async Task<List<HealthDailyVitalsRecord>> GetLeanDailyVitalsAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-            var hasCached = _vitalsCache.TryGetValue(dateStr, out var cached);
-            if (!forceRefresh && hasCached && cached != null)
+            var hasCached = _vitalsCache.TryGetValue(dateStr, out var cachedEntry);
+            if (!forceRefresh && hasCached && cachedEntry.Rows != null && IsLeanCacheFresh(date, cachedEntry.CachedUtc))
             {
-                return cached;
+                return cachedEntry.Rows;
             }
 
             var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
             if (string.IsNullOrEmpty(currentUserId))
             {
-                return cached ?? new List<HealthDailyVitalsRecord>();
+                return cachedEntry.Rows ?? new List<HealthDailyVitalsRecord>();
             }
 
             var key = dateStr + (forceRefresh ? "_force" : "");
@@ -498,7 +548,7 @@ namespace Daily_WinUI.Services
                         var list = resp.Models
                             .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.HasSignal)
                             .ToList();
-                        _vitalsCache[dateStr] = list;
+                        _vitalsCache[dateStr] = (DateTime.UtcNow, list);
                         return list;
                     }
                 }
@@ -511,31 +561,31 @@ namespace Daily_WinUI.Services
                     _inFlightVitalsFetches.TryRemove(key, out Task<List<HealthDailyVitalsRecord>>? _);
                 }
 
-                return cached ?? new List<HealthDailyVitalsRecord>();
+                return cachedEntry.Rows ?? new List<HealthDailyVitalsRecord>();
             })).ConfigureAwait(false);
         }
 
         public async Task<List<HealthIntradayHeartRateRecord>> GetLeanIntradayHeartRateAsync(DateTime date, bool forceRefresh = false)
         {
             var dateStr = date.ToString("yyyy-MM-dd");
-            var hasCached = _hrCache.TryGetValue(dateStr, out var cached);
-            if (!forceRefresh && hasCached && cached != null)
+            var hasCached = _hrCache.TryGetValue(dateStr, out var cachedEntry);
+            if (!forceRefresh && hasCached && cachedEntry.Rows != null && IsLeanCacheFresh(date, cachedEntry.CachedUtc))
             {
-                return cached;
+                return cachedEntry.Rows;
             }
 
             // Pillar 2: health_intraday_heart_rate has a 7-day rolling retention; older dates use archived Summary.Cardiovascular.IntradayHeartRate.
             if ((DateTime.Today - date.Date).TotalDays > 8)
             {
                 var empty = new List<HealthIntradayHeartRateRecord>();
-                _hrCache[dateStr] = empty;
+                _hrCache[dateStr] = (DateTime.UtcNow, empty);
                 return empty;
             }
 
             var currentUserId = await EnsureUserIdAsync().ConfigureAwait(false);
             if (string.IsNullOrEmpty(currentUserId))
             {
-                return cached ?? new List<HealthIntradayHeartRateRecord>();
+                return cachedEntry.Rows ?? new List<HealthIntradayHeartRateRecord>();
             }
 
             var key = dateStr + (forceRefresh ? "_force" : "");
@@ -563,7 +613,7 @@ namespace Daily_WinUI.Services
                             .Where(r => !DeviceSource.IsVirtual(r.SourceDeviceKey) && r.BpmAvg > 0)
                             .OrderBy(r => r.BucketMinute)
                             .ToList();
-                        _hrCache[dateStr] = list;
+                        _hrCache[dateStr] = (DateTime.UtcNow, list);
                         return list;
                     }
                 }
@@ -576,7 +626,7 @@ namespace Daily_WinUI.Services
                     _inFlightHrFetches.TryRemove(key, out Task<List<HealthIntradayHeartRateRecord>>? _);
                 }
 
-                return cached ?? new List<HealthIntradayHeartRateRecord>();
+                return cachedEntry.Rows ?? new List<HealthIntradayHeartRateRecord>();
             })).ConfigureAwait(false);
         }
 
@@ -671,7 +721,7 @@ namespace Daily_WinUI.Services
                         .ToList();
                     foreach (var g in list.GroupBy(r => r.LocalDate))
                     {
-                        _vitalsCache[g.Key] = g.ToList();
+                        _vitalsCache[g.Key] = (DateTime.UtcNow, g.ToList());
                     }
                     _rangeVitalsCache[rangeKey] = (DateTime.UtcNow, list);
                     return list;
@@ -1298,7 +1348,7 @@ namespace Daily_WinUI.Services
             await _realtimeSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (_realtimeChannel != null && !forceRecreate && _realtimeChannel.IsJoined) return;
+                if (_realtimeChannel != null && !forceRecreate && IsRealtimeHealthy && _sourcesRealtimeChannel?.IsJoined == true) return;
 
                 void Cleanup(ref RealtimeChannel? ch)
                 {
@@ -1996,22 +2046,32 @@ namespace Daily_WinUI.Services
             _sleepCache.TryRemove(todayStr, out _);
             _vitalsCache.TryRemove(todayStr, out _);
             _hrCache.TryRemove(todayStr, out _);
+            _summaryRemoteFetchedUtc.TryRemove(todayStr, out _);
             if (selectedStr != todayStr)
             {
                 _sleepCache.TryRemove(selectedStr, out _);
                 _vitalsCache.TryRemove(selectedStr, out _);
                 _hrCache.TryRemove(selectedStr, out _);
+                _summaryRemoteFetchedUtc.TryRemove(selectedStr, out _);
             }
             InvalidateRangeCaches();
+
+            await SetupRealtimeSubscriptionAsync(forceRecreate: false).ConfigureAwait(false);
 
             if (!_hasLoadedSources || (DateTime.UtcNow - _lastSourcesFetchedUtc).TotalMinutes >= 15)
             {
                 await GetHealthSourcesAsync(forceRefresh: true).ConfigureAwait(false);
             }
-            await RefreshSummaryFromRemoteAsync(today).ConfigureAwait(false);
+            await Task.WhenAll(
+                GetLeanSleepSessionsAsync(today, forceRefresh: true),
+                RefreshSummaryFromRemoteAsync(today)
+            ).ConfigureAwait(false);
             if (_selectedDate.Date != today.Date)
             {
-                await RefreshSummaryFromRemoteAsync(_selectedDate).ConfigureAwait(false);
+                await Task.WhenAll(
+                    GetLeanSleepSessionsAsync(_selectedDate, forceRefresh: true),
+                    RefreshSummaryFromRemoteAsync(_selectedDate)
+                ).ConfigureAwait(false);
             }
         }
     }

@@ -83,13 +83,13 @@ namespace Daily.Models.Health
 
         public int AwakeCount => Stages.Count(x => x.SleepCategory == "Awake");
 
-        public int DeepPercent => AsleepSeconds > 0 ? (int)((DeepSeconds / AsleepSeconds) * 100) : 0;
-        public int RemPercent => AsleepSeconds > 0 ? (int)((RemSeconds / AsleepSeconds) * 100) : 0;
-        public int LightPercent => AsleepSeconds > 0 ? (int)((LightSeconds / AsleepSeconds) * 100) : 0;
-        public int AwakePercent => DurationSeconds > 0 ? (int)((AwakeSeconds / DurationSeconds) * 100) : 0;
+        public int DeepPercent => AsleepSeconds > 0 ? (int)Math.Round((DeepSeconds / AsleepSeconds) * 100.0, MidpointRounding.AwayFromZero) : 0;
+        public int RemPercent => AsleepSeconds > 0 ? (int)Math.Round((RemSeconds / AsleepSeconds) * 100.0, MidpointRounding.AwayFromZero) : 0;
+        public int LightPercent => AsleepSeconds > 0 ? (int)Math.Round((LightSeconds / AsleepSeconds) * 100.0, MidpointRounding.AwayFromZero) : 0;
+        public int AwakePercent => DurationSeconds > 0 ? (int)Math.Round((AwakeSeconds / DurationSeconds) * 100.0, MidpointRounding.AwayFromZero) : 0;
         public int RestorativePercent => DeepPercent + RemPercent;
 
-        public int EfficiencyPercent => DurationSeconds > 0 ? Math.Clamp((int)((AsleepSeconds / DurationSeconds) * 100), 10, 100) : 90;
+        public int EfficiencyPercent => DurationSeconds > 0 ? Math.Clamp((int)Math.Round((AsleepSeconds / DurationSeconds) * 100.0, MidpointRounding.AwayFromZero), 10, 100) : 90;
 
         private int? _sleepScore;
         public int SleepScore

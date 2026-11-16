@@ -739,10 +739,27 @@ class HealthDataRepository(
                 if (localTelemetry.isNotEmpty()) {
                     cachedTelemetry = localTelemetry
                     withContext(Dispatchers.IO) {
-                        telemetryDao.insertRecords(localTelemetry.map { HealthTelemetryEntity.fromRecord(it) })
+                        val sleepByDate = LinkedHashMap<String, MutableList<HealthTelemetryEntity>>()
+                        val nonSleepEntities = mutableListOf<HealthTelemetryEntity>()
+                        for (record in localTelemetry) {
+                            val entity = HealthTelemetryEntity.fromRecord(record)
+                            if (record.isSleep || record.isSleepStage) {
+                                sleepByDate.getOrPut(record.localDate ?: dateKey) { mutableListOf() }.add(entity)
+                            } else {
+                                nonSleepEntities.add(entity)
+                            }
+                        }
+                        for ((sleepDate, dateEntities) in sleepByDate) {
+                            telemetryDao.replaceSleepTelemetryForDate(currentUserId, sleepDate, dateEntities)
+                        }
+                        if (nonSleepEntities.isNotEmpty()) {
+                            telemetryDao.insertRecords(nonSleepEntities)
+                        }
                     }
                     if (currentUserId != "local_user") {
-                        if (remoteSleepResult != null && remoteSleepResult.isEmpty() && localLeanSleep.isNotEmpty()) {
+                        if (localLeanSleep.isNotEmpty() &&
+                            SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(localLeanSleep, remoteSleepResult)
+                        ) {
                             ensureSleepFingerprintsLoaded(currentUserId)
                             if (lastUploadedSleepFpByDate.containsKey(dateKey)) {
                                 invalidateSleepFingerprint(dateKey, currentUserId)
@@ -3831,6 +3848,53 @@ internal object SleepUploadFingerprintStore {
                 "${s.id}:${s.durationSeconds}:${s.timeInBedSeconds}:${s.stages.size}:${s.deepSeconds}:${s.remSeconds}:${s.lightSeconds}:${s.awakeSeconds}:$startSec:$endSec:$selectedFlag:$stagesHash"
             }
         return "$SCHEMA_VERSION|$body"
+    }
+
+    /**
+     * Returns true when confirmed remote `health_sleep_sessions` are missing or materially
+     * older/truncated compared to fresh local sleep sessions (e.g. a peer phone overwrote
+     * Supabase before the server guard or before final stages synced), so our cached upload
+     * fingerprint is invalidated to self-heal Supabase once without redundant writes when matching.
+     */
+    fun shouldInvalidateStaleRemoteSleep(
+        local: List<HealthSleepSessionRecord>,
+        remote: List<HealthSleepSessionRecord>?
+    ): Boolean {
+        if (local.isEmpty() || remote == null) return false
+        if (remote.isEmpty()) return true
+
+        fun sessionKey(s: HealthSleepSessionRecord): String {
+            return if (s.sessionType == "nap") {
+                "nap|${s.id}"
+            } else {
+                "${s.sessionType}|${DeviceSource.from(s.sourceDeviceKey).displayName}"
+            }
+        }
+
+        val remoteByKey = LinkedHashMap<String, HealthSleepSessionRecord>()
+        for (r in remote) {
+            val k = sessionKey(r)
+            val existing = remoteByKey[k]
+            if (existing == null || r.stages.size > existing.stages.size ||
+                (r.stages.size == existing.stages.size && r.durationSeconds > existing.durationSeconds)
+            ) {
+                remoteByKey[k] = r
+            }
+        }
+
+        for (l in local) {
+            val r = remoteByKey[sessionKey(l)] ?: return true
+            if (r.stages.isEmpty() && l.stages.isNotEmpty()) return true
+            if (l.durationSeconds > r.durationSeconds) return true
+            if (l.endTime > r.endTime + 60_000L && l.durationSeconds >= r.durationSeconds) return true
+            if (l.stages.size > r.stages.size && l.durationSeconds >= r.durationSeconds - 600) return true
+            val localRestorative = l.deepSeconds + l.remSeconds
+            val remoteRestorative = r.deepSeconds + r.remSeconds
+            if (localRestorative > remoteRestorative && l.durationSeconds * 10L >= r.durationSeconds * 9L) {
+                return true
+            }
+        }
+        return false
     }
 
     fun cutoffDateKey(

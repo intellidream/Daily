@@ -1047,6 +1047,9 @@ namespace Daily.Models.Health
                 {
                     var sLocal = ParseUtcToLocal(st.StartTime, start);
                     var eLocal = ParseUtcToLocal(st.EndTime, sLocal.AddSeconds(st.DurationSeconds));
+                    double stageDur = st.DurationSeconds > 0
+                        ? st.DurationSeconds
+                        : (eLocal > sLocal ? (eLocal - sLocal).TotalSeconds : 0);
                     var stageKey = st.Stage.ToLowerInvariant() switch
                     {
                         "deep" => "sleep_stage_deep",
@@ -1057,10 +1060,10 @@ namespace Daily.Models.Health
                     return new HealthTelemetry
                     {
                         TypeString = stageKey,
-                        Value = st.DurationSeconds,
+                        Value = stageDur,
                         Unit = "sec",
                         StartTime = sLocal,
-                        EndTime = eLocal != default ? eLocal : sLocal.AddSeconds(st.DurationSeconds),
+                        EndTime = eLocal != default ? eLocal : sLocal.AddSeconds(stageDur),
                         SourceDevice = canonDevice
                     };
                 }).ToList();

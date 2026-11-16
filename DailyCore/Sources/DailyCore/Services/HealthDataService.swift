@@ -94,6 +94,7 @@ public final class HealthDataService: ObservableObject {
     private var realtimeTask: Task<Void, Never>?
     private var realtimeDebounceTask: Task<Void, Never>?
     private var subscribedRealtimeUserId: String?
+    private var lastRealtimeAttemptAt: Date = .distantPast
     private var lastLocalUploadCompletedAt: Date = .distantPast
     private var lastSourcesFetchAt: Date = .distantPast
     private var lastUploadedSleepFpByDate: [String: String] = [:]
@@ -368,12 +369,16 @@ public final class HealthDataService: ObservableObject {
         periodicActiveSyncTask?.cancel()
         periodicActiveSyncTask = Task { [weak self] in
             while !Task.isCancelled {
-                let sleepNs: UInt64 = (self?.realtimeChannel != nil) ? 900_000_000_000 : 300_000_000_000 // 15m with Realtime active, 5m fallback
+                let isSubscribed = self?.realtimeChannel?.status == .subscribed
+                let sleepNs: UInt64 = isSubscribed ? 900_000_000_000 : 300_000_000_000 // 15m with Realtime active, 5m fallback
                 try? await Task.sleep(nanoseconds: sleepNs)
                 guard let self = self, !Task.isCancelled else { break }
                 self.checkMidnightRolloverIfNeeded()
-                if AuthService.shared.isAuthenticated && self.isToday {
-                    await self.loadDataForSelectedDate(forceRefresh: true)
+                if AuthService.shared.isAuthenticated {
+                    self.setupRealtimeSubscription()
+                    if self.isToday {
+                        await self.loadDataForSelectedDate(forceRefresh: true)
+                    }
                 }
             }
         }
@@ -393,9 +398,17 @@ public final class HealthDataService: ObservableObject {
                   let session = try? await self.supabase.auth.session,
                   let userId = session.user.id.uuidString.lowercased() as String? else { return }
             
-            if self.subscribedRealtimeUserId == userId, self.realtimeChannel != nil {
+            if self.subscribedRealtimeUserId == userId,
+               let existing = self.realtimeChannel,
+               existing.status == .subscribed || existing.status == .subscribing {
                 return
             }
+            let now = Date()
+            if self.subscribedRealtimeUserId == userId,
+               now.timeIntervalSince(self.lastRealtimeAttemptAt) < 15.0 {
+                return
+            }
+            self.lastRealtimeAttemptAt = now
             
             self.realtimeTask?.cancel()
             self.realtimeDebounceTask?.cancel()
@@ -712,8 +725,12 @@ public final class HealthDataService: ObservableObject {
     
     public func refreshIfStale() async {
         checkMidnightRolloverIfNeeded()
+        if AuthService.shared.isAuthenticated {
+            setupRealtimeSubscription()
+        }
         let isToday = Calendar.current.isDateInToday(selectedDate)
-        let staleThreshold: TimeInterval = isToday ? 300 : 3600 // 5 min for today, 1 hour for past
+        let isRealtimeLive = realtimeChannel?.status == .subscribed
+        let staleThreshold: TimeInterval = isToday ? (isRealtimeLive ? 90 : 30) : 3600
         
         if hasPendingLocalHealthRefresh || Date().timeIntervalSince(lastRefreshTimestamp) > staleThreshold {
             hasPendingLocalHealthRefresh = false
@@ -975,10 +992,9 @@ public final class HealthDataService: ObservableObject {
         }
         
         if let uid = userId,
-           let confirmedRemoteSleep = remoteSleepResult,
-           confirmedRemoteSleep.isEmpty,
            !localSleepRecs.isEmpty,
-           hadCachedSleepFpBeforeSync {
+           hadCachedSleepFpBeforeSync,
+           SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(local: localSleepRecs, remote: remoteSleepResult) {
             invalidateSleepFingerprint(forDateKey: dateKey, userId: uid)
             lastSyncedSignatureByDate.removeValue(forKey: dateKey)
             let sleepOnly = localTelemetry.filter { $0.isSleep || $0.isSleepStage }
@@ -4626,6 +4642,49 @@ internal struct SleepUploadFingerprintStore: Sendable {
             }
             .joined(separator: "|")
         return "\(schemaVersion)|\(body)"
+    }
+
+    /// Returns `true` when confirmed remote `health_sleep_sessions` are missing or materially
+    /// older/truncated compared to fresh local sleep sessions, so cached upload fingerprints
+    /// self-heal Supabase once without redundant writes when matching.
+    static func shouldInvalidateStaleRemoteSleep(
+        local: [HealthSleepSessionRecord],
+        remote: [HealthSleepSessionRecord]?
+    ) -> Bool {
+        guard !local.isEmpty, let remote else { return false }
+        if remote.isEmpty { return true }
+
+        func sessionKey(_ s: HealthSleepSessionRecord) -> String {
+            if s.sessionType == "nap" {
+                return "nap|\(s.id)"
+            }
+            return "\(s.sessionType)|\(DeviceSource.from(name: s.sourceDeviceKey).displayName)"
+        }
+
+        var remoteByKey: [String: HealthSleepSessionRecord] = [:]
+        for r in remote {
+            let key = sessionKey(r)
+            if let existing = remoteByKey[key] {
+                if r.stages.count > existing.stages.count ||
+                    (r.stages.count == existing.stages.count && r.durationSeconds > existing.durationSeconds) {
+                    remoteByKey[key] = r
+                }
+            } else {
+                remoteByKey[key] = r
+            }
+        }
+
+        for l in local {
+            guard let r = remoteByKey[sessionKey(l)] else { return true }
+            if r.stages.isEmpty && !l.stages.isEmpty { return true }
+            if l.durationSeconds > r.durationSeconds { return true }
+            if l.endTime.timeIntervalSince(r.endTime) > 60 && l.durationSeconds >= r.durationSeconds { return true }
+            if l.stages.count > r.stages.count && l.durationSeconds >= r.durationSeconds - 600 { return true }
+            if (l.deepSeconds + l.remSeconds) > (r.deepSeconds + r.remSeconds) && l.durationSeconds * 10 >= r.durationSeconds * 9 {
+                return true
+            }
+        }
+        return false
     }
 
     static func cutoffDateKey(

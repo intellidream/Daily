@@ -200,6 +200,47 @@ namespace Daily.Health.Tests
             var domain = lean.ToDomainSleepSession(new DateTime(2026, 11, 15));
             Assert.Single(domain.Stages);
             Assert.Equal(domain.StartTime, domain.Stages[0].StartTime);
+            Assert.Equal(18, domain.DeepPercent);
+            Assert.Equal(18, domain.RemPercent);
+        }
+
+        [Fact]
+        public void TestLeanStageDurationDerivedFromTimestampsWhenOmitted()
+        {
+            var json = """
+            {
+                "id": "sleep_u1_2026-11-16_primary_sleep_pixel_watch_5",
+                "user_id": "u1",
+                "local_date": "2026-11-16",
+                "source_device_key": "Pixel Watch 5",
+                "start_time": "2026-11-16T00:06:00Z",
+                "end_time": "2026-11-16T08:12:00Z",
+                "duration_seconds": 28200,
+                "deep_seconds": 3660,
+                "rem_seconds": 7380,
+                "light_seconds": 17160,
+                "awake_seconds": 960,
+                "stages": [
+                    {
+                        "id": "s1",
+                        "stage_type": "REM",
+                        "start_time": "2026-11-16T04:42:00Z",
+                        "end_time": "2026-11-16T05:13:00Z",
+                        "source_device": "Pixel Watch 5"
+                    }
+                ]
+            }
+            """;
+
+            var record = HealthJsonSerializer.Deserialize<HealthSleepSessionRecord>(json);
+            Assert.NotNull(record);
+            var session = record!.ToDomainSleepSession(new DateTime(2026, 11, 16));
+            Assert.Single(session.Stages);
+            Assert.Equal(1860, session.Stages[0].DurationSeconds);
+            Assert.Equal(7380, session.RemSeconds);
+            Assert.Equal(3660, session.DeepSeconds);
+            Assert.Equal(26, session.RemPercent);
+            Assert.Equal(13, session.DeepPercent);
         }
     }
 }

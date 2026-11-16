@@ -1305,6 +1305,7 @@ public sealed partial class MainWindow : Window
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     private DateTime _lastForegroundSyncUtc = DateTime.UtcNow;
+    private DateTime _lastHealthForegroundSyncUtc = DateTime.UtcNow;
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
@@ -1312,10 +1313,16 @@ public sealed partial class MainWindow : Window
             return;
 
         var nowUtc = DateTime.UtcNow;
-        if ((nowUtc - _lastForegroundSyncUtc) < TimeSpan.FromMinutes(3))
+        bool runFullSync = (nowUtc - _lastForegroundSyncUtc) >= TimeSpan.FromMinutes(3);
+        bool runHealthDeltaPull = (nowUtc - _lastHealthForegroundSyncUtc) >= TimeSpan.FromSeconds(60);
+        if (!runFullSync && !runHealthDeltaPull)
             return;
 
-        _lastForegroundSyncUtc = nowUtc;
+        if (runFullSync)
+        {
+            _lastForegroundSyncUtc = nowUtc;
+        }
+        _lastHealthForegroundSyncUtc = nowUtc;
         System.Threading.Tasks.Task.Run(async () =>
         {
             try
@@ -1326,10 +1333,13 @@ public sealed partial class MainWindow : Window
                     await guardian.EnsureValidSessionAsync();
                 }
 
-                var syncService = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
-                if (syncService != null)
+                if (runFullSync)
                 {
-                    await syncService.SyncAsync(Daily.Services.SyncScope.All);
+                    var syncService = App.Current?.Services?.GetService<Daily.Services.ISyncService>();
+                    if (syncService != null)
+                    {
+                        await syncService.SyncAsync(Daily.Services.SyncScope.All);
+                    }
                 }
 
                 var healthService = App.Current?.Services?.GetService<Daily.Services.Health.IHealthService>();
@@ -1359,6 +1369,7 @@ public sealed partial class MainWindow : Window
         }
 
         _lastForegroundSyncUtc = DateTime.UtcNow;
+        _lastHealthForegroundSyncUtc = DateTime.UtcNow;
 
         // Run background session validation and catch-up sync on restoration
         System.Threading.Tasks.Task.Run(async () =>

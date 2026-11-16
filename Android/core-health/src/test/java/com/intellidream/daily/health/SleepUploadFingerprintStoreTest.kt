@@ -4,6 +4,7 @@ import com.intellidream.daily.model.HealthSleepSessionRecord
 import com.intellidream.daily.model.SleepStageRecord
 import com.intellidream.daily.model.SleepStageType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -100,5 +101,57 @@ class SleepUploadFingerprintStoreTest {
         )
         assertTrue(afterRemove.isEmpty())
         assertNull(afterRemoveJson)
+    }
+
+    @Test
+    fun testShouldInvalidateStaleRemoteSleep() {
+        val startMs = 1_794_787_560_000L // 2026-11-16T00:06:00Z
+        val staleEndMs = startMs + 25_680_000L
+        val fullEndMs = startMs + 29_160_000L
+
+        val fullLocal = HealthSleepSessionRecord(
+            id = "sleep_u1_2026-11-16_primary_sleep_pixel_watch_5",
+            userId = "u1",
+            localDate = "2026-11-16",
+            sessionType = "primary_sleep",
+            sourceDeviceKey = "Pixel Watch 5",
+            hostDeviceName = "Trapper",
+            startTime = startMs,
+            endTime = fullEndMs,
+            durationSeconds = 28200,
+            timeInBedSeconds = 29160,
+            deepSeconds = 3660,
+            remSeconds = 7380,
+            lightSeconds = 17160,
+            awakeSeconds = 960,
+            stages = listOf(
+                SleepStageRecord(id = "s1", stageType = SleepStageType.DEEP, startTime = startMs, endTime = startMs + 3660_000L),
+                SleepStageRecord(id = "s2", stageType = SleepStageType.REM, startTime = startMs + 3660_000L, endTime = fullEndMs)
+            ),
+            sourcePriority = 2
+        )
+
+        val staleRemote = fullLocal.copy(
+            hostDeviceName = "Radar",
+            endTime = staleEndMs,
+            durationSeconds = 24540,
+            timeInBedSeconds = 25680,
+            deepSeconds = 3600,
+            remSeconds = 5700,
+            lightSeconds = 15240,
+            awakeSeconds = 1140,
+            stages = listOf(
+                SleepStageRecord(id = "r1", stageType = SleepStageType.LIGHT, startTime = startMs, endTime = staleEndMs)
+            )
+        )
+
+        // Exact match -> false (zero redundant uploads)
+        assertFalse(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(listOf(fullLocal), listOf(fullLocal)))
+        // Network error (null) -> false
+        assertFalse(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(listOf(fullLocal), null))
+        // Empty remote -> true
+        assertTrue(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(listOf(fullLocal), emptyList()))
+        // Remote truncated by peer device (1h35m vs 2h3m) -> true (self-heal)
+        assertTrue(SleepUploadFingerprintStore.shouldInvalidateStaleRemoteSleep(listOf(fullLocal), listOf(staleRemote)))
     }
 }

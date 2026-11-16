@@ -24,6 +24,8 @@ namespace Daily_WinUI.Controls
         private HealthDailySummaryRecord? _currentSummary;
         private List<VitalMetric> _metrics = new();
         private SleepSession? _primarySleepSession;
+        private bool _isLoadingData = false;
+        private bool _reloadPending = false;
 
         public HealthWidgetControl()
         {
@@ -70,8 +72,16 @@ namespace Daily_WinUI.Controls
         {
             DispatcherQueue.TryEnqueue(async () =>
             {
-                _currentSummary = record;
-                await RefreshDerivedDataAsync();
+                var todayStr = DateTime.Today.ToString("yyyy-MM-dd");
+                if (record != null && !string.IsNullOrEmpty(record.LocalDate) && record.LocalDate != todayStr)
+                {
+                    return;
+                }
+                if (record != null)
+                {
+                    _currentSummary = record;
+                }
+                await LoadDataAsync();
             });
         }
 
@@ -119,25 +129,39 @@ namespace Daily_WinUI.Controls
 
         public async Task LoadDataAsync()
         {
+            if (_isLoadingData)
+            {
+                _reloadPending = true;
+                return;
+            }
+            _isLoadingData = true;
             try
             {
-                if (_healthHubService != null)
+                do
                 {
-                    _currentSummary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
-                }
+                    _reloadPending = false;
+                    if (_healthHubService != null)
+                    {
+                        _currentSummary = await _healthHubService.GetDailySummaryAsync(DateTime.Today);
+                    }
 
-                if (_healthService != null)
-                {
-                    _metrics = await _healthService.FetchMetricsForDateAsync(DateTime.Today);
-                    var (primary, _) = await _healthService.GetSleepSessionsAsync(DateTime.Today);
-                    _primarySleepSession = primary;
-                }
+                    if (_healthService != null)
+                    {
+                        _metrics = await _healthService.FetchMetricsForDateAsync(DateTime.Today);
+                        var (primary, _) = await _healthService.GetSleepSessionsAsync(DateTime.Today);
+                        _primarySleepSession = primary;
+                    }
 
-                await RefreshDerivedDataAsync();
+                    await RefreshDerivedDataAsync();
+                } while (_reloadPending);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[HealthWidgetControl] Error loading data: {ex.Message}");
+            }
+            finally
+            {
+                _isLoadingData = false;
             }
         }
 

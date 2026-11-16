@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.intellidream.daily.database.entity.HealthDailySummaryEntity
 import com.intellidream.daily.database.entity.HealthTelemetryEntity
 import com.intellidream.daily.database.entity.VitalMetricEntity
@@ -29,6 +30,19 @@ interface HealthTelemetryDao {
 
     @Query("UPDATE health_telemetry SET synced_at = :syncedAt WHERE id IN (:ids)")
     suspend fun markRecordsSynced(ids: List<String>, syncedAt: Long)
+
+    @Query("DELETE FROM health_telemetry WHERE user_id = :userId AND local_date = :localDate AND type LIKE 'sleep%'")
+    suspend fun deleteSleepTelemetryForDate(userId: String, localDate: String)
+
+    @Transaction
+    suspend fun replaceSleepTelemetryForDate(
+        userId: String,
+        localDate: String,
+        records: List<HealthTelemetryEntity>
+    ) {
+        deleteSleepTelemetryForDate(userId, localDate)
+        insertRecords(records)
+    }
 
     @Query("DELETE FROM health_telemetry WHERE start_time < :cutoffTime")
     suspend fun deleteTelemetryBefore(cutoffTime: Long)
