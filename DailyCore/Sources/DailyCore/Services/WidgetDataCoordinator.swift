@@ -952,8 +952,6 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         return try? JSONSerialization.data(withJSONObject: stripTimestamps(obj), options: [.sortedKeys])
     }
 
-    /// Writes both an atomic App Group container file and synchronized UserDefaults blob,
-    /// deduplicating semantically identical updates to preserve iOS WidgetKit reload budget.
     private func persistBridgeValue<T: Encodable>(
         _ value: T,
         defaultsKey: String,
@@ -962,10 +960,36 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         directory: URL? = nil,
         defaults: UserDefaults? = nil
     ) {
+        persistBridgeValue(
+            value,
+            envelopeDefaultsKey: nil,
+            legacyDefaultsValue: value,
+            defaultsKey: defaultsKey,
+            bridgeFilename: bridgeFilename,
+            reloadingKinds: kinds,
+            directory: directory,
+            defaults: defaults
+        )
+    }
+
+    /// Writes an atomic App Group container file plus synchronized UserDefaults payloads,
+    /// deduplicating semantically identical updates to preserve WidgetKit reload budget while
+    /// keeping legacy flat snapshot keys compatible across macOS/iOS widget extension restarts.
+    private func persistBridgeValue<T: Encodable, L: Encodable>(
+        _ value: T,
+        envelopeDefaultsKey: String?,
+        legacyDefaultsValue: L,
+        defaultsKey: String,
+        bridgeFilename: String,
+        reloadingKinds kinds: [String],
+        directory: URL? = nil,
+        defaults: UserDefaults? = nil
+    ) {
         let store = defaults ?? groupDefaults
-        guard let encoded = try? JSONEncoder().encode(value) else { return }
+        guard let encoded = try? JSONEncoder().encode(value),
+              let legacyEncoded = try? JSONEncoder().encode(legacyDefaultsValue) else { return }
         let url = bridgeFileURL(filename: bridgeFilename, directory: directory)
-        let cacheKey = url?.path ?? defaultsKey
+        let cacheKey = url?.path ?? envelopeDefaultsKey ?? defaultsKey
         let semanticData = canonicalSemanticData(for: value) ?? encoded
 
         bridgeLock.lock()
@@ -980,10 +1004,16 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         }
         bridgeLock.unlock()
 
-        store.set(encoded, forKey: defaultsKey)
+        if let envelopeDefaultsKey {
+            store.set(encoded, forKey: envelopeDefaultsKey)
+        }
+        store.set(legacyEncoded, forKey: defaultsKey)
         store.synchronize()
         if defaults == nil {
-            UserDefaults.standard.set(encoded, forKey: defaultsKey)
+            if let envelopeDefaultsKey {
+                UserDefaults.standard.set(encoded, forKey: envelopeDefaultsKey)
+            }
+            UserDefaults.standard.set(legacyEncoded, forKey: defaultsKey)
         }
         reloadTimelines(kinds: kinds)
     }
@@ -1612,6 +1642,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     // MARK: - Sleep (Sleep Studio)
     
     private let sleepSnapshotKey = "daily_sleep_widget_snapshot_v1"
+    private let sleepEnvelopeKey = "daily_sleep_widget_envelope_v1"
     
     public func updateSleepSnapshot(from session: SleepSession?, restingHeartRate: Double? = nil, hrvMs: Double? = nil) {
         updateSleepSnapshot(
@@ -1644,6 +1675,8 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         )
         persistBridgeValue(
             envelope,
+            envelopeDefaultsKey: sleepEnvelopeKey,
+            legacyDefaultsValue: snapshot,
             defaultsKey: sleepSnapshotKey,
             bridgeFilename: Self.sleepBridgeFilename,
             reloadingKinds: [WidgetKind.sleep, WidgetKind.combined],
@@ -1675,14 +1708,19 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             return nil
         }
 
-        // 1. Atomic App Group container bridge (bypasses cross-process cfprefsd lag on iOS)
+        // 1. Atomic App Group container bridge (bypasses cross-process cfprefsd lag)
         if let bridgeSnap = decodeEnvelopeOrLegacy(
             from: readAtomicBridgeData(filename: Self.sleepBridgeFilename, directory: bridgeDirectoryURL)
         ) {
             return bridgeSnap
         }
 
-        // 2. Synchronized App Group UserDefaults fallback
+        // 2. Date-scoped Envelope in synchronized App Group UserDefaults
+        if let envelopeSnap = decodeEnvelopeOrLegacy(from: store.data(forKey: sleepEnvelopeKey)) {
+            return envelopeSnap
+        }
+
+        // 3. Flat legacy snapshot key in synchronized App Group UserDefaults
         if let defaultsSnap = decodeEnvelopeOrLegacy(from: store.data(forKey: sleepSnapshotKey)) {
             return defaultsSnap
         }
@@ -1793,6 +1831,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     // MARK: - Stress Level & Monkey Mascot
     
     private let stressSnapshotKey = "daily_stress_widget_snapshot_v1"
+    private let stressEnvelopeKey = "daily_stress_widget_envelope_v1"
 
     private func persistStressSnapshot(
         _ snapshot: StressWidgetSnapshot,
@@ -1806,6 +1845,8 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         )
         persistBridgeValue(
             envelope,
+            envelopeDefaultsKey: stressEnvelopeKey,
+            legacyDefaultsValue: snapshot,
             defaultsKey: stressSnapshotKey,
             bridgeFilename: Self.stressBridgeFilename,
             reloadingKinds: [WidgetKind.stress, WidgetKind.combined],
@@ -1824,7 +1865,34 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         parasympathetic: Int,
         sympathetic: Int
     ) {
-        let now = Date()
+        updateStressSnapshot(
+            score: score,
+            level: level,
+            monkeyMood: monkeyMood,
+            advice: advice,
+            hrvMs: hrvMs,
+            restingHeartRate: restingHeartRate,
+            parasympathetic: parasympathetic,
+            sympathetic: sympathetic,
+            bridgeDirectoryURL: nil,
+            defaults: nil,
+            now: Date()
+        )
+    }
+
+    public func updateStressSnapshot(
+        score: Int,
+        level: StressLevel,
+        monkeyMood: MonkeyMood,
+        advice: String,
+        hrvMs: Double?,
+        restingHeartRate: Double?,
+        parasympathetic: Int,
+        sympathetic: Int,
+        bridgeDirectoryURL: URL?,
+        defaults: UserDefaults?,
+        now: Date
+    ) {
         let snapshot = StressWidgetSnapshot(
             hasData: true,
             stressScore: score,
@@ -1837,11 +1905,15 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             sympatheticPercent: sympathetic,
             lastUpdated: now
         )
-        persistStressSnapshot(snapshot, bridgeDirectoryURL: nil, defaults: nil, now: now)
+        persistStressSnapshot(snapshot, bridgeDirectoryURL: bridgeDirectoryURL, defaults: defaults, now: now)
     }
     
     public func clearStressSnapshot() {
-        persistStressSnapshot(StressWidgetSnapshot.empty, bridgeDirectoryURL: nil, defaults: nil, now: Date())
+        clearStressSnapshot(bridgeDirectoryURL: nil, defaults: nil, now: Date())
+    }
+
+    public func clearStressSnapshot(bridgeDirectoryURL: URL?, defaults: UserDefaults?, now: Date) {
+        persistStressSnapshot(StressWidgetSnapshot.empty, bridgeDirectoryURL: bridgeDirectoryURL, defaults: defaults, now: now)
     }
     
     public func fetchStressSnapshot() -> StressWidgetSnapshot {
@@ -1871,6 +1943,10 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
             from: readAtomicBridgeData(filename: Self.stressBridgeFilename, directory: bridgeDirectoryURL)
         ) {
             return bridgeSnap
+        }
+
+        if let envelopeSnap = decodeEnvelopeOrLegacy(from: store.data(forKey: stressEnvelopeKey)) {
+            return envelopeSnap
         }
 
         if let defaultsSnap = decodeEnvelopeOrLegacy(from: store.data(forKey: stressSnapshotKey)) {

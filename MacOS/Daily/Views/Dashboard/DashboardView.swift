@@ -94,6 +94,8 @@ public struct DashboardView: View {
             async let n: () = NewsService.shared.loadFeed(NewsService.shared.selectedFeed, forceRefresh: true)
             async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
             _ = await (w, h, hab, n, f)
+            TagdosStore.shared.syncWithWidgets()
+            SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
         }
         .task {
             async let w: () = WeatherService.shared.currentWeather == nil ? WeatherService.shared.refreshWeather() : ()
@@ -102,6 +104,8 @@ public struct DashboardView: View {
             async let n: () = NewsService.shared.articles.isEmpty ? NewsService.shared.loadFeed(NewsService.shared.selectedFeed) : ()
             async let f: () = FinanceService.shared.loadFinanceData()
             _ = await (w, h, hab, n, f)
+            TagdosStore.shared.syncWithWidgets()
+            SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
             
             // Strictly after all 6 hub data sources finish loading, evaluate automatic morning presentation
             if await SmartBriefingService.shared.checkAutomaticMorningPresentation() {

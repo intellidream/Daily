@@ -1841,6 +1841,80 @@ struct HealthServiceTests {
         #expect(rollover.dayChanged == true)
         #expect(rollover.slotChanged == true)
     }
+
+    @Test func testLegacyFlatSleepAndStressDefaultsRemainDecodableAlongsideDateEnvelopes() async throws {
+        let suiteName = "group.com.intellidream.daily.test.compat.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("compat_bridge_test_\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let coordinator = WidgetDataCoordinator.shared
+        let cal = Calendar.current
+        let now = cal.date(bySettingHour: 10, minute: 15, second: 0, of: Date())!
+
+        let session = SleepSession(
+            id: "compat-sleep",
+            startTime: cal.date(byAdding: .hour, value: -8, to: now)!,
+            endTime: cal.date(byAdding: .hour, value: -1, to: now)!,
+            stages: [
+                SleepStageRecord(
+                    id: "cs1",
+                    stageType: .deep,
+                    startTime: cal.date(byAdding: .hour, value: -8, to: now)!,
+                    endTime: cal.date(byAdding: .hour, value: -6, to: now)!
+                ),
+                SleepStageRecord(
+                    id: "cs2",
+                    stageType: .rem,
+                    startTime: cal.date(byAdding: .hour, value: -6, to: now)!,
+                    endTime: cal.date(byAdding: .hour, value: -4, to: now)!
+                )
+            ],
+            sourceDevice: "Apple Watch Ultra 2",
+            hasGranularHypnogram: true
+        )
+
+        coordinator.updateSleepSnapshot(
+            from: session,
+            restingHeartRate: 53,
+            hrvMs: 68,
+            bridgeDirectoryURL: tempDir,
+            defaults: defaults,
+            now: now
+        )
+        coordinator.updateStressSnapshot(
+            score: 42,
+            level: .calm,
+            monkeyMood: .zen,
+            advice: "Balanced nervous system.",
+            hrvMs: 68,
+            restingHeartRate: 53,
+            parasympathetic: 61,
+            sympathetic: 39,
+            bridgeDirectoryURL: tempDir,
+            defaults: defaults,
+            now: now
+        )
+
+        // Legacy defaults keys must decode cleanly as flat SleepWidgetSnapshot / StressWidgetSnapshot
+        let legacySleepData = try #require(defaults.data(forKey: "daily_sleep_widget_snapshot_v1"))
+        let legacySleep = try JSONDecoder().decode(SleepWidgetSnapshot.self, from: legacySleepData)
+        #expect(legacySleep.hasData == true)
+        #expect(legacySleep.sleepScore == session.sleepScore)
+
+        let legacyStressData = try #require(defaults.data(forKey: "daily_stress_widget_snapshot_v1"))
+        let legacyStress = try JSONDecoder().decode(StressWidgetSnapshot.self, from: legacyStressData)
+        #expect(legacyStress.hasData == true)
+        #expect(legacyStress.stressScore == 42)
+
+        // Explicit same-day clear via envelope overrides even without deleting summary/legacy keys
+        coordinator.clearStressSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: now)
+        let clearedStress = coordinator.fetchStressSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: now)
+        #expect(clearedStress.hasData == false)
+    }
 }
 
 

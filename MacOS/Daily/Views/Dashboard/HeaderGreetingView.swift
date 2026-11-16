@@ -167,6 +167,8 @@ public struct HeaderGreetingView: View {
                         async let f: () = FinanceService.shared.loadFinanceData(forceRefresh: true)
                         async let s: () = SavedArticlesService.shared.syncWithSupabase()
                         _ = await (w, h, hab, n, f, s)
+                        TagdosStore.shared.syncWithWidgets()
+                        SmartBriefingService.shared.refreshLocalWidgetBriefingIfNeeded()
                         
                         try? await Task.sleep(nanoseconds: 350_000_000)
                         withAnimation(.easeInOut(duration: 0.25)) {

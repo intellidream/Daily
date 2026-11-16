@@ -1,6 +1,122 @@
 import SwiftUI
 import DailyCore
 import AppKit
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
+
+@MainActor
+private final class MacOSLifecycleCoordinator {
+    static let shared = MacOSLifecycleCoordinator()
+    private var isStarted = false
+    private var activeSyncTask: Task<Void, Never>?
+    private var lastLifecycleSyncAt: Date = .distantPast
+    private var observerTokens: [NSObjectProtocol] = []
+    private var workspaceObserverTokens: [NSObjectProtocol] = []
+
+    func start() {
+        guard !isStarted else { return }
+        isStarted = true
+
+        observerTokens.append(
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.syncIfNeeded(force: false)
+                }
+            }
+        )
+        observerTokens.append(
+            NotificationCenter.default.addObserver(
+                forName: .NSCalendarDayChanged,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.syncIfNeeded(force: true)
+                }
+            }
+        )
+        workspaceObserverTokens.append(
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.syncIfNeeded(force: true)
+                }
+            }
+        )
+    }
+
+    func syncIfNeeded(force: Bool = false, initialBoot: Bool = false) async {
+        if let existing = activeSyncTask {
+            await existing.value
+            if !force { return }
+        }
+
+        let now = Date()
+        let habitsRolledOver = HabitsService.shared.checkMidnightRolloverIfNeeded()
+        let healthRolledOver = HealthDataService.shared.checkMidnightRolloverIfNeeded()
+        let rolloverState = WidgetDataCoordinator.shared.consumePendingWidgetRolloverReload()
+        let effectiveDayRollover = habitsRolledOver || healthRolledOver || rolloverState.dayChanged
+        let shouldForceNetwork = force || effectiveDayRollover
+
+        if !initialBoot && !shouldForceNetwork && !rolloverState.slotChanged && now.timeIntervalSince(lastLifecycleSyncAt) < 15 {
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.lastLifecycleSyncAt = Date()
+
+            SmartLedgerStore.shared.reloadFromStorage()
+            HabitsService.shared.reloadFromLocalStorage()
+            TagdosStore.shared.loadFromStorage()
+            TagdosStore.shared.syncWithWidgets()
+            if initialBoot {
+                HabitsService.shared.saveDailyTotals()
+            }
+            await HabitsService.shared.flushOfflineQueue()
+            await HabitsService.shared.loadDataForSelectedDate(forceRefresh: shouldForceNetwork)
+            if initialBoot || shouldForceNetwork {
+                await TagdosStore.shared.syncWithSupabase()
+                await PrismStore.shared.syncWithSupabase()
+            }
+            if force {
+                await HealthDataService.shared.loadDataForSelectedDate(forceRefresh: true)
+                await WeatherService.shared.refreshWeather(force: true)
+            } else {
+                await HealthDataService.shared.refreshIfStale()
+                if initialBoot {
+                    await WeatherService.shared.refreshWeather()
+                } else {
+                    await WeatherService.shared.refreshWeatherIfStale()
+                }
+            }
+            await SmartBriefingService.shared.syncForForegroundTransition(
+                dayOrSlotChanged: effectiveDayRollover || rolloverState.slotChanged
+            )
+
+            #if canImport(WidgetKit)
+            if effectiveDayRollover {
+                WidgetCenter.shared.reloadAllTimelines()
+            } else if rolloverState.slotChanged {
+                WidgetDataCoordinator.shared.reloadTimelines(kinds: [WidgetDataCoordinator.WidgetKind.combined])
+            }
+            #endif
+        }
+        activeSyncTask = task
+        await task.value
+        if activeSyncTask == task {
+            activeSyncTask = nil
+        }
+    }
+}
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -30,20 +146,11 @@ struct DailyMacOSApp: App {
         
         // Start cross-process Darwin notification listener for widget quick logging
         WidgetDarwinMutationListener.shared.startListening()
+        MacOSLifecycleCoordinator.shared.start()
         
         // Eagerly trigger initial sync from Supabase and hydrate widget snapshots
         Task { @MainActor in
-            SmartLedgerStore.shared.reloadFromStorage()
-            HabitsService.shared.reloadFromLocalStorage()
-            TagdosStore.shared.loadFromStorage()
-            TagdosStore.shared.syncWithWidgets()
-            HabitsService.shared.saveDailyTotals()
-            await HabitsService.shared.flushOfflineQueue()
-            await HabitsService.shared.loadDataForSelectedDate()
-            await TagdosStore.shared.syncWithSupabase()
-            await PrismStore.shared.syncWithSupabase()
-            await HealthDataService.shared.refreshIfStale()
-            await WeatherService.shared.refreshWeather()
+            await MacOSLifecycleCoordinator.shared.syncIfNeeded(force: false, initialBoot: true)
         }
     }
     
@@ -55,6 +162,13 @@ struct DailyMacOSApp: App {
                 .frame(minWidth: 440, minHeight: 650)
                 .onOpenURL { url in
                     handleIncomingURL(url)
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        Task { @MainActor in
+                            await MacOSLifecycleCoordinator.shared.syncIfNeeded(force: false)
+                        }
+                    }
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -132,9 +246,7 @@ struct DailyMacOSApp: App {
                 
                 Button("Sync with Cloud") {
                     Task { @MainActor in
-                        await HabitsService.shared.flushOfflineQueue()
-                        await HabitsService.shared.loadDataForSelectedDate()
-                        await HealthDataService.shared.refreshIfStale()
+                        await MacOSLifecycleCoordinator.shared.syncIfNeeded(force: true)
                     }
                 }
                 .keyboardShortcut("r", modifiers: .command)
