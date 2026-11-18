@@ -223,14 +223,14 @@ public struct HealthSleepSessionRecord: Identifiable, Codable, Hashable, Sendabl
         var effectiveStages = stages
         if effectiveStages.isEmpty && (deepSeconds + remSeconds + lightSeconds + awakeSeconds) > 0 {
             var cursor = startTime
-            if deepSeconds > 0 {
-                let end = cursor.addingTimeInterval(Double(deepSeconds))
-                effectiveStages.append(SleepStageRecord(id: "\(id)_deep", stageType: .deep, startTime: cursor, endTime: end, durationSeconds: Double(deepSeconds), sourceDevice: canonDevice))
-                cursor = end
-            }
             if remSeconds > 0 {
                 let end = cursor.addingTimeInterval(Double(remSeconds))
                 effectiveStages.append(SleepStageRecord(id: "\(id)_rem", stageType: .rem, startTime: cursor, endTime: end, durationSeconds: Double(remSeconds), sourceDevice: canonDevice))
+                cursor = end
+            }
+            if deepSeconds > 0 {
+                let end = cursor.addingTimeInterval(Double(deepSeconds))
+                effectiveStages.append(SleepStageRecord(id: "\(id)_deep", stageType: .deep, startTime: cursor, endTime: end, durationSeconds: Double(deepSeconds), sourceDevice: canonDevice))
                 cursor = end
             }
             if lightSeconds > 0 {

@@ -87,9 +87,9 @@ data class HealthSleepSessionRecord(
             }
             val knownStages = deepSeconds + remSeconds + lightSeconds + awakeSeconds
             if (knownStages > 0) {
-                appendBlock(SleepStageType.LIGHT, lightSeconds)
-                appendBlock(SleepStageType.DEEP, deepSeconds)
                 appendBlock(SleepStageType.REM, remSeconds)
+                appendBlock(SleepStageType.DEEP, deepSeconds)
+                appendBlock(SleepStageType.LIGHT, lightSeconds)
                 appendBlock(SleepStageType.AWAKE, awakeSeconds)
             } else if (durationSeconds > 0) {
                 appendBlock(SleepStageType.LIGHT, durationSeconds)

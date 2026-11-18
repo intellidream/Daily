@@ -445,10 +445,103 @@ data class SleepSession(
         get() {
             val totalStages = deepSeconds + remSeconds + lightSeconds + awakeSeconds
             val span = max(0.0, (endTime - startTime) / 1000.0)
-            if (totalStages > 0 && span > totalStages * 1.35) {
+            if (stages.isEmpty() || totalStages <= 0.0) {
+                return max(span, totalStages)
+            }
+            val untrackedBreaks = computeUntrackedBreakSeconds(stages, startTime, endTime)
+            val effectiveSpan = max(0.0, span - untrackedBreaks)
+            if (effectiveSpan > totalStages * 1.35) {
                 return totalStages
             }
-            return max(span, totalStages)
+            return max(effectiveSpan, totalStages)
+        }
+
+    /**
+     * Derives explorable sleep segments (`Stage 1`, `Stage 2`, ...) on-the-fly when a nocturnal
+     * session contains 2+ sleep episodes separated either by an untracked break (>= 45m) or a
+     * sustained wake interval (>= 45m) flanked by >= 20m of real sleep on each side.
+     * Returns an empty list for standard single-segment nights.
+     */
+    val sleepSegments: List<SleepSession>
+        get() {
+            if (isNap || stages.size < 2) return emptyList()
+            val minBreakMs = 45L * 60L * 1000L
+            val minBreakSec = 45.0 * 60.0
+            val minSegmentAsleepSec = 20.0 * 60.0
+
+            val sorted = stages.sortedBy { it.startTime }
+
+            // 1. Split on untracked gaps >= 45 minutes
+            val contiguousRuns = mutableListOf<MutableList<SleepStageRecord>>()
+            var currentRun = mutableListOf(sorted[0])
+            var runCursorEnd = sorted[0].endTime
+
+            for (i in 1 until sorted.size) {
+                val st = sorted[i]
+                val gapMs = st.startTime - runCursorEnd
+                if (gapMs >= minBreakMs) {
+                    contiguousRuns.add(currentRun)
+                    currentRun = mutableListOf(st)
+                    runCursorEnd = st.endTime
+                } else {
+                    currentRun.add(st)
+                    if (st.endTime > runCursorEnd) {
+                        runCursorEnd = st.endTime
+                    }
+                }
+            }
+            contiguousRuns.add(currentRun)
+
+            // 2. Within each contiguous run, split on sustained Awake blocks >= 45m flanked by >= 20m sleep
+            fun splitOnSustainedAwake(run: List<SleepStageRecord>): List<List<SleepStageRecord>> {
+                var idx = 0
+                while (idx < run.size) {
+                    if (run[idx].stageType == SleepStageType.AWAKE) {
+                        var endIdx = idx
+                        var awakeDur = run[idx].durationSeconds
+                        while (endIdx + 1 < run.size && run[endIdx + 1].stageType == SleepStageType.AWAKE) {
+                            endIdx += 1
+                            awakeDur += run[endIdx].durationSeconds
+                        }
+                        if (awakeDur >= minBreakSec) {
+                            val before = run.subList(0, idx)
+                            val after = run.subList(endIdx + 1, run.size)
+                            val beforeAsleep = before.filter { it.stageType != SleepStageType.AWAKE }.sumOf { it.durationSeconds }
+                            val afterAsleep = after.filter { it.stageType != SleepStageType.AWAKE }.sumOf { it.durationSeconds }
+                            if (beforeAsleep >= minSegmentAsleepSec && afterAsleep >= minSegmentAsleepSec) {
+                                return listOf(before) + splitOnSustainedAwake(after)
+                            }
+                        }
+                        idx = endIdx + 1
+                    } else {
+                        idx += 1
+                    }
+                }
+                return listOf(run)
+            }
+
+            val candidateLists = contiguousRuns
+                .flatMap { splitOnSustainedAwake(it) }
+                .filter { list ->
+                    val asleep = list.filter { it.stageType != SleepStageType.AWAKE }.sumOf { it.durationSeconds }
+                    asleep >= minSegmentAsleepSec
+                }
+
+            if (candidateLists.size < 2) return emptyList()
+
+            return candidateLists.mapIndexedNotNull { index, segStages ->
+                val segStart = segStages.firstOrNull()?.startTime ?: return@mapIndexedNotNull null
+                val segEnd = segStages.maxOfOrNull { it.endTime } ?: return@mapIndexedNotNull null
+                SleepSession(
+                    id = "${id}_seg_${index + 1}",
+                    startTime = segStart,
+                    endTime = segEnd,
+                    isNap = false,
+                    stages = segStages,
+                    sourceDevice = sourceDevice,
+                    hasGranularHypnogram = hasGranularHypnogram
+                )
+            }
         }
 
     val awakeCount: Int
@@ -574,6 +667,41 @@ data class SleepSession(
 
     companion object {
         private val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+        private fun computeUntrackedBreakSeconds(
+            stages: List<SleepStageRecord>,
+            sessionStartMs: Long,
+            sessionEndMs: Long,
+            minBreakMs: Long = 45L * 60L * 1000L
+        ): Double {
+            val sorted = stages.sortedBy { it.startTime }
+            val first = sorted.firstOrNull() ?: return 0.0
+            var untrackedMs = 0L
+
+            val leadingGap = first.startTime - sessionStartMs
+            if (leadingGap >= minBreakMs) {
+                untrackedMs += leadingGap
+            }
+
+            var cursorEnd = first.endTime
+            for (i in 1 until sorted.size) {
+                val curr = sorted[i]
+                val gap = curr.startTime - cursorEnd
+                if (gap >= minBreakMs) {
+                    untrackedMs += gap
+                }
+                if (curr.endTime > cursorEnd) {
+                    cursorEnd = curr.endTime
+                }
+            }
+
+            val trailingGap = sessionEndMs - cursorEnd
+            if (trailingGap >= minBreakMs) {
+                untrackedMs += trailingGap
+            }
+
+            return untrackedMs / 1000.0
+        }
 
         fun formatTimeSpan(seconds: Double): String {
             if (seconds <= 0) return "--"

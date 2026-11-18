@@ -231,6 +231,16 @@ namespace Daily_WinUI.DesktopWidgets.Views
                         SleepMetricText.Text = sleepStr;
                         LargeSleepMetricText.Text = sleepStr;
 
+                        var ps = summary?.Summary?.Sleep?.PrimarySession;
+                        if (ps != null && (ps.RemSeconds > 0 || ps.DeepSeconds > 0))
+                        {
+                            int rMins = (int)Math.Round(ps.RemSeconds / 60.0);
+                            int dMins = (int)Math.Round(ps.DeepSeconds / 60.0);
+                            string rStr = rMins >= 60 ? $"{rMins / 60}h {rMins % 60}m" : $"{rMins}m";
+                            string dStr = dMins >= 60 ? $"{dMins / 60}h {dMins % 60}m" : $"{dMins}m";
+                            LargeSleepStageText.Text = $"REM {rStr} · Deep {dStr}";
+                        }
+
                         int stress = summary?.StressAvg ?? 22;
                         int pulse = (int)Math.Round(summary?.Rhr ?? 62);
                         string stressLabel = stress < 30 ? "Low" : (stress < 60 ? "Balanced" : "High");

@@ -407,6 +407,11 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="16" Padding="0,8,12,20">
 
+                            <!-- Split-Night Stage Selector (Visible when 2+ sleep stages exist) -->
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Visibility="{x:Bind HasSleepSegmentsVisibility, Mode=OneWay}">
+                                <StackPanel x:Name="SleepSegmentSelectorPanel" Orientation="Horizontal" Spacing="8" />
+                            </ScrollViewer>
+
                             <!-- Hero Sleep Architecture Card -->
                             <Border Background="{ThemeResource LayerOnAccentAcrylicFillColorDefaultBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="18">
                                 <StackPanel Spacing="16">
@@ -418,7 +423,7 @@
 
                                         <StackPanel Grid.Column="0" Spacing="4">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <TextBlock Text="LAST NIGHT'S SLEEP" FontSize="11" FontWeight="Bold" Foreground="#00C7BE" />
+                                                <TextBlock Text="{x:Bind SleepHeroHeaderText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="#00C7BE" />
                                                 <controls:DeviceOriginBadge DeviceName="{x:Bind SleepSourceDevice, Mode=OneWay}" IsCompact="True" />
                                             </StackPanel>
                                             <TextBlock Text="{x:Bind TotalSleepText, Mode=OneWay}" FontSize="32" FontWeight="Bold" Foreground="{ThemeResource AppFgColorBrush}" />
@@ -496,12 +501,12 @@
                                             <TextBlock Text="{x:Bind HypnogramHeaderTitle, Mode=OneWay}" FontSize="15" FontWeight="SemiBold" />
                                         </StackPanel>
                                         
-                                        <!-- Stage Legend Pills (Deep, REM, Core, Awake) -->
+                                        <!-- Stage Legend Pills (REM, Deep, Core, Awake) -->
                                         <StackPanel Orientation="Horizontal" Spacing="14" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="7" Height="7" Fill="#FF7043" /><TextBlock Text="Awake" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" /></StackPanel>
                                             <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="7" Height="7" Fill="#26C6DA" /><TextBlock Text="REM" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" /></StackPanel>
-                                            <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="7" Height="7" Fill="#42A5F5" /><TextBlock Text="Core" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" /></StackPanel>
                                             <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="7" Height="7" Fill="#3949AB" /><TextBlock Text="Deep" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" /></StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="7" Height="7" Fill="#42A5F5" /><TextBlock Text="Core" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" /></StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4"><Ellipse Width="7" Height="7" Fill="#FF7043" /><TextBlock Text="Awake" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" /></StackPanel>
                                         </StackPanel>
                                     </Grid>
 
@@ -564,7 +569,7 @@
                                         <Canvas x:Name="StageProportionCanvas" Height="22" HorizontalAlignment="Stretch" SizeChanged="StageProportionCanvas_SizeChanged" />
                                     </StackPanel>
 
-                                    <!-- 4 Stage Breakdown Cards -->
+                                    <!-- 4 Stage Breakdown Cards (REM first, Deep second) -->
                                     <Grid ColumnSpacing="10" Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -573,19 +578,19 @@
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
 
-                                        <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#3949AB" BorderThickness="1" CornerRadius="10" Padding="12">
-                                            <StackPanel>
-                                                <TextBlock Text="DEEP" FontSize="10" FontWeight="Bold" Foreground="#3949AB" />
-                                                <TextBlock Text="{x:Bind DeepDurationText, Mode=OneWay}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
-                                                <TextBlock Text="{x:Bind DeepPercentText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
-                                            </StackPanel>
-                                        </Border>
-
-                                        <Border Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#26C6DA" BorderThickness="1" CornerRadius="10" Padding="12">
+                                        <Border Grid.Column="0" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#26C6DA" BorderThickness="1" CornerRadius="10" Padding="12">
                                             <StackPanel>
                                                 <TextBlock Text="REM" FontSize="10" FontWeight="Bold" Foreground="#26C6DA" />
                                                 <TextBlock Text="{x:Bind RemDurationText, Mode=OneWay}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
                                                 <TextBlock Text="{x:Bind RemPercentText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Column="1" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="#3949AB" BorderThickness="1" CornerRadius="10" Padding="12">
+                                            <StackPanel>
+                                                <TextBlock Text="DEEP" FontSize="10" FontWeight="Bold" Foreground="#3949AB" />
+                                                <TextBlock Text="{x:Bind DeepDurationText, Mode=OneWay}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
+                                                <TextBlock Text="{x:Bind DeepPercentText, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource AppFgMutedColorBrush}" />
                                             </StackPanel>
                                         </Border>
 

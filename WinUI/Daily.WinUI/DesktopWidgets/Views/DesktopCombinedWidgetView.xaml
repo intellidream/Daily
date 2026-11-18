@@ -197,7 +197,7 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="Sleep &amp; Recovery" FontSize="10" Foreground="#80FFFFFF"/>
                             <TextBlock x:Name="LargeSleepMetricText" Text="88/100 · 7h 45m" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
-                            <TextBlock x:Name="LargeSleepStageText" Text="Deep 1h 40m · REM 2h" FontSize="9.5" Foreground="#A5B4FC"/>
+                            <TextBlock x:Name="LargeSleepStageText" Text="REM 2h · Deep 1h 40m" FontSize="9.5" Foreground="#A5B4FC"/>
                         </StackPanel>
                     </Grid>
                 </Border>

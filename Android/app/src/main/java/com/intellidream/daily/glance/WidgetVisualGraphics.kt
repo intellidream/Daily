@@ -720,20 +720,20 @@ object WidgetVisualGraphics {
         var curX = 0f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        // 1. Deep (Electric Indigo #6366F1)
-        val deepW = (deepSec / total).toFloat() * widthPx
-        if (deepW > 0f) {
-            paint.color = Color.parseColor("#6366F1")
-            canvas.drawRect(curX, 0f, curX + deepW, heightPx.toFloat(), paint)
-            curX += deepW
-        }
-
-        // 2. REM (Vivid Purple #8B5CF6)
+        // 1. REM (Vivid Purple #8B5CF6)
         val remW = (remSec / total).toFloat() * widthPx
         if (remW > 0f) {
             paint.color = Color.parseColor("#8B5CF6")
             canvas.drawRect(curX, 0f, curX + remW, heightPx.toFloat(), paint)
             curX += remW
+        }
+
+        // 2. Deep (Electric Indigo #6366F1)
+        val deepW = (deepSec / total).toFloat() * widthPx
+        if (deepW > 0f) {
+            paint.color = Color.parseColor("#6366F1")
+            canvas.drawRect(curX, 0f, curX + deepW, heightPx.toFloat(), paint)
+            curX += deepW
         }
 
         // 3. Light (Electric Cyan #00E5FF)

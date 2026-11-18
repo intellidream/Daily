@@ -371,12 +371,38 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
             for (record in sleepResponse.records) {
-                val endDateStr = recordDateFormatter.format(Date(record.endTime.toEpochMilli()))
-                if (endDateStr != targetDateStr) continue
+                if (!record.endTime.isAfter(sleepStart) || record.endTime.isAfter(sleepEnd)) continue
                 val dev = record.metadata.dataOrigin.packageName
                 val modifiedMs = record.metadata.lastModifiedTime.toEpochMilli()
                 if (record.stages.isNotEmpty()) {
-                    for (stage in record.stages) {
+                    val sortedStages = record.stages.sortedBy { it.startTime }
+                    val sessionStartMs = record.startTime.toEpochMilli()
+                    val sessionEndMs = record.endTime.toEpochMilli()
+                    var cursorMs = sessionStartMs
+
+                    for (stage in sortedStages) {
+                        val stageStartEpoch = stage.startTime.toEpochMilli()
+                        val stageEndEpoch = stage.endTime.toEpochMilli()
+                        if (stageEndEpoch <= stageStartEpoch) continue
+
+                        // Fill uncovered >= 60s gaps inside the same SleepSessionRecord envelope as Awake
+                        val clampedStart = maxOf(sessionStartMs, stageStartEpoch)
+                        if (clampedStart - cursorMs >= 60_000L) {
+                            val gapSec = (clampedStart - cursorMs) / 1000.0
+                            buildRecord(
+                                type = "sleep_stage_awake",
+                                value = gapSec,
+                                unit = "seconds",
+                                startTime = cursorMs,
+                                endTime = clampedStart,
+                                rawPackage = dev,
+                                extId = "${record.metadata.id}_gap_$cursorMs",
+                                semantics = "session_stage",
+                                overrideLocalDate = targetDateStr,
+                                createdAt = modifiedMs - 1L
+                            )?.let { telemetry.add(it) }
+                        }
+
                         val stageTypeStr = when (stage.stage) {
                             SleepSessionRecord.STAGE_TYPE_DEEP -> "sleep_stage_deep"
                             SleepSessionRecord.STAGE_TYPE_REM -> "sleep_stage_rem"
@@ -387,20 +413,40 @@ class HealthConnectManager(private val context: Context) {
                             else -> "sleep_stage_light"
                         }
                         val durSec = ChronoUnit.SECONDS.between(stage.startTime, stage.endTime).toDouble()
-                        if (durSec <= 0) continue
-                        val stageStartEpoch = stage.startTime.toEpochMilli()
-                        val stageExtId = "${record.metadata.id}_$stageStartEpoch"
+                        if (durSec > 0) {
+                            val stageExtId = "${record.metadata.id}_$stageStartEpoch"
+                            buildRecord(
+                                type = stageTypeStr,
+                                value = durSec,
+                                unit = "seconds",
+                                startTime = stageStartEpoch,
+                                endTime = stageEndEpoch,
+                                rawPackage = dev,
+                                extId = stageExtId,
+                                semantics = "session_stage",
+                                overrideLocalDate = targetDateStr,
+                                createdAt = modifiedMs
+                            )?.let { telemetry.add(it) }
+                        }
+
+                        if (stageEndEpoch > cursorMs) {
+                            cursorMs = stageEndEpoch
+                        }
+                    }
+
+                    if (sessionEndMs - cursorMs >= 60_000L) {
+                        val gapSec = (sessionEndMs - cursorMs) / 1000.0
                         buildRecord(
-                            type = stageTypeStr,
-                            value = durSec,
+                            type = "sleep_stage_awake",
+                            value = gapSec,
                             unit = "seconds",
-                            startTime = stageStartEpoch,
-                            endTime = stage.endTime.toEpochMilli(),
+                            startTime = cursorMs,
+                            endTime = sessionEndMs,
                             rawPackage = dev,
-                            extId = stageExtId,
+                            extId = "${record.metadata.id}_gap_$cursorMs",
                             semantics = "session_stage",
                             overrideLocalDate = targetDateStr,
-                            createdAt = modifiedMs
+                            createdAt = modifiedMs - 1L
                         )?.let { telemetry.add(it) }
                     }
                 } else {

@@ -107,13 +107,14 @@ object SleepClusteringEngine {
 
             // A. If granular stage records exist for this device
             if (stageRecords.isNotEmpty()) {
-                val clusteredStageSessions = clusterStageRecords(
+                val rawStageSessions = clusterStageRecords(
                     stages = stageRecords,
                     targetDate = morningStartOfDay,
                     sourceDevice = device
                 )
+                val classifiedSessions = reclassifySplitMorningEpisodes(rawStageSessions)
 
-                for (session in clusteredStageSessions) {
+                for (session in classifiedSessions) {
                     if (session.isNap) {
                         allNaps.add(
                             NapSession(
@@ -131,13 +132,14 @@ object SleepClusteringEngine {
             }
             // B. If only aggregate sleep records exist for this device
             else if (aggregateRecords.isNotEmpty()) {
-                val clusteredAggregates = clusterAggregateRecords(
+                val rawAggregates = clusterAggregateRecords(
                     records = aggregateRecords,
                     targetDate = morningStartOfDay,
                     sourceDevice = device
                 )
+                val classifiedAggregates = reclassifySplitMorningEpisodes(rawAggregates)
 
-                for (session in clusteredAggregates) {
+                for (session in classifiedAggregates) {
                     if (session.isNap) {
                         allNaps.add(
                             NapSession(
@@ -153,6 +155,13 @@ object SleepClusteringEngine {
                     }
                 }
             }
+        }
+
+        // 2b. Device-agnostic biphasic/split-night consolidation per wearable
+        if (allNocturnalSessions.size >= 2) {
+            val consolidatedNocturnal = consolidateNocturnalSessionsByDevice(allNocturnalSessions.toList())
+            allNocturnalSessions.clear()
+            allNocturnalSessions.addAll(consolidatedNocturnal)
         }
 
         // 3. Fallback: If no nocturnal telemetry session was found, check daily vitals summary
@@ -461,14 +470,119 @@ object SleepClusteringEngine {
         )
     }
 
+    // MARK: - Split-Night / Biphasic Consolidation (Device-Agnostic)
+
+    /**
+     * Reclassifies early-morning (< 11:00) continuation episodes as nocturnal sleep rather than naps
+     * when preceded within <= 4 hours by a truncated nocturnal episode (< 6 hours asleep) on the same wearable.
+     */
+    private fun reclassifySplitMorningEpisodes(sessions: List<SleepSession>): List<SleepSession> {
+        if (sessions.size < 2) return sessions
+        val result = sessions.sortedBy { it.startTime }.toMutableList()
+        for (i in 1 until result.size) {
+            val prev = result[i - 1]
+            val curr = result[i]
+            if (!curr.isNap || prev.isNap) continue
+            val calStart = Calendar.getInstance().apply { timeInMillis = curr.startTime }
+            val startHour = calStart.get(Calendar.HOUR_OF_DAY)
+            val gapSeconds = (curr.startTime - prev.endTime) / 1000.0
+            if (startHour < 11 && prev.asleepSeconds < 6 * 3600 && gapSeconds >= 0.0 && gapSeconds <= 4 * 3600) {
+                result[i] = curr.copy(isNap = false)
+            }
+        }
+        return result
+    }
+
+    /**
+     * Consolidates multiple nocturnal episodes recorded by the same wearable during the same night
+     * (separated by <= 8 hours) into a single canonical nocturnal session without inventing fake Awake stages
+     * for untracked out-of-bed breaks.
+     */
+    private fun consolidateNocturnalSessionsByDevice(sessions: List<SleepSession>): List<SleepSession> {
+        if (sessions.size < 2) return sessions
+        val maxInterEpisodeGapMs = 8L * 3600L * 1000L
+
+        val byCanonical = LinkedHashMap<String, MutableList<SleepSession>>()
+        for (session in sessions) {
+            val key = DeviceSource.from(session.sourceDevice).displayName
+            byCanonical.getOrPut(key) { mutableListOf() }.add(session)
+        }
+
+        val consolidated = mutableListOf<SleepSession>()
+        for ((_, rawEpisodes) in byCanonical) {
+            val episodes = rawEpisodes.sortedBy { it.startTime }
+            if (episodes.size == 1) {
+                consolidated.add(episodes[0])
+                continue
+            }
+
+            val groups = mutableListOf(mutableListOf(episodes[0]))
+            for (i in 1 until episodes.size) {
+                val ep = episodes[i]
+                val prevEnd = groups.last().maxOfOrNull { it.endTime } ?: ep.startTime
+                if (ep.startTime - prevEnd <= maxInterEpisodeGapMs) {
+                    groups.last().add(ep)
+                } else {
+                    groups.add(mutableListOf(ep))
+                }
+            }
+
+            for (group in groups) {
+                if (group.size == 1) {
+                    consolidated.add(group[0])
+                    continue
+                }
+                val mergedStart = group[0].startTime
+                val mergedEnd = group.maxOfOrNull { it.endTime } ?: group.last().endTime
+                val hasGranular = group.any { it.hasGranularHypnogram }
+                val preservedDevice = group.firstOrNull { it.hasGranularHypnogram }?.sourceDevice ?: group[0].sourceDevice
+
+                val mergedStages = mutableListOf<SleepStageRecord>()
+                for (ep in group) {
+                    if (ep.stages.isNotEmpty()) {
+                        mergedStages.addAll(ep.stages)
+                    } else {
+                        val dur = max(0.0, (ep.endTime - ep.startTime) / 1000.0)
+                        if (dur > 0.0) {
+                            mergedStages.add(
+                                SleepStageRecord(
+                                    id = "${ep.id}_agg_light",
+                                    stageType = SleepStageType.LIGHT,
+                                    startTime = ep.startTime,
+                                    endTime = ep.endTime,
+                                    durationSeconds = dur,
+                                    sourceDevice = preservedDevice
+                                )
+                            )
+                        }
+                    }
+                }
+                mergedStages.sortBy { it.startTime }
+
+                consolidated.add(
+                    SleepSession(
+                        id = group[0].id,
+                        startTime = mergedStart,
+                        endTime = mergedEnd,
+                        isNap = false,
+                        stages = mergedStages,
+                        sourceDevice = preservedDevice,
+                        hasGranularHypnogram = hasGranular
+                    )
+                )
+            }
+        }
+        return consolidated
+    }
+
     /**
      * Priority ranking for selecting the primary nocturnal sleep session among multiple wearables.
-     * Dedicated sleep trackers (Oura Ring) have highest clinical accuracy, followed by Pixel/Galaxy/Apple Watch and Amazfit.
+     * Dedicated sleep trackers (Oura Ring) have highest clinical accuracy, followed by Pixel/Galaxy/Apple/OnePlus Watch and Amazfit.
      */
     private fun deviceSleepPriorityRank(deviceName: String): Int {
         val lower = deviceName.lowercase()
         if (lower.contains("oura")) return 100
-        if (lower.contains("watch") || lower.contains("pixel") || lower.contains("galaxy") || lower.contains("apple")) return 80
+        if (lower.contains("watch") || lower.contains("pixel") || lower.contains("galaxy") || lower.contains("apple") || lower.contains("oneplus")) return 80
         if (lower.contains("amazfit") || lower.contains("zepp") || lower.contains("balance")) return 70
         if (lower.contains("oneplus") || lower.contains("wearos") || lower.contains("wear os")) return 60
         if (lower.contains("huawei") || lower.contains("harmony")) return 50

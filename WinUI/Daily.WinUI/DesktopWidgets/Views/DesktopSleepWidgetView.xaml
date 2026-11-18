@@ -85,23 +85,23 @@
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
                     <TextBlock x:Name="MediumQualityHeader" Text="Restorative Sleep Quality (High)" FontSize="12" FontWeight="SemiBold" Foreground="#A5B4FC"/>
 
-                    <!-- Proportional Stages Bar -->
+                    <!-- Proportional Stages Bar (REM, Deep, Light, Awake) -->
                     <Grid Height="8" CornerRadius="4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
                             <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="2*" />
                             <ColumnDefinition Width="4*" />
                             <ColumnDefinition Width="1*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Background="#4F46E5" CornerRadius="4,0,0,4" ToolTipService.ToolTip="Deep Sleep"/>
-                        <Border Grid.Column="1" Background="#818CF8" ToolTipService.ToolTip="REM Sleep"/>
+                        <Border Grid.Column="0" Background="#818CF8" CornerRadius="4,0,0,4" ToolTipService.ToolTip="REM Sleep"/>
+                        <Border Grid.Column="1" Background="#4F46E5" ToolTipService.ToolTip="Deep Sleep"/>
                         <Border Grid.Column="2" Background="#A5B4FC" ToolTipService.ToolTip="Light Sleep"/>
                         <Border Grid.Column="3" Background="#F43F5E" CornerRadius="0,4,4,0" ToolTipService.ToolTip="Awake"/>
                     </Grid>
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock x:Name="DeepStageText" Text="Deep 1h 40m" FontSize="10" Foreground="#C7D2FE"/>
                         <TextBlock x:Name="RemStageText" Text="REM 2h 10m" FontSize="10" Foreground="#A5B4FC"/>
+                        <TextBlock x:Name="DeepStageText" Text="Deep 1h 40m" FontSize="10" Foreground="#C7D2FE"/>
                         <TextBlock x:Name="LightStageText" Text="Light 3h 25m" FontSize="10" Foreground="#818CF8"/>
                     </StackPanel>
                 </StackPanel>
@@ -152,16 +152,16 @@
                         <TextBlock x:Name="LargeEfficiencyText" Text="Efficiency: 92%" FontSize="11" Foreground="#34D399" HorizontalAlignment="Right"/>
                     </Grid>
 
-                    <!-- Proportional Stages Bar -->
+                    <!-- Proportional Stages Bar (REM, Deep, Light, Awake) -->
                     <Grid Height="10" CornerRadius="5">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="22*" />
                             <ColumnDefinition Width="25*" />
+                            <ColumnDefinition Width="22*" />
                             <ColumnDefinition Width="45*" />
                             <ColumnDefinition Width="8*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Background="#4F46E5" CornerRadius="5,0,0,5" ToolTipService.ToolTip="Deep Sleep (22%)"/>
-                        <Border Grid.Column="1" Background="#818CF8" ToolTipService.ToolTip="REM Sleep (25%)"/>
+                        <Border Grid.Column="0" Background="#818CF8" CornerRadius="5,0,0,5" ToolTipService.ToolTip="REM Sleep (25%)"/>
+                        <Border Grid.Column="1" Background="#4F46E5" ToolTipService.ToolTip="Deep Sleep (22%)"/>
                         <Border Grid.Column="2" Background="#A5B4FC" ToolTipService.ToolTip="Light Sleep (45%)"/>
                         <Border Grid.Column="3" Background="#F43F5E" CornerRadius="0,5,5,0" ToolTipService.ToolTip="Awake (8%)"/>
                     </Grid>
@@ -174,12 +174,12 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Spacing="1">
-                            <TextBlock Text="DEEP" FontSize="9" Foreground="#80FFFFFF"/>
-                            <TextBlock x:Name="LargeDeepStageText" Text="1h 40m" FontSize="11" FontWeight="SemiBold" Foreground="#C7D2FE"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="1">
                             <TextBlock Text="REM" FontSize="9" Foreground="#80FFFFFF"/>
                             <TextBlock x:Name="LargeRemStageText" Text="2h 10m" FontSize="11" FontWeight="SemiBold" Foreground="#A5B4FC"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="1">
+                            <TextBlock Text="DEEP" FontSize="9" Foreground="#80FFFFFF"/>
+                            <TextBlock x:Name="LargeDeepStageText" Text="1h 40m" FontSize="11" FontWeight="SemiBold" Foreground="#C7D2FE"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Spacing="1">
                             <TextBlock Text="LIGHT" FontSize="9" Foreground="#80FFFFFF"/>

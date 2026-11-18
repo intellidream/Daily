@@ -327,6 +327,7 @@ namespace Daily_WinUI.Views
         private void ApplyDeviceFilter()
         {
             _selectedStage = null;
+            _selectedSleepSegmentIndex = null;
             _filteredStressScore = null;
             _filteredHrvMs = null;
             _filteredHrvIsRmssd = false;
@@ -657,6 +658,7 @@ namespace Daily_WinUI.Views
 
         private Task RefreshDerivedDataAsync()
         {
+            PopulateSleepSegmentButtons();
             NotifyAllProperties();
 
             // Re-render visual canvas graphs
@@ -1570,9 +1572,128 @@ namespace Daily_WinUI.Views
         // TAB 1: SLEEP STUDIO PROPERTIES
         // ==========================================
 
-        public string SleepSourceDevice => _primarySleepSession?.SourceDevice ?? DominantDeviceName;
+        private int? _selectedSleepSegmentIndex;
 
-        public string TotalSleepText => SleepText;
+        private List<SleepSession> CurrentSleepSegments =>
+            _primarySleepSession?.GetSleepSegments() ?? new List<SleepSession>();
+
+        private SleepSession? ActiveDisplayedSleepSession
+        {
+            get
+            {
+                var segs = CurrentSleepSegments;
+                if (_selectedSleepSegmentIndex.HasValue &&
+                    _selectedSleepSegmentIndex.Value >= 0 &&
+                    _selectedSleepSegmentIndex.Value < segs.Count)
+                {
+                    return segs[_selectedSleepSegmentIndex.Value];
+                }
+                return _primarySleepSession;
+            }
+        }
+
+        public Visibility HasSleepSegmentsVisibility =>
+            CurrentSleepSegments.Count >= 2 ? Visibility.Visible : Visibility.Collapsed;
+
+        public string SleepHeroHeaderText
+        {
+            get
+            {
+                var segs = CurrentSleepSegments;
+                if (_selectedSleepSegmentIndex.HasValue && segs.Count >= 2)
+                {
+                    return $"SLEEP STAGE {_selectedSleepSegmentIndex.Value + 1} OF {segs.Count}";
+                }
+                return "LAST NIGHT'S SLEEP";
+            }
+        }
+
+        private void PopulateSleepSegmentButtons()
+        {
+            if (SleepSegmentSelectorPanel == null) return;
+            SleepSegmentSelectorPanel.Children.Clear();
+
+            var segs = CurrentSleepSegments;
+            if (segs.Count < 2 || _primarySleepSession == null) return;
+
+            Button BuildPill(string title, string subtitle, int? segIndex)
+            {
+                bool isSelected = _selectedSleepSegmentIndex == segIndex;
+                var accentTeal = Color.FromArgb(255, 0, 199, 190);
+                var bgBrush = isSelected
+                    ? new SolidColorBrush(Color.FromArgb(46, 0, 199, 190))
+                    : new SolidColorBrush(Color.FromArgb(18, 255, 255, 255));
+                var borderBrush = isSelected
+                    ? new SolidColorBrush(Color.FromArgb(145, 0, 199, 190))
+                    : new SolidColorBrush(Color.FromArgb(28, 255, 255, 255));
+
+                var stack = new StackPanel { Spacing = 1 };
+                stack.Children.Add(new TextBlock
+                {
+                    Text = title,
+                    FontSize = 11,
+                    FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                    Foreground = (Brush)Application.Current.Resources["AppFgColorBrush"]
+                });
+                stack.Children.Add(new TextBlock
+                {
+                    Text = subtitle,
+                    FontSize = 9.5,
+                    Foreground = isSelected
+                        ? new SolidColorBrush(accentTeal)
+                        : (Brush)Application.Current.Resources["AppFgMutedColorBrush"]
+                });
+
+                var btn = new Button
+                {
+                    Content = stack,
+                    Background = bgBrush,
+                    BorderBrush = borderBrush,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(16),
+                    Padding = new Thickness(12, 6, 12, 6)
+                };
+                btn.Click += (s, e) =>
+                {
+                    _selectedSleepSegmentIndex = segIndex;
+                    _selectedStage = null;
+                    PopulateSleepSegmentButtons();
+                    NotifyAllProperties();
+                    DrawSleepHypnogram();
+                    DrawSleepXAxis();
+                    DrawStageProportions();
+                };
+                return btn;
+            }
+
+            string fullSleep = FormatSecondsToHoursMins(
+                _primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds);
+            SleepSegmentSelectorPanel.Children.Add(BuildPill("Full Night", fullSleep, null));
+
+            for (int i = 0; i < segs.Count; i++)
+            {
+                var seg = segs[i];
+                string segSub = $"{seg.StartTime:HH:mm}–{seg.EffectiveEndTime:HH:mm} • {FormatSecondsToHoursMins(seg.AsleepSeconds)}";
+                SleepSegmentSelectorPanel.Children.Add(BuildPill($"Stage {i + 1}", segSub, i));
+            }
+        }
+
+        public string SleepSourceDevice => ActiveDisplayedSleepSession?.SourceDevice ?? DominantDeviceName;
+
+        public string TotalSleepText
+        {
+            get
+            {
+                if (_selectedSleepSegmentIndex.HasValue && ActiveDisplayedSleepSession != null)
+                {
+                    return FormatSecondsToHoursMins(
+                        ActiveDisplayedSleepSession.AsleepSeconds > 0
+                            ? ActiveDisplayedSleepSession.AsleepSeconds
+                            : ActiveDisplayedSleepSession.DurationSeconds);
+                }
+                return SleepText;
+            }
+        }
 
         public string SleepScheduleAndEfficiencyText
         {
@@ -1588,12 +1709,17 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                var displayed = ActiveDisplayedSleepSession;
+                if (_selectedSleepSegmentIndex.HasValue && displayed != null)
+                {
+                    return displayed.SleepScore > 0 ? displayed.SleepScore.ToString() : "--";
+                }
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    int s = _primarySleepSession?.SleepScore ?? 0;
+                    int s = displayed?.SleepScore ?? 0;
                     return s > 0 ? s.ToString() : "--";
                 }
-                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                int score = displayed?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
                 return score > 0 ? score.ToString() : "--";
             }
         }
@@ -1602,10 +1728,20 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                var displayed = ActiveDisplayedSleepSession;
+                if (_selectedSleepSegmentIndex.HasValue && displayed != null)
+                {
+                    int s = displayed.SleepScore;
+                    if (s >= 85) return "EXCELLENT";
+                    if (s >= 70) return "GOOD";
+                    if (s >= 50) return "FAIR";
+                    if (s > 0) return "NEEDS ATTENTION";
+                    return "RECORDED";
+                }
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    if (_primarySleepSession == null) return "NO DATA";
-                    int s = _primarySleepSession.SleepScore;
+                    if (displayed == null) return "NO DATA";
+                    int s = displayed.SleepScore;
                     if (s >= 85) return "EXCELLENT";
                     if (s >= 70) return "GOOD";
                     if (s >= 50) return "FAIR";
@@ -1615,7 +1751,7 @@ namespace Daily_WinUI.Views
                 var rating = _currentSummary?.Summary?.Sleep?.PrimarySession?.QualityRating;
                 if (!string.IsNullOrEmpty(rating)) return rating.ToUpperInvariant();
 
-                int score = _primarySleepSession?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
+                int score = displayed?.SleepScore ?? _currentSummary?.SleepScore ?? 0;
                 if (score >= 85) return "EXCELLENT";
                 if (score >= 70) return "GOOD";
                 if (score >= 50) return "FAIR";
@@ -1628,9 +1764,10 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                if (_primarySleepSession != null && _primarySleepSession.StartTime != default)
+                var displayed = ActiveDisplayedSleepSession;
+                if (displayed != null && displayed.StartTime != default)
                 {
-                    return _primarySleepSession.StartTime.ToString("HH:mm");
+                    return displayed.StartTime.ToString("HH:mm");
                 }
                 return "--:--";
             }
@@ -1640,9 +1777,10 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                if (_primarySleepSession != null && _primarySleepSession.EndTime != default)
+                var displayed = ActiveDisplayedSleepSession;
+                if (displayed != null && displayed.EffectiveEndTime != default)
                 {
-                    return _primarySleepSession.EndTime.ToString("HH:mm");
+                    return displayed.EffectiveEndTime.ToString("HH:mm");
                 }
                 return "--:--";
             }
@@ -1654,9 +1792,10 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0)
+                var displayed = ActiveDisplayedSleepSession;
+                if (displayed != null && displayed.DurationSeconds > 0)
                 {
-                    var ts = TimeSpan.FromSeconds(_primarySleepSession.DurationSeconds);
+                    var ts = TimeSpan.FromSeconds(displayed.DurationSeconds);
                     return $"{(int)ts.TotalHours}h {ts.Minutes}m";
                 }
                 return "--";
@@ -1667,9 +1806,14 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                var displayed = ActiveDisplayedSleepSession;
+                if (_selectedSleepSegmentIndex.HasValue && displayed != null && displayed.DurationSeconds > 0)
+                {
+                    return $"{displayed.EfficiencyPercent}% eff";
+                }
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    if (_primarySleepSession == null || _primarySleepSession.DurationSeconds <= 0)
+                    if (displayed == null || displayed.DurationSeconds <= 0)
                     {
                         return "--%";
                     }
@@ -1677,8 +1821,8 @@ namespace Daily_WinUI.Views
                     {
                         return $"{_filteredSleepEfficiency.Value:F0}% eff";
                     }
-                    double asleep = _primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds;
-                    double inBed = Math.Max(asleep, _primarySleepSession.DurationSeconds);
+                    double asleep = displayed.AsleepSeconds > 0 ? displayed.AsleepSeconds : displayed.DurationSeconds;
+                    double inBed = Math.Max(asleep, displayed.DurationSeconds);
                     int computedEff = (int)Math.Round(Math.Clamp((asleep / inBed) * 100.0, 1.0, 100.0));
                     return $"{computedEff}% eff";
                 }
@@ -1686,9 +1830,9 @@ namespace Daily_WinUI.Views
                 int eff = _currentSummary?.Summary?.Sleep?.PrimarySession?.EfficiencyPercent ?? 0;
                 if (eff > 0) return $"{eff}% eff";
 
-                if (_primarySleepSession != null && _primarySleepSession.DurationSeconds > 0 && _primarySleepSession.AsleepSeconds > 0)
+                if (displayed != null && displayed.DurationSeconds > 0 && displayed.AsleepSeconds > 0)
                 {
-                    int computedEff = (int)Math.Round(Math.Clamp((_primarySleepSession.AsleepSeconds / _primarySleepSession.DurationSeconds) * 100.0, 1.0, 100.0));
+                    int computedEff = (int)Math.Round(Math.Clamp((displayed.AsleepSeconds / displayed.DurationSeconds) * 100.0, 1.0, 100.0));
                     return $"{computedEff}% eff";
                 }
                 return "--%";
@@ -1699,12 +1843,17 @@ namespace Daily_WinUI.Views
         {
             get
             {
+                var displayed = ActiveDisplayedSleepSession;
+                if (_selectedSleepSegmentIndex.HasValue && displayed != null)
+                {
+                    return $"{displayed.RestorativePercent}%";
+                }
                 if (!string.IsNullOrEmpty(_selectedDeviceFilter))
                 {
-                    if (_primarySleepSession == null) return "--%";
-                    double d = _primarySleepSession.DeepSeconds;
-                    double r = _primarySleepSession.RemSeconds;
-                    double a = _primarySleepSession.AsleepSeconds > 0 ? _primarySleepSession.AsleepSeconds : _primarySleepSession.DurationSeconds;
+                    if (displayed == null) return "--%";
+                    double d = displayed.DeepSeconds;
+                    double r = displayed.RemSeconds;
+                    double a = displayed.AsleepSeconds > 0 ? displayed.AsleepSeconds : displayed.DurationSeconds;
                     if (a > 0 && (d + r) > 0)
                     {
                         return $"{((d + r) / a) * 100:F0}%";
@@ -1715,9 +1864,9 @@ namespace Daily_WinUI.Views
                 int rest = _currentSummary?.Summary?.Sleep?.PrimarySession?.RestorativePercent ?? 0;
                 if (rest > 0) return $"{rest}%";
 
-                double deep = _primarySleepSession?.DeepSeconds ?? 0;
-                double rem = _primarySleepSession?.RemSeconds ?? 0;
-                double asleep = _primarySleepSession?.AsleepSeconds ?? 0;
+                double deep = displayed?.DeepSeconds ?? 0;
+                double rem = displayed?.RemSeconds ?? 0;
+                double asleep = displayed?.AsleepSeconds ?? 0;
                 if (asleep > 0 && (deep + rem) > 0)
                 {
                     return $"{((deep + rem) / asleep) * 100:F0}%";
@@ -1746,9 +1895,9 @@ namespace Daily_WinUI.Views
                     int s = _primarySleepSession.SleepScore;
 
                     if (s >= 85)
-                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of optimal restorative sleep ({restPct:F0}% Deep + REM architecture).";
+                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of optimal restorative sleep ({restPct:F0}% REM + Deep architecture).";
                     if (s >= 70)
-                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of solid sleep with {restPct:F0}% restorative Deep + REM stages.";
+                        return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of solid sleep with {restPct:F0}% restorative REM + Deep stages.";
                     if (s > 0)
                         return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of sleep ({restPct:F0}% restorative). Mild fragmentation or shorter recovery detected.";
                     return $"{devLabel} recorded {(int)ts.TotalHours}h {ts.Minutes}m of sleep.";
@@ -1767,15 +1916,15 @@ namespace Daily_WinUI.Views
             }
         }
 
-        public string HypnogramHeaderTitle => _primarySleepSession?.HasGranularHypnogram == true && _primarySleepSession?.Stages?.Any() == true
+        public string HypnogramHeaderTitle => ActiveDisplayedSleepSession?.HasGranularHypnogram == true && ActiveDisplayedSleepSession?.Stages?.Any() == true
             ? "Clinical Sleep Hypnogram"
             : "Sleep Stage Proportions";
 
-        public Visibility GranularHypnogramVisibility => _primarySleepSession?.HasGranularHypnogram == true && _primarySleepSession?.Stages?.Any() == true
+        public Visibility GranularHypnogramVisibility => ActiveDisplayedSleepSession?.HasGranularHypnogram == true && ActiveDisplayedSleepSession?.Stages?.Any() == true
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        public Visibility StageProportionVisibility => _primarySleepSession?.HasGranularHypnogram != true || _primarySleepSession?.Stages?.Any() != true
+        public Visibility StageProportionVisibility => ActiveDisplayedSleepSession?.HasGranularHypnogram != true || ActiveDisplayedSleepSession?.Stages?.Any() != true
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -1816,17 +1965,17 @@ namespace Daily_WinUI.Views
         }
 
         // Stage Breakdown Card Formats
-        public string DeepDurationText => FormatSecondsToHoursMins(_primarySleepSession?.DeepSeconds ?? 0);
-        public string DeepPercentText => CalculateStagePercent(_primarySleepSession?.DeepSeconds ?? 0);
+        public string RemDurationText => FormatSecondsToHoursMins(ActiveDisplayedSleepSession?.RemSeconds ?? 0);
+        public string RemPercentText => CalculateStagePercent(ActiveDisplayedSleepSession?.RemSeconds ?? 0);
 
-        public string RemDurationText => FormatSecondsToHoursMins(_primarySleepSession?.RemSeconds ?? 0);
-        public string RemPercentText => CalculateStagePercent(_primarySleepSession?.RemSeconds ?? 0);
+        public string DeepDurationText => FormatSecondsToHoursMins(ActiveDisplayedSleepSession?.DeepSeconds ?? 0);
+        public string DeepPercentText => CalculateStagePercent(ActiveDisplayedSleepSession?.DeepSeconds ?? 0);
 
-        public string LightDurationText => FormatSecondsToHoursMins(_primarySleepSession?.LightSeconds ?? 0);
-        public string LightPercentText => CalculateStagePercent(_primarySleepSession?.LightSeconds ?? 0);
+        public string LightDurationText => FormatSecondsToHoursMins(ActiveDisplayedSleepSession?.LightSeconds ?? 0);
+        public string LightPercentText => CalculateStagePercent(ActiveDisplayedSleepSession?.LightSeconds ?? 0);
 
-        public string AwakeDurationText => FormatSecondsToHoursMins(_primarySleepSession?.AwakeSeconds ?? 0);
-        public string AwakePercentText => CalculateStagePercent(_primarySleepSession?.AwakeSeconds ?? 0);
+        public string AwakeDurationText => FormatSecondsToHoursMins(ActiveDisplayedSleepSession?.AwakeSeconds ?? 0);
+        public string AwakePercentText => CalculateStagePercent(ActiveDisplayedSleepSession?.AwakeSeconds ?? 0);
 
         private static string FormatSecondsToHoursMins(double seconds)
         {
@@ -1840,8 +1989,9 @@ namespace Daily_WinUI.Views
 
         private string CalculateStagePercent(double stageSec)
         {
-            double total = _primarySleepSession?.TotalStagesSeconds ?? 0;
-            if (total <= 0) total = _primarySleepSession?.DurationSeconds ?? 0;
+            var displayed = ActiveDisplayedSleepSession;
+            double total = displayed?.TotalStagesSeconds ?? 0;
+            if (total <= 0) total = displayed?.DurationSeconds ?? 0;
             if (total <= 0) return "--%";
             return $"{(stageSec / total) * 100:F0}%";
         }
@@ -1872,15 +2022,16 @@ namespace Daily_WinUI.Views
             if (SleepHypnogramCanvas == null) return;
             SleepHypnogramCanvas.Children.Clear();
 
-            var stages = _primarySleepSession?.Stages;
+            var displayed = ActiveDisplayedSleepSession;
+            var stages = displayed?.Stages;
             if (stages == null || !stages.Any()) return;
 
             double canvasWidth = SleepHypnogramCanvas.ActualWidth;
             double canvasHeight = SleepHypnogramCanvas.ActualHeight;
             if (canvasWidth <= 0 || canvasHeight <= 0) return;
 
-            var minTime = _primarySleepSession!.StartTime;
-            var maxTime = _primarySleepSession.EndTime;
+            var minTime = displayed!.StartTime;
+            var maxTime = displayed.EffectiveEndTime;
             double totalSeconds = (maxTime - minTime).TotalSeconds;
             if (totalSeconds <= 0) return;
 
@@ -1968,14 +2119,15 @@ namespace Daily_WinUI.Views
             if (SleepXAxisCanvas == null) return;
             SleepXAxisCanvas.Children.Clear();
 
-            var stages = _primarySleepSession?.Stages;
+            var displayed = ActiveDisplayedSleepSession;
+            var stages = displayed?.Stages;
             if (stages == null || !stages.Any()) return;
 
             double canvasWidth = SleepXAxisCanvas.ActualWidth;
             if (canvasWidth <= 0) return;
 
-            var minTime = _primarySleepSession!.StartTime;
-            var maxTime = _primarySleepSession.EndTime;
+            var minTime = displayed!.StartTime;
+            var maxTime = displayed.EffectiveEndTime;
             double totalSeconds = (maxTime - minTime).TotalSeconds;
             if (totalSeconds <= 0) return;
 
@@ -2009,11 +2161,12 @@ namespace Daily_WinUI.Views
             double height = StageProportionCanvas.ActualHeight;
             if (width <= 0 || height <= 0) return;
 
-            double deep = _primarySleepSession?.DeepSeconds ?? 0;
-            double rem = _primarySleepSession?.RemSeconds ?? 0;
-            double light = _primarySleepSession?.LightSeconds ?? 0;
-            double awake = _primarySleepSession?.AwakeSeconds ?? 0;
-            double total = deep + rem + light + awake;
+            var displayed = ActiveDisplayedSleepSession;
+            double rem = displayed?.RemSeconds ?? 0;
+            double deep = displayed?.DeepSeconds ?? 0;
+            double light = displayed?.LightSeconds ?? 0;
+            double awake = displayed?.AwakeSeconds ?? 0;
+            double total = rem + deep + light + awake;
             if (total <= 0) return;
 
             double currentX = 0;
@@ -2036,8 +2189,8 @@ namespace Daily_WinUI.Views
                 currentX += segWidth + 2;
             }
 
-            AddSegment(deep, Color.FromArgb(255, 57, 73, 171));
             AddSegment(rem, Color.FromArgb(255, 38, 198, 218));
+            AddSegment(deep, Color.FromArgb(255, 57, 73, 171));
             AddSegment(light, Color.FromArgb(255, 66, 165, 245));
             AddSegment(awake, Color.FromArgb(255, 255, 112, 67));
         }

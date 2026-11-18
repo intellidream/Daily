@@ -988,7 +988,7 @@ public struct CombinedWidgetView: View {
                             .font(.system(size: 11.5, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .lineLimit(1)
-                        Text("D \(entry.snapshot.sleep.deepFormatted) · R \(entry.snapshot.sleep.remFormatted)")
+                        Text("R \(entry.snapshot.sleep.remFormatted) · D \(entry.snapshot.sleep.deepFormatted)")
                             .font(.system(size: 7.5, weight: .semibold, design: .rounded))
                             .foregroundColor(WidgetColors.accentCyan)
                             .lineLimit(1)
@@ -1371,13 +1371,13 @@ public struct CombinedWidgetView: View {
                     largeSleepStagesBar
 
                     HStack(spacing: 5) {
-                        Text("D \(entry.snapshot.sleep.deepFormatted)")
-                            .font(.system(size: 8, weight: .semibold, design: .rounded))
-                            .foregroundColor(Color(hex: "#6366F1"))
-                            .lineLimit(1)
                         Text("R \(entry.snapshot.sleep.remFormatted)")
                             .font(.system(size: 8, weight: .semibold, design: .rounded))
                             .foregroundColor(Color(hex: "#8B5CF6"))
+                            .lineLimit(1)
+                        Text("D \(entry.snapshot.sleep.deepFormatted)")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color(hex: "#6366F1"))
                             .lineLimit(1)
                     }
                 }
@@ -1462,8 +1462,8 @@ public struct CombinedWidgetView: View {
             let aW = CGFloat((entry.snapshot.sleep.awakeSeconds / total)) * geo.size.width
 
             HStack(spacing: 1.5) {
-                RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#6366F1")).frame(width: max(2, dW))
                 RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#8B5CF6")).frame(width: max(2, rW))
+                RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#6366F1")).frame(width: max(2, dW))
                 RoundedRectangle(cornerRadius: 2).fill(WidgetColors.accentCyan).frame(width: max(2, lW))
                 RoundedRectangle(cornerRadius: 2).fill(WidgetColors.accentRed.opacity(0.7)).frame(width: max(2, aW))
             }

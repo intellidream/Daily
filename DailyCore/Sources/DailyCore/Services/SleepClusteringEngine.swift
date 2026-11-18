@@ -69,14 +69,18 @@ public enum SleepClusteringEngine {
             
             // A. If granular stage records exist for this device
             if !stageRecords.isEmpty {
-                let clusteredStageSessions = clusterStageRecords(
+                let rawStageSessions = clusterStageRecords(
                     stages: stageRecords,
                     targetDate: morningStartOfDay,
                     sourceDevice: device,
                     calendar: calendar
                 )
+                let classifiedSessions = reclassifySplitMorningEpisodes(
+                    rawStageSessions,
+                    calendar: calendar
+                )
                 
-                for session in clusteredStageSessions {
+                for session in classifiedSessions {
                     if session.isNap {
                         allNaps.append(NapSession(
                             id: session.id,
@@ -92,14 +96,18 @@ public enum SleepClusteringEngine {
             }
             // B. If only aggregate sleep records exist for this device (e.g. Apple Watch "sleep" without explicit stage prefixes)
             else if !aggregateRecords.isEmpty {
-                let clusteredAggregates = clusterAggregateRecords(
+                let rawAggregates = clusterAggregateRecords(
                     records: aggregateRecords,
                     targetDate: morningStartOfDay,
                     sourceDevice: device,
                     calendar: calendar
                 )
+                let classifiedAggregates = reclassifySplitMorningEpisodes(
+                    rawAggregates,
+                    calendar: calendar
+                )
                 
-                for session in clusteredAggregates {
+                for session in classifiedAggregates {
                     if session.isNap {
                         allNaps.append(NapSession(
                             id: session.id,
@@ -114,6 +122,9 @@ public enum SleepClusteringEngine {
                 }
             }
         }
+        
+        // 2b. Device-agnostic biphasic/split-night consolidation per wearable
+        allNocturnalSessions = consolidateNocturnalSessionsByDevice(allNocturnalSessions)
         
         // 3. Fallback: If no nocturnal telemetry session was found, check daily vitals summary
         if allNocturnalSessions.isEmpty, let durationMin = vitalsSummary[.sleepDuration], durationMin > 0 {
@@ -384,6 +395,125 @@ public enum SleepClusteringEngine {
             sourceDevice: sourceDevice,
             hasGranularHypnogram: false
         )
+    }
+    
+    // MARK: - Split-Night / Biphasic Consolidation (Device-Agnostic)
+    
+    /// Reclassifies early-morning (< 11:00) continuation episodes as nocturnal sleep rather than naps
+    /// when preceded within <= 4 hours by a truncated nocturnal episode (< 6 hours asleep) on the same wearable.
+    private static func reclassifySplitMorningEpisodes(
+        _ sessions: [SleepSession],
+        calendar: Calendar
+    ) -> [SleepSession] {
+        guard sessions.count >= 2 else { return sessions }
+        var result = sessions.sorted { $0.startTime < $1.startTime }
+        for i in 1..<result.count {
+            let prev = result[i - 1]
+            let curr = result[i]
+            guard curr.isNap, !prev.isNap else { continue }
+            let startHour = calendar.component(.hour, from: curr.startTime)
+            let gapSeconds = curr.startTime.timeIntervalSince(prev.endTime)
+            if startHour < 11 && prev.asleepSeconds < 6 * 3600 && gapSeconds >= 0 && gapSeconds <= 4 * 3600 {
+                result[i] = SleepSession(
+                    id: curr.id,
+                    startTime: curr.startTime,
+                    endTime: curr.endTime,
+                    isNap: false,
+                    stages: curr.stages,
+                    sourceDevice: curr.sourceDevice,
+                    hasGranularHypnogram: curr.hasGranularHypnogram
+                )
+            }
+        }
+        return result
+    }
+    
+    /// Consolidates multiple nocturnal episodes recorded by the same wearable during the same night
+    /// (separated by <= 8 hours) into a single canonical nocturnal session without inventing fake Awake stages
+    /// for untracked out-of-bed breaks.
+    private static func consolidateNocturnalSessionsByDevice(_ sessions: [SleepSession]) -> [SleepSession] {
+        guard sessions.count >= 2 else { return sessions }
+        let maxInterEpisodeGapSeconds: Double = 8 * 3600
+        
+        var orderedKeys: [String] = []
+        var byCanonicalDevice: [String: [SleepSession]] = [:]
+        for session in sessions {
+            let key = DeviceSource.from(name: session.sourceDevice).displayName
+            if byCanonicalDevice[key] == nil {
+                orderedKeys.append(key)
+            }
+            byCanonicalDevice[key, default: []].append(session)
+        }
+        
+        var consolidated: [SleepSession] = []
+        for key in orderedKeys {
+            guard let deviceEpisodes = byCanonicalDevice[key]?.sorted(by: { $0.startTime < $1.startTime }),
+                  let first = deviceEpisodes.first
+            else { continue }
+            
+            if deviceEpisodes.count == 1 {
+                consolidated.append(first)
+                continue
+            }
+            
+            // Group consecutive nocturnal episodes within <= 8h gap
+            var groups: [[SleepSession]] = [[first]]
+            for i in 1..<deviceEpisodes.count {
+                let ep = deviceEpisodes[i]
+                let prevEnd = groups[groups.count - 1].map(\.endTime).max() ?? ep.startTime
+                if ep.startTime.timeIntervalSince(prevEnd) <= maxInterEpisodeGapSeconds {
+                    groups[groups.count - 1].append(ep)
+                } else {
+                    groups.append([ep])
+                }
+            }
+            
+            for group in groups {
+                if group.count == 1 {
+                    consolidated.append(group[0])
+                    continue
+                }
+                let mergedStart = group[0].startTime
+                let mergedEnd = group.map(\.endTime).max() ?? group[group.count - 1].endTime
+                let hasGranular = group.contains { $0.hasGranularHypnogram }
+                let preservedDeviceName = group.first(where: { $0.hasGranularHypnogram })?.sourceDevice ?? group[0].sourceDevice
+                
+                var mergedStages: [SleepStageRecord] = []
+                for ep in group {
+                    if !ep.stages.isEmpty {
+                        mergedStages.append(contentsOf: ep.stages)
+                    } else {
+                        let dur = max(0, ep.endTime.timeIntervalSince(ep.startTime))
+                        if dur > 0 {
+                            mergedStages.append(
+                                SleepStageRecord(
+                                    id: "\(ep.id)_agg_light",
+                                    stageType: .light,
+                                    startTime: ep.startTime,
+                                    endTime: ep.endTime,
+                                    durationSeconds: dur,
+                                    sourceDevice: preservedDeviceName
+                                )
+                            )
+                        }
+                    }
+                }
+                mergedStages.sort { $0.startTime < $1.startTime }
+                
+                consolidated.append(
+                    SleepSession(
+                        id: group[0].id,
+                        startTime: mergedStart,
+                        endTime: mergedEnd,
+                        isNap: false,
+                        stages: mergedStages,
+                        sourceDevice: preservedDeviceName,
+                        hasGranularHypnogram: hasGranular
+                    )
+                )
+            }
+        }
+        return consolidated
     }
     
     // MARK: - Dedicated Tracker Priority Ranking

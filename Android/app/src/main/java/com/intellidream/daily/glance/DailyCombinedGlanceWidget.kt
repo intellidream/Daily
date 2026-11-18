@@ -881,9 +881,9 @@ class DailyCombinedGlanceWidget : GlanceAppWidget() {
                         Spacer(modifier = GlanceModifier.height(3.dp))
 
                         Row(modifier = GlanceModifier.fillMaxWidth()) {
-                            Text(text = "Deep $deepFormatted", style = TextStyle(color = ColorProvider(Color(0xFF6366F1)), fontSize = 9.sp))
-                            Spacer(modifier = GlanceModifier.width(6.dp))
                             Text(text = "REM $remFormatted", style = TextStyle(color = ColorProvider(Color(0xFF8B5CF6)), fontSize = 9.sp))
+                            Spacer(modifier = GlanceModifier.width(6.dp))
+                            Text(text = "Deep $deepFormatted", style = TextStyle(color = ColorProvider(Color(0xFF6366F1)), fontSize = 9.sp))
                             Spacer(modifier = GlanceModifier.defaultWeight())
                             Text(text = "Eff $sleepEff%", style = TextStyle(color = ColorProvider(Color(0xFF00FFB2)), fontSize = 9.sp, fontWeight = FontWeight.Bold))
                         }

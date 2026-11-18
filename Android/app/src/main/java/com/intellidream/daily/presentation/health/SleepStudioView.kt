@@ -2,7 +2,10 @@ package com.intellidream.daily.presentation.health
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,8 +49,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
@@ -84,9 +90,33 @@ fun SleepStudioView(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (session != null) {
+            val segments = remember(session.id, session.startTime, session.endTime, session.stages.size) {
+                session.sleepSegments
+            }
+            var selectedSegmentIndex by remember(session.id, session.startTime) {
+                mutableStateOf<Int?>(null)
+            }
+            val displayedSession = if (selectedSegmentIndex != null && selectedSegmentIndex!! in segments.indices) {
+                segments[selectedSegmentIndex!!]
+            } else {
+                session
+            }
+
+            // 0. Interactive Split-Night Stage Selector (only visible when 2+ sleep stages exist)
+            if (segments.size >= 2) {
+                SleepSegmentSelectorBar(
+                    fullSession = session,
+                    segments = segments,
+                    selectedIndex = selectedSegmentIndex,
+                    onSelect = { selectedSegmentIndex = it }
+                )
+            }
+
             // 1. Hero Sleep Score & Schedule Card
             HeroSleepScoreCard(
-                session = session,
+                session = displayedSession,
+                segmentNumber = if (selectedSegmentIndex != null && segments.size >= 2) selectedSegmentIndex!! + 1 else null,
+                totalSegments = segments.size,
                 onScoreRingTapped = handleScrollToHypnogram
             )
 
@@ -107,11 +137,16 @@ fun SleepStudioView(
 
             // 5. Clinical Hypnogram Container Card
             Box(modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoViewRequester)) {
-                HypnogramContainerCard(session = session)
+                HypnogramContainerCard(
+                    session = displayedSession,
+                    segments = segments,
+                    selectedSegmentIndex = selectedSegmentIndex,
+                    onSelectSegment = { selectedSegmentIndex = it }
+                )
             }
 
             // 6. Sleep Architecture Breakdown Grid
-            ArchitectureMetricsGrid(session = session)
+            ArchitectureMetricsGrid(session = displayedSession)
         } else {
             EmptySleepCard()
         }
@@ -123,11 +158,90 @@ fun SleepStudioView(
     }
 }
 
+// MARK: - Split-Night Stage Selector
+
+@Composable
+private fun SleepSegmentSelectorBar(
+    fullSession: SleepSession,
+    segments: List<SleepSession>,
+    selectedIndex: Int?,
+    onSelect: (Int?) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SegmentSelectorPill(
+            title = "Full Night",
+            subtitle = fullSession.totalAsleepFormatted,
+            isFullNight = true,
+            isSelected = selectedIndex == null,
+            onClick = { onSelect(null) }
+        )
+        segments.forEachIndexed { index, seg ->
+            SegmentSelectorPill(
+                title = "Stage ${index + 1}",
+                subtitle = "${seg.bedtimeFormatted}–${seg.wakeTimeFormatted} • ${seg.totalAsleepFormatted}",
+                isFullNight = false,
+                isSelected = selectedIndex == index,
+                onClick = { onSelect(index) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SegmentSelectorPill(
+    title: String,
+    subtitle: String,
+    isFullNight: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val bgColor = if (isSelected) ThemeColors.accentCyan.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f)
+    val borderColor = if (isSelected) ThemeColors.accentCyan.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(bgColor)
+            .border(1.dp, borderColor, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    ) {
+        Icon(
+            imageVector = if (isFullNight) Icons.Rounded.Bedtime else Icons.Rounded.Schedule,
+            contentDescription = null,
+            tint = if (isSelected) ThemeColors.accentCyan else ThemeColors.fgMutedDark,
+            modifier = Modifier.size(13.dp)
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                text = subtitle,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (isSelected) ThemeColors.accentCyan else ThemeColors.fgMutedDark
+            )
+        }
+    }
+}
+
 // MARK: - Hero Sleep Score Card
 
 @Composable
 private fun HeroSleepScoreCard(
     session: SleepSession,
+    segmentNumber: Int? = null,
+    totalSegments: Int = 0,
     onScoreRingTapped: () -> Unit
 ) {
     GlassCard(
@@ -150,7 +264,7 @@ private fun HeroSleepScoreCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "LAST NIGHT'S SLEEP",
+                            text = if (segmentNumber != null) "SLEEP STAGE $segmentNumber OF $totalSegments" else "LAST NIGHT'S SLEEP",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = ThemeColors.accentCyan
@@ -330,7 +444,12 @@ private fun HeroSleepScoreCard(
 // MARK: - Hypnogram Container Card
 
 @Composable
-private fun HypnogramContainerCard(session: SleepSession) {
+private fun HypnogramContainerCard(
+    session: SleepSession,
+    segments: List<SleepSession> = emptyList(),
+    selectedSegmentIndex: Int? = null,
+    onSelectSegment: (Int?) -> Unit = {}
+) {
     val hasHypnogram = session.hasGranularHypnogram || session.stages.isNotEmpty()
 
     GlassCard(
@@ -354,7 +473,22 @@ private fun HypnogramContainerCard(session: SleepSession) {
                     color = ThemeColors.accentCyan
                 )
 
-                if (hasHypnogram) {
+                if (segments.size >= 2) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        CompactHypnogramSegmentChip(
+                            label = "Full",
+                            isSelected = selectedSegmentIndex == null,
+                            onClick = { onSelectSegment(null) }
+                        )
+                        segments.indices.forEach { idx ->
+                            CompactHypnogramSegmentChip(
+                                label = "S${idx + 1}",
+                                isSelected = selectedSegmentIndex == idx,
+                                onClick = { onSelectSegment(idx) }
+                            )
+                        }
+                    }
+                } else if (hasHypnogram) {
                     Text(
                         text = "Tap stage to inspect",
                         fontSize = 11.sp,
@@ -370,24 +504,24 @@ private fun HypnogramContainerCard(session: SleepSession) {
                 StageProportionBar(session = session)
             }
 
-            // Legend Pills
+            // Legend Pills (REM first, Deep second)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 LegendPill(
                     modifier = Modifier.weight(1f),
-                    label = "Deep",
-                    colorHex = SleepStageType.DEEP.hexColor,
-                    valStr = session.deepFormatted,
-                    pct = session.deepPercent
-                )
-                LegendPill(
-                    modifier = Modifier.weight(1f),
                     label = "REM",
                     colorHex = SleepStageType.REM.hexColor,
                     valStr = session.remFormatted,
                     pct = session.remPercent
+                )
+                LegendPill(
+                    modifier = Modifier.weight(1f),
+                    label = "Deep",
+                    colorHex = SleepStageType.DEEP.hexColor,
+                    valStr = session.deepFormatted,
+                    pct = session.deepPercent
                 )
                 LegendPill(
                     modifier = Modifier.weight(1f),
@@ -409,8 +543,27 @@ private fun HypnogramContainerCard(session: SleepSession) {
 }
 
 @Composable
+private fun CompactHypnogramSegmentChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Text(
+        text = label,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        color = if (isSelected) ThemeColors.accentCyan else ThemeColors.fgMutedDark,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(if (isSelected) ThemeColors.accentCyan.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 3.5.dp)
+    )
+}
+
+@Composable
 private fun StageProportionBar(session: SleepSession) {
-    val total = maxOf(1.0, session.deepSeconds + session.remSeconds + session.lightSeconds + session.awakeSeconds)
+    val total = maxOf(1.0, session.remSeconds + session.deepSeconds + session.lightSeconds + session.awakeSeconds)
 
     Row(
         modifier = Modifier
@@ -419,15 +572,6 @@ private fun StageProportionBar(session: SleepSession) {
             .clip(RoundedCornerShape(4.dp)),
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        if (session.deepSeconds > 0) {
-            Box(
-                modifier = Modifier
-                    .weight((session.deepSeconds / total).toFloat())
-                    .fillMaxWidth()
-                    .height(18.dp)
-                    .background(Color(android.graphics.Color.parseColor(SleepStageType.DEEP.hexColor)))
-            )
-        }
         if (session.remSeconds > 0) {
             Box(
                 modifier = Modifier
@@ -435,6 +579,15 @@ private fun StageProportionBar(session: SleepSession) {
                     .fillMaxWidth()
                     .height(18.dp)
                     .background(Color(android.graphics.Color.parseColor(SleepStageType.REM.hexColor)))
+            )
+        }
+        if (session.deepSeconds > 0) {
+            Box(
+                modifier = Modifier
+                    .weight((session.deepSeconds / total).toFloat())
+                    .fillMaxWidth()
+                    .height(18.dp)
+                    .background(Color(android.graphics.Color.parseColor(SleepStageType.DEEP.hexColor)))
             )
         }
         if (session.lightSeconds > 0) {
@@ -506,19 +659,19 @@ private fun ArchitectureMetricsGrid(session: SleepSession) {
         ) {
             MetricTile(
                 modifier = Modifier.weight(1f),
-                title = "Deep Sleep",
-                value = session.deepFormatted,
-                subtitle = "${session.deepPercent}% of sleep",
-                icon = Icons.Rounded.Nightlight,
-                tint = Color(android.graphics.Color.parseColor(SleepStageType.DEEP.hexColor))
-            )
-            MetricTile(
-                modifier = Modifier.weight(1f),
                 title = "REM Sleep",
                 value = session.remFormatted,
                 subtitle = "${session.remPercent}% of sleep",
                 icon = Icons.Rounded.AutoAwesome,
                 tint = Color(android.graphics.Color.parseColor(SleepStageType.REM.hexColor))
+            )
+            MetricTile(
+                modifier = Modifier.weight(1f),
+                title = "Deep Sleep",
+                value = session.deepFormatted,
+                subtitle = "${session.deepPercent}% of sleep",
+                icon = Icons.Rounded.Nightlight,
+                tint = Color(android.graphics.Color.parseColor(SleepStageType.DEEP.hexColor))
             )
         }
         Row(

@@ -1614,10 +1614,10 @@ private fun buildInlineTurn(
                 CoPilotInlineTurn(
                     question = topic.fullQuestion,
                     headline = "Sleep Score ${primarySleep.sleepScore}% • ${hours}h ${mins}m Architecture",
-                    body = "Your nocturnal session recorded ${deepMins}m of physical-repair Deep NREM and ${remMins}m of cognitive REM consolidation.",
+                    body = "Your nocturnal session recorded ${remMins}m of cognitive REM consolidation and ${deepMins}m of physical-repair Deep NREM.",
                     highlights = listOf(
-                        "Deep NREM (${deepMins}m): Supports muscular & immune cellular restoration.",
-                        "REM Stage (${remMins}m): Anchors emotional regulation and memory synthesis."
+                        "REM Stage (${remMins}m): Anchors emotional regulation and memory synthesis.",
+                        "Deep NREM (${deepMins}m): Supports muscular & immune cellular restoration."
                     ),
                     targetTab = topic.targetTab,
                     portalTitle = topic.portalButtonTitle,

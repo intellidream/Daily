@@ -242,5 +242,83 @@ namespace Daily.Health.Tests
             Assert.Equal(26, session.RemPercent);
             Assert.Equal(13, session.DeepPercent);
         }
+
+        [Fact]
+        public void TestBiphasicSleepUntrackedGapAndSustainedAwakeSegments()
+        {
+            // 1. Untracked break >= 45m (22:18 -> 03:28, break 2h03m, 05:31 -> 09:45)
+            var ep1Start = new DateTime(2026, 11, 17, 22, 18, 0);
+            var r1End = ep1Start.AddMinutes(53);
+            var d1End = r1End.AddMinutes(39);
+            var l1End = d1End.AddMinutes(182);
+            var ep1End = l1End.AddMinutes(36); // 03:28
+
+            var ep2Start = new DateTime(2026, 11, 18, 5, 31, 0);
+            var r2End = ep2Start.AddMinutes(24);
+            var d2End = r2End.AddMinutes(35);
+            var l2End = d2End.AddMinutes(146);
+            var ep2End = l2End.AddMinutes(49); // 09:45
+
+            var splitSession = new SleepSession
+            {
+                StartTime = ep1Start,
+                EndTime = ep2End,
+                SourceDevice = "Oura Ring",
+                HasGranularHypnogram = true,
+                Stages = new System.Collections.Generic.List<HealthTelemetry>
+                {
+                    new() { TypeString = "sleep_stage_rem", StartTime = ep1Start, EndTime = r1End, Value = 53 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_deep", StartTime = r1End, EndTime = d1End, Value = 39 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_light", StartTime = d1End, EndTime = l1End, Value = 182 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_awake", StartTime = l1End, EndTime = ep1End, Value = 36 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_rem", StartTime = ep2Start, EndTime = r2End, Value = 24 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_deep", StartTime = r2End, EndTime = d2End, Value = 35 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_light", StartTime = d2End, EndTime = l2End, Value = 146 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_awake", StartTime = l2End, EndTime = ep2End, Value = 49 * 60, Unit = "sec" }
+                }
+            };
+
+            Assert.Equal(479 * 60, splitSession.AsleepSeconds);
+            Assert.Equal(564 * 60, splitSession.DurationSeconds); // 9h 24m (subtracts 2h 03m untracked break)
+            Assert.Equal(ep2End, splitSession.EffectiveEndTime);  // Wake time stays 09:45!
+
+            var segments = splitSession.GetSleepSegments();
+            Assert.Equal(2, segments.Count);
+            Assert.Equal(274 * 60, segments[0].AsleepSeconds);
+            Assert.Equal(205 * 60, segments[1].AsleepSeconds);
+
+            // 2. Continuous session with 2h 49m Awake bridge (03:18 -> 06:07)
+            var sStart = new DateTime(2026, 11, 17, 22, 21, 0);
+            var a0End = sStart.AddMinutes(10);
+            var s1End = a0End.AddMinutes(287); // 03:18
+            var bridgeEnd = s1End.AddMinutes(169); // 06:07
+            var s2End = bridgeEnd.AddMinutes(211); // 09:38
+
+            var envelopeSession = new SleepSession
+            {
+                StartTime = sStart,
+                EndTime = s2End,
+                SourceDevice = "Pixel Watch 5",
+                HasGranularHypnogram = true,
+                Stages = new System.Collections.Generic.List<HealthTelemetry>
+                {
+                    new() { TypeString = "sleep_stage_awake", StartTime = sStart, EndTime = a0End, Value = 10 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_light", StartTime = a0End, EndTime = s1End, Value = 287 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_awake", StartTime = s1End, EndTime = bridgeEnd, Value = 169 * 60, Unit = "sec" },
+                    new() { TypeString = "sleep_stage_light", StartTime = bridgeEnd, EndTime = s2End, Value = 211 * 60, Unit = "sec" }
+                }
+            };
+
+            Assert.Equal(498 * 60, envelopeSession.AsleepSeconds);
+            Assert.Equal(677 * 60, envelopeSession.DurationSeconds);
+            Assert.Equal(179 * 60, envelopeSession.AwakeSeconds);
+
+            var envSegments = envelopeSession.GetSleepSegments();
+            Assert.Equal(2, envSegments.Count);
+            Assert.Equal(287 * 60, envSegments[0].AsleepSeconds);
+            Assert.Equal(10 * 60, envSegments[0].AwakeSeconds);
+            Assert.Equal(211 * 60, envSegments[1].AsleepSeconds);
+            Assert.Equal(0, envSegments[1].AwakeSeconds);
+        }
     }
 }

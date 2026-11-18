@@ -268,8 +268,8 @@ public struct SleepWidgetView: View {
 
                 // 4 Mini Stage Metric Capsules
                 HStack(spacing: 3) {
-                    stagePill(label: "Deep", duration: entry.snapshot.deepFormatted, color: deepColor)
                     stagePill(label: "REM", duration: entry.snapshot.remFormatted, color: remColor)
+                    stagePill(label: "Deep", duration: entry.snapshot.deepFormatted, color: deepColor)
                     stagePill(label: "Light", duration: entry.snapshot.lightFormatted, color: lightColor)
                     stagePill(label: "Awake", duration: entry.snapshot.awakeFormatted, color: awakeColor)
                 }
@@ -453,7 +453,7 @@ public struct SleepWidgetView: View {
                         .font(.system(size: 8.5, weight: .bold))
                         .foregroundColor(.white.opacity(0.45))
                     Spacer()
-                    Text("\(entry.snapshot.restorativePercent)% Restorative (Deep + REM)")
+                    Text("\(entry.snapshot.restorativePercent)% Restorative (REM + Deep)")
                         .font(.system(size: 8.5, weight: .bold, design: .rounded))
                         .foregroundColor(WidgetColors.accentPurple)
                 }
@@ -465,8 +465,8 @@ public struct SleepWidgetView: View {
 
             // 4-Column Stage Breakdown Grid
             HStack(spacing: 6) {
-                stageDetailCard(label: "Deep", duration: entry.snapshot.deepFormatted, percent: entry.snapshot.deepPercent, color: deepColor)
                 stageDetailCard(label: "REM", duration: entry.snapshot.remFormatted, percent: entry.snapshot.remPercent, color: remColor)
+                stageDetailCard(label: "Deep", duration: entry.snapshot.deepFormatted, percent: entry.snapshot.deepPercent, color: deepColor)
                 stageDetailCard(label: "Light", duration: entry.snapshot.lightFormatted, percent: entry.snapshot.lightPercent, color: lightColor)
                 stageDetailCard(label: "Awake", duration: entry.snapshot.awakeFormatted, percent: entry.snapshot.awakePercent, color: awakeColor)
             }
@@ -727,10 +727,10 @@ public struct SleepWidgetView: View {
 
             Spacer(minLength: 4)
 
-            // Empty Stage Cards row (Deep, REM, Light, Awake placeholders)
+            // Empty Stage Cards row (REM, Deep, Light, Awake placeholders)
             HStack(spacing: 6) {
-                emptyStageCard(label: "Deep", color: deepColor)
                 emptyStageCard(label: "REM", color: remColor)
+                emptyStageCard(label: "Deep", color: deepColor)
                 emptyStageCard(label: "Light", color: lightColor)
                 emptyStageCard(label: "Awake", color: awakeColor)
             }
@@ -849,18 +849,18 @@ public struct SleepWidgetView: View {
     private func stageProportionalBar(height: CGFloat) -> some View {
         GeometryReader { geo in
             let w = geo.size.width
-            let total = max(1.0, entry.snapshot.deepSeconds + entry.snapshot.remSeconds + entry.snapshot.lightSeconds + entry.snapshot.awakeSeconds)
+            let total = max(1.0, entry.snapshot.remSeconds + entry.snapshot.deepSeconds + entry.snapshot.lightSeconds + entry.snapshot.awakeSeconds)
 
             HStack(spacing: 2) {
-                if entry.snapshot.deepSeconds > 0 {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(deepColor)
-                        .frame(width: max(3, CGFloat(entry.snapshot.deepSeconds / total) * w))
-                }
                 if entry.snapshot.remSeconds > 0 {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(remColor)
                         .frame(width: max(3, CGFloat(entry.snapshot.remSeconds / total) * w))
+                }
+                if entry.snapshot.deepSeconds > 0 {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(deepColor)
+                        .frame(width: max(3, CGFloat(entry.snapshot.deepSeconds / total) * w))
                 }
                 if entry.snapshot.lightSeconds > 0 {
                     RoundedRectangle(cornerRadius: 3)

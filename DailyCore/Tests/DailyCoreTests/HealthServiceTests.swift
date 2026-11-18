@@ -1969,6 +1969,113 @@ struct HealthServiceTests {
         let clearedStress = coordinator.fetchStressSnapshot(bridgeDirectoryURL: tempDir, defaults: defaults, now: now)
         #expect(clearedStress.hasData == false)
     }
+
+    @Test func testBiphasicUntrackedGapSleepConsolidationAndSegments() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let prevDay = cal.date(byAdding: .day, value: -1, to: today)!
+
+        // Episode 1: 22:18 -> 03:28 (REM 53m, Deep 39m, Light 182m, Awake 36m = 4h 34m asleep, 5h 10m in bed)
+        let ep1Start = cal.date(bySettingHour: 22, minute: 18, second: 0, of: prevDay)!
+        let r1End = ep1Start.addingTimeInterval(53 * 60)
+        let d1End = r1End.addingTimeInterval(39 * 60)
+        let l1End = d1End.addingTimeInterval(182 * 60)
+        let ep1End = l1End.addingTimeInterval(36 * 60) // 03:28
+
+        // Untracked break: 03:28 -> 05:31 (2h 03m = 123m >= 45m)
+        // Episode 2: 05:31 -> 09:45 (REM 24m, Deep 35m, Light 146m, Awake 49m = 3h 25m asleep, 4h 14m in bed)
+        let ep2Start = cal.date(bySettingHour: 5, minute: 31, second: 0, of: today)!
+        let r2End = ep2Start.addingTimeInterval(24 * 60)
+        let d2End = r2End.addingTimeInterval(35 * 60)
+        let l2End = d2End.addingTimeInterval(146 * 60)
+        let ep2End = l2End.addingTimeInterval(49 * 60) // 09:45
+
+        // Plus an afternoon nap on the same wearable (14:15 -> 15:00) that MUST remain separate
+        let napStart = cal.date(bySettingHour: 14, minute: 15, second: 0, of: today)!
+        let napEnd = napStart.addingTimeInterval(45 * 60)
+
+        for wearableName in ["Oura Ring", "Apple Watch Ultra 2", "OnePlus Watch 3"] {
+            let telemetry = [
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_rem", value: 53, unit: "min", startTime: ep1Start, endTime: r1End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_deep", value: 39, unit: "min", startTime: r1End, endTime: d1End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_light", value: 182, unit: "min", startTime: d1End, endTime: l1End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_awake", value: 36, unit: "min", startTime: l1End, endTime: ep1End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_rem", value: 24, unit: "min", startTime: ep2Start, endTime: r2End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_deep", value: 35, unit: "min", startTime: r2End, endTime: d2End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_light", value: 146, unit: "min", startTime: d2End, endTime: l2End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_awake", value: 49, unit: "min", startTime: l2End, endTime: ep2End, sourceDevice: wearableName),
+                HealthTelemetryRecord(userId: "u", type: "sleep_stage_light", value: 45, unit: "min", startTime: napStart, endTime: napEnd, sourceDevice: wearableName)
+            ]
+
+            let result = SleepClusteringEngine.clusterSleep(targetDate: today, telemetry: telemetry)
+            #expect(result.allSessions.count == 1)
+            #expect(result.naps.count == 1)
+
+            let primary = try #require(result.primarySession)
+            #expect(primary.startTime == ep1Start)
+            #expect(primary.endTime == ep2End)
+            #expect(Int(primary.asleepSeconds) == (274 + 205) * 60) // 7h 59m
+            #expect(Int(primary.remSeconds) == 77 * 60)             // 1h 17m
+            #expect(Int(primary.deepSeconds) == 74 * 60)            // 1h 14m
+            #expect(Int(primary.awakeSeconds) == 85 * 60)           // No fake awake added for untracked break
+            #expect(Int(primary.durationSeconds) == (310 + 254) * 60) // 9h 24m in bed (NOT 11h 27m)
+
+            let segments = primary.sleepSegments
+            #expect(segments.count == 2)
+            #expect(Int(segments[0].asleepSeconds) == 274 * 60)
+            #expect(Int(segments[1].asleepSeconds) == 205 * 60)
+        }
+    }
+
+    @Test func testBiphasicSustainedAwakeEnvelopeAndSegments() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let prevDay = cal.date(byAdding: .day, value: -1, to: today)!
+
+        // Continuous envelope 22:21 -> 09:38 with 2h 49m Awake bridge 03:18 -> 06:07
+        let sStart = cal.date(bySettingHour: 22, minute: 21, second: 0, of: prevDay)!
+        let a0End = sStart.addingTimeInterval(10 * 60)
+        let r1End = a0End.addingTimeInterval(49 * 60)
+        let d1End = r1End.addingTimeInterval(64 * 60)
+        let l1End = d1End.addingTimeInterval(174 * 60) // 03:18
+        let bridgeEnd = l1End.addingTimeInterval(169 * 60) // 06:07 (2h 49m Awake)
+        let r2End = bridgeEnd.addingTimeInterval(48 * 60)
+        let d2End = r2End.addingTimeInterval(35 * 60)
+        let sEnd = d2End.addingTimeInterval(128 * 60) // 09:38
+
+        let stages = [
+            SleepStageRecord(stageType: .awake, startTime: sStart, endTime: a0End, durationSeconds: 10 * 60),
+            SleepStageRecord(stageType: .rem, startTime: a0End, endTime: r1End, durationSeconds: 49 * 60),
+            SleepStageRecord(stageType: .deep, startTime: r1End, endTime: d1End, durationSeconds: 64 * 60),
+            SleepStageRecord(stageType: .light, startTime: d1End, endTime: l1End, durationSeconds: 174 * 60),
+            SleepStageRecord(stageType: .awake, startTime: l1End, endTime: bridgeEnd, durationSeconds: 169 * 60),
+            SleepStageRecord(stageType: .rem, startTime: bridgeEnd, endTime: r2End, durationSeconds: 48 * 60),
+            SleepStageRecord(stageType: .deep, startTime: r2End, endTime: d2End, durationSeconds: 35 * 60),
+            SleepStageRecord(stageType: .light, startTime: d2End, endTime: sEnd, durationSeconds: 128 * 60)
+        ]
+
+        let fullSession = SleepSession(
+            startTime: sStart,
+            endTime: sEnd,
+            isNap: false,
+            stages: stages,
+            sourceDevice: "Pixel Watch 5",
+            hasGranularHypnogram: true
+        )
+
+        #expect(Int(fullSession.asleepSeconds) == 498 * 60)   // 8h 18m
+        #expect(Int(fullSession.durationSeconds) == 677 * 60) // 11h 17m
+        #expect(Int(fullSession.remSeconds) == 97 * 60)       // 1h 37m
+        #expect(Int(fullSession.deepSeconds) == 99 * 60)      // 1h 39m
+        #expect(Int(fullSession.awakeSeconds) == 179 * 60)    // 2h 59m
+
+        let segments = fullSession.sleepSegments
+        #expect(segments.count == 2)
+        #expect(Int(segments[0].asleepSeconds) == 287 * 60)   // 4h 47m
+        #expect(Int(segments[0].awakeSeconds) == 10 * 60)     // 10m (excludes 2h 49m inter-segment bridge)
+        #expect(Int(segments[1].asleepSeconds) == 211 * 60)   // 3h 31m
+        #expect(Int(segments[1].awakeSeconds) == 0)
+    }
 }
 
 

@@ -732,10 +732,140 @@ public struct SleepSession: Identifiable, Codable, Hashable, Sendable {
     public var durationSeconds: Double {
         let totalStages = deepSeconds + remSeconds + lightSeconds + awakeSeconds
         let span = max(0, endTime.timeIntervalSince(startTime))
-        if totalStages > 0 && span > totalStages * 1.35 {
+        guard !stages.isEmpty, totalStages > 0 else {
+            return max(span, totalStages)
+        }
+        let untrackedBreaks = Self.computeUntrackedBreakSeconds(
+            stages: stages,
+            sessionStart: startTime,
+            sessionEnd: endTime
+        )
+        let effectiveSpan = max(0, span - untrackedBreaks)
+        if effectiveSpan > totalStages * 1.35 {
             return totalStages
         }
-        return max(span, totalStages)
+        return max(effectiveSpan, totalStages)
+    }
+    
+    /// Computes uncovered time gaps (>= 45 minutes) between consecutive stages or session bounds
+    /// so split-night sleep episodes do not inflate Time in Bed or penalize Sleep Efficiency.
+    private static func computeUntrackedBreakSeconds(
+        stages: [SleepStageRecord],
+        sessionStart: Date,
+        sessionEnd: Date,
+        minBreakSeconds: Double = 45 * 60
+    ) -> Double {
+        let sorted = stages.sorted { $0.startTime < $1.startTime }
+        guard let first = sorted.first else { return 0 }
+        
+        var untracked: Double = 0
+        let leadingGap = first.startTime.timeIntervalSince(sessionStart)
+        if leadingGap >= minBreakSeconds {
+            untracked += leadingGap
+        }
+        
+        var cursorEnd = first.endTime
+        for i in 1..<sorted.count {
+            let curr = sorted[i]
+            let gap = curr.startTime.timeIntervalSince(cursorEnd)
+            if gap >= minBreakSeconds {
+                untracked += gap
+            }
+            if curr.endTime > cursorEnd {
+                cursorEnd = curr.endTime
+            }
+        }
+        
+        let trailingGap = sessionEnd.timeIntervalSince(cursorEnd)
+        if trailingGap >= minBreakSeconds {
+            untracked += trailingGap
+        }
+        return untracked
+    }
+    
+    /// Derives explorable sleep segments (`Stage 1`, `Stage 2`, ...) on-the-fly when a nocturnal
+    /// session contains 2+ sleep episodes separated either by an untracked break (>= 45m) or a
+    /// sustained wake interval (>= 45m) flanked by >= 20m of real sleep on each side.
+    /// Returns an empty array for standard single-segment nights.
+    public var sleepSegments: [SleepSession] {
+        guard !isNap, stages.count >= 2 else { return [] }
+        let minBreakSeconds: Double = 45 * 60
+        let minSegmentAsleepSeconds: Double = 20 * 60
+        
+        let sorted = stages.sorted { $0.startTime < $1.startTime }
+        
+        // 1. Split on untracked gaps >= 45 minutes
+        var contiguousRuns: [[SleepStageRecord]] = []
+        var currentRun: [SleepStageRecord] = [sorted[0]]
+        var runCursorEnd = sorted[0].endTime
+        
+        for i in 1..<sorted.count {
+            let st = sorted[i]
+            let gap = st.startTime.timeIntervalSince(runCursorEnd)
+            if gap >= minBreakSeconds {
+                contiguousRuns.append(currentRun)
+                currentRun = [st]
+                runCursorEnd = st.endTime
+            } else {
+                currentRun.append(st)
+                if st.endTime > runCursorEnd {
+                    runCursorEnd = st.endTime
+                }
+            }
+        }
+        contiguousRuns.append(currentRun)
+        
+        // 2. Within each contiguous run, split on sustained Awake blocks >= 45m flanked by >= 20m sleep
+        func splitOnSustainedAwake(_ run: [SleepStageRecord]) -> [[SleepStageRecord]] {
+            var idx = 0
+            while idx < run.count {
+                if run[idx].stageType == .awake {
+                    var endIdx = idx
+                    var awakeDur = run[idx].durationSeconds
+                    while endIdx + 1 < run.count && run[endIdx + 1].stageType == .awake {
+                        endIdx += 1
+                        awakeDur += run[endIdx].durationSeconds
+                    }
+                    if awakeDur >= minBreakSeconds {
+                        let before = Array(run[0..<idx])
+                        let after = Array(run[(endIdx + 1)..<run.count])
+                        let beforeAsleep = before.filter { $0.stageType != .awake }.reduce(0.0) { $0 + $1.durationSeconds }
+                        let afterAsleep = after.filter { $0.stageType != .awake }.reduce(0.0) { $0 + $1.durationSeconds }
+                        if beforeAsleep >= minSegmentAsleepSeconds && afterAsleep >= minSegmentAsleepSeconds {
+                            return [before] + splitOnSustainedAwake(after)
+                        }
+                    }
+                    idx = endIdx + 1
+                } else {
+                    idx += 1
+                }
+            }
+            return [run]
+        }
+        
+        let candidateStageLists = contiguousRuns
+            .flatMap { splitOnSustainedAwake($0) }
+            .filter { list in
+                let asleep = list.filter { $0.stageType != .awake }.reduce(0.0) { $0 + $1.durationSeconds }
+                return asleep >= minSegmentAsleepSeconds
+            }
+        
+        guard candidateStageLists.count >= 2 else { return [] }
+        
+        return candidateStageLists.enumerated().compactMap { index, segStages in
+            guard let segStart = segStages.first?.startTime,
+                  let segEnd = segStages.map(\.endTime).max()
+            else { return nil }
+            return SleepSession(
+                id: "\(id)_seg_\(index + 1)",
+                startTime: segStart,
+                endTime: segEnd,
+                isNap: false,
+                stages: segStages,
+                sourceDevice: sourceDevice,
+                hasGranularHypnogram: hasGranularHypnogram
+            )
+        }
     }
     
     public var awakeCount: Int {

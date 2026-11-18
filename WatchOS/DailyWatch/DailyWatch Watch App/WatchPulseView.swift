@@ -144,17 +144,17 @@ struct WatchPulseView: View {
                         }
                     }
 
-                    // Proportional Sleep Stage Breakdown Bar (Deep, REM, Core/Light, Awake)
+                    // Proportional Sleep Stage Breakdown Bar (REM, Deep, Core/Light, Awake)
                     GeometryReader { geo in
                         let spacing: CGFloat = 2
                         let usableWidth = max(16, geo.size.width - (spacing * 3))
                         HStack(spacing: spacing) {
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(Color(hex: "#6366F1"))
-                                .frame(width: usableWidth * CGFloat(snap.deepFraction), height: 5)
-                            RoundedRectangle(cornerRadius: 2)
                                 .fill(Color(hex: "#A855F7"))
                                 .frame(width: usableWidth * CGFloat(snap.remFraction), height: 5)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color(hex: "#6366F1"))
+                                .frame(width: usableWidth * CGFloat(snap.deepFraction), height: 5)
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(Color(hex: "#38BDF8"))
                                 .frame(width: usableWidth * CGFloat(snap.lightFraction), height: 5)

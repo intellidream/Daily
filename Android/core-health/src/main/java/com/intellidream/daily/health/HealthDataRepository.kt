@@ -3887,6 +3887,7 @@ internal object SleepUploadFingerprintStore {
             if (r.stages.isEmpty() && l.stages.isNotEmpty()) return true
             if (l.durationSeconds > r.durationSeconds) return true
             if (l.endTime > r.endTime + 60_000L && l.durationSeconds >= r.durationSeconds) return true
+            if (r.startTime > l.startTime + 60_000L && l.durationSeconds >= r.durationSeconds) return true
             if (l.stages.size > r.stages.size && l.durationSeconds >= r.durationSeconds - 600) return true
             val localRestorative = l.deepSeconds + l.remSeconds
             val remoteRestorative = r.deepSeconds + r.remSeconds

@@ -4,6 +4,7 @@ import DailyCore
 /// Dedicated Sleep Studio visualizing nocturnal sleep architecture, 4-level hypnogram, and daytime naps.
 public struct SleepStudioView: View {
     @ObservedObject private var healthService = HealthDataService.shared
+    @State private var selectedSegmentIndex: Int? = nil
     
     public init() {}
     
@@ -11,14 +12,31 @@ public struct SleepStudioView: View {
         ScrollViewReader { proxy in
             VStack(spacing: 16) {
                 if let session = healthService.primarySleepSession {
+                    let segments = session.sleepSegments
+                    let displayedSession: SleepSession = {
+                        if let idx = selectedSegmentIndex, idx >= 0, idx < segments.count {
+                            return segments[idx]
+                        }
+                        return session
+                    }()
                     let analysis = SleepAnalysisEngine.shared.analyze(
                         session: session,
                         nocturnalRestingBpm: healthService.restingBpm > 0 ? healthService.restingBpm : nil,
                         nocturnalHrvMs: healthService.currentVitals[.hrvSdnn]?.value
                     )
                     
+                    // 0. Interactive Split-Night Stage Selector (only visible when 2+ sleep stages exist)
+                    if segments.count >= 2 {
+                        sleepSegmentSelectorBar(fullSession: session, segments: segments)
+                    }
+                    
                     // 1. Hero Sleep Score & Schedule Card (Tap score ring to scroll to hypnogram)
-                    heroSleepScoreCard(session: session, proxy: proxy)
+                    heroSleepScoreCard(
+                        session: displayedSession,
+                        segmentNumber: (selectedSegmentIndex != nil && segments.count >= 2) ? (selectedSegmentIndex! + 1) : nil,
+                        totalSegments: segments.count,
+                        proxy: proxy
+                    )
                     
                     // 2. Recovery Verdict & Readiness Card
                     SleepVerdictCard(verdict: analysis.verdict)
@@ -32,11 +50,11 @@ public struct SleepStudioView: View {
                     }
                     
                     // 5. Clinical Hypnogram or Proportional Stage Bar
-                    hypnogramContainerCard(session: session)
+                    hypnogramContainerCard(session: displayedSession, fullSession: session, segments: segments)
                         .id("hypnogram_container")
                     
                     // 6. Sleep Architecture Breakdown Grid
-                    architectureMetricsGrid(session: session)
+                    architectureMetricsGrid(session: displayedSession)
                         .id("sleep_stages_grid")
                 } else {
                     emptySleepCard
@@ -47,18 +65,98 @@ public struct SleepStudioView: View {
                     daytimeNapsSection
                 }
             }
+            .onChange(of: healthService.primarySleepSession?.id) { _, _ in
+                selectedSegmentIndex = nil
+            }
+            .onChange(of: healthService.primarySleepSession?.startTime) { _, _ in
+                selectedSegmentIndex = nil
+            }
         }
+    }
+    
+    // MARK: - Split-Night Stage Selector
+    
+    private func sleepSegmentSelectorBar(fullSession: SleepSession, segments: [SleepSession]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                segmentPillButton(
+                    title: "Full Night",
+                    subtitle: fullSession.totalAsleepFormatted,
+                    isSelected: selectedSegmentIndex == nil
+                ) {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        selectedSegmentIndex = nil
+                    }
+                }
+                
+                ForEach(Array(segments.enumerated()), id: \.element.id) { index, seg in
+                    segmentPillButton(
+                        title: "Stage \(index + 1)",
+                        subtitle: "\(seg.bedtimeFormatted)–\(seg.wakeTimeFormatted) • \(seg.totalAsleepFormatted)",
+                        isSelected: selectedSegmentIndex == index
+                    ) {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            selectedSegmentIndex = index
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+    
+    private func segmentPillButton(
+        title: String,
+        subtitle: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: title == "Full Night" ? "moon.stars.fill" : "clock.badge.checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(isSelected ? ThemeColors.accentCyan : ThemeColors.fgMutedDark)
+                
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text(subtitle)
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .foregroundColor(isSelected ? ThemeColors.accentCyan : ThemeColors.fgMutedDark)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(isSelected ? ThemeColors.accentCyan.opacity(0.18) : Color.white.opacity(0.06))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                isSelected ? ThemeColors.accentCyan.opacity(0.55) : Color.white.opacity(0.1),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
     
     // MARK: - Hero Sleep Score Card
     
-    private func heroSleepScoreCard(session: SleepSession, proxy: ScrollViewProxy) -> some View {
+    private func heroSleepScoreCard(
+        session: SleepSession,
+        segmentNumber: Int?,
+        totalSegments: Int,
+        proxy: ScrollViewProxy
+    ) -> some View {
         GlassCard(cornerRadius: 22, padding: 20) {
             VStack(spacing: 16) {
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text("LAST NIGHT'S SLEEP")
+                            Text(segmentNumber != nil ? "SLEEP STAGE \(segmentNumber!) OF \(totalSegments)" : "LAST NIGHT'S SLEEP")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                 .foregroundColor(ThemeColors.accentCyan)
                             
@@ -176,7 +274,7 @@ public struct SleepStudioView: View {
     
     // MARK: - Hypnogram Container Card
     
-    private func hypnogramContainerCard(session: SleepSession) -> some View {
+    private func hypnogramContainerCard(session: SleepSession, fullSession: SleepSession, segments: [SleepSession]) -> some View {
         GlassCard(cornerRadius: 20, padding: 18) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -184,7 +282,18 @@ public struct SleepStudioView: View {
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentCyan)
                     Spacer()
-                    if session.hasGranularHypnogram {
+                    if segments.count >= 2 {
+                        HStack(spacing: 4) {
+                            compactHypnogramSegmentChip(label: "Full", isSelected: selectedSegmentIndex == nil) {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) { selectedSegmentIndex = nil }
+                            }
+                            ForEach(Array(segments.enumerated()), id: \.element.id) { idx, _ in
+                                compactHypnogramSegmentChip(label: "S\(idx + 1)", isSelected: selectedSegmentIndex == idx) {
+                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) { selectedSegmentIndex = idx }
+                                }
+                            }
+                        }
+                    } else if session.hasGranularHypnogram {
                         Text("Tap stage to inspect")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(ThemeColors.fgMutedDark)
@@ -197,10 +306,10 @@ public struct SleepStudioView: View {
                     stageProportionBar(session: session)
                 }
                 
-                // Stage Legend Pills
+                // Stage Legend Pills (REM first, Deep second)
                 HStack(spacing: 12) {
-                    legendPill(label: "Deep", colorHex: SleepStageType.deep.hexColor, val: session.deepFormatted, pct: session.deepPercent)
                     legendPill(label: "REM", colorHex: SleepStageType.rem.hexColor, val: session.remFormatted, pct: session.remPercent)
+                    legendPill(label: "Deep", colorHex: SleepStageType.deep.hexColor, val: session.deepFormatted, pct: session.deepPercent)
                     legendPill(label: "Light", colorHex: SleepStageType.light.hexColor, val: session.lightFormatted, pct: session.lightPercent)
                     legendPill(label: "Awake", colorHex: SleepStageType.awake.hexColor, val: session.awakeFormatted, pct: session.awakePercent)
                 }
@@ -208,22 +317,37 @@ public struct SleepStudioView: View {
         }
     }
     
+    private func compactHypnogramSegmentChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(isSelected ? ThemeColors.accentCyan : ThemeColors.fgMutedDark)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3.5)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? ThemeColors.accentCyan.opacity(0.18) : Color.white.opacity(0.06))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+    
     private func stageProportionBar(session: SleepSession) -> some View {
         VStack(spacing: 8) {
             GeometryReader { geo in
                 let w = geo.size.width
-                let total = max(1, session.deepSeconds + session.remSeconds + session.lightSeconds + session.awakeSeconds)
+                let total = max(1, session.remSeconds + session.deepSeconds + session.lightSeconds + session.awakeSeconds)
                 
                 HStack(spacing: 2) {
-                    if session.deepSeconds > 0 {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(hex: SleepStageType.deep.hexColor))
-                            .frame(width: max(4, (session.deepSeconds / total) * w))
-                    }
                     if session.remSeconds > 0 {
                         RoundedRectangle(cornerRadius: 3)
                             .fill(Color(hex: SleepStageType.rem.hexColor))
                             .frame(width: max(4, (session.remSeconds / total) * w))
+                    }
+                    if session.deepSeconds > 0 {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(hex: SleepStageType.deep.hexColor))
+                            .frame(width: max(4, (session.deepSeconds / total) * w))
                     }
                     if session.lightSeconds > 0 {
                         RoundedRectangle(cornerRadius: 3)
@@ -262,8 +386,8 @@ public struct SleepStudioView: View {
     
     private func architectureMetricsGrid(session: SleepSession) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            metricTile(title: "Deep Sleep", value: session.deepFormatted, subtitle: "\(session.deepPercent)% of sleep", icon: "moon.fill", tint: Color(hex: SleepStageType.deep.hexColor))
             metricTile(title: "REM Sleep", value: session.remFormatted, subtitle: "\(session.remPercent)% of sleep", icon: "sparkles", tint: Color(hex: SleepStageType.rem.hexColor))
+            metricTile(title: "Deep Sleep", value: session.deepFormatted, subtitle: "\(session.deepPercent)% of sleep", icon: "moon.fill", tint: Color(hex: SleepStageType.deep.hexColor))
             metricTile(title: "Light / Core", value: session.lightFormatted, subtitle: "\(session.lightPercent)% of sleep", icon: "bed.double", tint: Color(hex: SleepStageType.light.hexColor))
             metricTile(title: "Awakenings", value: "\(session.awakeCount) times", subtitle: "\(session.awakeFormatted) awake", icon: "eye.fill", tint: Color(hex: SleepStageType.awake.hexColor))
         }

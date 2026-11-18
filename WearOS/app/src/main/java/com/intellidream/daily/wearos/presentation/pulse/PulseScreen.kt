@@ -272,7 +272,7 @@ fun PulseScreen(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // Proportional Sleep Stage Breakdown Bar (Deep, REM, Core/Light, Awake)
+                    // Proportional Sleep Stage Breakdown Bar (REM, Deep, Core/Light, Awake)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -280,8 +280,8 @@ fun PulseScreen(
                             .clip(RoundedCornerShape(2.dp)),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        Box(modifier = Modifier.weight(snap.deepWeight).fillMaxSize().background(Color(0xFF6366F1)))
                         Box(modifier = Modifier.weight(snap.remWeight).fillMaxSize().background(Color(0xFFA855F7)))
+                        Box(modifier = Modifier.weight(snap.deepWeight).fillMaxSize().background(Color(0xFF6366F1)))
                         Box(modifier = Modifier.weight(snap.lightWeight).fillMaxSize().background(Color(0xFF38BDF8)))
                         Box(modifier = Modifier.weight(snap.awakeWeight).fillMaxSize().background(Color(0xFFF59E0B)))
                     }

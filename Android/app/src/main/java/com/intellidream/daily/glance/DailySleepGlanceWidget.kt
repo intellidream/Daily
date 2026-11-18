@@ -67,8 +67,8 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
         val asleepHours = totalMinutes / 60
         val asleepMins = totalMinutes % 60
         val totalAsleepFormatted = if (hasData) "${asleepHours}h ${asleepMins}m" else "--"
-        val inBedDiffMins = if (hasData) Math.max(0, ((session!!.durationSeconds - session.asleepSeconds) / 60.0).roundToInt()) else 0
-        val timeInBedFormatted = if (hasData) "${asleepHours}h ${asleepMins + inBedDiffMins}m" else "--"
+        val inBedTotalMins = if (hasData) (session!!.durationSeconds / 60.0).roundToInt() else 0
+        val timeInBedFormatted = if (hasData) "${inBedTotalMins / 60}h ${inBedTotalMins % 60}m" else "--"
         val efficiencyPercent = if (hasData) session!!.efficiencyPercent else 0
         val restorativePercent = if (hasData) session!!.restorativePercent else 0
         val sleepQualityRating = when {
@@ -500,9 +500,9 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                     modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    MiniStagePill("Deep", deepFormatted, Color(0xFF6366F1), GlanceModifier.defaultWeight())
-                    Spacer(modifier = GlanceModifier.width(3.dp))
                     MiniStagePill("REM", remFormatted, Color(0xFF8B5CF6), GlanceModifier.defaultWeight())
+                    Spacer(modifier = GlanceModifier.width(3.dp))
+                    MiniStagePill("Deep", deepFormatted, Color(0xFF6366F1), GlanceModifier.defaultWeight())
                     Spacer(modifier = GlanceModifier.width(3.dp))
                     MiniStagePill("Light", lightFormatted, Color(0xFF00E5FF), GlanceModifier.defaultWeight())
                     Spacer(modifier = GlanceModifier.width(3.dp))
@@ -792,17 +792,23 @@ class DailySleepGlanceWidget : GlanceAppWidget() {
                 Spacer(modifier = GlanceModifier.height(8.dp))
 
                 // 4-Column Stage Breakdown Grid
+                val asleepTotal = maxOf(1.0, remSec + deepSec + lightSec)
+                val bedTotal = maxOf(asleepTotal, remSec + deepSec + lightSec + awakeSec)
+                val remPctStr = if (remSec > 0) "${((remSec / asleepTotal) * 100.0).roundToInt()}%" else "0%"
+                val deepPctStr = if (deepSec > 0) "${((deepSec / asleepTotal) * 100.0).roundToInt()}%" else "0%"
+                val lightPctStr = if (lightSec > 0) "${((lightSec / asleepTotal) * 100.0).roundToInt()}%" else "0%"
+                val awakePctStr = if (awakeSec > 0) "${((awakeSec / bedTotal) * 100.0).roundToInt()}%" else "0%"
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    LargeStageCard("Deep", deepFormatted, "20%", Color(0xFF6366F1), GlanceModifier.defaultWeight())
+                    LargeStageCard("REM", remFormatted, remPctStr, Color(0xFF8B5CF6), GlanceModifier.defaultWeight())
                     Spacer(modifier = GlanceModifier.width(6.dp))
-                    LargeStageCard("REM", remFormatted, "22%", Color(0xFF8B5CF6), GlanceModifier.defaultWeight())
+                    LargeStageCard("Deep", deepFormatted, deepPctStr, Color(0xFF6366F1), GlanceModifier.defaultWeight())
                     Spacer(modifier = GlanceModifier.width(6.dp))
-                    LargeStageCard("Light", lightFormatted, "58%", Color(0xFF00E5FF), GlanceModifier.defaultWeight())
+                    LargeStageCard("Light", lightFormatted, lightPctStr, Color(0xFF00E5FF), GlanceModifier.defaultWeight())
                     Spacer(modifier = GlanceModifier.width(6.dp))
-                    LargeStageCard("Awake", awakeFormatted, "7%", Color(0xFFEF4444), GlanceModifier.defaultWeight())
+                    LargeStageCard("Awake", awakeFormatted, awakePctStr, Color(0xFFEF4444), GlanceModifier.defaultWeight())
                 }
             }
 

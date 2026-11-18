@@ -593,4 +593,112 @@ class LeanHealthBuildersTest {
         assertEquals(35460, guarded[0].durationSeconds)
         assertEquals(81, guarded[0].stages.size)
     }
+
+    @Test
+    fun `biphasic split-night sleep consolidates across wearables and extracts stages cleanly`() {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.NOVEMBER, 18, 0, 0, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val targetDate = cal.time
+        val prevDayCal = (cal.clone() as java.util.Calendar).apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+
+        val ep1Start = (prevDayCal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 22)
+            set(java.util.Calendar.MINUTE, 18)
+        }.timeInMillis
+        val r1End = ep1Start + 53 * 60_000L
+        val d1End = r1End + 39 * 60_000L
+        val l1End = d1End + 182 * 60_000L
+        val ep1End = l1End + 36 * 60_000L // 03:28
+
+        val ep2Start = (cal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 5)
+            set(java.util.Calendar.MINUTE, 31)
+        }.timeInMillis
+        val r2End = ep2Start + 24 * 60_000L
+        val d2End = r2End + 35 * 60_000L
+        val l2End = d2End + 146 * 60_000L
+        val ep2End = l2End + 49 * 60_000L // 09:45
+
+        val napStart = (cal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 14)
+            set(java.util.Calendar.MINUTE, 15)
+        }.timeInMillis
+        val napEnd = napStart + 40 * 60_000L
+
+        for (wearable in listOf("Oura Ring", "OnePlus Watch 3", "Pixel Watch 5")) {
+            val telemetry = listOf(
+                HealthTelemetryRecord(id = "1", userId = "u", type = "sleep_stage_rem", value = 3180.0, unit = "seconds", startTime = ep1Start, endTime = r1End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "2", userId = "u", type = "sleep_stage_deep", value = 2340.0, unit = "seconds", startTime = r1End, endTime = d1End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "3", userId = "u", type = "sleep_stage_light", value = 10920.0, unit = "seconds", startTime = d1End, endTime = l1End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "4", userId = "u", type = "sleep_stage_awake", value = 2160.0, unit = "seconds", startTime = l1End, endTime = ep1End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "5", userId = "u", type = "sleep_stage_rem", value = 1440.0, unit = "seconds", startTime = ep2Start, endTime = r2End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "6", userId = "u", type = "sleep_stage_deep", value = 2100.0, unit = "seconds", startTime = r2End, endTime = d2End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "7", userId = "u", type = "sleep_stage_light", value = 8760.0, unit = "seconds", startTime = d2End, endTime = l2End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "8", userId = "u", type = "sleep_stage_awake", value = 2940.0, unit = "seconds", startTime = l2End, endTime = ep2End, sourceDevice = wearable),
+                HealthTelemetryRecord(id = "9", userId = "u", type = "sleep_stage_light", value = 2400.0, unit = "seconds", startTime = napStart, endTime = napEnd, sourceDevice = wearable)
+            )
+
+            val res = SleepClusteringEngine.clusterSleep(targetDate = targetDate, telemetry = telemetry)
+            assertEquals(1, res.allSessions.size)
+            assertEquals(1, res.naps.size)
+            val primary = res.primarySession!!
+            assertEquals(479 * 60, primary.asleepSeconds.toInt())
+            assertEquals(77 * 60, primary.remSeconds.toInt())
+            assertEquals(74 * 60, primary.deepSeconds.toInt())
+            assertEquals(85 * 60, primary.awakeSeconds.toInt())
+            assertEquals(564 * 60, primary.durationSeconds.toInt())
+
+            val leanRows = HealthDataRepository.buildLeanSleepSessionRecords(
+                primarySession = primary,
+                allSessions = res.allSessions,
+                naps = res.naps,
+                dateKey = "2026-11-18",
+                userId = "u1",
+                hostName = "Trapper"
+            )
+            val primaryLean = leanRows.first { it.sessionType == "primary_sleep" }
+            assertEquals(479 * 60, primaryLean.durationSeconds)
+            assertEquals(564 * 60, primaryLean.timeInBedSeconds)
+
+            val segments = primary.sleepSegments
+            assertEquals(2, segments.size)
+            assertEquals(274 * 60, segments[0].asleepSeconds.toInt())
+            assertEquals(205 * 60, segments[1].asleepSeconds.toInt())
+        }
+
+        // Also verify single-envelope sustained Awake bridge (2h 49m) extracts 2 clean segments
+        val sStart = ep1Start + 180_000L // 22:21
+        val a0End = sStart + 10 * 60_000L
+        val s1End = a0End + 287 * 60_000L // 4h 47m asleep -> 03:18
+        val bridgeEnd = s1End + 169 * 60_000L // 06:07 (2h 49m Awake)
+        val s2End = bridgeEnd + 211 * 60_000L // 3h 31m asleep -> 09:38
+        val envelopeSession = com.intellidream.daily.model.SleepSession(
+            startTime = sStart,
+            endTime = s2End,
+            isNap = false,
+            stages = listOf(
+                SleepStageRecord(id = "a0", stageType = SleepStageType.AWAKE, startTime = sStart, endTime = a0End, durationSeconds = 600.0),
+                SleepStageRecord(id = "r1", stageType = SleepStageType.REM, startTime = a0End, endTime = a0End + 49 * 60_000L, durationSeconds = 49 * 60.0),
+                SleepStageRecord(id = "d1", stageType = SleepStageType.DEEP, startTime = a0End + 49 * 60_000L, endTime = a0End + 113 * 60_000L, durationSeconds = 64 * 60.0),
+                SleepStageRecord(id = "l1", stageType = SleepStageType.LIGHT, startTime = a0End + 113 * 60_000L, endTime = s1End, durationSeconds = 174 * 60.0),
+                SleepStageRecord(id = "gap", stageType = SleepStageType.AWAKE, startTime = s1End, endTime = bridgeEnd, durationSeconds = 169 * 60.0),
+                SleepStageRecord(id = "r2", stageType = SleepStageType.REM, startTime = bridgeEnd, endTime = bridgeEnd + 48 * 60_000L, durationSeconds = 48 * 60.0),
+                SleepStageRecord(id = "d2", stageType = SleepStageType.DEEP, startTime = bridgeEnd + 48 * 60_000L, endTime = bridgeEnd + 83 * 60_000L, durationSeconds = 35 * 60.0),
+                SleepStageRecord(id = "l2", stageType = SleepStageType.LIGHT, startTime = bridgeEnd + 83 * 60_000L, endTime = s2End, durationSeconds = 128 * 60.0)
+            ),
+            sourceDevice = "Pixel Watch 5",
+            hasGranularHypnogram = true
+        )
+        assertEquals(498 * 60, envelopeSession.asleepSeconds.toInt())
+        assertEquals(677 * 60, envelopeSession.durationSeconds.toInt())
+        assertEquals(179 * 60, envelopeSession.awakeSeconds.toInt())
+        val envSegments = envelopeSession.sleepSegments
+        assertEquals(2, envSegments.size)
+        assertEquals(287 * 60, envSegments[0].asleepSeconds.toInt())
+        assertEquals(10 * 60, envSegments[0].awakeSeconds.toInt())
+        assertEquals(211 * 60, envSegments[1].asleepSeconds.toInt())
+        assertEquals(0, envSegments[1].awakeSeconds.toInt())
+    }
 }

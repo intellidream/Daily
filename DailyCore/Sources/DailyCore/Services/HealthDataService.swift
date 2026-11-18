@@ -3576,7 +3576,13 @@ public final class HealthDataService: ObservableObject {
         hostName: String = "Schmitz"
     ) -> [HealthSleepSessionRecord] {
         var results: [HealthSleepSessionRecord] = []
-        let candidateSessions = allSessions.isEmpty ? [primarySession].compactMap { $0 } : allSessions
+        let rawCandidates = allSessions.isEmpty ? [primarySession].compactMap { $0 } : allSessions
+        let candidateSessions = rawCandidates.sorted { a, b in
+            if a.hasGranularHypnogram != b.hasGranularHypnogram {
+                return a.hasGranularHypnogram && !b.hasGranularHypnogram
+            }
+            return a.asleepSeconds > b.asleepSeconds
+        }
         var seenCanon = Set<String>()
         
         for session in candidateSessions {
@@ -4679,6 +4685,7 @@ internal struct SleepUploadFingerprintStore: Sendable {
             if r.stages.isEmpty && !l.stages.isEmpty { return true }
             if l.durationSeconds > r.durationSeconds { return true }
             if l.endTime.timeIntervalSince(r.endTime) > 60 && l.durationSeconds >= r.durationSeconds { return true }
+            if r.startTime.timeIntervalSince(l.startTime) > 60 && l.durationSeconds >= r.durationSeconds { return true }
             if l.stages.count > r.stages.count && l.durationSeconds >= r.durationSeconds - 600 { return true }
             if (l.deepSeconds + l.remSeconds) > (r.deepSeconds + r.remSeconds) && l.durationSeconds * 10 >= r.durationSeconds * 9 {
                 return true

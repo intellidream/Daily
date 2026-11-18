@@ -218,7 +218,8 @@ export function clusterSleepTelemetry(
     const aggRecs = nonNap.filter(r => !isSleepStageRecord(r));
 
     if (stageRecs.length > 0) {
-      const clustered = clusterStages(stageRecs, targetDateStr, device, tzOffsetMin);
+      const rawClustered = clusterStages(stageRecs, targetDateStr, device, tzOffsetMin);
+      const clustered = reclassifySplitMorningEpisodes(rawClustered, tzOffsetMin);
       for (const s of clustered) {
         if (s.is_nap) {
           allNaps.push({
@@ -233,7 +234,8 @@ export function clusterSleepTelemetry(
         }
       }
     } else if (aggRecs.length > 0) {
-      const clusteredAgg = clusterAggregates(aggRecs, targetDateStr, device, tzOffsetMin);
+      const rawAgg = clusterAggregates(aggRecs, targetDateStr, device, tzOffsetMin);
+      const clusteredAgg = reclassifySplitMorningEpisodes(rawAgg, tzOffsetMin);
       for (const s of clusteredAgg) {
         if (s.is_nap) {
           allNaps.push({
@@ -248,6 +250,13 @@ export function clusterSleepTelemetry(
         }
       }
     }
+  }
+
+  // 2b. Device-agnostic biphasic/split-night consolidation per wearable
+  if (allNocturnalSessions.length >= 2) {
+    const consolidatedNocturnal = consolidateNocturnalSessionsByDevice([...allNocturnalSessions]);
+    allNocturnalSessions.length = 0;
+    allNocturnalSessions.push(...consolidatedNocturnal);
   }
 
   // 3. Select primary nocturnal session
@@ -505,6 +514,132 @@ function normalizeAndClipStages(
   return normalized;
 }
 
+function reclassifySplitMorningEpisodes(
+  sessions: SleepSession[],
+  tzOffsetMin: number
+): SleepSession[] {
+  if (sessions.length < 2) return sessions;
+  const sorted = [...sessions].sort((a, b) => toEpochMs(a.start_time) - toEpochMs(b.start_time));
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    if (!curr.is_nap || prev.is_nap) continue;
+    const startHour = getLocalHour(new Date(toEpochMs(curr.start_time)), tzOffsetMin);
+    const gapSec = (toEpochMs(curr.start_time) - toEpochMs(prev.end_time)) / 1000;
+    if (startHour < 11 && prev.asleep_seconds < 6 * 3600 && gapSec >= 0 && gapSec <= 4 * 3600) {
+      sorted[i] = { ...curr, is_nap: false };
+    }
+  }
+  return sorted;
+}
+
+function consolidateNocturnalSessionsByDevice(sessions: SleepSession[]): SleepSession[] {
+  if (sessions.length < 2) return sessions;
+  const maxInterEpisodeGapMs = 8 * 3600 * 1000;
+  const byCanon = new Map<string, SleepSession[]>();
+  for (const s of sessions) {
+    const key = canonicalizeDeviceName(s.source_device, null);
+    if (!byCanon.has(key)) byCanon.set(key, []);
+    byCanon.get(key)!.push(s);
+  }
+
+  const consolidated: SleepSession[] = [];
+  for (const rawEpisodes of byCanon.values()) {
+    const episodes = [...rawEpisodes].sort((a, b) => toEpochMs(a.start_time) - toEpochMs(b.start_time));
+    if (episodes.length === 1) {
+      consolidated.push(episodes[0]);
+      continue;
+    }
+
+    const groups: SleepSession[][] = [[episodes[0]]];
+    for (let i = 1; i < episodes.length; i++) {
+      const ep = episodes[i];
+      const prevGroup = groups[groups.length - 1];
+      const prevEndMs = Math.max(...prevGroup.map(g => toEpochMs(g.end_time)));
+      if (toEpochMs(ep.start_time) - prevEndMs <= maxInterEpisodeGapMs) {
+        prevGroup.push(ep);
+      } else {
+        groups.push([ep]);
+      }
+    }
+
+    for (const group of groups) {
+      if (group.length === 1) {
+        consolidated.push(group[0]);
+        continue;
+      }
+      const mergedStart = group[0].start_time;
+      const maxEndMs = Math.max(...group.map(g => toEpochMs(g.end_time)));
+      const mergedEnd = new Date(maxEndMs).toISOString();
+      const hasGranular = group.some(g => g.has_granular_hypnogram);
+      const preservedDevice =
+        group.find(g => g.has_granular_hypnogram)?.source_device ?? group[0].source_device;
+
+      const mergedStages: SleepStageRecord[] = [];
+      for (const ep of group) {
+        if (ep.stages && ep.stages.length > 0) {
+          mergedStages.push(...ep.stages);
+        } else {
+          const dur = Math.max(0, (toEpochMs(ep.end_time) - toEpochMs(ep.start_time)) / 1000);
+          if (dur > 0) {
+            mergedStages.push({
+              id: `${ep.id}_agg_light`,
+              stage_type: 'Light',
+              start_time: ep.start_time,
+              end_time: ep.end_time,
+              duration_seconds: Math.round(dur),
+              source_device: preservedDevice
+            });
+          }
+        }
+      }
+      mergedStages.sort((a, b) => toEpochMs(a.start_time) - toEpochMs(b.start_time));
+
+      consolidated.push(
+        createSleepSessionObject({
+          id: group[0].id,
+          startTime: mergedStart,
+          endTime: mergedEnd,
+          isNap: false,
+          sourceDevice: preservedDevice,
+          hasGranularHypnogram: hasGranular,
+          stages: mergedStages
+        })
+      );
+    }
+  }
+  return consolidated;
+}
+
+function computeUntrackedBreakSeconds(
+  stages: SleepStageRecord[],
+  sessionStartMs: number,
+  sessionEndMs: number,
+  minBreakSec = 45 * 60
+): number {
+  if (stages.length === 0) return 0;
+  const sorted = [...stages].sort((a, b) => toEpochMs(a.start_time) - toEpochMs(b.start_time));
+  let untrackedMs = 0;
+  const minBreakMs = minBreakSec * 1000;
+
+  const leadingGap = toEpochMs(sorted[0].start_time) - sessionStartMs;
+  if (leadingGap >= minBreakMs) untrackedMs += leadingGap;
+
+  let cursorEnd = toEpochMs(sorted[0].end_time);
+  for (let i = 1; i < sorted.length; i++) {
+    const currStart = toEpochMs(sorted[i].start_time);
+    const currEnd = toEpochMs(sorted[i].end_time);
+    const gap = currStart - cursorEnd;
+    if (gap >= minBreakMs) untrackedMs += gap;
+    if (currEnd > cursorEnd) cursorEnd = currEnd;
+  }
+
+  const trailingGap = sessionEndMs - cursorEnd;
+  if (trailingGap >= minBreakMs) untrackedMs += trailingGap;
+
+  return untrackedMs / 1000;
+}
+
 export function createSleepSessionObject(params: {
   id: string;
   startTime: string;
@@ -528,13 +663,22 @@ export function createSleepSessionObject(params: {
     else if (st.stage_type === 'Awake') awakeSec += st.duration_seconds;
   }
 
-  const spanSec = Math.max(0, (toEpochMs(endTime) - toEpochMs(startTime)) / 1000);
+  const startMs = toEpochMs(startTime);
+  const endMs = toEpochMs(endTime);
+  const spanSec = Math.max(0, (endMs - startMs) / 1000);
   const totalStagesSec = deepSec + remSec + lightSec + awakeSec;
 
-  const durationSec =
-    totalStagesSec > 0 && spanSec > totalStagesSec * 1.35
-      ? totalStagesSec
-      : Math.max(spanSec, totalStagesSec);
+  let durationSec: number;
+  if (stages.length > 0 && totalStagesSec > 0) {
+    const untrackedBreaks = computeUntrackedBreakSeconds(stages, startMs, endMs);
+    const effectiveSpanSec = Math.max(0, spanSec - untrackedBreaks);
+    durationSec =
+      effectiveSpanSec > totalStagesSec * 1.35
+        ? totalStagesSec
+        : Math.max(effectiveSpanSec, totalStagesSec);
+  } else {
+    durationSec = Math.max(spanSec, totalStagesSec);
+  }
 
   const asleepStagesSec = deepSec + remSec + lightSec;
   const asleepSec = asleepStagesSec > 0 ? asleepStagesSec : Math.max(0, durationSec - awakeSec);
