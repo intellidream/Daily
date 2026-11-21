@@ -223,6 +223,7 @@ fun CosmosScreen(
     val haptics = LocalHapticFeedback.current
 
     // Strict lifecycle binding: zero background battery/CPU drain when hidden
+    // Note: addObserver immediately dispatches ON_START / ON_RESUME if already resumed; guarded idempotently in ViewModel.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -232,7 +233,9 @@ fun CosmosScreen(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        viewModel.onObservatoryVisible()
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            viewModel.onObservatoryVisible()
+        }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.onObservatoryHidden()
@@ -259,9 +262,11 @@ fun CosmosScreen(
         LaunchedEffect(activity) {
             WindowInfoTracker.getOrCreate(activity).windowLayoutInfo(activity).collect { info ->
                 val fold = info.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()
+                val hingeDeg = viewModel.cameraState.value.hingeAngleDegrees
                 if (fold != null &&
                     fold.state == FoldingFeature.State.HALF_OPENED &&
-                    fold.orientation == FoldingFeature.Orientation.HORIZONTAL
+                    fold.orientation == FoldingFeature.Orientation.HORIZONTAL &&
+                    (hingeDeg == null || hingeDeg <= 142f)
                 ) {
                     val decor = activity.window.decorView
                     val winLoc = IntArray(2)
@@ -1000,7 +1005,7 @@ private fun CosmosLiveHeadingBadge(
             cam.isArGyroActive && cam.needsCompassCalibration -> " · Cal (∞)"
             cam.isArGyroActive && cam.isGyroLockIgnoreMagnet -> " · Gyro-Lock"
             cam.isArGyroActive -> " · Live Sky"
-            cam.sensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT -> " · Lift >15°"
+            cam.sensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT -> " · Lift Phone"
             else -> ""
         }
         Text(
@@ -1070,7 +1075,9 @@ private fun SkyDomeViewport(
             .semantics { contentDescription = visiblePlanetsSummary }
             .pointerInput(Unit) {
                 // Unified multi-touch recognizer: 2-finger pinch zooms along optical axis WITHOUT breaking Live Sky gyro;
-                // 1-finger drag immediately disengages Live Sky to smooth manual explore mode!
+                // 1-finger deliberate drag (> density-scaled touchSlop) disengages Live Sky to smooth manual explore mode
+                // without false-cancelling Auto-Lift from palm/bezel brushes on Pixel 9 Pro / Z Fold 8!
+                val touchSlopPx = max(viewConfiguration.touchSlop * 1.25f, 32f)
                 awaitEachGesture {
                     var wasMultiTouch = false
                     var dragDistanceAccum = 0f
@@ -1088,7 +1095,7 @@ private fun SkyDomeViewport(
                         } else if (pressedCount == 1 && !wasMultiTouch) {
                             val pan = event.calculatePan()
                             dragDistanceAccum += hypot(pan.x, pan.y)
-                            if (dragDistanceAccum > 6f && (abs(pan.x) > 0.1f || abs(pan.y) > 0.1f)) {
+                            if (dragDistanceAccum > touchSlopPx && (abs(pan.x) > 0.1f || abs(pan.y) > 0.1f)) {
                                 val cam = viewModel.cameraState.value
                                 val degPerPx = (cam.fovDegrees / max(320f, min(size.width.toFloat(), size.height.toFloat()))) * 0.92
                                 viewModel.setCameraAttitude(

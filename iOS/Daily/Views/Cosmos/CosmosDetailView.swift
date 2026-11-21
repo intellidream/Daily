@@ -64,7 +64,7 @@ private struct CosmosHeadingReadoutView: View {
                         .foregroundColor((needsCalibration || hasMagneticInterference) ? palette.warning : palette.accent)
                         .lineLimit(1)
                 } else if sensorMode == .standbyAutoLift {
-                    Text(isCompact ? "· Lift >15°" : "· Lift >15° for Live Sky")
+                    Text(isCompact ? "· Lift Phone" : "· Lift Phone for Live Sky")
                         .font(.system(size: isCompact ? 8.5 : 10, weight: .medium))
                         .foregroundColor(palette.fgMuted)
                         .lineLimit(1)
@@ -80,9 +80,9 @@ private struct CosmosHeadingReadoutView: View {
     }
 
     private var headingString: String {
-        let az = Int(camera.effectiveAzimuth.rounded()) % 360
-        let comp = CelestialCoordinates.compassPoint(for: camera.effectiveAzimuth)
-        let alt = Int(camera.effectiveAltitude.rounded())
+        let az = camera.displayAzimuthDeg
+        let comp = CelestialCoordinates.compassPoint(for: Double(az))
+        let alt = camera.displayAltitudeDeg
         if isCompact {
             return String(format: "· %03d° %@ · %+d°", az, comp, alt)
         }
@@ -314,7 +314,8 @@ public struct CosmosDetailView: View {
     @ViewBuilder
     private func skyDomeViewport(isSplitActive: Bool, canToggleSplit: Bool) -> some View {
         GeometryReader { geometry in
-            let frameInterval: Double = (vm.isMotionTrackingEnabled || vm.playbackSpeedMultiplier > 0) ? (1.0 / 90.0) : (1.0 / 30.0)
+            let isHighRate = vm.isMotionTrackingEnabled || vm.playbackSpeedMultiplier > 0
+            let frameInterval: Double? = isHighRate ? nil : (1.0 / 24.0)
             ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
 
@@ -333,75 +334,79 @@ public struct CosmosDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 #endif
 
-                TimelineView(.animation(minimumInterval: frameInterval)) { timeline in
-                    let scene = vm.projectSkyScene(
-                        in: geometry.size,
-                        renderTimestamp: timeline.date.timeIntervalSinceReferenceDate
-                    )
-                    ZStack(alignment: .topLeading) {
-                        Canvas { context, size in
+                ZStack(alignment: .topLeading) {
+                    TimelineView(.animation(minimumInterval: frameInterval)) { timeline in
+                        Canvas(opaque: true) { context, size in
+                            let scene = vm.projectSkyScene(
+                                in: size,
+                                renderTimestamp: timeline.date.timeIntervalSinceReferenceDate,
+                                includeAccessibilityLandmarks: false
+                            )
                             drawSkyScene(context: context, size: size, scene: scene)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        #if os(macOS)
-                        .onContinuousHover { phase in
-                            switch phase {
-                            case .active(let pt):
-                                vm.camera.hoverLocation = pt
-                            case .ended:
-                                vm.camera.hoverLocation = nil
+                    }
+                    .contentShape(Rectangle())
+                    #if os(macOS)
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let pt):
+                            vm.camera.hoverLocation = pt
+                        case .ended:
+                            vm.camera.hoverLocation = nil
+                        }
+                    }
+                    #endif
+                    .gesture(
+                        DragGesture(minimumDistance: vm.isMotionTrackingEnabled ? 14 : 4)
+                            .onChanged { value in
+                                let dx = Double(value.translation.width - dragOffset.width)
+                                let dy = Double(value.translation.height - dragOffset.height)
+                                dragOffset = value.translation
+                                vm.handlePan(
+                                    deltaX: dx,
+                                    deltaY: dy,
+                                    viewportWidth: Double(geometry.size.width),
+                                    viewportHeight: Double(geometry.size.height)
+                                )
+                            }
+                            .onEnded { _ in
+                                dragOffset = .zero
+                            }
+                    )
+                    .simultaneousGesture(
+                        MagnifyGesture()
+                            .onChanged { value in
+                                let delta = value.magnification / currentZoomScale
+                                currentZoomScale = value.magnification
+                                vm.handleZoom(
+                                    deltaMagnification: Double(delta),
+                                    anchorPoint: value.startLocation,
+                                    viewportSize: geometry.size
+                                )
+                            }
+                            .onEnded { _ in
+                                currentZoomScale = 1.0
+                            }
+                    )
+                    .onTapGesture { location in
+                        let tapScene = vm.projectSkyScene(in: geometry.size)
+                        if let hit = vm.hitTestTarget(at: location, in: tapScene) {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                                vm.selectedTarget = hit
+                            }
+                        } else if vm.selectedTarget != nil {
+                            withAnimation(.spring(response: 0.28)) {
+                                vm.selectedTarget = nil
                             }
                         }
-                        #endif
-                        .gesture(
-                            DragGesture(minimumDistance: 3)
-                                .onChanged { value in
-                                    let dx = Double(value.translation.width - dragOffset.width)
-                                    let dy = Double(value.translation.height - dragOffset.height)
-                                    dragOffset = value.translation
-                                    vm.handlePan(
-                                        deltaX: dx,
-                                        deltaY: dy,
-                                        viewportWidth: Double(geometry.size.width),
-                                        viewportHeight: Double(geometry.size.height)
-                                    )
-                                }
-                                .onEnded { _ in
-                                    dragOffset = .zero
-                                }
-                        )
-                        .simultaneousGesture(
-                            MagnifyGesture()
-                                .onChanged { value in
-                                    let delta = value.magnification / currentZoomScale
-                                    currentZoomScale = value.magnification
-                                    vm.handleZoom(
-                                        deltaMagnification: Double(delta),
-                                        anchorPoint: value.startLocation,
-                                        viewportSize: geometry.size
-                                    )
-                                }
-                                .onEnded { _ in
-                                    currentZoomScale = 1.0
-                                }
-                        )
-                        .onTapGesture { location in
-                            let tapScene = vm.projectSkyScene(in: geometry.size)
-                            if let hit = vm.hitTestTarget(at: location, in: tapScene) {
-                                triggerHaptic()
-                                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                                    vm.selectedTarget = hit
-                                }
-                            } else if vm.selectedTarget != nil {
-                                withAnimation(.spring(response: 0.28)) {
-                                    vm.selectedTarget = nil
-                                }
-                            }
-                        }
+                    }
 
-                        // Semantic VoiceOver Accessibility Overlay
-                        ForEach(scene.accessibilityLandmarks) { lm in
+                    #if os(iOS)
+                    if UIAccessibility.isVoiceOverRunning {
+                        let a11yScene = vm.projectSkyScene(in: geometry.size, includeAccessibilityLandmarks: true)
+                        ForEach(a11yScene.accessibilityLandmarks) { lm in
                             Color.clear
                                 .frame(width: lm.frame.width, height: lm.frame.height)
                                 .position(x: lm.frame.midX, y: lm.frame.midY)
@@ -414,6 +419,7 @@ public struct CosmosDetailView: View {
                                 }
                         }
                     }
+                    #endif
                 }
 
                 // Top HUD
@@ -1157,17 +1163,14 @@ public struct CosmosDetailView: View {
             context.draw(issLbl, at: CGPoint(x: pt.x, y: pt.y - 15))
         }
 
-        // 11. Selected Target Reticle
-        if let sel = vm.selectedTarget {
-            let live = vm.liveMetrics(for: sel)
-            if let sp = scene.matrix.projectHorizontal(azimuthDegrees: live.azimuthDegrees, altitudeDegrees: live.altitudeDegrees, margin: 20.0), sp.isVisible {
-                let rRect = CGRect(x: sp.x - 16, y: sp.y - 16, width: 32, height: 32)
-                context.stroke(
-                    Path(ellipseIn: rRect),
-                    with: .color(p.accent),
-                    style: StrokeStyle(lineWidth: 1.6, dash: [5, 3])
-                )
-            }
+        // 11. Selected Target Reticle (pre-projected at zero rise/transit/set cost)
+        if let sp = scene.selectedTargetScreenPoint {
+            let rRect = CGRect(x: sp.x - 16, y: sp.y - 16, width: 32, height: 32)
+            context.stroke(
+                Path(ellipseIn: rRect),
+                with: .color(p.accent),
+                style: StrokeStyle(lineWidth: 1.6, dash: [5, 3])
+            )
         }
 
         // 12. Horizon Ground Mask, Cardinal Compass & Zenith

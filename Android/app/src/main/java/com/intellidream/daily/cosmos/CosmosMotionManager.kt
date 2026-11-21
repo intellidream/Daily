@@ -135,7 +135,7 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
     private var lastRawTrueAzimuthDegrees: Double = 180.0
     private var lastValidAzimuthRadians: Double = Math.PI
 
-    // Lift-to-Sky hysteresis (> +15° sustained >= 250ms)
+    // Lift-to-Sky hysteresis (>= +6° unsmoothed optical altitude sustained >= 180ms)
     private var liftAboveThresholdSinceMs: Long = 0L
     private var hasLoweredSinceDragPause: Boolean = true
     private var dragPausedAtMs: Long = 0L
@@ -143,6 +143,9 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
     // Reusable pre-allocated buffers (zero GC pressure at 120Hz)
     private val rawQuat = FloatArray(4) // [w, x, y, z]
     private val smoothedQuat = FloatArray(4)
+    private val rawQuatForMatrix = FloatArray(4) // [x, y, z, w]
+    private val rawRotationMatrix = FloatArray(9)
+    private val rawRemappedMatrix = FloatArray(9)
     private val quatForMatrix = FloatArray(4) // [x, y, z, w]
     private val rotationMatrix = FloatArray(9)
     private val remappedMatrix = FloatArray(9)
@@ -153,6 +156,9 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
     private var hasInitialQuat = false
     private var activeCompositeSensor: Sensor? = null
     private var usingRawAccelMagFallback = false
+    private var sensorsRegistered = false
+    private var registeredCompositeType: Int = -1
+    private var registeredWithMagMonitor = false
 
     fun updateObserverLocation(latitude: Double, longitude: Double, elevationMeters: Double = 50.0) {
         val field = GeomagneticField(
@@ -185,20 +191,26 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         }
         liftAboveThresholdSinceMs = 0L
         hasLoweredSinceDragPause = true
-        if (currentSensorMode == AndroidCosmosSensorMode.UNAVAILABLE) {
-            currentSensorMode = if (autoLiftEnabled) AndroidCosmosSensorMode.STANDBY_AUTO_LIFT else AndroidCosmosSensorMode.MANUAL_OFF
+        // Every fresh visit to Cosmos starts ready for Auto-Lift unless already actively tracking
+        if (currentSensorMode != AndroidCosmosSensorMode.ACTIVE_LIVE_SKY) {
+            currentSensorMode = if (autoLiftEnabled) {
+                AndroidCosmosSensorMode.STANDBY_AUTO_LIFT
+            } else {
+                AndroidCosmosSensorMode.MANUAL_OFF
+            }
         }
         when (currentSensorMode) {
             AndroidCosmosSensorMode.ACTIVE_LIVE_SKY -> {
-                registerHardwareSensors(highFrequency = true)
+                ensureHardwareSensorsRegistered()
                 _isTracking.value = true
             }
             AndroidCosmosSensorMode.STANDBY_AUTO_LIFT,
             AndroidCosmosSensorMode.PAUSED_AFTER_DRAG -> {
-                registerHardwareSensors(highFrequency = false)
+                ensureHardwareSensorsRegistered()
                 _isTracking.value = false
             }
             else -> {
+                unregisterAllSensors()
                 startHingeMonitoringOnly()
                 _isTracking.value = false
             }
@@ -207,11 +219,11 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
     }
 
     fun endObservatorySession() {
-        sensorManager?.unregisterListener(this)
+        unregisterAllSensors()
         _isTracking.value = false
         hasInitialQuat = false
         liftAboveThresholdSinceMs = 0L
-        if (hasSensorHardware && currentSensorMode != AndroidCosmosSensorMode.MANUAL_OFF) {
+        if (hasSensorHardware) {
             currentSensorMode = AndroidCosmosSensorMode.STANDBY_AUTO_LIFT
         }
         publishModeOnly()
@@ -222,7 +234,7 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         hasInitialQuat = false
         liftAboveThresholdSinceMs = 0L
         currentSensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
-        registerHardwareSensors(highFrequency = true)
+        ensureHardwareSensorsRegistered()
         _isTracking.value = true
         publishModeOnly()
     }
@@ -233,13 +245,13 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         liftAboveThresholdSinceMs = 0L
         if (explicitUserOff) {
             currentSensorMode = if (hasSensorHardware) AndroidCosmosSensorMode.MANUAL_OFF else AndroidCosmosSensorMode.UNAVAILABLE
-            sensorManager?.unregisterListener(this)
+            unregisterAllSensors()
             startHingeMonitoringOnly()
         } else {
             currentSensorMode = if (hasSensorHardware) AndroidCosmosSensorMode.PAUSED_AFTER_DRAG else AndroidCosmosSensorMode.UNAVAILABLE
             hasLoweredSinceDragPause = false
             dragPausedAtMs = SystemClock.elapsedRealtime()
-            registerHardwareSensors(highFrequency = false)
+            ensureHardwareSensorsRegistered()
         }
         publishModeOnly()
     }
@@ -259,7 +271,7 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             currentSensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT ||
             currentSensorMode == AndroidCosmosSensorMode.PAUSED_AFTER_DRAG
         ) {
-            registerHardwareSensors(highFrequency = currentSensorMode == AndroidCosmosSensorMode.ACTIVE_LIVE_SKY)
+            ensureHardwareSensorsRegistered(forceRebind = true)
             gyroAnchorOffsetDegrees = if (enabled) {
                 normalizeSignedDegrees(curAz - lastRawTrueAzimuthDegrees)
             } else {
@@ -288,10 +300,14 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         publishModeOnly()
     }
 
-    private fun registerHardwareSensors(highFrequency: Boolean) {
+    private fun unregisterAllSensors() {
         sensorManager?.unregisterListener(this)
-        val delay = if (highFrequency) SensorManager.SENSOR_DELAY_GAME else SensorManager.SENSOR_DELAY_UI
+        sensorsRegistered = false
+        registeredCompositeType = -1
+        registeredWithMagMonitor = false
+    }
 
+    private fun ensureHardwareSensorsRegistered(forceRebind: Boolean = false) {
         val chosenComposite: Sensor? = when {
             isGyroLockIgnoreMagnet && gameRotationSensor != null -> gameRotationSensor
             primaryRotationSensor != null -> primaryRotationSensor
@@ -300,9 +316,28 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             else -> null
         }
 
-        activeCompositeSensor = chosenComposite
-        usingRawAccelMagFallback = (chosenComposite == null && accelerometerSensor != null && magneticFieldSensor != null)
+        val fallbackAccelMag = (chosenComposite == null && accelerometerSensor != null && magneticFieldSensor != null)
+        val wantMagMonitor = (magneticFieldSensor != null && !fallbackAccelMag && !isGyroLockIgnoreMagnet)
+        val desiredType = chosenComposite?.type ?: (if (fallbackAccelMag) -2 else -1)
 
+        if (!forceRebind &&
+            sensorsRegistered &&
+            registeredCompositeType == desiredType &&
+            registeredWithMagMonitor == wantMagMonitor
+        ) {
+            return
+        }
+
+        sensorManager?.unregisterListener(this)
+        activeCompositeSensor = chosenComposite
+        usingRawAccelMagFallback = fallbackAccelMag
+        registeredCompositeType = desiredType
+        registeredWithMagMonitor = wantMagMonitor
+        sensorsRegistered = true
+
+        // Always register SENSOR_DELAY_GAME once while Cosmos is visible so STANDBY -> ACTIVE_LIVE_SKY
+        // transitions instantaneously without re-entrant unregisterListener/registerListener inside onSensorChanged!
+        val delay = SensorManager.SENSOR_DELAY_GAME
         if (chosenComposite != null) {
             sensorManager?.registerListener(this, chosenComposite, delay)
         } else if (usingRawAccelMagFallback) {
@@ -310,8 +345,7 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             sensorManager?.registerListener(this, magneticFieldSensor, delay)
         }
 
-        // Monitor raw magnetic field norm (µT) when magnetometer exists so MagSafe/balcony interference is caught immediately
-        if (magneticFieldSensor != null && !usingRawAccelMagFallback && !isGyroLockIgnoreMagnet) {
+        if (wantMagMonitor) {
             sensorManager?.registerListener(this, magneticFieldSensor, SensorManager.SENSOR_DELAY_UI)
         }
 
@@ -367,6 +401,62 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             }
         }
 
+        @Suppress("DEPRECATION")
+        val displayRotation = activeDisplayRotation ?: windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        val (axisX, axisY) = when (displayRotation) {
+            Surface.ROTATION_90 -> Pair(SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X)
+            Surface.ROTATION_180 -> Pair(SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y)
+            Surface.ROTATION_270 -> Pair(SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X)
+            else -> Pair(SensorManager.AXIS_X, SensorManager.AXIS_Y)
+        }
+
+        // Zero-Lag Auto-Lift Check on unsmoothed `rawQuat` BEFORE SLERP (>= +6.0° sustained >= 180ms)
+        if (currentSensorMode != AndroidCosmosSensorMode.ACTIVE_LIVE_SKY) {
+            rawQuatForMatrix[0] = rawQuat[1]
+            rawQuatForMatrix[1] = rawQuat[2]
+            rawQuatForMatrix[2] = rawQuat[3]
+            rawQuatForMatrix[3] = rawQuat[0]
+            SensorManager.getRotationMatrixFromVector(rawRotationMatrix, rawQuatForMatrix)
+            SensorManager.remapCoordinateSystem(rawRotationMatrix, axisX, axisY, rawRemappedMatrix)
+            val rawFUp = -rawRemappedMatrix[8].toDouble()
+            val rawAltDeg = Math.toDegrees(asin(rawFUp.coerceIn(-1.0, 1.0)))
+
+            // Only suppress auto-lift when genuinely resting flat on a table in tabletop flex posture (< 138° hinge & pointing below horizon)
+            val hinge = currentHingeAngle
+            val isRestingInTabletop = isTabletopPosture &&
+                (hinge == null || hinge in 65f..138f) &&
+                rawAltDeg < 4.0
+
+            val nowMs = SystemClock.elapsedRealtime()
+            if (!isRestingInTabletop) {
+                if (currentSensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT) {
+                    if (rawAltDeg >= 6.0) {
+                        if (liftAboveThresholdSinceMs == 0L) {
+                            liftAboveThresholdSinceMs = nowMs
+                        } else if ((nowMs - liftAboveThresholdSinceMs) >= 180L) {
+                            liftAboveThresholdSinceMs = 0L
+                            engageFromAutoLift()
+                        }
+                    } else {
+                        liftAboveThresholdSinceMs = 0L
+                    }
+                } else if (currentSensorMode == AndroidCosmosSensorMode.PAUSED_AFTER_DRAG) {
+                    if (rawAltDeg < -5.0 && (nowMs - dragPausedAtMs) > 900L) {
+                        hasLoweredSinceDragPause = true
+                    } else if (hasLoweredSinceDragPause && rawAltDeg >= 14.0 && (nowMs - dragPausedAtMs) > 1500L) {
+                        if (liftAboveThresholdSinceMs == 0L) {
+                            liftAboveThresholdSinceMs = nowMs
+                        } else if ((nowMs - liftAboveThresholdSinceMs) >= 200L) {
+                            liftAboveThresholdSinceMs = 0L
+                            engageFromAutoLift()
+                        }
+                    } else {
+                        liftAboveThresholdSinceMs = 0L
+                    }
+                }
+            }
+        }
+
         if (!hasInitialQuat) {
             System.arraycopy(rawQuat, 0, smoothedQuat, 0, 4)
             hasInitialQuat = true
@@ -379,15 +469,6 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         quatForMatrix[2] = smoothedQuat[3]
         quatForMatrix[3] = smoothedQuat[0]
         SensorManager.getRotationMatrixFromVector(rotationMatrix, quatForMatrix)
-
-        @Suppress("DEPRECATION")
-        val displayRotation = activeDisplayRotation ?: windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
-        val (axisX, axisY) = when (displayRotation) {
-            Surface.ROTATION_90 -> Pair(SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X)
-            Surface.ROTATION_180 -> Pair(SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y)
-            Surface.ROTATION_270 -> Pair(SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X)
-            else -> Pair(SensorManager.AXIS_X, SensorManager.AXIS_Y)
-        }
         SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remappedMatrix)
 
         // Screen basis in Magnetic ENU:
@@ -406,36 +487,6 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
 
         val altRad = asin(fUp.coerceIn(-1.0, 1.0))
         val altDeg = Math.toDegrees(altRad)
-
-        // Standby Auto-Lift State Machine (> +15° sustained >= 250ms; skipped in foldable tabletop flex posture)
-        val nowMs = SystemClock.elapsedRealtime()
-        if (!isTabletopPosture) {
-            if (currentSensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT) {
-                if (altDeg >= 15.0) {
-                    if (liftAboveThresholdSinceMs == 0L) {
-                        liftAboveThresholdSinceMs = nowMs
-                    } else if ((nowMs - liftAboveThresholdSinceMs) >= 250L) {
-                        liftAboveThresholdSinceMs = 0L
-                        engageFromAutoLift()
-                    }
-                } else {
-                    liftAboveThresholdSinceMs = 0L
-                }
-            } else if (currentSensorMode == AndroidCosmosSensorMode.PAUSED_AFTER_DRAG) {
-                if (altDeg < -5.0 && (nowMs - dragPausedAtMs) > 1200L) {
-                    hasLoweredSinceDragPause = true
-                } else if (hasLoweredSinceDragPause && altDeg >= 20.0 && (nowMs - dragPausedAtMs) > 2000L) {
-                    if (liftAboveThresholdSinceMs == 0L) {
-                        liftAboveThresholdSinceMs = nowMs
-                    } else if ((nowMs - liftAboveThresholdSinceMs) >= 300L) {
-                        liftAboveThresholdSinceMs = 0L
-                        engageFromAutoLift()
-                    }
-                } else {
-                    liftAboveThresholdSinceMs = 0L
-                }
-            }
-        }
 
         val isRelativeOnly = isGyroLockIgnoreMagnet ||
             (activeCompositeSensor?.type == Sensor.TYPE_GAME_ROTATION_VECTOR)
@@ -545,9 +596,9 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
 
     private fun engageFromAutoLift() {
         currentSensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
-        registerHardwareSensors(highFrequency = true)
+        System.arraycopy(rawQuat, 0, smoothedQuat, 0, 4)
+        hasInitialQuat = true
         _isTracking.value = true
-        publishModeOnly()
         onAutoLiftEngaged?.invoke()
     }
 

@@ -451,26 +451,12 @@ public final class CosmosViewModel: ObservableObject {
     // MARK: - Subscriptions
 
     private func setupSubscriptions() {
-        motionService.$currentAzimuth
-            .sink { [weak self] az in
-                guard let self = self, self.isMotionTrackingEnabled else { return }
-                self.camera.azimuth = az
-            }
-            .store(in: &cancellables)
-
-        motionService.$currentAltitude
-            .sink { [weak self] alt in
-                guard let self = self, self.isMotionTrackingEnabled else { return }
-                self.camera.altitude = alt
-            }
-            .store(in: &cancellables)
-
-        motionService.$currentRoll
-            .sink { [weak self] roll in
-                guard let self = self, self.isMotionTrackingEnabled else { return }
-                self.camera.roll = roll
-            }
-            .store(in: &cancellables)
+        motionService.onAttitudeSample = { [weak self] az, alt, roll, _ in
+            guard let self = self, self.isMotionTrackingEnabled else { return }
+            self.camera.azimuth = az
+            self.camera.altitude = alt
+            self.camera.roll = roll
+        }
 
         liveService.$stargazingConditions
             .sink { [weak self] _ in

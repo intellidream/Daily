@@ -9,12 +9,15 @@ public enum CosmosSensorMode: String, Equatable, Sendable {
     case manualOff
 }
 
-/// Graceful fallback motion tracker on macOS desktop where hardware IMU + magnetometer are absent.
-/// Preserves 100% API parity with iOS `CosmosMotionService` while cleanly reporting `isAvailable = false`
-/// so desktop UI hides mobile-only compass/sensor controls without clutter.
 @MainActor
 public final class CosmosMotionService: ObservableObject {
     public static let shared = CosmosMotionService()
+
+    public typealias BasisNWZ = (
+        right: (Double, Double, Double),
+        up: (Double, Double, Double),
+        forward: (Double, Double, Double)
+    )
 
     @Published public private(set) var sensorMode: CosmosSensorMode = .unavailable
     @Published public private(set) var isTracking: Bool = false
@@ -31,17 +34,13 @@ public final class CosmosMotionService: ObservableObject {
     @Published public private(set) var headingAccuracyDegrees: Double = -1.0
     @Published public private(set) var azimuthOffsetDegrees: Double = 0.0
 
-    @Published public private(set) var currentAzimuth: Double = 180.0
-    @Published public private(set) var currentAltitude: Double = 45.0
-    @Published public private(set) var currentRoll: Double = 0.0
-
-    public private(set) var currentBasisNWZ: (
-        right: (Double, Double, Double),
-        up: (Double, Double, Double),
-        forward: (Double, Double, Double)
-    )? = nil
+    public private(set) var currentAzimuth: Double = 180.0
+    public private(set) var currentAltitude: Double = 45.0
+    public private(set) var currentRoll: Double = 0.0
+    public private(set) var currentBasisNWZ: BasisNWZ? = nil
 
     public var onAutoLiftEngaged: (() -> Void)? = nil
+    public var onAttitudeSample: ((Double, Double, Double, BasisNWZ) -> Void)? = nil
 
     private init() {
         self.isAvailable = false

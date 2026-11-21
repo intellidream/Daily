@@ -40,11 +40,17 @@ public struct CosmosPalette {
 @Observable
 @MainActor
 public final class CosmosCameraController {
-    public var azimuth: Double = 180.0
-    public var altitude: Double = 38.0
+    public var azimuth: Double = 180.0 {
+        didSet { syncDisplayHeading() }
+    }
+    public var altitude: Double = 38.0 {
+        didSet { syncDisplayHeading() }
+    }
     public var roll: Double = 0.0
     public var fov: Double = 60.0 // 0.5° (High-Power Telescope) ... 120.0° (Wide Dome)
-    public var isZenithPlanisphereLocked: Bool = false
+    public var isZenithPlanisphereLocked: Bool = false {
+        didSet { syncDisplayHeading() }
+    }
     public var hoverLocation: CGPoint? = nil
     public var customBasisNWZ: (
         right: (Double, Double, Double),
@@ -52,7 +58,18 @@ public final class CosmosCameraController {
         forward: (Double, Double, Double)
     )? = nil
 
+    // Integer-quantized heading degrees so HUD labels never re-layout at 100Hz on sub-degree updates
+    public private(set) var displayAzimuthDeg: Int = 180
+    public private(set) var displayAltitudeDeg: Int = 38
+
     public init() {}
+
+    private func syncDisplayHeading() {
+        let nextAz = ((Int(effectiveAzimuth.rounded()) % 360) + 360) % 360
+        if displayAzimuthDeg != nextAz { displayAzimuthDeg = nextAz }
+        let nextAlt = Int(effectiveAltitude.rounded())
+        if displayAltitudeDeg != nextAlt { displayAltitudeDeg = nextAlt }
+    }
 
     public var effectiveAzimuth: Double {
         azimuth
@@ -292,6 +309,7 @@ public struct ProjectedSkyScene {
     public let nadirScreenUnitVector: CGPoint
     public let cardinals: [(label: String, x: Double, y: Double, isPrimary: Bool)]
     public let zenithPoint: CGPoint?
+    public let selectedTargetScreenPoint: CGPoint?
     public let targetGuide: SkyTargetGuideState?
     public let hoverSummary: (point: CGPoint, title: String, subtitle: String)?
     public let accessibilityLandmarks: [SkyAccessibilityLandmark]
@@ -316,9 +334,32 @@ public final class CosmosViewModel: ObservableObject {
     private var playbackTimer: AnyCancellable?
     private var isObservatoryActive: Bool = false
 
-    // Pre-baked star sRGB lookup parallel to `catalogService.stars` (zero per-frame log/pow math)
+    // Pre-baked star sRGB & flat index tables parallel to `catalogService.stars` (zero per-frame hashing or trig)
     private let prebakedStarRGB: [(r: Float, g: Float, b: Float)]
+    private let prebakedStarProperNames: [String?]
+    private let prebakedConstellationIndexPairs: [(Int, Int)]
+    private let prebakedAsterismIndexPairs: [(Int, Int)]
+    private let prebakedConstellationCenters: [(record: ConstellationRecord, ux: Double, uy: Double, uz: Double)]
+    private let brightStarByHip: [Int: BrightStarRecord]
     private let constellationCodeByIndex: [UInt16: String]
+
+    // Reusable flat per-star screen projection scratchpads (zero heap/dictionary allocations at 120Hz)
+    private var starProjX: [Double]
+    private var starProjY: [Double]
+    private var starProjStamp: [UInt32]
+    private var currentProjStamp: UInt32 = 0
+
+    // Cached 1Hz ephemeris & SGP4 orbital samples so 120Hz camera motion runs pure 3x3 matrix math (<0.8ms/frame)
+    private var cachedSceneDate: Date = .distantPast
+    private var cachedSceneLat: Double = .nan
+    private var cachedSceneLon: Double = .nan
+    private var cachedSceneElev: Double = .nan
+    private var cachedSunCoords: CelestialCoordinates? = nil
+    private var cachedBodyCoords: [(body: CelestialBody, coords: CelestialCoordinates)] = []
+    private var cachedSaturnTilt: Double = 0.0
+    private var cachedJupiterMoons: JupiterMoonsState? = nil
+    private var cachedIssLive: LiveSatellitePosition? = nil
+    private var cachedIssArcSamples: [LiveSatellitePosition] = []
 
     // Isolated 120Hz camera controller
     public let camera = CosmosCameraController()
@@ -409,20 +450,71 @@ public final class CosmosViewModel: ObservableObject {
     @Published public private(set) var circadianContext: CircadianSkyContext
 
     public init() {
-        let stars = CosmosCatalogService.shared.stars
+        let catalog = CosmosCatalogService.shared
+        let stars = catalog.stars
         var rgb: [(Float, Float, Float)] = []
         rgb.reserveCapacity(stars.count)
-        for s in stars {
+        var properNames: [String?] = []
+        properNames.reserveCapacity(stars.count)
+        var hipToIdx: [Int: Int] = [:]
+        hipToIdx.reserveCapacity(stars.count)
+
+        for (i, s) in stars.enumerated() {
             let c = PackedStar.ballesterosRGB(bv: Double(s.bv))
             rgb.append((Float(c.r), Float(c.g), Float(c.b)))
+            if s.hip > 0 {
+                hipToIdx[s.hip] = i
+                if let name = catalog.starDesignationsByHip[s.hip]?.name, !name.isEmpty {
+                    properNames.append(name)
+                } else {
+                    properNames.append(nil)
+                }
+            } else {
+                properNames.append(nil)
+            }
         }
         self.prebakedStarRGB = rgb
+        self.prebakedStarProperNames = properNames
+        self.starProjX = Array(repeating: 0.0, count: stars.count)
+        self.starProjY = Array(repeating: 0.0, count: stars.count)
+        self.starProjStamp = Array(repeating: 0, count: stars.count)
 
+        var constPairs: [(Int, Int)] = []
+        constPairs.reserveCapacity(680)
+        var constCenters: [(ConstellationRecord, Double, Double, Double)] = []
+        constCenters.reserveCapacity(catalog.constellations.count)
         var cMap: [UInt16: String] = [:]
-        for c in CosmosCatalogService.shared.constellations {
+        for c in catalog.constellations {
             cMap[UInt16(clamping: c.index)] = c.nameEn
+            let raRad = c.centerRaHours * 15.0 * (.pi / 180.0)
+            let decRad = c.centerDecDeg * (.pi / 180.0)
+            constCenters.append((c, cos(decRad) * cos(raRad), cos(decRad) * sin(raRad), sin(decRad)))
+            for pair in c.segments where pair.count == 2 {
+                if let ia = hipToIdx[pair[0]], let ib = hipToIdx[pair[1]] {
+                    constPairs.append((ia, ib))
+                }
+            }
         }
+        self.prebakedConstellationIndexPairs = constPairs
+        self.prebakedConstellationCenters = constCenters
         self.constellationCodeByIndex = cMap
+
+        var astPairs: [(Int, Int)] = []
+        astPairs.reserveCapacity(140)
+        for ast in catalog.asterisms {
+            for pair in ast.segments where pair.count == 2 {
+                if let ia = hipToIdx[pair[0]], let ib = hipToIdx[pair[1]] {
+                    astPairs.append((ia, ib))
+                }
+            }
+        }
+        self.prebakedAsterismIndexPairs = astPairs
+
+        var bMap: [Int: BrightStarRecord] = [:]
+        for b in catalog.brightStars {
+            bMap[b.hip] = b
+        }
+        self.brightStarByHip = bMap
 
         let now = Date()
         let defaultObs = (latitude: 44.4268, longitude: 26.1025)
@@ -488,29 +580,14 @@ public final class CosmosViewModel: ObservableObject {
     // MARK: - Subscriptions
 
     private func setupSubscriptions() {
-        motionService.$currentAzimuth
-            .sink { [weak self] az in
-                guard let self = self, self.isMotionTrackingEnabled else { return }
-                self.camera.azimuth = az
-                self.camera.customBasisNWZ = self.motionService.currentBasisNWZ
-            }
-            .store(in: &cancellables)
-
-        motionService.$currentAltitude
-            .sink { [weak self] alt in
-                guard let self = self, self.isMotionTrackingEnabled else { return }
-                self.camera.altitude = alt
-                self.camera.customBasisNWZ = self.motionService.currentBasisNWZ
-            }
-            .store(in: &cancellables)
-
-        motionService.$currentRoll
-            .sink { [weak self] roll in
-                guard let self = self, self.isMotionTrackingEnabled else { return }
-                self.camera.roll = roll
-                self.camera.customBasisNWZ = self.motionService.currentBasisNWZ
-            }
-            .store(in: &cancellables)
+        // Direct 100Hz callback into @Observable CosmosCameraController (zero Combine/ObservableObject HUD churn!)
+        motionService.onAttitudeSample = { [weak self] az, alt, roll, basis in
+            guard let self = self, self.isMotionTrackingEnabled else { return }
+            self.camera.customBasisNWZ = basis
+            self.camera.roll = roll
+            self.camera.azimuth = az
+            self.camera.altitude = alt
+        }
 
         #if canImport(UIKit)
         NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
@@ -1013,7 +1090,85 @@ public final class CosmosViewModel: ObservableObject {
 
     // MARK: - High-Throughput 120Hz Sky Scene Projection
 
-    public func projectSkyScene(in size: CGSize, renderTimestamp: TimeInterval = Date().timeIntervalSinceReferenceDate) -> ProjectedSkyScene {
+    private func ensureSceneEphemerisFresh(date: Date, obsLat: Double, obsLon: Double, obsElev: Double) {
+        let timeDelta = abs(date.timeIntervalSince(cachedSceneDate))
+        if cachedSunCoords != nil &&
+            timeDelta < 0.25 &&
+            abs(obsLat - cachedSceneLat) < 0.0005 &&
+            abs(obsLon - cachedSceneLon) < 0.0005 &&
+            abs(obsElev - cachedSceneElev) < 2.0 {
+            return
+        }
+
+        cachedSceneDate = date
+        cachedSceneLat = obsLat
+        cachedSceneLon = obsLon
+        cachedSceneElev = obsElev
+
+        let obs3 = (latitude: obsLat, longitude: obsLon, elevation: obsElev)
+        let sun = astronomyService.coordinates(of: .sun, for: obs3, at: date)
+        cachedSunCoords = sun
+        cachedSaturnTilt = astronomyService.saturnRingTilt(at: date)
+        cachedJupiterMoons = astronomyService.jupiterMoons(at: date, observer: (obsLat, obsLon))
+
+        let bodies: [CelestialBody] = [.sun, .moon, .mercury, .venus, .mars, .jupiter, .saturn, .uranus, .neptune]
+        var bCoords: [(CelestialBody, CelestialCoordinates)] = []
+        bCoords.reserveCapacity(bodies.count)
+        for body in bodies {
+            let c = (body == .sun) ? sun : astronomyService.coordinates(of: body, for: obs3, at: date)
+            bCoords.append((body, c))
+        }
+        cachedBodyCoords = bCoords
+
+        if let liveIss = liveService.currentIssPosition(latitude: obsLat, longitude: obsLon, at: date) {
+            cachedIssLive = liveIss
+            var samples: [LiveSatellitePosition] = []
+            samples.reserveCapacity(31)
+            for step in -10...20 {
+                let sampleTime = date.addingTimeInterval(Double(step) * 20.0)
+                if let sp = liveService.currentIssPosition(latitude: obsLat, longitude: obsLon, at: sampleTime),
+                   sp.altitudeDegrees >= -2.0 {
+                    samples.append(sp)
+                }
+            }
+            cachedIssArcSamples = samples
+        } else {
+            cachedIssLive = nil
+            cachedIssArcSamples = []
+        }
+    }
+
+    private func fastHorizontalCoordinates(for target: CosmosTarget, matrix: SkyProjectionMatrix) -> (azimuthDegrees: Double, altitudeDegrees: Double) {
+        switch target.kind {
+        case .body(let body):
+            if let hit = cachedBodyCoords.first(where: { $0.body == body }) {
+                return (hit.coords.azimuthDegrees, hit.coords.altitudeDegrees)
+            }
+        case .iss:
+            if let live = cachedIssLive {
+                return (live.azimuthDegrees, live.altitudeDegrees)
+            }
+        default:
+            break
+        }
+        let raRad = target.rightAscensionHours * 15.0 * (.pi / 180.0)
+        let decRad = target.declinationDegrees * (.pi / 180.0)
+        let vx = cos(decRad) * cos(raRad)
+        let vy = cos(decRad) * sin(raRad)
+        let vz = sin(decRad)
+        let hx = matrix.h00 * vx + matrix.h01 * vy + matrix.h02 * vz
+        let hy = matrix.h10 * vx + matrix.h11 * vy + matrix.h12 * vz
+        let hz = matrix.h20 * vx + matrix.h21 * vy + matrix.h22 * vz
+        let altDeg = asin(max(-1.0, min(1.0, hz))) * (180.0 / .pi)
+        let azDeg = (atan2(-hy, hx) * (180.0 / .pi) + 360.0).truncatingRemainder(dividingBy: 360.0)
+        return (azDeg, altDeg)
+    }
+
+    public func projectSkyScene(
+        in size: CGSize,
+        renderTimestamp: TimeInterval = Date().timeIntervalSinceReferenceDate,
+        includeAccessibilityLandmarks: Bool = false
+    ) -> ProjectedSkyScene {
         let vw = max(1.0, Double(size.width))
         let vh = max(1.0, Double(size.height))
         let obsLat = observerLatitude
@@ -1024,6 +1179,8 @@ public final class CosmosViewModel: ObservableObject {
         let camAlt = camera.effectiveAltitude
         let camRoll = camera.effectiveRoll
         let currentFov = camera.fov
+
+        ensureSceneEphemerisFresh(date: date, obsLat: obsLat, obsLon: obsLon, obsElev: obsElev)
 
         let mat = astronomyService.makeProjectionMatrix(
             observerLatitudeDegrees: obsLat,
@@ -1039,8 +1196,11 @@ public final class CosmosViewModel: ObservableObject {
             viewportHeight: vh
         )
 
-        let obs3 = (latitude: obsLat, longitude: obsLon, elevation: obsElev)
-        let sunCoords = astronomyService.coordinates(of: .sun, for: obs3, at: date)
+        let sunCoords = cachedSunCoords ?? astronomyService.coordinates(
+            of: .sun,
+            for: (latitude: obsLat, longitude: obsLon, elevation: obsElev),
+            at: date
+        )
         let sunPt: CGPoint? = mat.projectHorizontal(
             azimuthDegrees: sunCoords.azimuthDegrees,
             altitudeDegrees: sunCoords.altitudeDegrees,
@@ -1077,18 +1237,26 @@ public final class CosmosViewModel: ObservableObject {
             }
         }
 
-        // 2. Stars (15,544 Hipparcos binary catalog, zero-trig per star)
+        // 2. Stars (15,544 Hipparcos binary catalog, zero-trig & zero-dictionary hashing per star)
+        currentProjStamp &+= 1
+        if currentProjStamp == 0 {
+            for i in 0..<starProjStamp.count { starProjStamp[i] = 0 }
+            currentProjStamp = 1
+        }
+        let stamp = currentProjStamp
+
+        let stars = catalogService.stars
         var projectedStars: [ProjectedPackedStar] = []
         projectedStars.reserveCapacity(2200)
-        var hipScreenMap: [Int: (x: Double, y: Double)] = [:]
-        hipScreenMap.reserveCapacity(1400)
 
         let labelMagThreshold: Float = currentFov <= 15.0 ? 3.6 : (currentFov <= 45.0 ? 2.4 : 1.7)
         let seeingFactor = min(2.2, max(0.4, (stargazingConditions.seeingArcseconds ?? 1.5) / 1.5))
+        let fovScale = max(0.75, min(2.1, sqrt(60.0 / max(4.0, currentFov))))
+        let daylightAlphaScale = 1.0 - daylightFactor * 0.85
 
-        for (idx, star) in catalogService.stars.enumerated() {
-            let needsHipForStick = showConstellationLines || showAsterisms
-            if star.vMag > dynamicMagLimit && !(needsHipForStick && star.vMag <= 5.6) {
+        for idx in 0..<stars.count {
+            let star = stars[idx]
+            if star.vMag > dynamicMagLimit {
                 continue
             }
 
@@ -1099,27 +1267,24 @@ public final class CosmosViewModel: ObservableObject {
                 margin: 90.0
             ) else { continue }
 
-            if needsHipForStick {
-                hipScreenMap[star.hip] = (proj.x, proj.y)
-            }
+            starProjX[idx] = proj.x
+            starProjY[idx] = proj.y
+            starProjStamp[idx] = stamp
 
-            guard proj.isVisible, star.vMag <= dynamicMagLimit else { continue }
+            guard proj.isVisible else { continue }
 
             // Compute altitude sin(alt) = hz for atmospheric extinction & scintillation
             let sinAlt = mat.h20 * Double(star.ux) + mat.h21 * Double(star.uy) + mat.h22 * Double(star.uz)
             if showHorizonCompass && sinAlt < -0.02 {
-                // Below geometric horizon when horizon silhouette is active
                 continue
             }
 
             // Pogson photometric sizing scaled smoothly by FOV
             let magDelta = Double(dynamicMagLimit - star.vMag)
             let flux = pow(10.0, 0.21 * min(7.5, max(0.0, magDelta)))
-            let fovScale = max(0.75, min(2.1, sqrt(60.0 / max(4.0, currentFov))))
             let diameter = min(10.5, max(1.05, 0.72 * flux * fovScale * 0.42))
 
-            var alpha = min(1.0, max(0.18, 0.22 + 0.16 * magDelta)) * (1.0 - daylightFactor * 0.85)
-            // Subtle realistic airmass scintillation near horizon (alt < 22°)
+            var alpha = min(1.0, max(0.18, 0.22 + 0.16 * magDelta)) * daylightAlphaScale
             if sinAlt > 0.0 && sinAlt < 0.38 && star.vMag < 4.2 {
                 let airmassDepth = (0.38 - sinAlt) / 0.38
                 let phase = renderTimestamp * 7.5 + Double(star.hip % 97) * 0.37
@@ -1128,12 +1293,7 @@ public final class CosmosViewModel: ObservableObject {
             }
 
             let c = prebakedStarRGB[idx]
-            let lbl: String?
-            if star.vMag <= labelMagThreshold, let proper = catalogService.starDesignationsByHip[star.hip]?.name, !proper.isEmpty {
-                lbl = proper
-            } else {
-                lbl = nil
-            }
+            let lbl = star.vMag <= labelMagThreshold ? prebakedStarProperNames[idx] : nil
 
             projectedStars.append(
                 ProjectedPackedStar(
@@ -1151,37 +1311,32 @@ public final class CosmosViewModel: ObservableObject {
             )
         }
 
-        // 3. Constellation Stick-Figure Segments (88 IAU constellations, [hipA, hipB] pairs)
+        // 3. Constellation Stick-Figure Segments (88 IAU constellations via flat pre-baked star indices)
         let maxSegSpan2 = pow(max(vw, vh) * 0.85, 2.0)
         var constSegments: [ProjectedSegment] = []
         if showConstellationLines {
             constSegments.reserveCapacity(520)
-            for const in catalogService.constellations {
-                for pair in const.segments where pair.count == 2 {
-                    let posA = hipScreenMap[pair[0]] ?? projectHipFallback(pair[0], matrix: mat)
-                    let posB = hipScreenMap[pair[1]] ?? projectHipFallback(pair[1], matrix: mat)
-                    if let a = posA, let b = posB {
-                        let dx = a.x - b.x, dy = a.y - b.y
-                        if (dx * dx + dy * dy) <= maxSegSpan2 {
-                            constSegments.append(ProjectedSegment(x1: a.x, y1: a.y, x2: b.x, y2: b.y))
-                        }
+            for (ia, ib) in prebakedConstellationIndexPairs {
+                if let a = projectStarIndex(ia, stamp: stamp, stars: stars, matrix: mat),
+                   let b = projectStarIndex(ib, stamp: stamp, stars: stars, matrix: mat) {
+                    let dx = a.x - b.x, dy = a.y - b.y
+                    if (dx * dx + dy * dy) <= maxSegSpan2 {
+                        constSegments.append(ProjectedSegment(x1: a.x, y1: a.y, x2: b.x, y2: b.y))
                     }
                 }
             }
         }
 
-        // 4. Asterisms (14 iconic sky patterns)
+        // 4. Asterisms (14 iconic sky patterns via flat pre-baked star indices)
         var astSegments: [ProjectedSegment] = []
         if showAsterisms {
-            for ast in catalogService.asterisms {
-                for pair in ast.segments where pair.count == 2 {
-                    let posA = hipScreenMap[pair[0]] ?? projectHipFallback(pair[0], matrix: mat)
-                    let posB = hipScreenMap[pair[1]] ?? projectHipFallback(pair[1], matrix: mat)
-                    if let a = posA, let b = posB {
-                        let dx = a.x - b.x, dy = a.y - b.y
-                        if (dx * dx + dy * dy) <= maxSegSpan2 {
-                            astSegments.append(ProjectedSegment(x1: a.x, y1: a.y, x2: b.x, y2: b.y))
-                        }
+            astSegments.reserveCapacity(96)
+            for (ia, ib) in prebakedAsterismIndexPairs {
+                if let a = projectStarIndex(ia, stamp: stamp, stars: stars, matrix: mat),
+                   let b = projectStarIndex(ib, stamp: stamp, stars: stars, matrix: mat) {
+                    let dx = a.x - b.x, dy = a.y - b.y
+                    if (dx * dx + dy * dy) <= maxSegSpan2 {
+                        astSegments.append(ProjectedSegment(x1: a.x, y1: a.y, x2: b.x, y2: b.y))
                     }
                 }
             }
@@ -1190,17 +1345,12 @@ public final class CosmosViewModel: ObservableObject {
         // 5. Constellation Labels
         var constLabels: [ProjectedConstellationLabel] = []
         if showConstellationLabels && currentFov >= 8.0 {
-            for const in catalogService.constellations {
-                if currentFov > 95.0 && const.rank > 2 { continue }
-                let raRad = const.centerRaHours * 15.0 * (.pi / 180.0)
-                let decRad = const.centerDecDeg * (.pi / 180.0)
-                let vx = cos(decRad) * cos(raRad)
-                let vy = cos(decRad) * sin(raRad)
-                let vz = sin(decRad)
-                let sinAlt = mat.h20 * vx + mat.h21 * vy + mat.h22 * vz
+            for item in prebakedConstellationCenters {
+                if currentFov > 95.0 && item.record.rank > 2 { continue }
+                let sinAlt = mat.h20 * item.ux + mat.h21 * item.uy + mat.h22 * item.uz
                 if showHorizonCompass && sinAlt < 0.02 { continue }
-                if let p = mat.projectEQJUnitVector(ux: vx, uy: vy, uz: vz, margin: 20.0), p.isVisible {
-                    constLabels.append(ProjectedConstellationLabel(record: const, screenX: p.x, screenY: p.y))
+                if let p = mat.projectEQJUnitVector(ux: item.ux, uy: item.uy, uz: item.uz, margin: 20.0), p.isVisible {
+                    constLabels.append(ProjectedConstellationLabel(record: item.record, screenX: p.x, screenY: p.y))
                 }
             }
         }
@@ -1238,12 +1388,12 @@ public final class CosmosViewModel: ObservableObject {
         var projectedDSOs: [ProjectedDSO] = []
         if showDeepSkyObjects && daylightFactor < 0.7 {
             let dsoMagLimit = Double(dynamicMagLimit) + 2.2
+            let pxPerDeg = min(vw, vh) / max(0.5, currentFov)
             for dso in catalogService.deepSkyObjects where dso.visualMagnitude <= dsoMagLimit {
                 let sinAlt = mat.h20 * Double(dso.ux) + mat.h21 * Double(dso.uy) + mat.h22 * Double(dso.uz)
                 if showHorizonCompass && sinAlt < -0.02 { continue }
                 if let p = mat.projectEQJUnitVector(ux: Double(dso.ux), uy: Double(dso.uy), uz: Double(dso.uz), margin: 30.0), p.isVisible {
                     let angularDeg = max(0.12, dso.majorAxisArcmin / 60.0)
-                    let pxPerDeg = min(vw, vh) / max(0.5, currentFov)
                     let radiusPx = max(6.0, min(64.0, angularDeg * pxPerDeg * 0.5))
                     let aspect = max(0.32, min(1.0, dso.minorAxisArcmin / max(0.1, dso.majorAxisArcmin)))
                     projectedDSOs.append(
@@ -1279,18 +1429,17 @@ public final class CosmosViewModel: ObservableObject {
             }
         }
 
-        // 10. Solar System Bodies (Sun, Moon with bright-limb terminator, Saturn rings, Jupiter + 4 Galilean moons)
+        // 10. Solar System Bodies (1Hz cached VSOP87/ELP2000 coordinates projected at 120Hz)
         var projectedPlanets: [ProjectedPlanet] = []
         if showPlanets {
-            let bodies: [CelestialBody] = [.sun, .moon, .mercury, .venus, .mars, .jupiter, .saturn, .uranus, .neptune]
-            let saturnTilt = astronomyService.saturnRingTilt(at: date)
-            let jupMoonsState: JupiterMoonsState? = (currentFov <= 10.0)
-                ? astronomyService.jupiterMoons(at: date, observer: (obsLat, obsLon))
-                : nil
+            let saturnTilt = cachedSaturnTilt
+            let jupMoonsState: JupiterMoonsState? = (currentFov <= 10.0) ? cachedJupiterMoons : nil
+            let pxPerDeg = min(vw, vh) / max(0.5, currentFov)
+            let rollRad = camRoll * (.pi / 180.0)
+            let cr = cos(rollRad), sr = sin(rollRad)
 
-            for body in bodies {
+            for (body, coords) in cachedBodyCoords {
                 if currentFov > 45.0 && (body == .uranus || body == .neptune) { continue }
-                let coords = astronomyService.coordinates(of: body, for: obs3, at: date)
                 if showHorizonCompass && coords.altitudeDegrees < -1.0 { continue }
                 guard let p = mat.projectHorizontal(
                     azimuthDegrees: coords.azimuthDegrees,
@@ -1298,7 +1447,6 @@ public final class CosmosViewModel: ObservableObject {
                     margin: 48.0
                 ), p.isVisible else { continue }
 
-                let pxPerDeg = min(vw, vh) / max(0.5, currentFov)
                 let trueRadiusDeg = (coords.angularDiameterArcsec / 3600.0)
                 let minIconDiameter: Double = {
                     switch body {
@@ -1314,10 +1462,7 @@ public final class CosmosViewModel: ObservableObject {
 
                 var gMoons: [ProjectedGalileanMoon] = []
                 if body == .jupiter, let jm = jupMoonsState {
-                    // Sky-plane Jupiter radius in pixels (magnified slightly at medium-scope FOV for legibility)
                     let jupRadiusPx = max(7.0, diameter * 0.5)
-                    let rollRad = camRoll * (.pi / 180.0)
-                    let cr = cos(rollRad), sr = sin(rollRad)
                     for m in jm.all {
                         let dxLocal = m.xRadius * jupRadiusPx
                         let dyLocal = m.yRadius * jupRadiusPx
@@ -1348,20 +1493,18 @@ public final class CosmosViewModel: ObservableObject {
             }
         }
 
-        // 11. Live ISS Satellite & Orbital Trajectory Arc
+        // 11. Live ISS Satellite & Orbital Trajectory Arc (1Hz cached SGP4 projected at 120Hz)
         var issProjected: ProjectedIssState? = nil
-        if showSatellites, let liveIss = liveService.currentIssPosition(latitude: obsLat, longitude: obsLon, at: date) {
+        if showSatellites, let liveIss = cachedIssLive {
             if let p = mat.projectHorizontal(
                 azimuthDegrees: liveIss.azimuthDegrees,
                 altitudeDegrees: liveIss.altitudeDegrees,
                 margin: 80.0
             ) {
                 var arc: [(point: CGPoint, isSunlit: Bool)] = []
-                for step in -10...20 {
-                    let sampleTime = date.addingTimeInterval(Double(step) * 20.0)
-                    if let sp = liveService.currentIssPosition(latitude: obsLat, longitude: obsLon, at: sampleTime),
-                       sp.altitudeDegrees >= -2.0,
-                       let spProj = mat.projectHorizontal(azimuthDegrees: sp.azimuthDegrees, altitudeDegrees: sp.altitudeDegrees, margin: 120.0) {
+                arc.reserveCapacity(cachedIssArcSamples.count)
+                for sp in cachedIssArcSamples {
+                    if let spProj = mat.projectHorizontal(azimuthDegrees: sp.azimuthDegrees, altitudeDegrees: sp.altitudeDegrees, margin: 120.0) {
                         arc.append((CGPoint(x: spProj.x, y: spProj.y), sp.isSunlit))
                     }
                 }
@@ -1428,12 +1571,16 @@ public final class CosmosViewModel: ObservableObject {
             $0.isVisible ? CGPoint(x: $0.x, y: $0.y) : nil
         }
 
-        // 13. AR / Off-Screen Target Guide Arrow
+        // 13. Selected Target Screen Reticle & AR Off-Screen Guide Arrow (zero rise/transit/set overhead!)
+        var selectedPt: CGPoint? = nil
         var guide: SkyTargetGuideState? = nil
         if let sel = selectedTarget {
-            let live = liveMetrics(for: sel)
-            let azRad = live.azimuthDegrees * (.pi / 180.0)
-            let altRad = live.altitudeDegrees * (.pi / 180.0)
+            let horiz = fastHorizontalCoordinates(for: sel, matrix: mat)
+            if let sp = mat.projectHorizontal(azimuthDegrees: horiz.azimuthDegrees, altitudeDegrees: horiz.altitudeDegrees, margin: 20.0), sp.isVisible {
+                selectedPt = CGPoint(x: sp.x, y: sp.y)
+            }
+            let azRad = horiz.azimuthDegrees * (.pi / 180.0)
+            let altRad = horiz.altitudeDegrees * (.pi / 180.0)
             let hx = cos(altRad) * cos(azRad)
             let hy = -cos(altRad) * sin(azRad)
             let hz = sin(altRad)
@@ -1469,45 +1616,47 @@ public final class CosmosViewModel: ObservableObject {
             }
         }
 
-        // 15. Semantic Accessibility Landmarks (VoiceOver)
+        // 15. Semantic Accessibility Landmarks (computed ONLY when VoiceOver is active)
         var landmarks: [SkyAccessibilityLandmark] = []
-        for p in projectedPlanets where p.altitude > -2.0 {
-            let t = target(for: p.body)
-            let frame = CGRect(x: p.screenX - 22, y: p.screenY - 22, width: 44, height: 44)
-            landmarks.append(
-                SkyAccessibilityLandmark(
-                    id: t.id,
-                    label: t.name,
-                    valueSummary: String(format: "Azimuth %.0f degrees %@, Altitude %.0f degrees", p.azimuth, p.coordinates.compassDirection, p.altitude),
-                    frame: frame,
-                    target: t
-                )
-            )
-        }
-        if let iss = issProjected, iss.position.altitudeDegrees > 0 {
-            let t = issTarget(from: iss.position)
-            landmarks.append(
-                SkyAccessibilityLandmark(
-                    id: t.id,
-                    label: "International Space Station",
-                    valueSummary: String(format: "Altitude %.0f degrees, %@", iss.position.altitudeDegrees, iss.position.isSunlit ? "Sunlit" : "In shadow"),
-                    frame: CGRect(x: iss.screenX - 22, y: iss.screenY - 22, width: 44, height: 44),
-                    target: t
-                )
-            )
-        }
-        for s in projectedStars.prefix(12) where s.label != nil {
-            if let bStar = catalogService.brightStars.first(where: { $0.hip == s.hip }) {
-                let t = target(for: bStar)
+        if includeAccessibilityLandmarks {
+            for p in projectedPlanets where p.altitude > -2.0 {
+                let t = target(for: p.body)
+                let frame = CGRect(x: p.screenX - 22, y: p.screenY - 22, width: 44, height: 44)
                 landmarks.append(
                     SkyAccessibilityLandmark(
                         id: t.id,
-                        label: bStar.name,
-                        valueSummary: String(format: "Star in %@, Magnitude %.1f", bStar.constellation, bStar.magnitude),
-                        frame: CGRect(x: s.x - 18, y: s.y - 18, width: 36, height: 36),
+                        label: t.name,
+                        valueSummary: String(format: "Azimuth %.0f degrees %@, Altitude %.0f degrees", p.azimuth, p.coordinates.compassDirection, p.altitude),
+                        frame: frame,
                         target: t
                     )
                 )
+            }
+            if let iss = issProjected, iss.position.altitudeDegrees > 0 {
+                let t = issTarget(from: iss.position)
+                landmarks.append(
+                    SkyAccessibilityLandmark(
+                        id: t.id,
+                        label: "International Space Station",
+                        valueSummary: String(format: "Altitude %.0f degrees, %@", iss.position.altitudeDegrees, iss.position.isSunlit ? "Sunlit" : "In shadow"),
+                        frame: CGRect(x: iss.screenX - 22, y: iss.screenY - 22, width: 44, height: 44),
+                        target: t
+                    )
+                )
+            }
+            for s in projectedStars.prefix(12) where s.label != nil {
+                if let bStar = brightStarByHip[s.hip] {
+                    let t = target(for: bStar)
+                    landmarks.append(
+                        SkyAccessibilityLandmark(
+                            id: t.id,
+                            label: bStar.name,
+                            valueSummary: String(format: "Star in %@, Magnitude %.1f", bStar.constellation, bStar.magnitude),
+                            frame: CGRect(x: s.x - 18, y: s.y - 18, width: 36, height: 36),
+                            target: t
+                        )
+                    )
+                }
             }
         }
 
@@ -1532,17 +1681,29 @@ public final class CosmosViewModel: ObservableObject {
             nadirScreenUnitVector: nadirScreenVec,
             cardinals: cards,
             zenithPoint: zPt,
+            selectedTargetScreenPoint: selectedPt,
             targetGuide: guide,
             hoverSummary: hoverInfo,
             accessibilityLandmarks: landmarks
         )
     }
 
-    private func projectHipFallback(_ hip: Int, matrix: SkyProjectionMatrix) -> (x: Double, y: Double)? {
-        guard let s = catalogService.star(forHip: hip),
-              let p = matrix.projectEQJUnitVector(ux: Double(s.ux), uy: Double(s.uy), uz: Double(s.uz), margin: 180.0) else {
+    private func projectStarIndex(
+        _ index: Int,
+        stamp: UInt32,
+        stars: [PackedStar],
+        matrix: SkyProjectionMatrix
+    ) -> (x: Double, y: Double)? {
+        if starProjStamp[index] == stamp {
+            return (starProjX[index], starProjY[index])
+        }
+        let s = stars[index]
+        guard let p = matrix.projectEQJUnitVector(ux: Double(s.ux), uy: Double(s.uy), uz: Double(s.uz), margin: 180.0) else {
             return nil
         }
+        starProjX[index] = p.x
+        starProjY[index] = p.y
+        starProjStamp[index] = stamp
         return (p.x, p.y)
     }
 

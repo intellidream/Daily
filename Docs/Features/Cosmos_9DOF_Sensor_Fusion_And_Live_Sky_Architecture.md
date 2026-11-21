@@ -15,17 +15,26 @@ When pointing a smartphone or foldable device toward the real sky ("Compass / Li
 
 ---
 
-## 2. Smart "Lift-to-Sky" (`> +15°`) & Multi-Touch State Machine
+## 2. Smart "Lift-to-Sky" (`>= +6°`) & Multi-Touch State Machine
 
-1. **`standbyAutoLift` (Default on Entry for Phones & Foldables):**
-   - Lightweight 30Hz attitude watch monitors optical-axis elevation without moving the manual camera.
-   - Sustaining device optical elevation **`>= +15.0°` above the horizon for `>= 250ms`** automatically engages **`activeLiveSky`** at 90Hz–120Hz, synchronizes the simulation clock to real-time (`LIVE`), and triggers a subtle haptic confirmation.
-   - Automatically suppressed when a foldable is resting in **Tabletop Flex Mode** (`HALF_OPENED` horizontal crease).
-2. **`activeLiveSky` (90Hz–120Hz Full 9-DOF Tracking):**
+1. **`standbyAutoLift` (Default on Every Fresh Entry to Cosmos on Phones & Foldables):**
+   - Evaluates **unsmoothed** optical-axis elevation directly from the raw hardware quaternion (`rawQ` / `rawQuat`) *before* adaptive SLERP filtering, eliminating filter convergence delay when lifting from a resting hand pose (`-40°..-60°`).
+   - Sustaining unsmoothed optical elevation **`>= +6.0°` above the horizon for `>= 180ms`** automatically snaps `smoothedQuat = rawQuat`, engages **`activeLiveSky`** at 100Hz–120Hz with zero transition lag, synchronizes the simulation clock to real-time (`LIVE`), and triggers haptic confirmation.
+   - On Android (`CosmosMotionManager`), `SensorManager.SENSOR_DELAY_GAME` is bound idempotently once on observatory entry (`ensureHardwareSensorsRegistered`) so transitioning from `STANDBY_AUTO_LIFT` to `ACTIVE_LIVE_SKY` never invokes re-entrant `unregisterListener`/`registerListener` inside `SensorEventListener.onSensorChanged`. Every fresh entry into Cosmos resets prior `MANUAL_OFF` state back to `STANDBY_AUTO_LIFT` while keeping `0` active listeners whenever Cosmos is closed or backgrounded.
+   - Geometrically suppressed on foldables *only* when genuinely resting flat in **Tabletop Flex Mode** (`HALF_OPENED` horizontal crease with hinge angle `65°..138°` and optical elevation `< +4°`), preventing false tabletop lockouts when holding an unfolded Galaxy Z Fold at `160°..178°` toward the sky.
+2. **`activeLiveSky` (100Hz–120Hz Full 9-DOF ProMotion / LTPO Tracking):**
    - **2-Finger Pinch-to-Zoom:** Zooms smoothly along the live optical crosshair *without* cancelling sensor tracking.
-   - **1-Finger Pan / Drag:** Disengages immediately (`pausedAfterDrag`) with zero resistance, levels the horizon roll (`0°`), and surfaces a 1-tap **"Resume Live Sky"** pill above the bottom console (also re-arming if the user lowers the phone `< -5°` and lifts it back toward the sky `> +20°`).
+   - **1-Finger Deliberate Pan / Drag:** Uses density-scaled touch slop (`>= 14pt` on iOS, `max(touchSlop * 1.25f, 32px)` on Android) so thin/curved bezel palm brushes never accidentally cancel Live Sky or Auto-Lift, while intentional panning disengages immediately (`pausedAfterDrag`), levels horizon roll (`0°`), and surfaces a 1-tap **"Resume Live Sky"** pill (also re-arming automatically after lowering `< -5°` and lifting back `>= +14°`).
 3. **`manualOff` (Explicit Top HUD Toggle Off):**
-   - Tapping the top HUD Compass button while active turns off all IMU hardware listeners for the remainder of the session until explicitly tapped back on.
+   - Tapping the top HUD Compass button while active turns off all IMU hardware listeners for the remainder of the current observatory visit until tapped back on or until the user re-enters Cosmos.
+
+---
+
+## 2B. 120Hz Zero-Invalidation Rendering Pipeline (iOS ProMotion & Android Compose)
+
+- **Zero `@Published` / `ObservableObject` Thrash on iOS:** `CosmosMotionService` streams 100Hz `(azimuth, altitude, roll, BasisNWZ)` samples directly into `@Observable CosmosCameraController` via `onAttitudeSample` (with integer-quantized `displayAzimuthDeg` / `displayAltitudeDeg` for the top HUD readout and `0.5s` / `1.0 µT` throttling on diagnostic magnetic UI badges), eliminating full-screen SwiftUI `CosmosDetailView` body rebuilds during sensor motion.
+- **Direct GPU `Canvas(opaque: true)` VSync Evaluation:** `CosmosDetailView` evaluates `vm.projectSkyScene(...)` strictly inside the `Canvas` render closure under unthrottled ProMotion `TimelineView(.animation)` while keeping gesture recognizers static outside `TimelineView`.
+- **1Hz Ephemeris & SGP4 Caching + Zero-Allocation Flat Star Indexing:** `CosmosViewModel` pre-bakes flat star index pairs for all 88 IAU constellations and 14 asterisms (zero per-frame `Dictionary` hashing) and caches VSOP87/ELP2000 planetary coordinates, Saturn ring tilt, Galilean moons, and the 31-point SGP4 ISS orbital arc at 1Hz (`ensureSceneEphemerisFresh`), keeping 120Hz frame projection purely matrix-bound (`< 0.8ms` per frame on A-series/M-series silicon).
 
 ---
 

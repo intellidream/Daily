@@ -20,20 +20,27 @@ public enum CosmosSensorMode: String, Equatable, Sendable {
     case manualOff
 }
 
-/// High-frequency (90Hz–120Hz) 9-DOF sensor fusion & True North sky tracker for iOS & Foldable devices.
-/// Combines CoreMotion gyroscope + accelerometer + magnetometer with CoreLocation / NOAA WMM-2025 True North
-/// declination, FOV-adaptive quaternion SLERP optical stabilization, magnetic anomaly (µT) detection,
-/// Gyro-Only balcony mode, and 1-tap celestial "Align on Target" azimuth calibration.
+/// Ultra-low-latency (100Hz–120Hz) 9-DOF sensor fusion & True North sky tracker for iOS & Foldable devices.
+/// Streams attitude samples directly into `@Observable CosmosCameraController` via `onAttitudeSample`
+/// (zero `@Published` / `ObservableObject` view-tree invalidations per frame!).
 @MainActor
 public final class CosmosMotionService: NSObject, ObservableObject {
     public static let shared = CosmosMotionService()
+
+    public typealias BasisNWZ = (
+        right: (Double, Double, Double),
+        up: (Double, Double, Double),
+        forward: (Double, Double, Double)
+    )
 
     #if canImport(CoreMotion) && !os(macOS)
     private let motionManager = CMMotionManager()
     private let headingLocationManager = CLLocationManager()
     private var activeReferenceFrame: CMAttitudeReferenceFrame = .xArbitraryZVertical
+    private var orientationObserver: NSObjectProtocol?
     #endif
 
+    // Low-frequency UI diagnostic state (strictly change-guarded — 0 emissions/sec during steady tracking!)
     @Published public private(set) var sensorMode: CosmosSensorMode = .unavailable
     @Published public private(set) var isTracking: Bool = false
     @Published public private(set) var isAvailable: Bool = false
@@ -49,19 +56,14 @@ public final class CosmosMotionService: NSObject, ObservableObject {
     @Published public private(set) var headingAccuracyDegrees: Double = -1.0
     @Published public private(set) var azimuthOffsetDegrees: Double = 0.0
 
-    @Published public private(set) var currentAzimuth: Double = 180.0
-    @Published public private(set) var currentAltitude: Double = 45.0
-    @Published public private(set) var currentRoll: Double = 0.0
-
-    /// Direct orthonormal camera basis `(right, up, forward)` in NWZ (`+X=North, +Y=West, +Z=Zenith`),
-    /// eliminating Euler gimbal singularities at exact Zenith (+90°) and Nadir (-90°).
-    public private(set) var currentBasisNWZ: (
-        right: (Double, Double, Double),
-        up: (Double, Double, Double),
-        forward: (Double, Double, Double)
-    )? = nil
+    // High-frequency attitude values (NOT @Published — pushed directly to @Observable CosmosCameraController!)
+    public private(set) var currentAzimuth: Double = 180.0
+    public private(set) var currentAltitude: Double = 45.0
+    public private(set) var currentRoll: Double = 0.0
+    public private(set) var currentBasisNWZ: BasisNWZ? = nil
 
     public var onAutoLiftEngaged: (() -> Void)? = nil
+    public var onAttitudeSample: ((Double, Double, Double, BasisNWZ) -> Void)? = nil
 
     private var smoothedQuat: simd_quatd? = nil
     private var lastRawTrueAzimuthDegrees: Double = 180.0
@@ -69,7 +71,12 @@ public final class CosmosMotionService: NSObject, ObservableObject {
     private var gyroAnchorOffsetDegrees: Double = 0.0
     private var currentFovDegrees: Double = 60.0
 
-    // Auto-lift hysteresis state (> +15° sustained for >= 0.25s; re-arms after lowering < -5° when pausedAfterDrag)
+    private var cachedScreenRightDev = SIMD3<Double>(1.0, 0.0, 0.0)
+    private var cachedScreenUpDev = SIMD3<Double>(0.0, 1.0, 0.0)
+    private var lastMagUiPublishUptime: TimeInterval = 0.0
+    private var latestRawMagMicroTesla: Double = 0.0
+
+    // Auto-lift hysteresis (> +8° sustained for >= 180ms; re-arms after lowering < -5° when pausedAfterDrag)
     private var liftAboveThresholdSince: TimeInterval? = nil
     private var hasLoweredSinceDragPause: Bool = true
     private var dragPausedTimestamp: TimeInterval = 0.0
@@ -77,10 +84,21 @@ public final class CosmosMotionService: NSObject, ObservableObject {
     private override init() {
         super.init()
         #if canImport(CoreMotion) && !os(macOS)
-        self.isAvailable = motionManager.isDeviceMotionAvailable
-        self.sensorMode = self.isAvailable ? .standbyAutoLift : .unavailable
+        let avail = motionManager.isDeviceMotionAvailable
+        self.isAvailable = avail
+        self.sensorMode = avail ? .standbyAutoLift : .unavailable
         self.headingLocationManager.delegate = self
-        self.headingLocationManager.headingFilter = 1.0
+        self.headingLocationManager.headingFilter = 2.0
+        refreshCachedScreenBasisVectors()
+        orientationObserver = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshCachedScreenBasisVectors()
+            }
+        }
         #else
         self.isAvailable = false
         self.sensorMode = .unavailable
@@ -93,8 +111,12 @@ public final class CosmosMotionService: NSObject, ObservableObject {
             longitudeDegrees: longitude,
             elevationMeters: elevationMeters
         )
-        wmmDeclinationDegrees = est.declinationDegrees
-        expectedFieldMicroTesla = est.expectedIntensityMicroTesla
+        if abs(wmmDeclinationDegrees - est.declinationDegrees) > 0.05 {
+            wmmDeclinationDegrees = est.declinationDegrees
+        }
+        if abs(expectedFieldMicroTesla - est.expectedIntensityMicroTesla) > 0.2 {
+            expectedFieldMicroTesla = est.expectedIntensityMicroTesla
+        }
     }
 
     public func updateCurrentFov(_ fovDegrees: Double) {
@@ -103,73 +125,66 @@ public final class CosmosMotionService: NSObject, ObservableObject {
 
     // MARK: - Observatory Session Lifecycle
 
-    /// Begins passive Lift-to-Sky standby monitoring when entering Cosmos on a physical iPhone / iPad / Foldable.
-    /// Does NOT hijack the camera until the user lifts the phone above +15° toward the sky (or taps Live Sky).
     public func beginObservatorySession(autoLiftEnabled: Bool = true) {
         #if canImport(CoreMotion) && !os(macOS)
         guard motionManager.isDeviceMotionAvailable else {
-            sensorMode = .unavailable
+            setModeIfChanged(.unavailable)
             return
         }
+        refreshCachedScreenBasisVectors()
         liftAboveThresholdSince = nil
         hasLoweredSinceDragPause = true
-        if sensorMode == .unavailable || sensorMode == .manualOff {
-            sensorMode = autoLiftEnabled ? .standbyAutoLift : .manualOff
+        if sensorMode != .activeLiveSky {
+            setModeIfChanged(autoLiftEnabled ? .standbyAutoLift : .manualOff)
         }
-        if sensorMode == .standbyAutoLift {
-            startHardwarePipeline(highFrequency: false)
-        } else if sensorMode == .activeLiveSky {
-            startHardwarePipeline(highFrequency: true)
-            isTracking = true
+        if sensorMode == .standbyAutoLift || sensorMode == .activeLiveSky {
+            startHardwarePipeline()
+            setIsTrackingIfChanged(sensorMode == .activeLiveSky)
         }
         #endif
     }
 
     public func endObservatorySession() {
         stopHardwarePipeline()
-        isTracking = false
+        setIsTrackingIfChanged(false)
         currentBasisNWZ = nil
+        smoothedQuat = nil
         liftAboveThresholdSince = nil
         if isAvailable {
-            sensorMode = .standbyAutoLift
+            setModeIfChanged(.standbyAutoLift)
         }
     }
 
-    /// Explicit user tap on the Live Sky / Compass button.
     public func startTracking() {
         #if canImport(CoreMotion) && !os(macOS)
         guard motionManager.isDeviceMotionAvailable else { return }
+        refreshCachedScreenBasisVectors()
         smoothedQuat = nil
         liftAboveThresholdSince = nil
-        sensorMode = .activeLiveSky
-        isTracking = true
-        startHardwarePipeline(highFrequency: true)
+        setModeIfChanged(.activeLiveSky)
+        setIsTrackingIfChanged(true)
+        startHardwarePipeline()
         #endif
     }
 
-    /// Explicit user tap to turn Live Sky OFF completely (disables auto-lift for current session until re-enabled).
     public func stopTracking(explicitUserOff: Bool = true) {
         #if canImport(CoreMotion) && !os(macOS)
-        isTracking = false
+        setIsTrackingIfChanged(false)
         currentBasisNWZ = nil
-        needsCompassCalibration = false
+        if needsCompassCalibration { needsCompassCalibration = false }
         smoothedQuat = nil
         liftAboveThresholdSince = nil
         if explicitUserOff {
-            sensorMode = isAvailable ? .manualOff : .unavailable
+            setModeIfChanged(isAvailable ? .manualOff : .unavailable)
             stopHardwarePipeline()
         } else {
-            // Disengaged by 1-finger touch pan: keep lightweight attitude monitor so lowering & re-lifting works,
-            // while surfacing a 1-tap "Resume Live Sky" pill.
-            sensorMode = isAvailable ? .pausedAfterDrag : .unavailable
+            setModeIfChanged(isAvailable ? .pausedAfterDrag : .unavailable)
             hasLoweredSinceDragPause = false
             dragPausedTimestamp = ProcessInfo.processInfo.systemUptime
-            motionManager.deviceMotionUpdateInterval = 1.0 / 30.0
         }
         #endif
     }
 
-    /// Switches between Magnetometer-fused True North and pure drift-free Gyroscope + Gravity lock (ideal for steel balconies / MagSafe cases).
     public func setGyroLockIgnoreMagnet(_ enabled: Bool) {
         #if canImport(CoreMotion) && !os(macOS)
         guard isGyroLockIgnoreMagnet != enabled else { return }
@@ -178,33 +193,43 @@ public final class CosmosMotionService: NSObject, ObservableObject {
         smoothedQuat = nil
         if sensorMode == .activeLiveSky || sensorMode == .standbyAutoLift || sensorMode == .pausedAfterDrag {
             stopHardwarePipeline()
-            startHardwarePipeline(highFrequency: sensorMode == .activeLiveSky)
-            if enabled {
-                // Anchor arbitrary gyro yaw to the last known true azimuth
-                gyroAnchorOffsetDegrees = normalizeDegreesSigned(targetAzBeforeSwitch - lastRawTrueAzimuthDegrees)
-            } else {
-                gyroAnchorOffsetDegrees = 0.0
-            }
+            startHardwarePipeline()
+            gyroAnchorOffsetDegrees = enabled
+                ? normalizeDegreesSigned(targetAzBeforeSwitch - lastRawTrueAzimuthDegrees)
+                : 0.0
         }
         #endif
     }
 
-    /// Calibrates compass bearing against a real visible celestial body (e.g. Moon, Venus, Jupiter, Sirius) when local metal/magnets skew North.
     public func alignAzimuth(toTrueTargetAzimuth targetAzimuthDegrees: Double) {
         let delta = normalizeDegreesSigned(targetAzimuthDegrees - lastRawTrueAzimuthDegrees - gyroAnchorOffsetDegrees)
-        azimuthOffsetDegrees = delta
+        if abs(azimuthOffsetDegrees - delta) > 0.01 {
+            azimuthOffsetDegrees = delta
+        }
         if hasMagneticInterference && !isGyroLockIgnoreMagnet {
-            // Automatically engage Gyro-Stabilized Lock so wandering balcony magnetic fields cannot undo the star alignment!
             setGyroLockIgnoreMagnet(true)
-            azimuthOffsetDegrees = normalizeDegreesSigned(targetAzimuthDegrees - lastRawTrueAzimuthDegrees - gyroAnchorOffsetDegrees)
+            let updatedDelta = normalizeDegreesSigned(targetAzimuthDegrees - lastRawTrueAzimuthDegrees - gyroAnchorOffsetDegrees)
+            if abs(azimuthOffsetDegrees - updatedDelta) > 0.01 {
+                azimuthOffsetDegrees = updatedDelta
+            }
         }
     }
 
     public func clearAzimuthAlignmentOffset() {
-        azimuthOffsetDegrees = 0.0
+        if azimuthOffsetDegrees != 0.0 {
+            azimuthOffsetDegrees = 0.0
+        }
     }
 
     // MARK: - Hardware Sensor Pipeline
+
+    private func setModeIfChanged(_ next: CosmosSensorMode) {
+        if sensorMode != next { sensorMode = next }
+    }
+
+    private func setIsTrackingIfChanged(_ next: Bool) {
+        if isTracking != next { isTracking = next }
+    }
 
     private func stopHardwarePipeline() {
         #if canImport(CoreMotion) && !os(macOS)
@@ -216,24 +241,27 @@ public final class CosmosMotionService: NSObject, ObservableObject {
     }
 
     #if canImport(CoreMotion) && !os(macOS)
-    private func startHardwarePipeline(highFrequency: Bool) {
+    private func startHardwarePipeline() {
         guard motionManager.isDeviceMotionAvailable else { return }
-        motionManager.deviceMotionUpdateInterval = highFrequency ? (1.0 / 90.0) : (1.0 / 30.0)
-        motionManager.showsDeviceMovementDisplay = highFrequency && !isGyroLockIgnoreMagnet
+        motionManager.deviceMotionUpdateInterval = 1.0 / 100.0
+        motionManager.showsDeviceMovementDisplay = false
 
         let available = CMMotionManager.availableAttitudeReferenceFrames()
         let authStatus = headingLocationManager.authorizationStatus
         let isLocAuthorized = (authStatus == .authorizedWhenInUse || authStatus == .authorizedAlways)
 
         let selectedFrame: CMAttitudeReferenceFrame
+        let nextTrueNorth: Bool
+        let nextRelGyro: Bool
+
         if isGyroLockIgnoreMagnet {
             selectedFrame = .xArbitraryZVertical
-            isUsingTrueNorth = false
-            isRelativeGyroOnly = true
+            nextTrueNorth = false
+            nextRelGyro = true
         } else if available.contains(.xTrueNorthZVertical) && isLocAuthorized {
             selectedFrame = .xTrueNorthZVertical
-            isUsingTrueNorth = true
-            isRelativeGyroOnly = false
+            nextTrueNorth = true
+            nextRelGyro = false
             if CLLocationManager.headingAvailable() {
                 headingLocationManager.startUpdatingHeading()
             }
@@ -242,24 +270,26 @@ public final class CosmosMotionService: NSObject, ObservableObject {
             }
         } else if available.contains(.xMagneticNorthZVertical) {
             selectedFrame = .xMagneticNorthZVertical
-            // Offline WMM-2025 declination upgrades Magnetic North -> True Geographic North!
-            isUsingTrueNorth = true
-            isRelativeGyroOnly = false
+            nextTrueNorth = true
+            nextRelGyro = false
             if CLLocationManager.headingAvailable() {
                 headingLocationManager.startUpdatingHeading()
             }
-            if authStatus == .notDetermined && highFrequency {
+            if authStatus == .notDetermined && sensorMode == .activeLiveSky {
                 headingLocationManager.requestWhenInUseAuthorization()
             }
         } else if available.contains(.xArbitraryCorrectedZVertical) {
             selectedFrame = .xArbitraryCorrectedZVertical
-            isUsingTrueNorth = false
-            isRelativeGyroOnly = true
+            nextTrueNorth = false
+            nextRelGyro = true
         } else {
             selectedFrame = .xArbitraryZVertical
-            isUsingTrueNorth = false
-            isRelativeGyroOnly = true
+            nextTrueNorth = false
+            nextRelGyro = true
         }
+
+        if isUsingTrueNorth != nextTrueNorth { isUsingTrueNorth = nextTrueNorth }
+        if isRelativeGyroOnly != nextRelGyro { isRelativeGyroOnly = nextRelGyro }
 
         if motionManager.isDeviceMotionActive && activeReferenceFrame == selectedFrame {
             return
@@ -275,32 +305,39 @@ public final class CosmosMotionService: NSObject, ObservableObject {
     }
 
     private func processMotion(_ motion: CMDeviceMotion) {
-        // 1. Magnetic Calibration & Anomaly Assessment (µT)
+        let nowUptime = ProcessInfo.processInfo.systemUptime
+
+        // 1. Throttled, Zero-Thrash Magnetic Health Check (only publishes on actual state transition!)
         if !isRelativeGyroOnly {
             let acc = motion.magneticField.accuracy
             let mf = motion.magneticField.field
             let normCalibrated = sqrt(mf.x * mf.x + mf.y * mf.y + mf.z * mf.z)
             if normCalibrated > 0.5 {
-                magneticFieldMicroTesla = normCalibrated
+                latestRawMagMicroTesla = normCalibrated
+            }
+            if (nowUptime - lastMagUiPublishUptime) >= 0.5 && abs(latestRawMagMicroTesla - magneticFieldMicroTesla) >= 1.0 {
+                lastMagUiPublishUptime = nowUptime
+                magneticFieldMicroTesla = latestRawMagMicroTesla
             }
             let highThresh = max(72.0, expectedFieldMicroTesla * 1.48)
             let lowThresh = min(18.0, expectedFieldMicroTesla * 0.42)
-            let fieldAnomaly = (magneticFieldMicroTesla > highThresh) ||
-                (magneticFieldMicroTesla > 1.0 && magneticFieldMicroTesla < lowThresh)
-            hasMagneticInterference = fieldAnomaly || (headingAccuracyDegrees > 30.0)
-            needsCompassCalibration = (acc == .uncalibrated || acc == .low) ||
+            let fieldAnomaly = (latestRawMagMicroTesla > highThresh) ||
+                (latestRawMagMicroTesla > 1.0 && latestRawMagMicroTesla < lowThresh)
+            let nextInterf = fieldAnomaly || (headingAccuracyDegrees > 30.0)
+            let nextCal = (acc == .uncalibrated || acc == .low) ||
                 (headingAccuracyDegrees < 0 && normCalibrated < 0.5) ||
-                hasMagneticInterference
+                nextInterf
+            if hasMagneticInterference != nextInterf { hasMagneticInterference = nextInterf }
+            if needsCompassCalibration != nextCal { needsCompassCalibration = nextCal }
         } else {
-            hasMagneticInterference = false
-            needsCompassCalibration = false
+            if hasMagneticInterference { hasMagneticInterference = false }
+            if needsCompassCalibration { needsCompassCalibration = false }
         }
 
-        // 2. FOV-Adaptive Quaternion SLERP (OIS stabilization at binocular/telescope magnification)
+        // 2. Extract hardware-fused quaternion & verify physical gravity orientation
         let cq = motion.attitude.quaternion
         var rawQ = simd_normalize(simd_quatd(ix: cq.x, iy: cq.y, iz: cq.z, r: cq.w))
 
-        // Self-verifying physical check against `motion.gravity` (device-frame gravity must map to world -Z):
         let gDev = SIMD3<Double>(motion.gravity.x, motion.gravity.y, motion.gravity.z)
         if abs(gDev.z) < 0.92 {
             let zDirect = rawQ.act(gDev).z
@@ -310,9 +347,51 @@ public final class CosmosMotionService: NSObject, ObservableObject {
             }
         }
 
-        let fovGain = sqrt(max(0.04, min(1.5, currentFovDegrees / 60.0)))
-        let minAlpha = max(0.025, 0.10 * fovGain)
-        let maxAlpha = max(0.22, min(0.62, 0.56 * fovGain + 0.08))
+        let opticalAxisDev = SIMD3<Double>(0.0, 0.0, -1.0)
+
+        // 3. Zero-Lag Auto-Lift Check directly on unsmoothed `rawQ` (>= +6° sustained for 180ms)
+        if sensorMode != .activeLiveSky {
+            let rawFwdZ = simd_normalize(rawQ.act(opticalAxisDev)).z
+            let rawAltDeg = asin(min(1.0, max(-1.0, rawFwdZ))) * (180.0 / .pi)
+            if sensorMode == .standbyAutoLift {
+                if rawAltDeg >= 6.0 {
+                    if let since = liftAboveThresholdSince {
+                        if (nowUptime - since) >= 0.18 {
+                            liftAboveThresholdSince = nil
+                            smoothedQuat = rawQ
+                            engageFromAutoLift()
+                        }
+                    } else {
+                        liftAboveThresholdSince = nowUptime
+                    }
+                } else {
+                    liftAboveThresholdSince = nil
+                }
+            } else if sensorMode == .pausedAfterDrag {
+                if rawAltDeg < -5.0 && (nowUptime - dragPausedTimestamp) > 1.0 {
+                    hasLoweredSinceDragPause = true
+                } else if hasLoweredSinceDragPause && rawAltDeg >= 14.0 && (nowUptime - dragPausedTimestamp) > 1.5 {
+                    if let since = liftAboveThresholdSince {
+                        if (nowUptime - since) >= 0.20 {
+                            liftAboveThresholdSince = nil
+                            smoothedQuat = rawQ
+                            engageFromAutoLift()
+                        }
+                    } else {
+                        liftAboveThresholdSince = nowUptime
+                    }
+                } else {
+                    liftAboveThresholdSince = nil
+                }
+            }
+            if sensorMode != .activeLiveSky { return }
+        }
+
+        // 4. Responsive Low-Latency 100Hz Quaternion SLERP (1:1 tracking when panning, OIS damping when steady / zoomed)
+        // CoreMotion's M-series hardware EKF is already gyro-fused; avoid heavy double-filtering!
+        let fovGain = sqrt(max(0.05, min(1.4, currentFovDegrees / 60.0)))
+        let minAlpha = max(0.06, 0.30 * fovGain)
+        let maxAlpha = max(0.38, min(0.94, 0.88 * fovGain + 0.06))
 
         let filteredQ: simd_quatd
         if let prev = smoothedQuat {
@@ -320,23 +399,20 @@ public final class CosmosMotionService: NSObject, ObservableObject {
                 rawQ = simd_quatd(vector: -rawQ.vector)
             }
             let cosHalfTheta = min(1.0, max(-1.0, Double(simd_dot(prev.vector, rawQ.vector))))
-            let angularDelta = 2.0 * acos(cosHalfTheta)
-            let alpha = min(maxAlpha, max(minAlpha, minAlpha + angularDelta * (1.75 * fovGain)))
+            let angularDelta = 2.0 * acos(cosHalfTheta) // radians per 10ms sample
+            let alpha = min(maxAlpha, max(minAlpha, minAlpha + angularDelta * (28.0 * fovGain)))
             filteredQ = simd_normalize(simd_slerp(prev, rawQ, alpha))
         } else {
             filteredQ = rawQ
         }
         smoothedQuat = filteredQ
 
-        // 3. Transform full right-handed screen basis (Right, Up, Rear-Camera Optical -Z) into NWZ
-        let (screenRightDev, screenUpDev) = currentScreenBasisDeviceVectors()
-        let opticalAxisDev = SIMD3<Double>(0.0, 0.0, -1.0)
-
-        var rightNWZ = simd_normalize(filteredQ.act(screenRightDev))
-        var upNWZ = simd_normalize(filteredQ.act(screenUpDev))
+        // 5. Transform cached screen basis (Right, Up, Optical -Z) into NWZ
+        var rightNWZ = simd_normalize(filteredQ.act(cachedScreenRightDev))
+        var upNWZ = simd_normalize(filteredQ.act(cachedScreenUpDev))
         var forwardNWZ = simd_normalize(filteredQ.act(opticalAxisDev))
 
-        // 4. Apply True North WMM declination (when frame is Magnetic North) + Gyro/Target-Align Azimuth Offset
+        // 6. Apply WMM-2025 declination (if Magnetic frame) + Gyro/Target-Align Azimuth Offset
         var totalEastClockwiseDeg: Double = 0.0
         if activeReferenceFrame == .xMagneticNorthZVertical {
             totalEastClockwiseDeg += wmmDeclinationDegrees
@@ -344,14 +420,12 @@ public final class CosmosMotionService: NSObject, ObservableObject {
         totalEastClockwiseDeg += gyroAnchorOffsetDegrees + azimuthOffsetDegrees
 
         if abs(totalEastClockwiseDeg) > 1e-4 {
-            // Increasing compass azimuth by +Δ° East corresponds to rotating around -Z (since +X=N, +Y=W => -Y=E)
             let rotZ = simd_quatd(angle: -totalEastClockwiseDeg * (.pi / 180.0), axis: SIMD3<Double>(0.0, 0.0, 1.0))
             rightNWZ = rotZ.act(rightNWZ)
             upNWZ = rotZ.act(upNWZ)
             forwardNWZ = rotZ.act(forwardNWZ)
         }
 
-        // Also compute raw unaligned azimuth (with WMM declination only) for 1-tap Target-Align calibration
         let rawForward = (activeReferenceFrame == .xMagneticNorthZVertical)
             ? simd_quatd(angle: -wmmDeclinationDegrees * (.pi / 180.0), axis: SIMD3<Double>(0.0, 0.0, 1.0)).act(simd_normalize(filteredQ.act(opticalAxisDev)))
             : simd_normalize(filteredQ.act(opticalAxisDev))
@@ -362,43 +436,8 @@ public final class CosmosMotionService: NSObject, ObservableObject {
         }
 
         let altRad = asin(min(1.0, max(-1.0, forwardNWZ.z)))
-        let altDeg = altRad * (180.0 / .pi)
+        let altDeg = max(-89.9, min(90.0, altRad * (180.0 / .pi)))
 
-        // 5. Standby Auto-Lift State Machine (> +15° sustained for >= 250ms)
-        let nowUptime = ProcessInfo.processInfo.systemUptime
-        if sensorMode == .standbyAutoLift {
-            if altDeg >= 15.0 {
-                if let since = liftAboveThresholdSince {
-                    if (nowUptime - since) >= 0.25 {
-                        liftAboveThresholdSince = nil
-                        engageFromAutoLift()
-                    }
-                } else {
-                    liftAboveThresholdSince = nowUptime
-                }
-            } else {
-                liftAboveThresholdSince = nil
-            }
-        } else if sensorMode == .pausedAfterDrag {
-            if altDeg < -5.0 && (nowUptime - dragPausedTimestamp) > 1.2 {
-                hasLoweredSinceDragPause = true
-            } else if hasLoweredSinceDragPause && altDeg >= 20.0 && (nowUptime - dragPausedTimestamp) > 2.0 {
-                if let since = liftAboveThresholdSince {
-                    if (nowUptime - since) >= 0.30 {
-                        liftAboveThresholdSince = nil
-                        engageFromAutoLift()
-                    }
-                } else {
-                    liftAboveThresholdSince = nowUptime
-                }
-            } else {
-                liftAboveThresholdSince = nil
-            }
-        }
-
-        guard sensorMode == .activeLiveSky else { return }
-
-        // 6. Extract Azimuth & Horizon-Relative Roll (while preserving exact 3x3 basis for gimbal-free rendering)
         let horizMag = hypot(forwardNWZ.x, forwardNWZ.y)
         let azRad: Double
         if horizMag > 1.0e-3 {
@@ -427,39 +466,48 @@ public final class CosmosMotionService: NSObject, ObservableObject {
         let projUpOnRight = simd_dot(upNWZ, right0)
         let projUpOnUp = simd_dot(upNWZ, up0)
         let rollDeg = atan2(projUpOnRight, projUpOnUp) * (180.0 / .pi)
+        let azDeg = azRad * (180.0 / .pi)
 
-        currentBasisNWZ = (
+        let basis: BasisNWZ = (
             right: (rightNWZ.x, rightNWZ.y, rightNWZ.z),
             up: (upNWZ.x, upNWZ.y, upNWZ.z),
             forward: (forwardNWZ.x, forwardNWZ.y, forwardNWZ.z)
         )
-        currentAzimuth = azRad * (180.0 / .pi)
-        currentAltitude = max(-89.9, min(90.0, altDeg))
+        currentBasisNWZ = basis
+        currentAzimuth = azDeg
+        currentAltitude = altDeg
         currentRoll = rollDeg
+
+        // Direct zero-allocation callback into @Observable CosmosCameraController!
+        onAttitudeSample?(azDeg, altDeg, rollDeg, basis)
     }
 
     private func engageFromAutoLift() {
-        sensorMode = .activeLiveSky
-        isTracking = true
-        startHardwarePipeline(highFrequency: true)
+        setModeIfChanged(.activeLiveSky)
+        setIsTrackingIfChanged(true)
+        if headingLocationManager.authorizationStatus == .notDetermined {
+            headingLocationManager.requestWhenInUseAuthorization()
+        }
         onAutoLiftEngaged?()
     }
 
-    private func currentScreenBasisDeviceVectors() -> (right: SIMD3<Double>, up: SIMD3<Double>) {
+    private func refreshCachedScreenBasisVectors() {
         let orientation = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first?.interfaceOrientation ?? .portrait
         switch orientation {
         case .landscapeLeft:
-            // Device rotated clockwise (home indicator on left): screen-up = -X_dev, screen-right = +Y_dev
-            return (SIMD3<Double>(0.0, 1.0, 0.0), SIMD3<Double>(-1.0, 0.0, 0.0))
+            cachedScreenRightDev = SIMD3<Double>(0.0, 1.0, 0.0)
+            cachedScreenUpDev = SIMD3<Double>(-1.0, 0.0, 0.0)
         case .landscapeRight:
-            // Device rotated counter-clockwise (home indicator on right): screen-up = +X_dev, screen-right = -Y_dev
-            return (SIMD3<Double>(0.0, -1.0, 0.0), SIMD3<Double>(1.0, 0.0, 0.0))
+            cachedScreenRightDev = SIMD3<Double>(0.0, -1.0, 0.0)
+            cachedScreenUpDev = SIMD3<Double>(1.0, 0.0, 0.0)
         case .portraitUpsideDown:
-            return (SIMD3<Double>(-1.0, 0.0, 0.0), SIMD3<Double>(0.0, -1.0, 0.0))
+            cachedScreenRightDev = SIMD3<Double>(-1.0, 0.0, 0.0)
+            cachedScreenUpDev = SIMD3<Double>(0.0, -1.0, 0.0)
         default:
-            return (SIMD3<Double>(1.0, 0.0, 0.0), SIMD3<Double>(0.0, 1.0, 0.0))
+            cachedScreenRightDev = SIMD3<Double>(1.0, 0.0, 0.0)
+            cachedScreenUpDev = SIMD3<Double>(0.0, 1.0, 0.0)
         }
     }
     #endif
@@ -481,7 +529,7 @@ extension CosmosMotionService: CLLocationManagerDelegate {
                self.activeReferenceFrame == .xMagneticNorthZVertical,
                (self.sensorMode == .activeLiveSky || self.sensorMode == .standbyAutoLift) {
                 self.stopHardwarePipeline()
-                self.startHardwarePipeline(highFrequency: self.sensorMode == .activeLiveSky)
+                self.startHardwarePipeline()
             }
         }
     }
@@ -490,8 +538,11 @@ extension CosmosMotionService: CLLocationManagerDelegate {
         let hAcc = newHeading.headingAccuracy
         let magNorm = sqrt(newHeading.x * newHeading.x + newHeading.y * newHeading.y + newHeading.z * newHeading.z)
         Task { @MainActor in
-            self.headingAccuracyDegrees = hAcc
-            if magNorm > 0.5 && self.magneticFieldMicroTesla < 0.5 {
+            if abs(self.headingAccuracyDegrees - hAcc) >= 1.0 {
+                self.headingAccuracyDegrees = hAcc
+            }
+            if magNorm > 0.5 && self.latestRawMagMicroTesla < 0.5 {
+                self.latestRawMagMicroTesla = magNorm
                 self.magneticFieldMicroTesla = magNorm
             }
         }
@@ -507,12 +558,9 @@ extension CosmosMotionService: CLLocationManagerDelegate {
         }
     }
 
-    nonisolated public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        // Gracefully ignore transient CoreLocation heading/fix timeouts; offline WMM-2025 declination remains active.
-    }
+    nonisolated public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 
     nonisolated public func locationManagerShouldDisplayHeadingCalibration(_ manager: CLLocationManager) -> Bool {
-        // Never interrupt passive browsing; allow native figure-8 prompt only if severely uncalibrated during active AR sky pointing.
         return false
     }
 }

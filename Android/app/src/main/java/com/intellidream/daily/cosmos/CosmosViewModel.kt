@@ -214,10 +214,6 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
                 if (!curState.isLiveTime && curState.playbackSpeedMultiplier == 0) {
                     resetToLiveTime()
                 }
-                _cameraState.value = _cameraState.value.copy(
-                    isArGyroActive = true,
-                    sensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
-                )
                 postStatusBanner("Live Sky Active · Point phone at the sky")
             }
         }
@@ -272,6 +268,7 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
     // MARK: - Strict Lifecycle Management (Zero Background Drain)
 
     fun onObservatoryVisible() {
+        if (isViewActive) return
         isViewActive = true
         motionManager.updateObserverLocation(
             _state.value.observerLatitude,
@@ -284,6 +281,7 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onObservatoryHidden() {
+        if (!isViewActive) return
         isViewActive = false
         tickerJob?.cancel()
         tickerJob = null
