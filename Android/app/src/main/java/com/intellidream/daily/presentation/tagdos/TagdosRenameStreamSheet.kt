@@ -35,6 +35,8 @@ import com.intellidream.daily.designsystem.ThemeColors
 @Composable
 fun TagdosRenameStreamSheet(
     currentTitle: String,
+    canDeleteStream: Boolean = false,
+    onDeleteStream: (() -> Unit)? = null,
     onSaveTitle: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -113,6 +115,22 @@ fun TagdosRenameStreamSheet(
                     ) {
                         Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+
+            if (canDeleteStream && onDeleteStream != null) {
+                TextButton(
+                    onClick = {
+                        onDeleteStream()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Delete Stream",
+                        color = ThemeColors.accentPink,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

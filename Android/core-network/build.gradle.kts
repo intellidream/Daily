@@ -1,8 +1,20 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun localProp(key: String): String =
+    localProperties.getProperty(key, "").replace("\"", "\\\"")
 
 android {
     namespace = "com.intellidream.daily.network"
@@ -10,6 +22,13 @@ android {
 
     defaultConfig {
         minSdk = 26
+        buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"${localProp("MICROSOFT_CLIENT_ID")}\"")
+        buildConfigField("String", "GOOGLE_MOBILE_CLIENT_ID", "\"${localProp("GOOGLE_MOBILE_CLIENT_ID")}\"")
+        buildConfigField("String", "GOOGLE_DESKTOP_CLIENT_ID", "\"${localProp("GOOGLE_DESKTOP_CLIENT_ID")}\"")
+        buildConfigField("String", "GOOGLE_DESKTOP_CLIENT_SECRET", "\"${localProp("GOOGLE_DESKTOP_CLIENT_SECRET")}\"")
+    }
+    buildFeatures {
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

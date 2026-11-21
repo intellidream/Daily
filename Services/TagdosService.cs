@@ -418,6 +418,200 @@ namespace Daily.Services
             }
         }
 
+        public async Task<TagDoStream> CreateStreamAsync(string? title = null, string rawText = "", string activeMemos = "")
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+
+            int nextOrderIndex;
+            lock (_cachedStreams)
+            {
+                nextOrderIndex = _cachedStreams.Count > 0 ? _cachedStreams.Max(s => s.OrderIndex) + 1 : 0;
+            }
+
+            var cleanTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+            var defaultTitle = $"Stream {nextOrderIndex + 1}";
+            var stream = TagdosParser.ParseStream(
+                rawText,
+                nextOrderIndex,
+                cleanTitle ?? defaultTitle,
+                null,
+                activeMemos,
+                "[]",
+                cleanTitle);
+
+            await SaveStreamAsync(stream).ConfigureAwait(false);
+            return stream;
+        }
+
+        public async Task DeleteStreamAsync(string streamId)
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+
+            List<TagDoStream> remaining;
+            lock (_cachedStreams)
+            {
+                if (_cachedStreams.Count <= 1) return;
+                remaining = _cachedStreams.Where(s => s.Id != streamId).OrderBy(s => s.OrderIndex).ToList();
+                if (remaining.Count == _cachedStreams.Count) return;
+            }
+
+            var conn = _databaseService.Connection;
+            await conn.DeleteAsync<LocalTagdoStream>(streamId).ConfigureAwait(false);
+
+            var reindexedLocals = new List<LocalTagdoStream>();
+            var nowTicks = DateTime.UtcNow.Ticks;
+
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                var s = remaining[i];
+                s.OrderIndex = i;
+                var local = new LocalTagdoStream
+                {
+                    Id = s.Id,
+                    OrderIndex = i,
+                    Title = s.Title,
+                    CustomTitle = s.CustomTitle,
+                    RawText = s.RawText,
+                    StreamReminderTicks = s.StreamReminder?.Ticks,
+                    ActiveMemos = s.ActiveMemos ?? string.Empty,
+                    AttachmentsJson = string.IsNullOrWhiteSpace(s.AttachmentsJson) ? "[]" : s.AttachmentsJson,
+                    UpdatedAtTicks = nowTicks,
+                    SyncedAtTicks = null
+                };
+                await conn.InsertOrReplaceAsync(local).ConfigureAwait(false);
+                reindexedLocals.Add(local);
+            }
+
+            lock (_cachedStreams)
+            {
+                _cachedStreams.Clear();
+                _cachedStreams.AddRange(remaining);
+            }
+
+            DataChanged?.Invoke(this, EventArgs.Empty);
+
+            int newCount = remaining.Count;
+            _ = Task.Run(async () =>
+            {
+                if (_supabaseClient != null)
+                {
+                    try
+                    {
+                        if (_sessionGuardian != null)
+                            await _sessionGuardian.EnsureValidSessionAsync().ConfigureAwait(false);
+
+                        var userId = _supabaseClient.Auth.CurrentUser?.Id;
+                        if (!string.IsNullOrEmpty(userId))
+                        {
+                            Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                            await ExecuteWithAuthAsync(async () =>
+                            {
+                                await _supabaseClient.From<RemoteTagdoStream>()
+                                    .Where(x => x.UserId == userId)
+                                    .Filter("stream_number", Supabase.Postgrest.Constants.Operator.GreaterThan, newCount)
+                                    .Delete(new Supabase.Postgrest.QueryOptions { Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal })
+                                    .ConfigureAwait(false);
+                                return true;
+                            }, "Tagdos.DeleteStreamOverflow").ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        SupabaseSessionGuardian.LogGuardian($"[TagdosService] Delete overflow streams failed: {ex.Message}");
+                    }
+                }
+
+                foreach (var ls in reindexedLocals)
+                {
+                    await PushSingleStreamAsync(ls).ConfigureAwait(false);
+                }
+            });
+        }
+
+        public async Task<TagDoStream> ImportExternalTasksAsync(
+            string mode,
+            string? targetStreamId,
+            string? newStreamTitle,
+            List<string> rawDslChunks,
+            List<string> memoLines)
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+
+            string combinedDsl = CombineImportedDslChunks(rawDslChunks);
+            string combinedMemos = string.Join("\n", memoLines.Select(m => m.Trim()).Where(m => !string.IsNullOrEmpty(m)));
+
+            if (string.Equals(mode, "new", StringComparison.OrdinalIgnoreCase))
+            {
+                return await CreateStreamAsync(newStreamTitle, combinedDsl, combinedMemos).ConfigureAwait(false);
+            }
+
+            TagDoStream? existing;
+            lock (_cachedStreams)
+            {
+                existing = _cachedStreams.FirstOrDefault(s => s.Id == targetStreamId);
+            }
+
+            if (existing == null)
+            {
+                return await CreateStreamAsync(newStreamTitle, combinedDsl, combinedMemos).ConfigureAwait(false);
+            }
+
+            string newRaw;
+            string mergedMemos;
+            if (string.Equals(mode, "replace", StringComparison.OrdinalIgnoreCase))
+            {
+                newRaw = combinedDsl;
+                mergedMemos = combinedMemos;
+            }
+            else
+            {
+                var existingRaw = (existing.RawText ?? string.Empty).Trim();
+                newRaw = string.IsNullOrEmpty(existingRaw)
+                    ? combinedDsl
+                    : (string.IsNullOrEmpty(combinedDsl) ? existingRaw : $"{existingRaw} & {combinedDsl}");
+
+                var existingMemos = (existing.ActiveMemos ?? string.Empty).Trim();
+                mergedMemos = string.IsNullOrEmpty(existingMemos)
+                    ? combinedMemos
+                    : (string.IsNullOrEmpty(combinedMemos) ? existingMemos : $"{existingMemos}\n{combinedMemos}");
+            }
+
+            var updated = TagdosParser.ParseStream(
+                newRaw,
+                existing.OrderIndex,
+                existing.Title,
+                existing.StreamReminder,
+                mergedMemos,
+                existing.AttachmentsJson,
+                existing.CustomTitle);
+            updated.Id = existing.Id;
+
+            await SaveStreamAsync(updated).ConfigureAwait(false);
+            return updated;
+        }
+
+        private static string CombineImportedDslChunks(List<string> chunks)
+        {
+            var cleaned = chunks.Select(c => (c ?? string.Empty).Trim()).Where(c => !string.IsNullOrEmpty(c)).ToList();
+            if (cleaned.Count == 0) return string.Empty;
+
+            var singleTags = new List<string>();
+            var complexClusters = new List<string>();
+            foreach (var chunk in cleaned)
+            {
+                if (chunk.Contains('&') || chunk.Contains('/'))
+                    complexClusters.Add(chunk);
+                else
+                    singleTags.Add(chunk);
+            }
+
+            var parts = new List<string>();
+            if (singleTags.Count > 0)
+                parts.Add(string.Join("/", singleTags));
+            parts.AddRange(complexClusters);
+            return string.Join(" & ", parts);
+        }
+
         public async Task<List<TagDoQuickNote>> GetQuickNotesAsync()
         {
             await EnsureLoadedAsync().ConfigureAwait(false);
@@ -598,9 +792,27 @@ namespace Daily.Services
 
                 if (remoteStreams.Count > 0)
                 {
+                    var remoteStreamNumbers = remoteStreams.Select(r => r.StreamNumber).ToHashSet();
+                    var maxRemoteUpdatedUtc = remoteStreams.Max(r => r.UpdatedAt.Kind == DateTimeKind.Utc ? r.UpdatedAt : r.UpdatedAt.ToUniversalTime());
+
+                    foreach (var orphanLocal in localStreams.ToList())
+                    {
+                        int localNum = orphanLocal.OrderIndex + 1;
+                        if (!remoteStreamNumbers.Contains(localNum) && !IsUntouchedSeedStream(orphanLocal))
+                        {
+                            var localUpd = new DateTime(orphanLocal.UpdatedAtTicks, DateTimeKind.Utc);
+                            if (orphanLocal.SyncedAtTicks != null || localUpd <= maxRemoteUpdatedUtc)
+                            {
+                                await conn.DeleteAsync(orphanLocal).ConfigureAwait(false);
+                                localStreams.Remove(orphanLocal);
+                                anyLocalUpdatedFromRemote = true;
+                            }
+                        }
+                    }
+
                     foreach (var remote in remoteStreams)
                     {
-                        int orderIdx = Math.Clamp(remote.StreamNumber - 1, 0, 4);
+                        int orderIdx = Math.Max(0, remote.StreamNumber - 1);
                         var existing = localStreams.FirstOrDefault(s => s.OrderIndex == orderIdx);
                         var remoteUpdatedUtc = remote.UpdatedAt.Kind == DateTimeKind.Utc
                             ? remote.UpdatedAt

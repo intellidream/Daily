@@ -74,7 +74,9 @@ public struct TagdosParser: Sendable {
             rawText: trimmed,
             clusters: parsedClusters,
             streamReminder: streamReminder,
-            orderIndex: orderIndex
+            orderIndex: orderIndex,
+            activeMemos: existingStream?.activeMemos ?? "",
+            attachments: existingStream?.attachments ?? []
         )
     }
 
@@ -87,6 +89,178 @@ public struct TagdosParser: Sendable {
     }
 
     // MARK: - Interactive Mutations
+
+    /// Updates the text of an existing pill in-place, re-evaluates its semantic type, and re-serializes rawText.
+    public func updatePillText(in stream: TagDoStream, pillId: UUID, newText: String) -> TagDoStream {
+        let cleanText = newText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: "&", with: "+")
+        guard !cleanText.isEmpty else { return stream }
+
+        var updatedClusters = stream.clusters
+        var didChange = false
+
+        for clusterIndex in 0..<updatedClusters.count {
+            var cluster = updatedClusters[clusterIndex]
+            if let pillIndex = cluster.pills.firstIndex(where: { $0.id == pillId }) {
+                let existing = cluster.pills[pillIndex]
+                cluster.pills[pillIndex] = TagDoPill(
+                    id: existing.id,
+                    rawText: cleanText,
+                    type: nil, // Auto-reclassify semantic type from new text
+                    isCompleted: existing.isCompleted,
+                    customReminderDate: existing.customReminderDate,
+                    decodedNote: existing.decodedNote
+                )
+                cluster.rawText = cluster.pills.map { $0.rawText }.joined(separator: "/")
+                updatedClusters[clusterIndex] = cluster
+                didChange = true
+                break
+            }
+        }
+
+        guard didChange else { return stream }
+        let newRawText = updatedClusters.map { $0.rawText }.joined(separator: " & ")
+        return TagDoStream(
+            id: stream.id,
+            title: stream.title,
+            customTitle: stream.customTitle,
+            rawText: newRawText,
+            clusters: updatedClusters,
+            streamReminder: stream.streamReminder,
+            orderIndex: stream.orderIndex,
+            activeMemos: stream.activeMemos,
+            attachments: stream.attachments,
+            updatedAt: Date()
+        )
+    }
+
+    // MARK: - DSL Detection & Import Helpers
+
+    /// Returns true if `text` already conforms to TagDoS DSL (e.g., `MG/GM/TG & FSH/LDL`, `C$T`, `EXP!`, `5K`).
+    public func isAlreadyTagdosDsl(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        if trimmed.contains("/") || trimmed.contains("&") {
+            let clusters = trimmed.components(separatedBy: "&")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !clusters.isEmpty else { return false }
+            var totalTokens = 0
+            for cluster in clusters {
+                let tokens = cluster.components(separatedBy: "/")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if tokens.isEmpty { return false }
+                for token in tokens {
+                    if token.rangeOfCharacter(from: .whitespacesAndNewlines) != nil || token.count > 16 {
+                        return false
+                    }
+                    totalTokens += 1
+                }
+            }
+            return totalTokens >= 1
+        }
+
+        // Single-token check: no spaces, compact length, and mnemonic formatting
+        guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+              trimmed.count <= 10 else {
+            return false
+        }
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.contains(".com") {
+            return false
+        }
+        let hasSemanticGlyph = trimmed.contains("$") || trimmed.contains("€") || trimmed.contains("!") ||
+            trimmed.rangeOfCharacter(from: .decimalDigits) != nil
+        if hasSemanticGlyph {
+            return true
+        }
+        let lettersOnly = trimmed.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+        let isAllCaps = !lettersOnly.isEmpty && lettersOnly.allSatisfy { CharacterSet.uppercaseLetters.contains($0) }
+        return isAllCaps || trimmed.count <= 4
+    }
+
+    /// Generates an editable mnemonic tag proposal for natural-language tasks.
+    public func proposeMnemonic(for title: String, isHighImportance: Bool = false) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return isHighImportance ? "TASK!" : "TASK" }
+        if isAlreadyTagdosDsl(trimmed) {
+            if isHighImportance && !trimmed.contains("!") && !trimmed.contains("/") && !trimmed.contains("&") {
+                return "\(trimmed)!"
+            }
+            return trimmed
+        }
+
+        let stopWords: Set<String> = [
+            "the", "a", "an", "to", "for", "of", "in", "on", "at", "and", "or", "with", "my", "this", "that",
+            "la", "de", "si", "cu", "pt", "pentru", "pe", "din", "un", "o", "sa"
+        ]
+        let financialWords: Set<String> = [
+            "pay", "bill", "bills", "invoice", "tax", "taxes", "bank", "card", "budget", "buy", "rent",
+            "salary", "transfer", "money", "cost", "price", "fee", "plata", "factura", "bani", "buget", "eur", "usd", "ron"
+        ]
+        let urgentWords: Set<String> = ["urgent", "asap", "important", "deadline", "critical", "immediately"]
+
+        let rawTokens = trimmed
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        let significant = rawTokens.filter { !stopWords.contains($0.lowercased()) }
+        let words = significant.isEmpty ? rawTokens : significant
+
+        let hasEuro = trimmed.contains("€") || rawTokens.contains(where: { $0.lowercased() == "eur" || $0.lowercased() == "euro" })
+        let hasDollar = trimmed.contains("$") || rawTokens.contains(where: { financialWords.contains($0.lowercased()) })
+        let isUrgent = isHighImportance || trimmed.contains("!") || rawTokens.contains(where: { urgentWords.contains($0.lowercased()) })
+
+        var base: String
+        if words.isEmpty {
+            base = "TASK"
+        } else if words.count == 1 {
+            base = String(words[0].prefix(5)).uppercased()
+        } else if words.count == 2 {
+            let p1 = String(words[0].prefix(3))
+            let p2 = String(words[1].prefix(3))
+            base = String((p1 + p2).prefix(6)).uppercased()
+        } else {
+            let p1 = String(words[0].prefix(2))
+            let p2 = String(words[1].prefix(2))
+            let p3 = String(words[2].prefix(2))
+            base = String((p1 + p2 + p3).prefix(6)).uppercased()
+        }
+
+        if hasEuro && !base.contains("€") {
+            base += "€"
+        } else if hasDollar && !base.contains("$") {
+            base += "$"
+        }
+        if isUrgent && !base.contains("!") {
+            base += "!"
+        }
+        return base
+    }
+
+    public func prepareImportItem(
+        title: String,
+        notes: String? = nil,
+        isHighImportance: Bool = false
+    ) -> (tagOrDsl: String, isAlreadyDsl: Bool, memoEntry: String?) {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isDsl = isAlreadyTagdosDsl(cleanTitle)
+        let tag = isDsl ? cleanTitle : proposeMnemonic(for: cleanTitle, isHighImportance: isHighImportance)
+
+        if isDsl {
+            let memo = cleanNotes.isEmpty ? nil : "• [\(tag)] \(cleanNotes)"
+            return (tag, true, memo)
+        } else {
+            let memo = cleanNotes.isEmpty
+                ? "• [\(tag)] \(cleanTitle)"
+                : "• [\(tag)] \(cleanTitle) — \(cleanNotes)"
+            return (tag, false, memo)
+        }
+    }
 
     /// Cycles a pill to the end of its cluster (or end of stream) for recurring habits.
     public func recyclePillToBack(in stream: TagDoStream, pillId: UUID) -> TagDoStream {

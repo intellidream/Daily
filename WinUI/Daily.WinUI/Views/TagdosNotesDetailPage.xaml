@@ -44,8 +44,16 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Right Actions: Quick Note, Sync, Pop-Out -->
+            <!-- Right Actions: Import Tasks, Quick Note, Pop-Out -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <!-- Import Tasks Button -->
+                <Button x:Name="ImportTasksButton" Click="ImportTasks_Click" Background="#2200E5FF" BorderBrush="#5500E5FF" BorderThickness="1" CornerRadius="16" Padding="12,6" ToolTipService.ToolTip="Import tasks from Microsoft To Do or Google Tasks">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                        <TextBlock Text="Import Tasks" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AppFgColorBrush}" />
+                    </StackPanel>
+                </Button>
+
                 <!-- Add Quick Note Button -->
                 <Button x:Name="TopBarAddNoteButton" Click="TopBarAddNote_Click" Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="12,6">
                     <StackPanel Orientation="Horizontal" Spacing="6">

@@ -229,5 +229,165 @@ namespace Daily.Services
                 }
             }
         }
+
+        public static bool UpdatePillText(TagDoStream stream, string pillId, string newText)
+        {
+            string cleanText = (newText ?? string.Empty).Trim()
+                .Replace("/", "-")
+                .Replace("&", "+");
+            if (string.IsNullOrWhiteSpace(cleanText)) return false;
+
+            foreach (var cluster in stream.Clusters)
+            {
+                var pill = cluster.Pills.FirstOrDefault(p => p.Id == pillId);
+                if (pill != null)
+                {
+                    pill.Text = cleanText;
+                    pill.Type = ClassifyPill(cleanText, pill.IsCompleted);
+                    stream.RawText = SerializeStream(stream);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool IsAlreadyTagdosDsl(string text)
+        {
+            var trimmed = (text ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(trimmed)) return false;
+
+            if (trimmed.Contains('/') || trimmed.Contains('&'))
+            {
+                var clusters = trimmed.Split('&', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                if (clusters.Length == 0) return false;
+                int totalTokens = 0;
+                foreach (var cluster in clusters)
+                {
+                    var tokens = cluster.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    if (tokens.Length == 0) return false;
+                    foreach (var token in tokens)
+                    {
+                        if (token.Any(char.IsWhiteSpace) || token.Length > 16) return false;
+                        totalTokens++;
+                    }
+                }
+                return totalTokens >= 1;
+            }
+
+            if (trimmed.Any(char.IsWhiteSpace) || trimmed.Length > 10) return false;
+            var lower = trimmed.ToLowerInvariant();
+            if (lower.StartsWith("http://") || lower.StartsWith("https://") || lower.Contains(".com"))
+            {
+                return false;
+            }
+
+            bool hasSemanticGlyph = trimmed.Contains('$') || trimmed.Contains('€') || trimmed.Contains('!') || trimmed.Any(char.IsDigit);
+            if (hasSemanticGlyph) return true;
+
+            var lettersOnly = trimmed.Where(char.IsLetter).ToArray();
+            bool isAllCaps = lettersOnly.Length > 0 && lettersOnly.All(char.IsUpper);
+            return isAllCaps || trimmed.Length <= 4;
+        }
+
+        private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "a", "an", "to", "for", "of", "in", "on", "at", "and", "or", "with", "my", "this", "that",
+            "la", "de", "si", "cu", "pt", "pentru", "pe", "din", "un", "o", "sa"
+        };
+
+        private static readonly HashSet<string> FinancialWords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "pay", "bill", "bills", "invoice", "tax", "taxes", "bank", "card", "budget", "buy", "rent",
+            "salary", "transfer", "money", "cost", "price", "fee", "plata", "factura", "bani", "buget", "eur", "usd", "ron"
+        };
+
+        private static readonly HashSet<string> UrgentWords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "urgent", "asap", "important", "deadline", "critical", "immediately"
+        };
+
+        public static string ProposeMnemonic(string title, bool isHighImportance = false)
+        {
+            var trimmed = (title ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(trimmed)) return isHighImportance ? "TASK!" : "TASK";
+            if (IsAlreadyTagdosDsl(trimmed))
+            {
+                return (isHighImportance && !trimmed.Contains('!') && !trimmed.Contains('/') && !trimmed.Contains('&'))
+                    ? $"{trimmed}!"
+                    : trimmed;
+            }
+
+            var rawTokens = Regex.Split(trimmed, @"[^A-Za-z0-9]+")
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToArray();
+            var significant = rawTokens.Where(t => !StopWords.Contains(t)).ToArray();
+            var words = significant.Length > 0 ? significant : rawTokens;
+
+            bool hasEuro = trimmed.Contains('€') || rawTokens.Any(t => t.Equals("eur", StringComparison.OrdinalIgnoreCase) || t.Equals("euro", StringComparison.OrdinalIgnoreCase));
+            bool hasDollar = trimmed.Contains('$') || rawTokens.Any(t => FinancialWords.Contains(t));
+            bool isUrgent = isHighImportance || trimmed.Contains('!') || rawTokens.Any(t => UrgentWords.Contains(t));
+
+            string baseTag;
+            if (words.Length == 0)
+            {
+                baseTag = "TASK";
+            }
+            else if (words.Length == 1)
+            {
+                baseTag = words[0][..Math.Min(5, words[0].Length)].ToUpperInvariant();
+            }
+            else if (words.Length == 2)
+            {
+                string combined = words[0][..Math.Min(3, words[0].Length)] + words[1][..Math.Min(3, words[1].Length)];
+                baseTag = combined[..Math.Min(6, combined.Length)].ToUpperInvariant();
+            }
+            else
+            {
+                string combined = words[0][..Math.Min(2, words[0].Length)]
+                    + words[1][..Math.Min(2, words[1].Length)]
+                    + words[2][..Math.Min(2, words[2].Length)];
+                baseTag = combined[..Math.Min(6, combined.Length)].ToUpperInvariant();
+            }
+
+            if (hasEuro && !baseTag.Contains('€'))
+            {
+                baseTag += "€";
+            }
+            else if (hasDollar && !baseTag.Contains('$'))
+            {
+                baseTag += "$";
+            }
+
+            if (isUrgent && !baseTag.Contains('!'))
+            {
+                baseTag += "!";
+            }
+
+            return baseTag;
+        }
+
+        public static (string TagOrDsl, bool IsAlreadyDsl, string? MemoEntry) PrepareImportItem(
+            string title,
+            string? notes = null,
+            bool isHighImportance = false)
+        {
+            string cleanTitle = (title ?? string.Empty).Trim();
+            string cleanNotes = (notes ?? string.Empty).Trim();
+            bool isDsl = IsAlreadyTagdosDsl(cleanTitle);
+            string tag = isDsl ? cleanTitle : ProposeMnemonic(cleanTitle, isHighImportance);
+
+            if (isDsl)
+            {
+                string? memo = string.IsNullOrEmpty(cleanNotes) ? null : $"• [{tag}] {cleanNotes}";
+                return (tag, true, memo);
+            }
+            else
+            {
+                string memo = string.IsNullOrEmpty(cleanNotes)
+                    ? $"• [{tag}] {cleanTitle}"
+                    : $"• [{tag}] {cleanTitle} — {cleanNotes}";
+                return (tag, false, memo);
+            }
+        }
     }
 }

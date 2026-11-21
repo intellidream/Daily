@@ -243,4 +243,149 @@ object TagdosParser {
             updatedAt = System.currentTimeMillis()
         )
     }
+
+    /**
+     * Updates the text of an existing pill in-place, re-evaluates its semantic type, and re-serializes rawText.
+     */
+    fun updatePillText(stream: TagDoStream, pillId: String, newText: String): TagDoStream {
+        val cleanText = newText.trim()
+            .replace("/", "-")
+            .replace("&", "+")
+        if (cleanText.isEmpty()) return stream
+
+        val updatedClusters = stream.clusters.map { it.copy(pills = it.pills.toMutableList()) }.toMutableList()
+        var didChange = false
+
+        for (clusterIndex in updatedClusters.indices) {
+            val cluster = updatedClusters[clusterIndex]
+            val pills = cluster.pills.toMutableList()
+            val pillIndex = pills.indexOfFirst { it.id == pillId }
+            if (pillIndex != -1) {
+                val existing = pills[pillIndex]
+                pills[pillIndex] = existing.copy(
+                    rawText = cleanText,
+                    type = TagDoPillType.detect(cleanText)
+                )
+                val newClusterRaw = pills.joinToString("/") { it.rawText }
+                updatedClusters[clusterIndex] = cluster.copy(pills = pills, rawText = newClusterRaw)
+                didChange = true
+                break
+            }
+        }
+
+        if (!didChange) return stream
+        val newRawText = updatedClusters.joinToString(" & ") { it.rawText }
+        return stream.copy(
+            rawText = newRawText,
+            clusters = updatedClusters,
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    // MARK: - DSL Detection & Import Helpers
+
+    /**
+     * Returns true if [text] already conforms to TagDoS DSL (e.g., `MG/GM/TG & FSH/LDL`, `C$T`, `EXP!`, `5K`).
+     */
+    fun isAlreadyTagdosDsl(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return false
+
+        if (trimmed.contains("/") || trimmed.contains("&")) {
+            val clusters = trimmed.split("&").map { it.trim() }.filter { it.isNotEmpty() }
+            if (clusters.isEmpty()) return false
+            var totalTokens = 0
+            for (cluster in clusters) {
+                val tokens = cluster.split("/").map { it.trim() }.filter { it.isNotEmpty() }
+                if (tokens.isEmpty()) return false
+                for (token in tokens) {
+                    if (token.any { it.isWhitespace() } || token.length > 16) return false
+                    totalTokens++
+                }
+            }
+            return totalTokens >= 1
+        }
+
+        if (trimmed.any { it.isWhitespace() } || trimmed.length > 10) return false
+        val lower = trimmed.lowercase()
+        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.contains(".com")) {
+            return false
+        }
+        val hasSemanticGlyph = trimmed.contains("$") || trimmed.contains("€") || trimmed.contains("!") ||
+            trimmed.any { it.isDigit() }
+        if (hasSemanticGlyph) return true
+
+        val lettersOnly = trimmed.filter { it.isLetter() }
+        val isAllCaps = lettersOnly.isNotEmpty() && lettersOnly.all { it.isUpperCase() }
+        return isAllCaps || trimmed.length <= 4
+    }
+
+    /**
+     * Generates an editable mnemonic tag proposal for natural-language tasks.
+     */
+    fun proposeMnemonic(title: String, isHighImportance: Boolean = false): String {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return if (isHighImportance) "TASK!" else "TASK"
+        if (isAlreadyTagdosDsl(trimmed)) {
+            return if (isHighImportance && !trimmed.contains("!") && !trimmed.contains("/") && !trimmed.contains("&")) {
+                "$trimmed!"
+            } else {
+                trimmed
+            }
+        }
+
+        val stopWords = setOf(
+            "the", "a", "an", "to", "for", "of", "in", "on", "at", "and", "or", "with", "my", "this", "that",
+            "la", "de", "si", "cu", "pt", "pentru", "pe", "din", "un", "o", "sa"
+        )
+        val financialWords = setOf(
+            "pay", "bill", "bills", "invoice", "tax", "taxes", "bank", "card", "budget", "buy", "rent",
+            "salary", "transfer", "money", "cost", "price", "fee", "plata", "factura", "bani", "buget", "eur", "usd", "ron"
+        )
+        val urgentWords = setOf("urgent", "asap", "important", "deadline", "critical", "immediately")
+
+        val rawTokens = trimmed.split(Regex("[^A-Za-z0-9]+")).filter { it.isNotEmpty() }
+        val significant = rawTokens.filter { it.lowercase() !in stopWords }
+        val words = significant.ifEmpty { rawTokens }
+
+        val hasEuro = trimmed.contains("€") || rawTokens.any { it.equals("eur", true) || it.equals("euro", true) }
+        val hasDollar = trimmed.contains("$") || rawTokens.any { it.lowercase() in financialWords }
+        val isUrgent = isHighImportance || trimmed.contains("!") || rawTokens.any { it.lowercase() in urgentWords }
+
+        var base = when {
+            words.isEmpty() -> "TASK"
+            words.size == 1 -> words[0].take(5).uppercase()
+            words.size == 2 -> (words[0].take(3) + words[1].take(3)).take(6).uppercase()
+            else -> (words[0].take(2) + words[1].take(2) + words[2].take(2)).take(6).uppercase()
+        }
+
+        if (hasEuro && !base.contains("€")) {
+            base += "€"
+        } else if (hasDollar && !base.contains("$")) {
+            base += "$"
+        }
+        if (isUrgent && !base.contains("!")) {
+            base += "!"
+        }
+        return base
+    }
+
+    fun prepareImportItem(
+        title: String,
+        notes: String? = null,
+        isHighImportance: Boolean = false
+    ): Triple<String, Boolean, String?> {
+        val cleanTitle = title.trim()
+        val cleanNotes = notes?.trim().orEmpty()
+        val isDsl = isAlreadyTagdosDsl(cleanTitle)
+        val tag = if (isDsl) cleanTitle else proposeMnemonic(cleanTitle, isHighImportance)
+
+        return if (isDsl) {
+            val memo = if (cleanNotes.isEmpty()) null else "• [$tag] $cleanNotes"
+            Triple(tag, true, memo)
+        } else {
+            val memo = if (cleanNotes.isEmpty()) "• [$tag] $cleanTitle" else "• [$tag] $cleanTitle — $cleanNotes"
+            Triple(tag, false, memo)
+        }
+    }
 }

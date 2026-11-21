@@ -127,14 +127,14 @@ class TagdosRepository(
         val defaultNotes = listOf(
             TagDoQuickNote(
                 id = UUID.randomUUID().toString(),
-                title = "DUBaFest bilete",
-                content = "DUBaFest bilete: ia pt CiSTiu si asigura buget 2x",
+                title = "Concert Tickets",
+                content = "Concert Tickets: book 2x passes and confirm budget",
                 isPinned = true
             ),
             TagDoQuickNote(
                 id = UUID.randomUUID().toString(),
-                title = "Benzina 98",
-                content = "Urmeaza benzina 98 la urmatorul plin, apoi curatat interior",
+                title = "Car Maintenance",
+                content = "Car Maintenance: refuel 98 octane and schedule interior clean",
                 isPinned = false
             )
         )
@@ -371,6 +371,210 @@ class TagdosRepository(
                 )
             )
         }
+    }
+
+    fun updatePillText(streamId: String, pillId: String, newText: String) {
+        val current = _streams.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == streamId }
+        if (idx < 0) return
+        val updated = TagdosParser.updatePillText(current[idx], pillId, newText)
+        current[idx] = updated
+        _streams.value = current
+
+        scope.launch(ioDispatcher) {
+            tagdosDao.upsertStream(
+                TagdoStreamEntity(
+                    id = updated.id,
+                    orderIndex = updated.orderIndex,
+                    title = updated.title,
+                    customTitle = updated.customTitle,
+                    rawText = updated.rawText,
+                    streamReminder = updated.streamReminder,
+                    activeMemos = updated.activeMemos,
+                    updatedAt = updated.updatedAt,
+                    syncedAt = null
+                )
+            )
+        }
+    }
+
+    fun createStream(
+        title: String? = null,
+        rawText: String = "",
+        activeMemos: String = ""
+    ): String {
+        val current = _streams.value.toMutableList()
+        val nextOrderIndex = (current.maxOfOrNull { it.orderIndex } ?: -1) + 1
+        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+        val newId = UUID.randomUUID().toString()
+        var stream = TagdosParser.parseStream(
+            rawText = rawText,
+            title = cleanTitle ?: "Stream ${nextOrderIndex + 1}",
+            id = newId,
+            orderIndex = nextOrderIndex
+        )
+        stream = if (cleanTitle != null) {
+            stream.copy(customTitle = cleanTitle, title = cleanTitle, activeMemos = activeMemos)
+        } else {
+            stream.copy(customTitle = null, title = stream.autoDetectedTitle, activeMemos = activeMemos)
+        }
+        current.add(stream)
+        _streams.value = current
+
+        scope.launch(ioDispatcher) {
+            tagdosDao.upsertStream(
+                TagdoStreamEntity(
+                    id = stream.id,
+                    orderIndex = stream.orderIndex,
+                    title = stream.title,
+                    customTitle = stream.customTitle,
+                    rawText = stream.rawText,
+                    streamReminder = stream.streamReminder,
+                    activeMemos = stream.activeMemos,
+                    updatedAt = System.currentTimeMillis(),
+                    syncedAt = null
+                )
+            )
+        }
+        return newId
+    }
+
+    fun deleteStream(streamId: String) {
+        val current = _streams.value
+        if (current.size <= 1) return
+        val remaining = current.filter { it.id != streamId }
+        if (remaining.size == current.size) return
+
+        val reindexedDomain = remaining.mapIndexed { idx, stream ->
+            val shifted = stream.copy(orderIndex = idx, updatedAt = System.currentTimeMillis())
+            if (shifted.customTitle.isNullOrBlank()) {
+                shifted.copy(title = shifted.autoDetectedTitle)
+            } else {
+                shifted
+            }
+        }
+        _streams.value = reindexedDomain
+
+        scope.launch(ioDispatcher) {
+            tagdosDao.deleteStreamById(streamId)
+            val reindexed = reindexedDomain.map { stream ->
+                TagdoStreamEntity(
+                    id = stream.id,
+                    orderIndex = stream.orderIndex,
+                    title = stream.title,
+                    customTitle = stream.customTitle,
+                    rawText = stream.rawText,
+                    streamReminder = stream.streamReminder,
+                    activeMemos = stream.activeMemos,
+                    updatedAt = stream.updatedAt,
+                    syncedAt = null
+                )
+            }
+            tagdosDao.upsertStreams(reindexed)
+        }
+    }
+
+    fun importExternalTasks(
+        mode: String,
+        targetStreamId: String?,
+        newStreamTitle: String?,
+        rawDslChunks: List<String>,
+        memoLines: List<String>
+    ): String {
+        val combinedDsl = combineImportedDslChunks(rawDslChunks)
+        val combinedMemos = memoLines.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+
+        if (mode == "new") {
+            return createStream(title = newStreamTitle, rawText = combinedDsl, activeMemos = combinedMemos)
+        }
+
+        val current = _streams.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == targetStreamId }
+        if (idx < 0) {
+            return createStream(title = newStreamTitle, rawText = combinedDsl, activeMemos = combinedMemos)
+        }
+        val existing = current[idx]
+
+        val newRaw: String
+        val mergedMemos: String
+        val preserveExisting: TagDoStream?
+
+        if (mode == "replace") {
+            newRaw = combinedDsl
+            mergedMemos = combinedMemos
+            preserveExisting = null
+        } else {
+            val existingRaw = existing.rawText.trim()
+            newRaw = when {
+                existingRaw.isEmpty() -> combinedDsl
+                combinedDsl.isEmpty() -> existingRaw
+                else -> "$existingRaw & $combinedDsl"
+            }
+            val existingMemos = existing.activeMemos.trim()
+            mergedMemos = when {
+                existingMemos.isEmpty() -> combinedMemos
+                combinedMemos.isEmpty() -> existingMemos
+                else -> "$existingMemos\n$combinedMemos"
+            }
+            preserveExisting = existing
+        }
+
+        var updated = TagdosParser.parseStream(
+            rawText = newRaw,
+            title = existing.customTitle ?: existing.title,
+            id = existing.id,
+            streamReminder = existing.streamReminder,
+            orderIndex = existing.orderIndex,
+            existingStream = preserveExisting
+        )
+        val existingCustomTitle = existing.customTitle
+        updated = if (existingCustomTitle.isNullOrBlank()) {
+            updated.copy(title = updated.autoDetectedTitle, customTitle = null, activeMemos = mergedMemos, updatedAt = System.currentTimeMillis())
+        } else {
+            updated.copy(customTitle = existingCustomTitle, title = existingCustomTitle, activeMemos = mergedMemos, updatedAt = System.currentTimeMillis())
+        }
+        current[idx] = updated
+        _streams.value = current
+
+        scope.launch(ioDispatcher) {
+            tagdosDao.upsertStream(
+                TagdoStreamEntity(
+                    id = updated.id,
+                    orderIndex = updated.orderIndex,
+                    title = updated.title,
+                    customTitle = updated.customTitle,
+                    rawText = updated.rawText,
+                    streamReminder = updated.streamReminder,
+                    activeMemos = updated.activeMemos,
+                    updatedAt = updated.updatedAt,
+                    syncedAt = null
+                )
+            )
+        }
+        return existing.id
+    }
+
+    private fun combineImportedDslChunks(chunks: List<String>): String {
+        val cleaned = chunks.map { it.trim() }.filter { it.isNotEmpty() }
+        if (cleaned.isEmpty()) return ""
+
+        val singleTags = mutableListOf<String>()
+        val complexClusters = mutableListOf<String>()
+
+        for (chunk in cleaned) {
+            if (chunk.contains("&") || chunk.contains("/")) {
+                complexClusters.add(chunk)
+            } else {
+                singleTags.add(chunk)
+            }
+        }
+
+        val parts = mutableListOf<String>()
+        if (singleTags.isNotEmpty()) {
+            parts.add(singleTags.joinToString("/"))
+        }
+        parts.addAll(complexClusters)
+        return parts.joinToString(" & ")
     }
 
     // MARK: - Quick Notes Mutations

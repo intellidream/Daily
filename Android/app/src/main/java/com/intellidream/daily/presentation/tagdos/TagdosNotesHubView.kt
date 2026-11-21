@@ -28,9 +28,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Notifications
@@ -110,6 +112,7 @@ fun TagdosNotesHubView(
     var showingAddTagSheet by remember { mutableStateOf(false) }
     var showingReminderPicker by remember { mutableStateOf(false) }
     var showingRenameSheet by remember { mutableStateOf(false) }
+    var showingImportSheet by remember { mutableStateOf(false) }
 
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -203,38 +206,58 @@ fun TagdosNotesHubView(
                     }
                 }
 
-                // Right Mode Toggle (exact 36dp Health Hub circular glass pill)
-                if (!isNotesTab) {
-                    val modeColor = if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple
+                // Right Actions: Import Tasks + Mode Toggle
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(modeColor.copy(alpha = 0.18f))
-                            .border(1.dp, modeColor.copy(alpha = 0.40f), CircleShape)
-                            .clickable {
-                                if (isRawEditMode) {
-                                    if (currentStream != null) {
-                                        repository.updateStreamRawText(currentStream.id, rawTextBuffer)
-                                    }
-                                } else {
-                                    if (currentStream != null) {
-                                        rawTextBuffer = currentStream.rawText
-                                    }
-                                }
-                                isRawEditMode = !isRawEditMode
-                            },
+                            .background(ThemeColors.accentCyan.copy(alpha = 0.16f))
+                            .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.35f), CircleShape)
+                            .clickable { showingImportSheet = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (isRawEditMode) Icons.Rounded.GridView else Icons.Rounded.TextFields,
-                            contentDescription = if (isRawEditMode) "Canvas Mode" else "Raw Text Mode",
-                            tint = modeColor,
+                            imageVector = Icons.Rounded.Download,
+                            contentDescription = "Import Tasks",
+                            tint = ThemeColors.accentCyan,
                             modifier = Modifier.size(18.dp)
                         )
                     }
-                } else {
-                    Spacer(modifier = Modifier.size(36.dp))
+
+                    if (!isNotesTab) {
+                        val modeColor = if (isRawEditMode) ThemeColors.accentGreen else ThemeColors.accentPurple
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(modeColor.copy(alpha = 0.18f))
+                                .border(1.dp, modeColor.copy(alpha = 0.40f), CircleShape)
+                                .clickable {
+                                    if (isRawEditMode) {
+                                        if (currentStream != null) {
+                                            repository.updateStreamRawText(currentStream.id, rawTextBuffer)
+                                        }
+                                    } else {
+                                        if (currentStream != null) {
+                                            rawTextBuffer = currentStream.rawText
+                                        }
+                                    }
+                                    isRawEditMode = !isRawEditMode
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isRawEditMode) Icons.Rounded.GridView else Icons.Rounded.TextFields,
+                                contentDescription = if (isRawEditMode) "Canvas Mode" else "Raw Text Mode",
+                                tint = modeColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -316,7 +339,29 @@ fun TagdosNotesHubView(
                     }
                 }
 
-                // Dedicated 6th Tab: Notes
+                // Add New Stream Button
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(ThemeColors.accentCyan.copy(alpha = 0.16f))
+                        .border(1.dp, ThemeColors.accentCyan.copy(alpha = 0.35f), CircleShape)
+                        .clickable {
+                            repository.createStream()
+                            selectedStreamIndex = streams.size
+                            isRawEditMode = false
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "New Stream",
+                        tint = ThemeColors.accentCyan,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+
+                // Dedicated Notes Tab
                 val isNotesSelected = selectedStreamIndex >= streams.size
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -438,6 +483,7 @@ fun TagdosNotesHubView(
     activePillAction?.let { action ->
         TagdosPillActionSheet(
             pill = action.pill,
+            onUpdateText = { newText -> repository.updatePillText(action.streamId, action.pill.id, newText) },
             onRecycle = { repository.recyclePillToBack(action.streamId, action.pill.id) },
             onToggleCompletion = { repository.togglePillCompletion(action.streamId, action.pill.id) },
             onMoveToFront = { repository.movePillToFront(action.streamId, action.pill.id) },
@@ -459,6 +505,11 @@ fun TagdosNotesHubView(
     if (showingRenameSheet && currentStream != null) {
         TagdosRenameStreamSheet(
             currentTitle = currentStream.customTitle ?: currentStream.title,
+            canDeleteStream = streams.size > 1,
+            onDeleteStream = {
+                repository.deleteStream(currentStream.id)
+                selectedStreamIndex = (selectedStreamIndex).coerceAtMost((streams.size - 2).coerceAtLeast(0))
+            },
             onSaveTitle = { newTitle ->
                 repository.updateStreamTitle(currentStream.id, newTitle)
             },
@@ -473,6 +524,24 @@ fun TagdosNotesHubView(
                 repository.setStreamReminder(currentStream.id, timestamp)
             },
             onDismiss = { showingReminderPicker = false }
+        )
+    }
+
+    if (showingImportSheet) {
+        TagdosImportTasksSheet(
+            repository = repository,
+            initialStreamId = currentStream?.id,
+            onImported = { importedId ->
+                val idx = repository.streams.value.indexOfFirst { it.id == importedId }
+                if (idx >= 0) {
+                    selectedStreamIndex = idx
+                    isRawEditMode = false
+                } else {
+                    selectedStreamIndex = streams.size
+                    isRawEditMode = false
+                }
+            },
+            onDismiss = { showingImportSheet = false }
         )
     }
 }
@@ -569,35 +638,43 @@ private fun InteractiveCanvasCard(
         // Clusters Flow
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            stream.clusters.forEachIndexed { clusterIndex, cluster ->
-                ClusterCardView(
-                    clusterIndex = clusterIndex,
-                    cluster = cluster,
-                    onAddPill = { onAddPillClick(clusterIndex) },
-                    onPillClick = onPillClick
-                )
-
-                if (clusterIndex < stream.clusters.size - 1) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
+            if (stream.clusters.isEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.04f))
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "No clusters yet. Add a tag or import external tasks.",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(ThemeColors.accentCyan.copy(alpha = 0.15f))
+                            .clickable { onAddPillClick(0) }
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(ThemeColors.accentPurple.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "&",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ThemeColors.accentPurple
-                            )
-                        }
+                        Text("+ Tag", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ThemeColors.accentCyan)
                     }
+                }
+            } else {
+                stream.clusters.forEachIndexed { clusterIndex, cluster ->
+                    ClusterCardView(
+                        clusterIndex = clusterIndex,
+                        cluster = cluster,
+                        onAddPill = { onAddPillClick(clusterIndex) },
+                        onPillClick = onPillClick
+                    )
                 }
             }
         }

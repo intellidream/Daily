@@ -56,6 +56,25 @@
                     android:scheme="com.intellidream.daily" />
             </intent-filter>
 
+            <!-- Microsoft To Do OAuth PKCE deep link callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="login-callback"
+                    android:scheme="com.intellidream.daily.desktop" />
+            </intent-filter>
+
+            <!-- Google Tasks OAuth PKCE deep link callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.googleusercontent.apps.605399352864-33jvco3b3cs3sivfj95dtcedjn0ufejf" />
+            </intent-filter>
+
             <!-- App deep links (daily://prism, daily://cosmos, daily://weather, daily://habits, daily://health) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

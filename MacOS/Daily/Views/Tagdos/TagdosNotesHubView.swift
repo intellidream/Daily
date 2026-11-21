@@ -16,6 +16,7 @@ public struct TagdosNotesHubView: View {
 
     // Pill Action Sheet / Dialog state
     @State private var activePillAction: TagDoPillAction? = nil
+    @State private var editingPillText: String = ""
     @State private var newPillClusterIndex: Int = 0
     @State private var showingAddTagSheet: Bool = false
     @State private var newTagInput: String = ""
@@ -27,6 +28,9 @@ public struct TagdosNotesHubView: View {
     // Stream Rename Sheet state
     @State private var showingRenameSheet: Bool = false
     @State private var editingStreamTitle: String = ""
+
+    // External Tasks Import Sheet state
+    @State private var showingImportSheet: Bool = false
 
     public var onNavigateBack: (() -> Void)? = nil
 
@@ -147,23 +151,37 @@ public struct TagdosNotesHubView: View {
         }
         .sheet(item: $activePillAction) { action in
             pillActionSheet(for: action)
-                .presentationDetents([.height(300)])
+                .frame(minWidth: 360)
+                .presentationDetents([.height(380)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingAddTagSheet) {
             addTagSheet
-                .presentationDetents([.height(200)])
+                .frame(minWidth: 340)
+                .presentationDetents([.height(210)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingReminderPicker) {
             reminderSheet
+                .frame(minWidth: 320)
                 .presentationDetents([.height(260)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingRenameSheet) {
             renameStreamSheet
-                .presentationDetents([.height(240)])
+                .frame(minWidth: 340)
+                .presentationDetents([.height(280)])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingImportSheet) {
+            TagdosImportTasksSheet(initialStreamId: currentStream?.id) { importedStreamId in
+                if let idx = store.streams.firstIndex(where: { $0.id == importedStreamId }) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedStreamIndex = idx
+                        rawTextBuffer = store.streams[idx].rawText
+                    }
+                }
+            }
         }
     }
 
@@ -204,37 +222,58 @@ public struct TagdosNotesHubView: View {
 
             Spacer()
 
-            if !isNotesTab {
-                // Dual Mode Toggle: Canvas vs Raw Edit
+            HStack(spacing: 8) {
                 Button {
                     triggerHaptic()
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        if isRawEditMode {
-                            // Saving from raw text
-                            if let stream = currentStream {
-                                store.updateStreamRawText(streamId: stream.id, newRawText: rawTextBuffer)
-                            }
-                        } else {
-                            if let stream = currentStream {
-                                rawTextBuffer = stream.rawText
-                            }
-                        }
-                        isRawEditMode.toggle()
-                    }
+                    showingImportSheet = true
                 } label: {
-                    Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle().fill(Color.white.opacity(0.08))
-                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                        )
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Import")
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .padding(.horizontal, 11)
+                    .frame(height: 36)
+                    .background(
+                        Capsule().fill(ThemeColors.accentCyan.opacity(0.14))
+                            .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.35), lineWidth: 1))
+                    )
                 }
                 .buttonStyle(.plain)
-                .help(isRawEditMode ? "Switch to Canvas View" : "Switch to Raw Text View")
-            } else {
-                Color.clear.frame(width: 36, height: 36)
+                .help("Import tasks from Microsoft To Do or Google Tasks")
+
+                if !isNotesTab {
+                    // Dual Mode Toggle: Canvas vs Raw Edit
+                    Button {
+                        triggerHaptic()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            if isRawEditMode {
+                                // Saving from raw text
+                                if let stream = currentStream {
+                                    store.updateStreamRawText(streamId: stream.id, newRawText: rawTextBuffer)
+                                }
+                            } else {
+                                if let stream = currentStream {
+                                    rawTextBuffer = stream.rawText
+                                }
+                            }
+                            isRawEditMode.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle().fill(Color.white.opacity(0.08))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(isRawEditMode ? "Switch to Canvas View" : "Switch to Raw Text View")
+                }
             }
         }
     }
@@ -295,7 +334,31 @@ public struct TagdosNotesHubView: View {
                     .buttonStyle(.plain)
                 }
 
-                // 6th Tab: Dedicated Quick Notes stream
+                // Add New Stream Button
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        let created = store.createStream()
+                        selectedStreamIndex = max(0, store.streams.count - 1)
+                        rawTextBuffer = created.rawText
+                        isRawEditMode = false
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(ThemeColors.accentCyan.opacity(0.15))
+                                .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.35), lineWidth: 1))
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Create New Stream")
+
+                // Dedicated Quick Notes stream
                 let isNotesSelected = selectedStreamIndex >= store.streams.count
                 Button {
                     triggerHaptic()
@@ -408,22 +471,38 @@ public struct TagdosNotesHubView: View {
     }
 
     private func clustersFlowView(stream: TagDoStream) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(Array(stream.clusters.enumerated()), id: \.element.id) { clusterIndex, cluster in
-                clusterCardView(clusterIndex: clusterIndex, cluster: cluster, streamId: stream.id)
-
-                if clusterIndex < stream.clusters.count - 1 {
-                    HStack {
-                        Spacer()
-                        Text("&")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundColor(ThemeColors.accentPurple)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(ThemeColors.accentPurple.opacity(0.15))
+        VStack(alignment: .leading, spacing: 10) {
+            if stream.clusters.isEmpty {
+                HStack {
+                    Text("No clusters yet. Add a tag or import external tasks.")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.white.opacity(0.5))
+                    Spacer()
+                    Button {
+                        triggerHaptic()
+                        newPillClusterIndex = 0
+                        newTagInput = ""
+                        showingAddTagSheet = true
+                    } label: {
+                        Text("+ Tag")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(ThemeColors.accentCyan.opacity(0.15))
                             .clipShape(Capsule())
-                        Spacer()
                     }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white.opacity(0.04))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                )
+            } else {
+                ForEach(Array(stream.clusters.enumerated()), id: \.element.id) { clusterIndex, cluster in
+                    clusterCardView(clusterIndex: clusterIndex, cluster: cluster, streamId: stream.id)
                 }
             }
         }
@@ -477,6 +556,7 @@ public struct TagdosNotesHubView: View {
     private func interactivePill(pill: TagDoPill, streamId: UUID, isLeading: Bool) -> some View {
         Button {
             triggerHaptic()
+            editingPillText = pill.rawText
             activePillAction = TagDoPillAction(streamId: streamId, pill: pill)
         } label: {
             HStack(spacing: 4) {
@@ -567,12 +647,45 @@ public struct TagdosNotesHubView: View {
     // MARK: - Pill Action Sheet
     @ViewBuilder
     private func pillActionSheet(for action: TagDoPillAction) -> some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Tag: \(action.pill.rawText)")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+        let trimmedEdit = editingPillText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canSaveEdit = !trimmedEdit.isEmpty && trimmedEdit != action.pill.rawText
+
+        VStack(spacing: 14) {
+            // Inline Pill Text Editor
+            HStack(spacing: 8) {
+                TextField("Tag...", text: $editingPillText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(pillColor(for: action.pill.type))
-                Spacer()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(pillColor(for: action.pill.type).opacity(0.35), lineWidth: 1)
+                    )
+                    .onSubmit {
+                        if canSaveEdit {
+                            triggerHaptic()
+                            store.updatePillText(streamId: action.streamId, pillId: action.pill.id, newText: trimmedEdit)
+                            activePillAction = nil
+                        }
+                    }
+
+                Button("Save") {
+                    triggerHaptic()
+                    store.updatePillText(streamId: action.streamId, pillId: action.pill.id, newText: trimmedEdit)
+                    activePillAction = nil
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundColor(canSaveEdit ? .black : Color.white.opacity(0.4))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(canSaveEdit ? ThemeColors.accentCyan : Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .disabled(!canSaveEdit)
             }
 
             VStack(spacing: 10) {
@@ -586,7 +699,7 @@ public struct TagdosNotesHubView: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(ThemeColors.accentCyan)
-                        Text("Recycle to Back (Mută la coadă • Recurent)")
+                        Text("Recycle to Back (Recurring)")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.white)
                         Spacer()
@@ -595,6 +708,7 @@ public struct TagdosNotesHubView: View {
                     .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
+                .buttonStyle(.plain)
 
                 // Option 2: Toggle Done (Stay in place)
                 Button {
@@ -606,7 +720,7 @@ public struct TagdosNotesHubView: View {
                         Image(systemName: action.pill.isCompleted ? "arrow.uturn.backward" : "checkmark.circle.fill")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(ThemeColors.accentGreen)
-                        Text(action.pill.isCompleted ? "Unmark / Debifează" : "Mark Done (Bifează pe loc)")
+                        Text(action.pill.isCompleted ? "Unmark Done" : "Mark Done (In Place)")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.white)
                         Spacer()
@@ -615,6 +729,7 @@ public struct TagdosNotesHubView: View {
                     .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
+                .buttonStyle(.plain)
 
                 // Option 3: Move to Front (Prioritize)
                 Button {
@@ -626,7 +741,7 @@ public struct TagdosNotesHubView: View {
                         Image(systemName: "arrow.up.to.line")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(ThemeColors.accentOrange)
-                        Text("Prioritizează la început de șir")
+                        Text("Prioritize to Front")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.white)
                         Spacer()
@@ -635,6 +750,7 @@ public struct TagdosNotesHubView: View {
                     .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
+                .buttonStyle(.plain)
 
                 // Option 4: Delete permanently (One-off)
                 Button {
@@ -646,7 +762,7 @@ public struct TagdosNotesHubView: View {
                         Image(systemName: "trash.fill")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(ThemeColors.accentPink)
-                        Text("Șterge definitiv (One-Off Task)")
+                        Text("Delete Permanently (One-Off)")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(ThemeColors.accentPink)
                         Spacer()
@@ -655,6 +771,7 @@ public struct TagdosNotesHubView: View {
                     .background(ThemeColors.accentPink.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(20)
@@ -664,11 +781,12 @@ public struct TagdosNotesHubView: View {
     // MARK: - Add Tag Sheet
     private var addTagSheet: some View {
         VStack(spacing: 16) {
-            Text("Adaugă Tag Nou în Cluster")
+            Text("Add New Tag to Cluster")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            TextField("Ex: MG, C$T, PL98, !MP$", text: $newTagInput)
+            TextField("e.g., MG, C$T, PL98, !MP$", text: $newTagInput)
+                .textFieldStyle(.plain)
                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundColor(.white)
                 .padding(12)
@@ -676,14 +794,15 @@ public struct TagdosNotesHubView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
             HStack(spacing: 10) {
-                Button("Anulează") {
+                Button("Cancel") {
                     showingAddTagSheet = false
                 }
+                .buttonStyle(.plain)
                 .foregroundColor(.white.opacity(0.6))
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
 
-                Button("Adaugă Tag") {
+                Button("Add Tag") {
                     triggerHaptic()
                     if let stream = currentStream {
                         let clean = newTagInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -693,6 +812,7 @@ public struct TagdosNotesHubView: View {
                     }
                     showingAddTagSheet = false
                 }
+                .buttonStyle(.plain)
                 .foregroundColor(.white)
                 .font(.system(size: 13, weight: .bold))
                 .padding(.vertical, 8)
@@ -709,7 +829,7 @@ public struct TagdosNotesHubView: View {
     private var renameStreamSheet: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Redenumește Stream")
+                Text("Rename Stream")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 Spacer()
@@ -719,12 +839,13 @@ public struct TagdosNotesHubView: View {
                         store.updateStreamTitle(streamId: stream.id, newTitle: nil)
                         showingRenameSheet = false
                     }
+                    .buttonStyle(.plain)
                     .foregroundColor(ThemeColors.accentCyan)
                     .font(.system(size: 12, weight: .semibold))
                 }
             }
 
-            TextField("Nume stream...", text: $editingStreamTitle)
+            TextField("Stream title...", text: $editingStreamTitle)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.white)
@@ -733,27 +854,51 @@ public struct TagdosNotesHubView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
             HStack(spacing: 12) {
-                Button("Anulează") {
+                Button("Cancel") {
                     showingRenameSheet = false
                 }
+                .buttonStyle(.plain)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.white.opacity(0.6))
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
 
-                Button("Salvează") {
+                Button("Save") {
                     triggerHaptic()
                     if let stream = currentStream {
                         store.updateStreamTitle(streamId: stream.id, newTitle: editingStreamTitle)
                     }
                     showingRenameSheet = false
                 }
+                .buttonStyle(.plain)
                 .foregroundColor(.white)
                 .font(.system(size: 13, weight: .bold))
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
                 .background(ThemeColors.accentPurple.opacity(0.6))
                 .clipShape(Capsule())
+            }
+
+            if store.streams.count > 1, let stream = currentStream {
+                Button(role: .destructive) {
+                    triggerHaptic()
+                    store.deleteStream(streamId: stream.id)
+                    selectedStreamIndex = min(selectedStreamIndex, max(0, store.streams.count - 1))
+                    showingRenameSheet = false
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Delete Stream")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(ThemeColors.accentPink)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(ThemeColors.accentPink.opacity(0.1))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(20)
@@ -764,32 +909,34 @@ public struct TagdosNotesHubView: View {
     private var reminderSheet: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Setează Reminder Stream")
+                Text("Set Stream Reminder")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 Spacer()
                 if let stream = currentStream, stream.streamReminder != nil {
-                    Button("Șterge") {
+                    Button("Clear") {
                         triggerHaptic()
                         store.setStreamReminder(streamId: stream.id, date: nil)
                         showingReminderPicker = false
                     }
+                    .buttonStyle(.plain)
                     .foregroundColor(ThemeColors.accentPink)
                     .font(.system(size: 12, weight: .semibold))
                 }
             }
 
-            DatePicker("Ora", selection: $reminderPickerDate, displayedComponents: [.hourAndMinute])
+            DatePicker("Time", selection: $reminderPickerDate, displayedComponents: [.hourAndMinute])
                 .datePickerStyle(.wheel)
                 .labelsHidden()
 
-            Button("Salvează Reminder") {
+            Button("Save Reminder") {
                 triggerHaptic()
                 if let stream = currentStream {
                     store.setStreamReminder(streamId: stream.id, date: reminderPickerDate)
                 }
                 showingReminderPicker = false
             }
+            .buttonStyle(.plain)
             .foregroundColor(.white)
             .font(.system(size: 13, weight: .bold))
             .padding(.vertical, 10)

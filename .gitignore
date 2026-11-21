@@ -287,6 +287,7 @@ local.properties
 
 # App Secrets
 Configuration/Secrets.cs
+DailyCore/Sources/DailyCore/Configuration/Secrets.swift
 WatchOS/DailyWatch/DailyWatch.xcodeproj/project.xcworkspace/xcuserdata/mihai.xcuserdatad/UserInterfaceState.xcuserstate
 
 # Swift Package Manager & Xcode Build

@@ -552,6 +552,9 @@ class MainActivity : ComponentActivity() {
         if (intent == null) return
         authRepository.handleIntent(intent)
         intent.data?.let { uri ->
+            if (com.intellidream.daily.network.TagdosExternalTasksService.handleOAuthCallback(uri)) {
+                return
+            }
             if (uri.scheme == "com.intellidream.daily" && uri.host == "login-callback") {
                 lifecycleScope.launch {
                     authRepository.handleAuthCallback(uri)

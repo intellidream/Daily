@@ -56,6 +56,7 @@ class DailyApp : Application() {
         super.onCreate()
         instance = this
         com.intellidream.daily.network.SupabaseClientManager.initialize(this)
+        com.intellidream.daily.network.TagdosExternalTasksService.initialize(this)
         settingsRepository = SettingsRepository(this)
         authRepository = AuthRepository(context = this)
         weatherCacheRepository = WeatherCacheRepository(this)

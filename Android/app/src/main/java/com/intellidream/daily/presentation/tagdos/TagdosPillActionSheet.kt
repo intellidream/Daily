@@ -16,17 +16,27 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.North
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Undo
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,13 +45,13 @@ import com.intellidream.daily.model.TagDoPill
 import com.intellidream.daily.model.TagDoPillType
 
 /**
- * Bottom sheet displaying interactive lifecycle operations for a TagDoS pill.
- * 1:1 Kotlin port of iOS [pillActionSheet in TagdosNotesHubView.swift].
+ * Bottom sheet displaying interactive lifecycle operations and inline editing for a TagDoS pill.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagdosPillActionSheet(
     pill: TagDoPill,
+    onUpdateText: (String) -> Unit,
     onRecycle: () -> Unit,
     onToggleCompletion: () -> Unit,
     onMoveToFront: () -> Unit,
@@ -49,6 +59,9 @@ fun TagdosPillActionSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var editBuffer by remember(pill.id) { mutableStateOf(pill.rawText) }
+    val trimmedEdit = editBuffer.trim()
+    val canSaveEdit = trimmedEdit.isNotEmpty() && trimmedEdit != pill.rawText
     val pillColor = when (pill.type) {
         TagDoPillType.Standard -> Color(0xFF00E5FF)
         TagDoPillType.Financial -> Color(0xFF00E676)
@@ -69,18 +82,48 @@ fun TagdosPillActionSheet(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Pill Title Header
+            // Inline Tag Editor Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Tag: ${pill.rawText}",
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = pillColor
+                OutlinedTextField(
+                    value = editBuffer,
+                    onValueChange = { editBuffer = it },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = pillColor
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = pillColor,
+                        unfocusedBorderColor = pillColor.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(10.dp)
                 )
-                Spacer(modifier = Modifier.weight(1f))
+
+                Button(
+                    onClick = {
+                        onUpdateText(trimmedEdit)
+                        onDismiss()
+                    },
+                    enabled = canSaveEdit,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ThemeColors.accentCyan,
+                        disabledContainerColor = Color.White.copy(alpha = 0.08f)
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = "Save",
+                        color = if (canSaveEdit) Color.Black else Color.White.copy(alpha = 0.4f),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             // Options List
@@ -92,7 +135,7 @@ fun TagdosPillActionSheet(
                 PillActionRow(
                     icon = Icons.Rounded.Sync,
                     iconTint = ThemeColors.accentCyan,
-                    title = "Recycle to Back (Mută la coadă • Recurent)",
+                    title = "Recycle to Back (Recurring)",
                     backgroundColor = Color.White.copy(alpha = 0.06f),
                     textColor = Color.White,
                     onClick = {
@@ -105,7 +148,7 @@ fun TagdosPillActionSheet(
                 PillActionRow(
                     icon = if (pill.isCompleted) Icons.Rounded.Undo else Icons.Rounded.CheckCircle,
                     iconTint = ThemeColors.accentGreen,
-                    title = if (pill.isCompleted) "Unmark / Debifează" else "Mark Done (Bifează pe loc)",
+                    title = if (pill.isCompleted) "Unmark Done" else "Mark Done (In Place)",
                     backgroundColor = Color.White.copy(alpha = 0.06f),
                     textColor = Color.White,
                     onClick = {
@@ -118,7 +161,7 @@ fun TagdosPillActionSheet(
                 PillActionRow(
                     icon = Icons.Rounded.North,
                     iconTint = ThemeColors.accentOrange,
-                    title = "Prioritizează la început de șir",
+                    title = "Prioritize to Front",
                     backgroundColor = Color.White.copy(alpha = 0.06f),
                     textColor = Color.White,
                     onClick = {
@@ -131,7 +174,7 @@ fun TagdosPillActionSheet(
                 PillActionRow(
                     icon = Icons.Rounded.Delete,
                     iconTint = ThemeColors.accentPink,
-                    title = "Șterge definitiv (One-Off Task)",
+                    title = "Delete Permanently (One-Off)",
                     backgroundColor = ThemeColors.accentPink.copy(alpha = 0.10f),
                     textColor = ThemeColors.accentPink,
                     onClick = {

@@ -847,7 +847,7 @@ namespace Daily_WinUI.Views
                 listener.Prefixes.Add(redirectUri);
                 listener.Start();
 
-                var authUrl = $"https://accounts.google.com/o/oauth2/v2/auth?client_id={Secrets.WindowsClientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("https://www.googleapis.com/auth/calendar.readonly")}&access_type=offline&prompt=select_account&state={state}";
+                var authUrl = $"https://accounts.google.com/o/oauth2/v2/auth?client_id={Secrets.WindowsClientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly")}&access_type=offline&prompt=select_account&state={state}";
 
                 await Launcher.LaunchUriAsync(new Uri(authUrl));
 

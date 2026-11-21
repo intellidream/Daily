@@ -16,6 +16,9 @@ namespace Daily.Services
         Task UpdateStreamTitleAsync(string streamId, string newTitle);
         Task SetStreamReminderAsync(string streamId, DateTime? reminder);
         Task UpdateStreamMemosAsync(string streamId, string memos, string attachmentsJson);
+        Task<TagDoStream> CreateStreamAsync(string? title = null, string rawText = "", string activeMemos = "");
+        Task DeleteStreamAsync(string streamId);
+        Task<TagDoStream> ImportExternalTasksAsync(string mode, string? targetStreamId, string? newStreamTitle, List<string> rawDslChunks, List<string> memoLines);
 
         Task<List<TagDoQuickNote>> GetQuickNotesAsync();
         Task<TagDoQuickNote> CreateQuickNoteAsync(string title, string content, bool isPinned = false);
