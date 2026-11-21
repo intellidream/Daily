@@ -4,7 +4,7 @@
 
 **Tagdos & Notes** is a high-density, mnemonic productivity and quick-capture system designed for DayOne. Inspired by high-velocity executive note-taking and cognitive shorthand, it compresses daily operations, routines, reminders, and financial checkpoints into dense, obfuscated lines of mental tags.
 
-Instead of heavy database rows and complex forms, Tagdos structures work into **Streams** (1 to 5) represented as single-line syntax strings that can be scanned at a glance, prioritized on the fly, and reflected seamlessly across Dashboard cards, interactive Hub views, and iOS System Widgets.
+Instead of heavy database rows and complex forms, Tagdos structures work into **Dynamic Streams** (`1..N`, seeded with 5 defaults and expandable via `+`) represented as single-line syntax strings that can be scanned at a glance, prioritized on the fly, and reflected seamlessly across Dashboard cards, interactive Hub views, iOS System Widgets, macOS, Android, and Windows (WinUI 3).
 
 ---
 
@@ -52,6 +52,9 @@ A core requirement of Tagdos is **task reusability**:
 ### 3.2 Parser (`TagdosParser.swift`)
 - `parseStream(raw:title:reminderTime:) -> TagDoStream`: Deterministic parser from raw string into cluster and pill hierarchy.
 - `serializeStream(_ stream: TagDoStream) -> String`: Serializes modified clusters back into standard shorthand notation.
+- `updatePillText(in:pillId:newText:) -> TagDoStream`: Edits an existing pill's text inline, re-evaluates its semantic pill type (`financial`, `urgent`, `metric`, `action`), and re-serializes `rawSyntax`.
+- `isAlreadyTagdosDsl(_:)`: Detects whether an external task title is already written in TagDoS DSL shorthand (`/` clusters, uppercase mnemonics, `$`/`€`/`!`/metric tokens).
+- `prepareImportItem(title:notes:isHighImportance:)`: Preserves valid TagDoS DSL titles verbatim (appending only notes if present), or converts natural-language titles into an editable mnemonic proposal plus formatted `• [TAG] Title — Notes` memo entry.
 - `recyclePillToBack(pillId:in:) -> TagDoStream`: Moves completed pill to end of stream.
 - `togglePillCompletion(pillId:in:) -> TagDoStream`: Toggles completion status.
 - `movePillToFront(pillId:in:) -> TagDoStream`: Bumps pill to top priority.
@@ -120,13 +123,17 @@ Accessible via Dashboard tap or `daily://tagdos` deep link:
   - Replaced legacy text back button with a clean, circular Liquid Glass back button (`chevron.left` in 32x32 circle, no "Dashboard" label).
   - Integrated interactive edge swipe-to-dismiss gesture (`startX <= 75 && translationX > 50`) for seamless natural navigation.
 - **Stream Switcher Bar**:
-  - 6 segmented tabs: Streams 1–5 (`S1` to `S5`) plus dedicated `Notes` tab.
-  - `S1`–`S5` are rendered inside distinct mini circular badges (`Circle()` with Purple glass accent) to stand out clearly beside the driving tag.
+  - Dynamic stream tabs (`S1` to `SN`), a `+` button to create additional streams beyond 5, and a dedicated `Notes` tab.
+  - `S1`–`SN` are rendered inside distinct mini circular badges (`Circle()` with Purple glass accent) to stand out clearly beside the driving tag.
   - Clean `Notes` tab label (`Image(systemName: "note.text")` + `Text("Notes")`), removing redundant trailing emojis.
-- **Dynamic & Custom Stream Naming**:
+- **Clean Cluster Canvas & Inline Pill Editing**:
+  - Standalone visual `&` separator rows between cluster cards are omitted in Canvas view on all platforms (maximizing vertical density) while keeping `&` intact inside the serialized DSL and Raw Text editor.
+  - Tapping/right-clicking any pill opens inline **Edit Tag** controls (re-classifying semantic color/type on save) alongside Prioritize to Front, Mark Done, Recycle to Back, and Delete.
+- **Dynamic & Custom Stream Naming & Deletion**:
   - Intelligent auto-detection of domain keywords (e.g. Work & Code, Health & Fitness, Finances & Bills, Home & Life, Daily Ops, or Driving Tag focus).
-  - Interactive stream rename sheet allowing custom naming.
+  - Interactive stream rename sheet allowing custom naming and **Delete Stream** (when more than one stream exists), re-indexing remaining stream order numbers and pruning deleted remote rows in Supabase.
   - Re-detection fallback: if the user deletes or clears the custom name, the system automatically falls back to the auto-detected domain title.
+- **100% English UI Standardization**: All TagDoS views, dialogs, action sheets, and fallback quick notes across iOS, macOS, Android, and WinUI 3 are standardized in English.
 - **Collapsible Per-Stream Active Memos (`TagdosActiveMemoView.swift`)**:
   - Compact collapsible header showing memo and attachment count badges, preserving vertical screen space for the cluster canvas.
   - Smooth spring animation toggle to expand full Markdown editor, file carousel, and media previews.
@@ -168,4 +175,22 @@ Registered in `DailyWidgetsBundle` under `com.intellidream.daily.TagdosWidget`:
 - **Positioning**: TagDoS is elevated to a first-class primary tab inside `FloatingGlassCapsule`: `[Dashboard, Money, TagDoS, Health, Habits]`.
 - **Dock Scrubbing & Flick Gestures**: The dynamic segment calculation seamlessly splits the floating capsule into 5 equal touch areas, preserving both instant single-tap switching and continuous horizontal scrubbing with tactile haptics.
 - **Root-Level Navigation**: Directly integrated into `RootView` with `onNavigateBack` fallback to Dashboard via top-left back button or edge swipe right.
+
+---
+
+## 9. External Task Import (Microsoft To Do & Google Tasks)
+
+TagDoS supports one-way, on-demand task import from **Microsoft To Do** and **Google Tasks** across **iOS**, **macOS**, **Android**, and **Windows (WinUI 3)**:
+
+### 9.1 Zero Background Egress & On-Demand Authentication
+- External task fetching and `public.calendar_accounts` lookups execute **exclusively when the user opens the Import UI** or explicitly taps Refresh/Connect — there are zero launch queries, background timers, or polling loops.
+- **Account Reuse & Re-Authentication**: Reads existing connected accounts from `calendar_accounts` (supporting 1-layer and WinUI 2-layer AES-GCM PBKDF2-SHA256 token decryption) and local OAuth cache. If unauthenticated or missing required scopes (`Tasks.Read` for Microsoft Graph, `https://www.googleapis.com/auth/tasks.readonly` for Google Tasks), the Import UI launches PKCE S256 OAuth directly (via `ASWebAuthenticationSession` on Apple platforms, system browser custom-scheme deep link callback on Android, and WinUI Calendar/OAuth flows on Windows).
+- OAuth client IDs/secrets are kept outside Git in ignored configuration files (`Secrets.swift` on Apple, `Android/local.properties` -> `BuildConfig` on Android, `Configuration/Secrets.cs` on Windows).
+
+### 9.2 DSL-Aware Conversion & No Back-Links
+- **Already TagDoS DSL**: If an incoming task title already matches TagDoS shorthand (`IsAlreadyTagdosDsl`), its exact DSL expression is imported directly with **no** mnemonic renaming and **no** redundant memo line (optional task notes still append to `active_memos`).
+- **Natural-Language Tasks**: Proposes an editable uppercase mnemonic (`$` / `€` / `!` inferred from keywords and high-importance flags) and appends `• [TAG] Original Title` (plus notes if present) to `active_memos`.
+- **Destination Modes**: Multi-selected tasks can be imported as **Append to existing stream**, **Replace existing stream** (replacing existing tags/memos cleanly), or **Create New Stream**.
+- **Pure Local Ownership (Zero Back-Links)**: Once imported, tasks live exclusively as native TagDoS streams and memos with zero external task IDs or write-back sync to Microsoft/Google.
+
 
