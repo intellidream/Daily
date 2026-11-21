@@ -61,11 +61,29 @@ data class CosmosCameraState(
     val azimuthDegrees: Double = 180.0,
     val altitudeDegrees: Double = 42.0,
     val rollDegrees: Double = 0.0,
+    val rightNWZ0: Double = 0.0,
+    val rightNWZ1: Double = 1.0,
+    val rightNWZ2: Double = 0.0,
+    val upNWZ0: Double = 0.0,
+    val upNWZ1: Double = 0.0,
+    val upNWZ2: Double = 1.0,
+    val forwardNWZ0: Double = -1.0,
+    val forwardNWZ1: Double = 0.0,
+    val forwardNWZ2: Double = 0.0,
+    val hasValidBasis: Boolean = false,
     val fovDegrees: Double = 65.0,
     val isArGyroActive: Boolean = false,
+    val sensorMode: AndroidCosmosSensorMode = AndroidCosmosSensorMode.UNAVAILABLE,
     val sensorAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
     val isRelativeGyroFallback: Boolean = false,
+    val isGyroLockIgnoreMagnet: Boolean = false,
+    val isGyroscopeLessHardware: Boolean = false,
+    val hasMagneticInterference: Boolean = false,
     val needsCompassCalibration: Boolean = false,
+    val magneticFieldMicroTesla: Double = 0.0,
+    val expectedFieldMicroTesla: Double = 49.0,
+    val magneticDeclinationDegrees: Double = 0.0,
+    val azimuthOffsetDegrees: Double = 0.0,
     val hingeAngleDegrees: Float? = null
 )
 
@@ -190,22 +208,62 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
+        motionManager.onAutoLiftEngaged = {
+            viewModelScope.launch {
+                val curState = _state.value
+                if (!curState.isLiveTime && curState.playbackSpeedMultiplier == 0) {
+                    resetToLiveTime()
+                }
+                _cameraState.value = _cameraState.value.copy(
+                    isArGyroActive = true,
+                    sensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
+                )
+                postStatusBanner("Live Sky Active · Point phone at the sky")
+            }
+        }
+
         // Collect 120Hz validated optical-axis gyro/hinge stream into isolated cameraState
         viewModelScope.launch {
             motionManager.attitude.collect { att ->
                 val cur = _cameraState.value
-                if (cur.isArGyroActive) {
+                val isLiveSky = att.sensorMode == AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
+                if (isLiveSky && att.hasValidBasis) {
                     _cameraState.value = cur.copy(
+                        isArGyroActive = true,
+                        sensorMode = att.sensorMode,
                         azimuthDegrees = att.azimuthDegrees,
                         altitudeDegrees = att.altitudeDegrees,
                         rollDegrees = att.rollDegrees,
+                        rightNWZ0 = att.rightNWZ0, rightNWZ1 = att.rightNWZ1, rightNWZ2 = att.rightNWZ2,
+                        upNWZ0 = att.upNWZ0, upNWZ1 = att.upNWZ1, upNWZ2 = att.upNWZ2,
+                        forwardNWZ0 = att.forwardNWZ0, forwardNWZ1 = att.forwardNWZ1, forwardNWZ2 = att.forwardNWZ2,
+                        hasValidBasis = true,
                         sensorAccuracy = att.accuracy,
                         isRelativeGyroFallback = att.isRelativeGyroFallback,
+                        isGyroLockIgnoreMagnet = att.isGyroLockIgnoreMagnet,
+                        isGyroscopeLessHardware = att.isGyroscopeLessHardware,
+                        hasMagneticInterference = att.hasMagneticInterference,
                         needsCompassCalibration = att.needsCompassCalibration,
+                        magneticFieldMicroTesla = att.magneticFieldMicroTesla,
+                        expectedFieldMicroTesla = att.expectedFieldMicroTesla,
+                        magneticDeclinationDegrees = att.magneticDeclinationDegrees,
+                        azimuthOffsetDegrees = att.azimuthOffsetDegrees,
                         hingeAngleDegrees = att.hingeAngleDegrees
                     )
-                } else if (att.hingeAngleDegrees != cur.hingeAngleDegrees) {
-                    _cameraState.value = cur.copy(hingeAngleDegrees = att.hingeAngleDegrees)
+                } else {
+                    _cameraState.value = cur.copy(
+                        isArGyroActive = isLiveSky,
+                        sensorMode = att.sensorMode,
+                        hasValidBasis = false,
+                        isGyroLockIgnoreMagnet = att.isGyroLockIgnoreMagnet,
+                        isGyroscopeLessHardware = att.isGyroscopeLessHardware,
+                        hasMagneticInterference = att.hasMagneticInterference,
+                        magneticFieldMicroTesla = att.magneticFieldMicroTesla,
+                        expectedFieldMicroTesla = att.expectedFieldMicroTesla,
+                        magneticDeclinationDegrees = att.magneticDeclinationDegrees,
+                        azimuthOffsetDegrees = att.azimuthOffsetDegrees,
+                        hingeAngleDegrees = att.hingeAngleDegrees
+                    )
                 }
             }
         }
@@ -215,10 +273,13 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onObservatoryVisible() {
         isViewActive = true
-        motionManager.startHingeMonitoringOnly()
-        if (_cameraState.value.isArGyroActive) {
-            motionManager.startTracking()
-        }
+        motionManager.updateObserverLocation(
+            _state.value.observerLatitude,
+            _state.value.observerLongitude,
+            _state.value.observerElevationMeters
+        )
+        motionManager.updateCurrentFov(_cameraState.value.fovDegrees)
+        motionManager.beginObservatorySession(autoLiftEnabled = true)
         startLiveTicker()
     }
 
@@ -226,7 +287,17 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
         isViewActive = false
         tickerJob?.cancel()
         tickerJob = null
-        motionManager.stopTracking()
+        motionManager.endObservatorySession()
+        _cameraState.value = _cameraState.value.copy(
+            isArGyroActive = false,
+            hasValidBasis = false,
+            rollDegrees = 0.0
+        )
+    }
+
+    fun updateDisplayAndPosture(displayRotation: Int?, isTabletop: Boolean) {
+        motionManager.updateDisplayRotation(displayRotation)
+        motionManager.updateTabletopPosture(isTabletop)
     }
 
     private fun startLiveTicker() {
@@ -359,24 +430,65 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
         }
         val next = !_cameraState.value.isArGyroActive
         if (next) {
+            if (!_state.value.isLiveTime && _state.value.playbackSpeedMultiplier == 0) {
+                resetToLiveTime()
+            }
             motionManager.updateObserverLocation(
                 _state.value.observerLatitude,
                 _state.value.observerLongitude,
                 _state.value.observerElevationMeters
             )
+            motionManager.updateCurrentFov(_cameraState.value.fovDegrees)
             motionManager.startTracking()
             _cameraState.value = _cameraState.value.copy(
                 isArGyroActive = true,
-                isRelativeGyroFallback = motionManager.isUsingRelativeFallback
+                sensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY,
+                isRelativeGyroFallback = motionManager.isUsingRelativeFallbackDefault
             )
         } else {
-            motionManager.stopTracking()
-            if (isViewActive) motionManager.startHingeMonitoringOnly()
+            motionManager.stopTracking(explicitUserOff = true)
             _cameraState.value = _cameraState.value.copy(
                 isArGyroActive = false,
+                hasValidBasis = false,
+                sensorMode = AndroidCosmosSensorMode.MANUAL_OFF,
                 rollDegrees = 0.0
             )
         }
+    }
+
+    fun resumeLiveSky() {
+        if (!motionManager.hasSensorHardware) return
+        if (!_state.value.isLiveTime && _state.value.playbackSpeedMultiplier == 0) {
+            resetToLiveTime()
+        }
+        motionManager.updateObserverLocation(
+            _state.value.observerLatitude,
+            _state.value.observerLongitude,
+            _state.value.observerElevationMeters
+        )
+        motionManager.updateCurrentFov(_cameraState.value.fovDegrees)
+        motionManager.startTracking()
+        _cameraState.value = _cameraState.value.copy(
+            isArGyroActive = true,
+            sensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
+        )
+    }
+
+    fun setGyroLockIgnoreMagnet(enabled: Boolean) {
+        motionManager.setGyroLockIgnoreMagnet(enabled)
+    }
+
+    fun alignCompassToSelectedTarget() {
+        val target = _state.value.selectedTarget ?: return
+        val metrics = computeTargetMetrics(target, _state.value)
+        motionManager.alignAzimuthToTarget(metrics.azimuthDegrees)
+        val off = motionManager.attitude.value.azimuthOffsetDegrees
+        postStatusBanner("Compass aligned to ${target.title} (${"%+.1f°".format(off)} offset)")
+    }
+
+    fun clearCompassAlignmentOffset() {
+        motionManager.clearAzimuthAlignmentOffset()
+        postStatusBanner("Reset celestial compass alignment offset.")
     }
 
     fun toggleNightVision() {
@@ -422,13 +534,14 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
     fun setCameraAttitude(azimuth: Double, altitude: Double) {
         val cur = _cameraState.value
         if (cur.isArGyroActive) {
-            motionManager.stopTracking()
-            if (isViewActive) motionManager.startHingeMonitoringOnly()
+            motionManager.stopTracking(explicitUserOff = false)
         }
         val clampedAlt = altitude.coerceIn(-45.0, 90.0)
         val normalizedAz = (azimuth % 360.0 + 360.0) % 360.0
         _cameraState.value = cur.copy(
             isArGyroActive = false,
+            hasValidBasis = false,
+            sensorMode = motionManager.attitude.value.sensorMode,
             azimuthDegrees = normalizedAz,
             altitudeDegrees = clampedAlt,
             rollDegrees = 0.0
@@ -436,7 +549,9 @@ class CosmosViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setFov(fov: Double) {
-        _cameraState.value = _cameraState.value.copy(fovDegrees = fov.coerceIn(0.5, 130.0))
+        val clamped = fov.coerceIn(0.5, 130.0)
+        motionManager.updateCurrentFov(clamped)
+        _cameraState.value = _cameraState.value.copy(fovDegrees = clamped)
     }
 
     fun applyZoomPreset(preset: CosmosZoomPreset) {

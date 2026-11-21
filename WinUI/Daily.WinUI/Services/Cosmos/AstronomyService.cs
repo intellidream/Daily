@@ -280,13 +280,14 @@ namespace Daily_WinUI.Services.Cosmos
             double cr = Math.Cos(roll);
             double sr = Math.Sin(roll);
 
-            double rx = cr * r0x + sr * u0x;
-            double ry = cr * r0y + sr * u0y;
-            double rz = cr * r0z + sr * u0z;
+            // Positive cameraRollDegrees = clockwise device tilt around optical forward `f`
+            double rx = cr * r0x - sr * u0x;
+            double ry = cr * r0y - sr * u0y;
+            double rz = cr * r0z - sr * u0z;
 
-            double ux = -sr * r0x + cr * u0x;
-            double uy = -sr * r0y + cr * u0y;
-            double uz = -sr * r0z + cr * u0z;
+            double ux = sr * r0x + cr * u0x;
+            double uy = sr * r0y + cr * u0y;
+            double uz = sr * r0z + cr * u0z;
 
             return (rx, ry, rz, ux, uy, uz, fx, fy, fz);
         }

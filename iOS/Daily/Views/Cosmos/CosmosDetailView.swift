@@ -16,7 +16,9 @@ private struct CosmosHeadingReadoutView: View {
     let playbackSpeed: Double
     let isUsingTrueNorth: Bool
     let isMotionTracking: Bool
+    let sensorMode: CosmosSensorMode
     let needsCalibration: Bool
+    let hasMagneticInterference: Bool
     var isCompact: Bool = false
     let palette: CosmosPalette
 
@@ -48,9 +50,23 @@ private struct CosmosHeadingReadoutView: View {
                     .lineLimit(1)
 
                 if isMotionTracking {
-                    Text(needsCalibration ? (isCompact ? "· Cal (8)" : "· Calibrate Compass (Figure-8)") : (isUsingTrueNorth ? (isCompact ? "· True N" : "· True North AR") : (isCompact ? "· Mag AR" : "· Magnetic AR")))
+                    let badgeText: String = {
+                        if hasMagneticInterference {
+                            return isCompact ? "· Mag!" : "· Mag Interference"
+                        } else if needsCalibration {
+                            return isCompact ? "· Cal (∞)" : "· Calibrate (Figure-8)"
+                        } else {
+                            return isUsingTrueNorth ? (isCompact ? "· Live N" : "· Live Sky (True N)") : (isCompact ? "· Gyro" : "· Gyro-Stabilized")
+                        }
+                    }()
+                    Text(badgeText)
                         .font(.system(size: isCompact ? 8.5 : 10, weight: .semibold))
-                        .foregroundColor(needsCalibration ? palette.warning : palette.accent)
+                        .foregroundColor((needsCalibration || hasMagneticInterference) ? palette.warning : palette.accent)
+                        .lineLimit(1)
+                } else if sensorMode == .standbyAutoLift {
+                    Text(isCompact ? "· Lift >15°" : "· Lift >15° for Live Sky")
+                        .font(.system(size: isCompact ? 8.5 : 10, weight: .medium))
+                        .foregroundColor(palette.fgMuted)
                         .lineLimit(1)
                 } else if camera.isZenithPlanisphereLocked {
                     Text(isCompact ? "· Zenith" : "· Zenith Lock")
@@ -203,6 +219,7 @@ public struct CosmosDetailView: View {
     @State private var showingDrawer: Bool = false
     @State private var showingSearchSheet: Bool = false
     @State private var showingLayersSheet: Bool = false
+    @State private var showingSensorCalibrationSheet: Bool = false
     @State private var showingDateJumpPopover: Bool = false
     @State private var showSplitObservatoryDeck: Bool = true
     @State private var showTimeScrubberBar: Bool = false
@@ -277,6 +294,9 @@ public struct CosmosDetailView: View {
         }
         .sheet(isPresented: $showingLayersSheet) {
             layersAndDateSheet
+        }
+        .sheet(isPresented: $showingSensorCalibrationSheet) {
+            sensorCalibrationSheet
         }
         .onAppear {
             vm.onObservatoryAppear()
@@ -401,6 +421,34 @@ public struct CosmosDetailView: View {
                     topHUDBar(isSplitActive: isSplitActive, canToggleSplit: canToggleSplit, viewportWidth: geometry.size.width)
                     zoomPresetsStrip
 
+                    if vm.isMotionTrackingEnabled &&
+                        (motionService.hasMagneticInterference || motionService.needsCompassCalibration || motionService.isGyroLockIgnoreMagnet || abs(motionService.azimuthOffsetDegrees) >= 0.3) {
+                        Button {
+                            triggerHaptic()
+                            showingSensorCalibrationSheet = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: (motionService.hasMagneticInterference || motionService.needsCompassCalibration) ? "exclamationmark.triangle.fill" : "location.north.circle.fill")
+                                    .font(.system(size: 10.5, weight: .bold))
+                                Text(sensorDiagnosticsPillLabel)
+                                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor((motionService.hasMagneticInterference || motionService.needsCompassCalibration) ? vm.palette.warning : vm.palette.accent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(vm.palette.cardBackground)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().strokeBorder(
+                                    (motionService.hasMagneticInterference || motionService.needsCompassCalibration) ? vm.palette.warning.opacity(0.65) : vm.palette.border,
+                                    lineWidth: 1
+                                )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     if let banner = vm.statusBannerMessage {
                         Text(banner)
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -414,9 +462,32 @@ public struct CosmosDetailView: View {
                     }
                 }
 
-                // Bottom Inspector + Time Machine Console
+                // Bottom Inspector + Resume Live Sky + Time Machine Console
                 VStack(spacing: 10) {
                     Spacer()
+
+                    if motionService.isAvailable && !vm.isMotionTrackingEnabled && motionService.sensorMode == .pausedAfterDrag {
+                        Button {
+                            triggerHaptic()
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                                vm.resumeLiveSky()
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "location.north.line.fill")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text("Resume Live Sky")
+                                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            }
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(vm.palette.accent))
+                            .shadow(color: Color.black.opacity(0.45), radius: 8, y: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.scale.combined(with: .opacity))
+                    }
 
                     if let target = vm.selectedTarget {
                         targetInspectorCard(target: target)
@@ -542,7 +613,9 @@ public struct CosmosDetailView: View {
                 playbackSpeed: vm.playbackSpeedMultiplier,
                 isUsingTrueNorth: motionService.isUsingTrueNorth,
                 isMotionTracking: vm.isMotionTrackingEnabled,
+                sensorMode: motionService.sensorMode,
                 needsCalibration: motionService.needsCompassCalibration,
+                hasMagneticInterference: motionService.hasMagneticInterference,
                 isCompact: isCompact,
                 palette: p
             )
@@ -567,7 +640,7 @@ public struct CosmosDetailView: View {
                 .buttonStyle(.plain)
                 .help("Red Night-Vision Mode (N)")
 
-                // AR Gyroscope Tracker — ONLY shown on hardware with IMU (hidden on macOS desktop)
+                // Live Sky Compass / 9-DOF Sensor Fusion Toggle — ONLY shown on hardware with IMU (hidden on macOS desktop)
                 if motionService.isAvailable {
                     Button {
                         triggerHaptic()
@@ -575,15 +648,31 @@ public struct CosmosDetailView: View {
                             vm.toggleMotionTracking()
                         }
                     } label: {
-                        Image(systemName: vm.isMotionTrackingEnabled ? "dot.scope" : "gyroscope")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(vm.isMotionTrackingEnabled ? .black : p.accent)
-                            .frame(width: 34, height: 34)
-                            .background(Circle().fill(vm.isMotionTrackingEnabled ? p.accent : p.pillBackground))
-                            .overlay(Circle().strokeBorder(p.border, lineWidth: 1))
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: vm.isMotionTrackingEnabled ? "location.north.line.fill" : "safari")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(vm.isMotionTrackingEnabled ? .black : p.accent)
+                                .frame(width: 34, height: 34)
+                                .background(Circle().fill(vm.isMotionTrackingEnabled ? p.accent : p.pillBackground))
+                                .overlay(Circle().strokeBorder(p.border, lineWidth: 1))
+
+                            if vm.isMotionTrackingEnabled && (motionService.hasMagneticInterference || motionService.needsCompassCalibration) {
+                                Circle()
+                                    .fill(p.warning)
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 1, y: -1)
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
-                    .help("Point-to-Sky AR Gyroscope")
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                            triggerHaptic()
+                            showingSensorCalibrationSheet = true
+                        }
+                    )
+                    .help("Live Sky Compass (Long-press for Sensor & Magnetic Calibration)")
+                    .accessibilityLabel(vm.isMotionTrackingEnabled ? "Live Sky Active" : "Enable Live Sky Compass")
                 }
 
                 // Sky Layers & Grids Button
@@ -1140,9 +1229,16 @@ public struct CosmosDetailView: View {
             botCol = Color(hex: "#02040B")
         }
 
+        let halfSpan = max(size.width, size.height) * 0.65
+        let cx = size.width * 0.5
+        let cy = size.height * 0.5
+        let down = scene.nadirScreenUnitVector
+        let gradStart = CGPoint(x: cx - down.x * halfSpan, y: cy - down.y * halfSpan)
+        let gradEnd = CGPoint(x: cx + down.x * halfSpan, y: cy + down.y * halfSpan)
+
         context.fill(
             Path(fullRect),
-            with: .linearGradient(Gradient(colors: [topCol, botCol]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height))
+            with: .linearGradient(Gradient(colors: [topCol, botCol]), startPoint: gradStart, endPoint: gradEnd)
         )
 
         if sunAlt > -14.0, let sunPt = scene.sunScreenPoint {
@@ -1177,7 +1273,7 @@ public struct CosmosDetailView: View {
         context.drawLayer { layer in
             layer.translateBy(x: pt.x, y: pt.y)
             if item.dso.type == .galaxy {
-                layer.rotate(by: .degrees(-item.positionAngleDeg))
+                layer.rotate(by: .degrees(-item.positionAngleDeg - vm.camera.effectiveRoll))
                 let w = r * 2.1
                 let h = max(5.0, w * item.aspectRatio)
                 let rect = CGRect(x: -w * 0.5, y: -h * 0.5, width: w, height: h)
@@ -1247,6 +1343,7 @@ public struct CosmosDetailView: View {
             if planet.body == .saturn {
                 context.drawLayer { layer in
                     layer.translateBy(x: pt.x, y: pt.y)
+                    layer.rotate(by: .degrees(-14.0 - vm.camera.effectiveRoll))
                     let tiltSin = max(0.14, min(0.85, abs(sin(planet.saturnRingTiltDeg * (.pi / 180.0)))))
                     let outerW = planet.diameter * 2.25
                     let outerH = outerW * tiltSin
@@ -1328,17 +1425,17 @@ public struct CosmosDetailView: View {
                 var maskPath = Path(CGRect(origin: .zero, size: size))
                 maskPath.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
                 context.fill(maskPath, with: .color(gCol), style: FillStyle(eoFill: true))
-            } else if vm.camera.effectiveAltitude < 65.0,
-                      let first = scene.horizonPoints.first,
-                      let last = scene.horizonPoints.last,
-                      first.x < last.x {
-                let bottomY = max(size.height + 60, max(first.y, last.y) + 420)
+            } else if let first = scene.horizonPoints.first,
+                      let last = scene.horizonPoints.last {
+                // Close ground polygon along true Earth Nadir screen vector regardless of 0°..360° device roll!
+                let down = scene.nadirScreenUnitVector
+                let farDist = hypot(size.width, size.height) * 1.65
                 var ground = Path()
-                ground.move(to: CGPoint(x: first.x, y: bottomY))
+                ground.move(to: CGPoint(x: first.x + down.x * farDist, y: first.y + down.y * farDist))
                 for pt in scene.horizonPoints {
                     ground.addLine(to: pt)
                 }
-                ground.addLine(to: CGPoint(x: last.x, y: bottomY))
+                ground.addLine(to: CGPoint(x: last.x + down.x * farDist, y: last.y + down.y * farDist))
                 ground.closeSubpath()
                 context.fill(ground, with: .color(gCol))
             }
@@ -1549,57 +1646,78 @@ public struct CosmosDetailView: View {
                 .foregroundColor(p.fgSecondary)
                 .lineLimit(2)
 
-            // Ecosystem Action Row: Log Sighting (#sky TagDoS) & Schedule Observation
-            HStack(spacing: 8) {
-                Button {
-                    triggerHaptic()
-                    vm.logSightingToTagdos(for: target)
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "checklist")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Log Sighting (#sky)")
-                            .font(.system(size: 11, weight: .semibold))
+            // Ecosystem Action Row: Log Sighting (#sky TagDoS), Schedule Observation & 1-Tap Celestial Compass Alignment
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if motionService.isAvailable && vm.isMotionTrackingEnabled {
+                        Button {
+                            triggerHaptic()
+                            vm.alignCompassToTarget(target)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "location.north.line.fill")
+                                    .font(.system(size: 10.5, weight: .bold))
+                                Text("Align Compass")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(p.accent))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Point phone physically at \(target.name) in the real sky and tap to calibrate compass bearing")
                     }
-                    .foregroundColor(p.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(p.pillBackground))
-                    .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
 
-                Button {
-                    triggerHaptic()
-                    let schedDate = live.transitTime ?? live.riseTime ?? Date().addingTimeInterval(3600)
-                    Task {
-                        await vm.scheduleObservationInCalendar(
-                            title: "Observe \(target.name)",
-                            startDate: schedDate,
-                            notes: "\(target.subtitle)\nRecommended optics: \(target.recommendedOptics ?? "Naked Eye")\n\(target.lore)"
-                        )
+                    Button {
+                        triggerHaptic()
+                        vm.logSightingToTagdos(for: target)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "checklist")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Log Sighting (#sky)")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(p.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(p.pillBackground))
+                        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
                     }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "calendar.badge.plus")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Schedule")
-                            .font(.system(size: 11, weight: .semibold))
+                    .buttonStyle(.plain)
+
+                    Button {
+                        triggerHaptic()
+                        let schedDate = live.transitTime ?? live.riseTime ?? Date().addingTimeInterval(3600)
+                        Task {
+                            await vm.scheduleObservationInCalendar(
+                                title: "Observe \(target.name)",
+                                startDate: schedDate,
+                                notes: "\(target.subtitle)\nRecommended optics: \(target.recommendedOptics ?? "Naked Eye")\n\(target.lore)"
+                            )
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Schedule")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(p.fgPrimary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(p.pillBackground))
+                        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
                     }
-                    .foregroundColor(p.fgPrimary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(p.pillBackground))
-                    .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                Spacer()
-
-                if let optics = target.recommendedOptics {
-                    Text(optics)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(p.fgMuted)
+                    if let optics = target.recommendedOptics {
+                        Text(optics)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(p.fgMuted)
+                            .padding(.leading, 4)
+                    }
                 }
             }
         }
@@ -2307,5 +2425,154 @@ public struct CosmosDetailView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 12).fill(palette.pillBackground))
+    }
+
+    // MARK: - 9-DOF Sensor Fusion, Magnetic Interference & Figure-8 Calibration Sheet
+
+    private var sensorDiagnosticsPillLabel: String {
+        if motionService.hasMagneticInterference {
+            return String(format: "Mag Interference (%.0f µT) · Tap to Fix", motionService.magneticFieldMicroTesla)
+        } else if motionService.needsCompassCalibration {
+            return "Calibrate Compass (Figure-8 ∞) · Tap"
+        } else if motionService.isGyroLockIgnoreMagnet {
+            if abs(motionService.azimuthOffsetDegrees) >= 0.3 {
+                return String(format: "Gyro-Lock Balcony Mode (%+.1f° aligned)", motionService.azimuthOffsetDegrees)
+            }
+            return "Gyro-Lock Balcony Mode (Magnet Ignored)"
+        } else {
+            return String(format: "Target-Aligned (%+.1f° offset)", motionService.azimuthOffsetDegrees)
+        }
+    }
+
+    @ViewBuilder
+    private var sensorCalibrationSheet: some View {
+        let p = vm.palette
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [p.sheetBackgroundTop, p.sheetBackgroundBottom],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        // 1. Live Sensor Telemetry & Geomagnetic Field Health
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("9-DOF SENSOR & GEOMAGNETIC STATUS")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(p.fgMuted)
+
+                            HStack(spacing: 8) {
+                                metricPill(
+                                    title: "AMBIENT FIELD",
+                                    value: motionService.magneticFieldMicroTesla > 0.5
+                                        ? String(format: "%.1f µT (exp ~%.0f µT)", motionService.magneticFieldMicroTesla, motionService.expectedFieldMicroTesla)
+                                        : String(format: "Expected ~%.0f µT", motionService.expectedFieldMicroTesla)
+                                )
+                                metricPill(
+                                    title: "WMM DECLINATION",
+                                    value: String(format: "%+.1f° %@", motionService.wmmDeclinationDegrees, motionService.wmmDeclinationDegrees >= 0 ? "E" : "W")
+                                )
+                            }
+
+                            Text(
+                                motionService.hasMagneticInterference
+                                    ? "Strong local magnetic distortion detected. Remove magnetic phone cases/MagSafe accessories or step away from steel balcony railings, speakers, and reinforced concrete."
+                                    : (motionService.needsCompassCalibration
+                                        ? "Magnetometer accuracy is currently low. Sweep your phone smoothly in a 3D Figure-8 (∞) pattern across all three axes."
+                                        : "9-axis gyroscope, accelerometer, and True North magnetometer fusion are locked and healthy.")
+                            )
+                            .font(.system(size: 12))
+                            .foregroundColor((motionService.hasMagneticInterference || motionService.needsCompassCalibration) ? p.warning : p.fgSecondary)
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(p.cardBackground))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(p.border, lineWidth: 1))
+
+                        // 2. Figure-8 Calibration Guide
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "infinity")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(p.accent)
+                                Text("Figure-8 Compass Calibration")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundColor(p.fgPrimary)
+                            }
+                            Text("Hold your phone away from metal objects and trace a smooth 3D Figure-8 (∞) in the air 3–4 times while rotating your wrist so the magnetometer samples Earth's field along X, Y, and Z.")
+                                .font(.system(size: 12))
+                                .foregroundColor(p.fgSecondary)
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(p.cardBackground))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(p.border, lineWidth: 1))
+
+                        // 3. Balcony / MagSafe Gyro-Lock Mode & Celestial Target Alignment
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("BALCONY & MAGSAFE INTERFERENCE TOOLS")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(p.fgMuted)
+
+                            Toggle(
+                                isOn: Binding(
+                                    get: { motionService.isGyroLockIgnoreMagnet },
+                                    set: { newVal in
+                                        triggerHaptic()
+                                        motionService.setGyroLockIgnoreMagnet(newVal)
+                                    }
+                                )
+                            ) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Gyro-Stabilized Lock (Ignore Magnetometer)")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(p.fgPrimary)
+                                    Text("Uses pure gyroscope + gravity when stargazing near steel railings or magnetic cases.")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(p.fgMuted)
+                                }
+                            }
+                            .tint(p.accent)
+
+                            if abs(motionService.azimuthOffsetDegrees) >= 0.1 {
+                                Divider().background(p.border)
+                                HStack {
+                                    Text(String(format: "Active Celestial Sight Offset: %+.1f°", motionService.azimuthOffsetDegrees))
+                                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                        .foregroundColor(p.accent)
+                                    Spacer()
+                                    Button("Reset Offset") {
+                                        triggerHaptic()
+                                        motionService.clearAzimuthAlignmentOffset()
+                                    }
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(p.warning)
+                                }
+                            } else {
+                                Text("Tip: Select the Moon or any bright planet on the map, point your phone at it in the real sky, and tap \"Align Compass\" for sub-degree accuracy.")
+                                    .font(.system(size: 11.5))
+                                    .foregroundColor(p.fgSecondary)
+                            }
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(p.cardBackground))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(p.border, lineWidth: 1))
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("Compass & Sky Sensors")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showingSensorCalibrationSheet = false }
+                        .foregroundColor(p.accent)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }

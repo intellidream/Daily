@@ -62,7 +62,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>DayOne uses your location to provide accurate local weather forecasts and atmospheric conditions.</string>
+	<string>DayOne uses your location to provide accurate local weather forecasts, atmospheric seeing, and True North stargazing alignment.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>DayOne uses device motion sensors to smoothly orient the live star map when you point your phone toward the sky.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

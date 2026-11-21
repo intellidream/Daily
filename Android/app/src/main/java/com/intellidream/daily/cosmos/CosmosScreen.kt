@@ -10,14 +10,16 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +67,7 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -279,6 +282,12 @@ fun CosmosScreen(
     var showSearchSheet by remember { mutableStateOf(false) }
     var showLayersSheet by remember { mutableStateOf(false) }
     var showTonightsDrawer by remember { mutableStateOf(false) }
+    var showSensorCalibrationSheet by remember { mutableStateOf(false) }
+
+    // Keep active Display rotation & foldable tabletop posture synchronized with CosmosMotionManager
+    SideEffect {
+        viewModel.updateDisplayAndPosture(view.display?.rotation, isTabletopMode)
+    }
 
     fun openCalendarSchedule(title: String, description: String, startMs: Long, endMs: Long) {
         runCatching {
@@ -351,12 +360,29 @@ fun CosmosScreen(
                                 prefix = "Tabletop Flex"
                             )
 
-                            HudCircleButton(
-                                icon = Icons.Rounded.Search,
-                                contentDescription = "Search Celestial Catalog",
-                                palette = palette,
-                                onClick = { showSearchSheet = true }
-                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (viewModel.motionManager.hasSensorHardware) {
+                                    val tabletopCam by viewModel.cameraState.collectAsState()
+                                    HudCircleButton(
+                                        icon = Icons.Rounded.Explore,
+                                        contentDescription = "Live Sky Compass",
+                                        palette = palette,
+                                        isActive = tabletopCam.isArGyroActive,
+                                        hasWarningDot = tabletopCam.isArGyroActive && tabletopCam.needsCompassCalibration,
+                                        onLongClick = { showSensorCalibrationSheet = true },
+                                        onClick = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.toggleArGyro()
+                                        }
+                                    )
+                                }
+                                HudCircleButton(
+                                    icon = Icons.Rounded.Search,
+                                    contentDescription = "Search Celestial Catalog",
+                                    palette = palette,
+                                    onClick = { showSearchSheet = true }
+                                )
+                            }
                         }
                     }
 
@@ -414,6 +440,7 @@ fun CosmosScreen(
                             onNavigateToWeather = onNavigateToWeather,
                             onOpenSearch = { showSearchSheet = true },
                             onOpenLayers = { showLayersSheet = true },
+                            onOpenSensorCalibration = { showSensorCalibrationSheet = true },
                             onOpenTonightDrawer = { showTonightsDrawer = true },
                             onScheduleEvent = ::openCalendarSchedule
                         )
@@ -462,6 +489,7 @@ fun CosmosScreen(
                     onNavigateToWeather = onNavigateToWeather,
                     onOpenSearch = { showSearchSheet = true },
                     onOpenLayers = { showLayersSheet = true },
+                    onOpenSensorCalibration = { showSensorCalibrationSheet = true },
                     onOpenTonightDrawer = { showTonightsDrawer = true },
                     onScheduleEvent = ::openCalendarSchedule
                 )
@@ -541,6 +569,14 @@ fun CosmosScreen(
                 onDismiss = { showTonightsDrawer = false }
             )
         }
+
+        if (showSensorCalibrationSheet) {
+            CosmosSensorCalibrationModal(
+                viewModel = viewModel,
+                palette = palette,
+                onDismiss = { showSensorCalibrationSheet = false }
+            )
+        }
     }
 }
 
@@ -561,6 +597,7 @@ private fun InteractiveSkyPaneContent(
     onNavigateToWeather: (() -> Unit)?,
     onOpenSearch: () -> Unit,
     onOpenLayers: () -> Unit,
+    onOpenSensorCalibration: () -> Unit,
     onOpenTonightDrawer: () -> Unit,
     onScheduleEvent: (String, String, Long, Long) -> Unit
 ) {
@@ -633,13 +670,15 @@ private fun InteractiveSkyPaneContent(
                     }
                 )
 
-                // Validated AR Gyroscope (only shown when IMU hardware exists)
+                // Live Sky Compass / 9-DOF Sensor Fusion Toggle (only shown when IMU/Compass hardware exists)
                 if (viewModel.motionManager.hasSensorHardware) {
                     HudCircleButton(
-                        icon = Icons.Rounded.Sensors,
-                        contentDescription = "Point-to-Sky AR Gyroscope",
+                        icon = Icons.Rounded.Explore,
+                        contentDescription = if (cameraState.isArGyroActive) "Live Sky Active (Long-press for calibration)" else "Enable Live Sky Compass",
                         palette = palette,
                         isActive = cameraState.isArGyroActive,
+                        hasWarningDot = cameraState.isArGyroActive && (cameraState.needsCompassCalibration || cameraState.hasMagneticInterference),
+                        onLongClick = onOpenSensorCalibration,
                         onClick = {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             viewModel.toggleArGyro()
@@ -704,41 +743,61 @@ private fun InteractiveSkyPaneContent(
                     }
                 }
 
-                if (cameraState.needsCompassCalibration && cameraState.isArGyroActive) {
-                    Box(
+                if (cameraState.isArGyroActive && (cameraState.hasMagneticInterference || cameraState.needsCompassCalibration)) {
+                    val diagLabel = if (cameraState.hasMagneticInterference) {
+                        "Mag Interference (${cameraState.magneticFieldMicroTesla.roundToInt()} µT) · Fix"
+                    } else {
+                        "Calibrate Compass (Figure-8 ∞)"
+                    }
+                    Row(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(palette.pillBg)
                             .border(1.dp, palette.warning, CircleShape)
-                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                            .clickable { onOpenSensorCalibration() }
+                            .padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Icon(Icons.Rounded.WarningAmber, contentDescription = null, tint = palette.warning, modifier = Modifier.size(12.dp))
                         Text(
-                            text = "Calibrate Compass (Figure-8)",
+                            text = diagLabel,
                             color = palette.warning,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                } else if (cameraState.isRelativeGyroFallback && cameraState.isArGyroActive) {
+                } else if (cameraState.isArGyroActive && (cameraState.isGyroLockIgnoreMagnet || abs(cameraState.azimuthOffsetDegrees) >= 0.3 || cameraState.isRelativeGyroFallback)) {
+                    val modeLabel = when {
+                        cameraState.isGyroLockIgnoreMagnet && abs(cameraState.azimuthOffsetDegrees) >= 0.3 ->
+                            "Gyro-Lock (${"%+.1f°".format(cameraState.azimuthOffsetDegrees)})"
+                        cameraState.isGyroLockIgnoreMagnet ->
+                            "Gyro-Lock Balcony Mode"
+                        abs(cameraState.azimuthOffsetDegrees) >= 0.3 ->
+                            "Target-Aligned (${"%+.1f°".format(cameraState.azimuthOffsetDegrees)})"
+                        else ->
+                            "Relative Gyro Mode"
+                    }
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(palette.pillBg)
                             .border(1.dp, palette.border, CircleShape)
+                            .clickable { onOpenSensorCalibration() }
                             .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Relative Gyro Mode",
-                            color = palette.fgMuted,
+                            text = modeLabel,
+                            color = palette.accent,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
         }
 
-        // Bottom Target Inspector + Continuous Time Machine Console
+        // Bottom Target Inspector + Resume Live Sky + Continuous Time Machine Console
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -747,6 +806,28 @@ private fun InteractiveSkyPaneContent(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (viewModel.motionManager.hasSensorHardware &&
+                !cameraState.isArGyroActive &&
+                cameraState.sensorMode == AndroidCosmosSensorMode.PAUSED_AFTER_DRAG
+            ) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(palette.accent)
+                            .clickable {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.resumeLiveSky()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(Icons.Rounded.Explore, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                        Text("Resume Live Sky", color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
             state.selectedTarget?.let { target ->
                 TargetInspectorCard(
                     viewModel = viewModel,
@@ -913,13 +994,29 @@ private fun CosmosLiveHeadingBadge(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+        val baseSub = if (state.isLiveTime) "LIVE EPHEMERIS" else DATE_TIME_FMT.format(Instant.ofEpochMilli(state.effectiveTimestamp))
+        val sensorSuffix = when {
+            cam.isArGyroActive && cam.hasMagneticInterference -> " · Mag!"
+            cam.isArGyroActive && cam.needsCompassCalibration -> " · Cal (∞)"
+            cam.isArGyroActive && cam.isGyroLockIgnoreMagnet -> " · Gyro-Lock"
+            cam.isArGyroActive -> " · Live Sky"
+            cam.sensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT -> " · Lift >15°"
+            else -> ""
+        }
         Text(
-            text = if (state.isLiveTime) "LIVE EPHEMERIS" else DATE_TIME_FMT.format(Instant.ofEpochMilli(state.effectiveTimestamp)),
-            color = if (state.isLiveTime) palette.positive else palette.warning,
+            text = baseSub + sensorSuffix,
+            color = if (cam.isArGyroActive && (cam.hasMagneticInterference || cam.needsCompassCalibration)) {
+                palette.warning
+            } else if (state.isLiveTime) {
+                palette.positive
+            } else {
+                palette.warning
+            },
             fontSize = 9.5.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = FontFamily.Monospace,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -945,6 +1042,7 @@ private fun SkyDomeViewport(
 ) {
     val camera by viewModel.cameraState.collectAsState()
     val tapCandidatesRef = remember { ArrayList<TapCandidate>(128) }
+    val customBasisBuf = remember { arrayOf(DoubleArray(3), DoubleArray(3), DoubleArray(3)) }
 
     // Reusable native Paint objects (zero per-frame allocations inside DrawScope!)
     val labelPaint = remember {
@@ -960,13 +1058,6 @@ private fun SkyDomeViewport(
         }
     }
 
-    val transformState = rememberTransformableState { zoomChange, _, _ ->
-        if (zoomChange != 1.0f && zoomChange.isFinite() && zoomChange > 0f) {
-            val curFov = viewModel.cameraState.value.fovDegrees
-            viewModel.setFov(curFov / zoomChange.toDouble())
-        }
-    }
-
     val visiblePlanetsSummary = remember(state.visiblePlanets, state.moon, state.conditions) {
         val pNames = state.visiblePlanets.joinToString(", ") { "${it.first.displayName} (${it.second.compassDirection})" }
         val moonSummary = state.moon?.let { "${it.quarter.displayName} ${it.illuminationPercent}%" } ?: "Moon"
@@ -977,16 +1068,37 @@ private fun SkyDomeViewport(
         modifier = Modifier
             .fillMaxSize()
             .semantics { contentDescription = visiblePlanetsSummary }
-            .transformable(transformState)
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    val cam = viewModel.cameraState.value
-                    val degPerPx = (cam.fovDegrees / max(320f, min(size.width.toFloat(), size.height.toFloat()))) * 0.92
-                    viewModel.setCameraAttitude(
-                        azimuth = cam.azimuthDegrees - dragAmount.x * degPerPx,
-                        altitude = cam.altitudeDegrees + dragAmount.y * degPerPx
-                    )
+                // Unified multi-touch recognizer: 2-finger pinch zooms along optical axis WITHOUT breaking Live Sky gyro;
+                // 1-finger drag immediately disengages Live Sky to smooth manual explore mode!
+                awaitEachGesture {
+                    var wasMultiTouch = false
+                    var dragDistanceAccum = 0f
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressedCount = event.changes.count { it.pressed }
+                        if (pressedCount >= 2) {
+                            wasMultiTouch = true
+                            val zoom = event.calculateZoom()
+                            if (zoom != 1.0f && zoom.isFinite() && zoom > 0f && abs(zoom - 1.0f) > 0.002f) {
+                                val curFov = viewModel.cameraState.value.fovDegrees
+                                viewModel.setFov(curFov / zoom.toDouble())
+                                event.changes.forEach { it.consume() }
+                            }
+                        } else if (pressedCount == 1 && !wasMultiTouch) {
+                            val pan = event.calculatePan()
+                            dragDistanceAccum += hypot(pan.x, pan.y)
+                            if (dragDistanceAccum > 6f && (abs(pan.x) > 0.1f || abs(pan.y) > 0.1f)) {
+                                val cam = viewModel.cameraState.value
+                                val degPerPx = (cam.fovDegrees / max(320f, min(size.width.toFloat(), size.height.toFloat()))) * 0.92
+                                viewModel.setCameraAttitude(
+                                    azimuth = cam.azimuthDegrees - pan.x * degPerPx,
+                                    altitude = cam.altitudeDegrees + pan.y * degPerPx
+                                )
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             }
             .pointerInput(Unit) {
@@ -1044,6 +1156,15 @@ private fun SkyDomeViewport(
             camera.altitudeDegrees
         }
 
+        val activeBasis: Array<DoubleArray>? = if (camera.isArGyroActive && camera.hasValidBasis) {
+            customBasisBuf[0][0] = camera.rightNWZ0; customBasisBuf[0][1] = camera.rightNWZ1; customBasisBuf[0][2] = camera.rightNWZ2
+            customBasisBuf[1][0] = camera.upNWZ0; customBasisBuf[1][1] = camera.upNWZ1; customBasisBuf[1][2] = camera.upNWZ2
+            customBasisBuf[2][0] = camera.forwardNWZ0; customBasisBuf[2][1] = camera.forwardNWZ1; customBasisBuf[2][2] = camera.forwardNWZ2
+            customBasisBuf
+        } else {
+            null
+        }
+
         val proj = AstronomyService.makeProjectionMatrix(
             observerLatitudeDegrees = state.observerLatitude,
             observerLongitudeDegrees = state.observerLongitude,
@@ -1051,15 +1172,17 @@ private fun SkyDomeViewport(
             cameraAzimuthDegrees = camera.azimuthDegrees,
             cameraAltitudeDegrees = effectiveAlt,
             cameraRollDegrees = camera.rollDegrees,
+            customBasisNWZ = activeBasis,
             fovDegrees = camera.fovDegrees,
             viewportWidth = w,
-            viewportHeight = h
+            viewportHeight = h,
+            observerElevationMeters = state.observerElevationMeters
         )
 
         tapCandidatesRef.clear()
 
-        // 1. Rayleigh Daylight / Twilight / Obsidian Sky Gradient
-        drawRayleighSkyBackground(state = state, palette = palette)
+        // 1. Rayleigh Daylight / Twilight / Obsidian Sky Gradient (oriented along true Zenith->Nadir roll axis)
+        drawRayleighSkyBackground(state = state, proj = proj, palette = palette)
 
         // 2. 5-Layer Milky Way Isophote Contours
         if (state.showMilkyWay && (!state.showAtmosphere || state.sunAltitudeDegrees < -4.0)) {
@@ -1110,6 +1233,7 @@ private fun SkyDomeViewport(
                 state = state,
                 proj = proj,
                 fovDegrees = camera.fovDegrees,
+                cameraRollDegrees = camera.rollDegrees,
                 palette = palette,
                 labelPaint = subPaint,
                 candidates = tapCandidatesRef
@@ -1132,6 +1256,7 @@ private fun SkyDomeViewport(
             state = state,
             proj = proj,
             fovDegrees = camera.fovDegrees,
+            cameraRollDegrees = camera.rollDegrees,
             palette = palette,
             labelPaint = labelPaint,
             subPaint = subPaint,
@@ -1175,6 +1300,7 @@ private fun SkyDomeViewport(
 
 private fun DrawScope.drawRayleighSkyBackground(
     state: CosmosViewState,
+    proj: SkyProjectionMatrix,
     palette: AndroidCosmosPalette
 ) {
     if (palette.isNightVision) {
@@ -1197,7 +1323,21 @@ private fun DrawScope.drawRayleighSkyBackground(
         sunAlt > -18.0 -> listOf(Color(0xFF040817), Color(0xFF081128), Color(0xFF141D38))
         else -> listOf(Color(0xFF02050E), Color(0xFF050B1C), Color(0xFF0B1429))
     }
-    drawRect(brush = Brush.verticalGradient(colors = colors))
+    val rawDownX = -proj.rz.toFloat()
+    val rawDownY = proj.uz.toFloat()
+    val dLen = hypot(rawDownX, rawDownY)
+    val dx = if (dLen > 1e-4f) rawDownX / dLen else 0f
+    val dy = if (dLen > 1e-4f) rawDownY / dLen else 1f
+    val halfSpan = max(size.width, size.height) * 0.65f
+    val cx = size.width * 0.5f
+    val cy = size.height * 0.5f
+    drawRect(
+        brush = Brush.linearGradient(
+            colors = colors,
+            start = Offset(cx - dx * halfSpan, cy - dy * halfSpan),
+            end = Offset(cx + dx * halfSpan, cy + dy * halfSpan)
+        )
+    )
 }
 
 private fun DrawScope.drawMilkyWayContours(
@@ -1551,6 +1691,7 @@ private fun DrawScope.drawDeepSkyCatalog(
     state: CosmosViewState,
     proj: SkyProjectionMatrix,
     fovDegrees: Double,
+    cameraRollDegrees: Double,
     palette: AndroidCosmosPalette,
     labelPaint: Paint,
     candidates: MutableList<TapCandidate>
@@ -1579,7 +1720,7 @@ private fun DrawScope.drawDeepSkyCatalog(
         when {
             dso.type.contains("Galaxy", ignoreCase = true) -> {
                 val ratio = (dso.minorAxisArcmin / max(1.0, dso.majorAxisArcmin)).toFloat().coerceIn(0.35f, 0.9f)
-                rotate(degrees = dso.positionAngleDeg.toFloat(), pivot = Offset(sx, sy)) {
+                rotate(degrees = (-dso.positionAngleDeg - cameraRollDegrees).toFloat(), pivot = Offset(sx, sy)) {
                     drawOval(
                         color = dsoStroke,
                         topLeft = Offset(sx - pxRadius, sy - pxRadius * ratio),
@@ -1649,6 +1790,7 @@ private fun DrawScope.drawSolarSystemBodies(
     state: CosmosViewState,
     proj: SkyProjectionMatrix,
     fovDegrees: Double,
+    cameraRollDegrees: Double,
     palette: AndroidCosmosPalette,
     labelPaint: Paint,
     subPaint: Paint,
@@ -1695,8 +1837,8 @@ private fun DrawScope.drawSolarSystemBodies(
                     addOval(androidx.compose.ui.geometry.Rect(sx - r, sy - r, sx + r, sy + r))
                 }
                 clipPath(moonClip) {
-                    // Rotate so bright limb points to +X (screen right), then draw lit hemisphere + terminator ellipse
-                    rotate(degrees = 90f - limbAngle, pivot = Offset(sx, sy)) {
+                    // Rotate so bright limb points toward Sun, accounting for 360° camera roll!
+                    rotate(degrees = ((limbAngle - cameraRollDegrees.toFloat()) - 90f), pivot = Offset(sx, sy)) {
                         drawArc(
                             color = litColor,
                             startAngle = -90f,
@@ -1723,7 +1865,7 @@ private fun DrawScope.drawSolarSystemBodies(
                 val ringTiltRad = Math.toRadians(abs(state.saturnRingTiltDegrees)).coerceIn(0.06, 0.55)
                 val ringRx = r * 2.35f
                 val ringRy = (ringRx * sin(ringTiltRad).toFloat()).coerceAtLeast(1.8f)
-                rotate(degrees = -14f, pivot = Offset(sx, sy)) {
+                rotate(degrees = (-14.0 - cameraRollDegrees).toFloat(), pivot = Offset(sx, sy)) {
                     drawOval(
                         color = bodyColor.copy(alpha = 0.82f),
                         topLeft = Offset(sx - ringRx, sy - ringRy),
@@ -1747,10 +1889,15 @@ private fun DrawScope.drawSolarSystemBodies(
                 // Live 4 Galilean Moons (Io, Europa, Ganymede, Callisto) in Binocular / Telescope Zoom!
                 if (fovDegrees <= 12.0 && state.jupiterMoons != null) {
                     subPaint.color = if (palette.isNightVision) 0xDDFF1824.toInt() else 0xFFE2E8F0.toInt()
+                    val rollRad = Math.toRadians(cameraRollDegrees)
+                    val cr = cos(rollRad).toFloat()
+                    val sr = sin(rollRad).toFloat()
                     for (gm in state.jupiterMoons.all) {
                         if (gm.isOcculted) continue
-                        val mx = sx + (gm.xRadius.toFloat() * r * 1.15f)
-                        val my = sy - (gm.yRadius.toFloat() * r * 1.15f)
+                        val dxLocal = gm.xRadius.toFloat() * r * 1.15f
+                        val dyLocal = gm.yRadius.toFloat() * r * 1.15f
+                        val mx = sx + (dxLocal * cr - dyLocal * sr)
+                        val my = sy - (dxLocal * sr + dyLocal * cr)
                         drawCircle(bodyColor, radius = 2.6f, center = Offset(mx, my))
                         if (fovDegrees <= 4.5) {
                             drawContext.canvas.nativeCanvas.drawText(gm.name, mx + 5f, my - 4f, subPaint)
@@ -1835,49 +1982,55 @@ private fun DrawScope.drawHorizonAndCompass(
     palette: AndroidCosmosPalette,
     labelPaint: Paint
 ) {
-    // Forward-hemisphere mathematical horizon curve + opaque landscape ground apron (alt < 0°)
-    val horizonPts = ArrayList<Offset>(72)
-    var lastX = Float.NEGATIVE_INFINITY
-    val marginPx = max(size.width, size.height) * 0.9
-    for (offset in -102..102 step 3) {
-        val az = ((cameraAzimuth + offset) % 360.0 + 360.0) % 360.0
+    // 360° roll-invariant forward-hemisphere horizon curve + screen-Nadir ground polygon
+    val horizonPts = ArrayList<Offset>(80)
+    val marginPx = max(size.width, size.height) * 1.35
+    val centerAz = if (hypot(proj.fx, proj.fy) > 1e-3) {
+        (Math.toDegrees(atan2(-proj.fy, proj.fx)) + 360.0) % 360.0
+    } else {
+        cameraAzimuth
+    }
+    for (offset in -114..114 step 3) {
+        val az = ((centerAz + offset) % 360.0 + 360.0) % 360.0
         val azRad = Math.toRadians(az)
         val cz = proj.fx * cos(azRad) + proj.fy * (-sin(azRad))
-        if (cz <= 0.05) continue
+        if (cz <= 0.04) continue
         val p = proj.projectHorizontal(az, 0.0, margin = marginPx) ?: continue
-        val sx = p.x.toFloat()
-        if (sx > lastX) {
-            lastX = sx
-            horizonPts.add(Offset(sx, p.y.toFloat()))
-        }
+        horizonPts.add(Offset(p.x.toFloat(), p.y.toFloat()))
     }
 
-    if (cameraAltitude < 65.0 && horizonPts.size >= 2) {
+    val rawDownX = -proj.rz.toFloat()
+    val rawDownY = proj.uz.toFloat()
+    val downLen = hypot(rawDownX, rawDownY)
+    val downX = if (downLen > 1e-4f) rawDownX / downLen else 0f
+    val downY = if (downLen > 1e-4f) rawDownY / downLen else 1f
+
+    if (horizonPts.size >= 2) {
         val groundFill = if (palette.isNightVision) {
             Color(0xEC070001)
         } else {
             Color(0xEC040812)
         }
+        val farDist = hypot(size.width, size.height) * 1.65f
         val groundPath = Path().apply {
             val first = horizonPts.first()
             val last = horizonPts.last()
-            val bottomY = max(size.height + 80f, max(first.y, last.y) + 500f)
-            moveTo(first.x, first.y)
-            for (i in 1 until horizonPts.size) {
+            moveTo(first.x + downX * farDist, first.y + downY * farDist)
+            for (i in horizonPts.indices) {
                 lineTo(horizonPts[i].x, horizonPts[i].y)
             }
-            lineTo(last.x, bottomY)
-            lineTo(first.x, bottomY)
+            lineTo(last.x + downX * farDist, last.y + downY * farDist)
             close()
         }
         drawPath(groundPath, color = groundFill)
     }
 
     val horizonLineColor = palette.accent.copy(alpha = 0.62f)
+    val maxSegJump = max(size.width, size.height) * 0.55f
     for (i in 0 until horizonPts.size - 1) {
         val a = horizonPts[i]
         val b = horizonPts[i + 1]
-        if (b.x > a.x && hypot(a.x - b.x, a.y - b.y) < size.width * 0.45f) {
+        if (hypot(a.x - b.x, a.y - b.y) < maxSegJump) {
             drawLine(horizonLineColor, a, b, strokeWidth = 2.0f)
         }
     }
@@ -2090,18 +2243,29 @@ private fun TargetInspectorCard(
             }
         }
 
-        // Action Row: Center, Log #sky Sighting to TagDoS, Schedule Observation
+        // Action Row: 1-Tap Compass Align (in Live Sky) / Center, Log #sky Sighting to TagDoS, Schedule Observation
+        val inspectorCam by viewModel.cameraState.collectAsState()
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            InspectorActionButton(
-                icon = Icons.Rounded.CenterFocusStrong,
-                label = "Center",
-                palette = palette,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.centerOnSelectedTarget() }
-            )
+            if (inspectorCam.isArGyroActive) {
+                InspectorActionButton(
+                    icon = Icons.Rounded.Explore,
+                    label = "Align",
+                    palette = palette,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.alignCompassToSelectedTarget() }
+                )
+            } else {
+                InspectorActionButton(
+                    icon = Icons.Rounded.CenterFocusStrong,
+                    label = "Center",
+                    palette = palette,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.centerOnSelectedTarget() }
+                )
+            }
             InspectorActionButton(
                 icon = Icons.Rounded.EditNote,
                 label = "Log #sky",
@@ -3027,6 +3191,7 @@ private fun CosmosTonightsBestModal(
 // REUSABLE HUD CONTROLS
 // ============================================================================
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HudCircleButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -3034,23 +3199,187 @@ private fun HudCircleButton(
     palette: AndroidCosmosPalette,
     isActive: Boolean = false,
     activeTint: Color = palette.accent,
+    hasWarningDot: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
+    Box(contentAlignment = Alignment.TopEnd) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(if (isActive) activeTint else palette.pillBg)
+                .border(1.dp, palette.border, CircleShape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (isActive) Color.Black else palette.fgPrimary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        if (hasWarningDot) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(palette.warning)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CosmosSensorCalibrationModal(
+    viewModel: CosmosViewModel,
+    palette: AndroidCosmosPalette,
+    onDismiss: () -> Unit
+) {
+    val cam by viewModel.cameraState.collectAsState()
+
     Box(
         modifier = Modifier
-            .size(34.dp)
-            .clip(CircleShape)
-            .background(if (isActive) activeTint else palette.pillBg)
-            .border(1.dp, palette.border, CircleShape)
-            .clickable { onClick() },
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.72f))
+            .clickable { onDismiss() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (isActive) Color.Black else palette.fgPrimary,
-            modifier = Modifier.size(16.dp)
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(palette.bgDeck)
+                .border(1.dp, palette.border, RoundedCornerShape(22.dp))
+                .clickable(enabled = false) {}
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Rounded.Explore, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                    Text("Compass & Sky Sensors", color = palette.fgPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "Close",
+                    tint = palette.fgMuted,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clickable { onDismiss() }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InspectorStatChip(
+                    label = "AMBIENT FIELD",
+                    value = if (cam.magneticFieldMicroTesla > 0.5) {
+                        "${"%.1f".format(cam.magneticFieldMicroTesla)} µT (exp ~${cam.expectedFieldMicroTesla.roundToInt()} µT)"
+                    } else {
+                        "Exp ~${cam.expectedFieldMicroTesla.roundToInt()} µT"
+                    },
+                    palette = palette,
+                    modifier = Modifier.weight(1f)
+                )
+                InspectorStatChip(
+                    label = "WMM DECLINATION",
+                    value = "${"%+.1f°".format(cam.magneticDeclinationDegrees)} ${if (cam.magneticDeclinationDegrees >= 0) "E" else "W"}",
+                    palette = palette,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            val healthText = when {
+                cam.hasMagneticInterference ->
+                    "Strong local magnetic distortion detected (${cam.magneticFieldMicroTesla.roundToInt()} µT). Remove magnetic phone cases/MagSafe accessories or step away from steel balcony railings and reinforced concrete."
+                cam.needsCompassCalibration ->
+                    "Magnetometer calibration accuracy is low. Sweep your phone smoothly in a 3D Figure-8 (∞) pattern across all 3 axes."
+                cam.isGyroscopeLessHardware ->
+                    "Compass + Accelerometer fallback active (device has no hardware gyroscope). Extra stabilization smoothing is applied automatically."
+                else ->
+                    "9-axis gyroscope, accelerometer, and True North magnetometer fusion are locked and healthy."
+            }
+            Text(
+                text = healthText,
+                color = if (cam.hasMagneticInterference || cam.needsCompassCalibration) palette.warning else palette.fgSecondary,
+                fontSize = 12.sp
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(palette.cardBg)
+                    .border(1.dp, palette.border, RoundedCornerShape(14.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Figure-8 (∞) Calibration Guide", color = palette.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Hold your phone away from metal objects and trace a smooth 3D Figure-8 (∞) in the air 3–4 times while rotating your wrist so the magnetometer samples Earth's field on X, Y, and Z.",
+                    color = palette.fgSecondary,
+                    fontSize = 11.5.sp
+                )
+            }
+
+            if (viewModel.motionManager.hasHardwareGyroscope) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(palette.cardBg)
+                        .border(1.dp, palette.border, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Gyro-Stabilized Lock (Ignore Magnet)", color = palette.fgPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Uses pure gyroscope + gravity on steel balconies or with magnetic cases.", color = palette.fgMuted, fontSize = 10.5.sp)
+                    }
+                    Switch(
+                        checked = cam.isGyroLockIgnoreMagnet,
+                        onCheckedChange = { viewModel.setGyroLockIgnoreMagnet(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = palette.accent)
+                    )
+                }
+            }
+
+            if (abs(cam.azimuthOffsetDegrees) >= 0.1) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Active Target Sight Offset: ${"%+.1f°".format(cam.azimuthOffsetDegrees)}",
+                        color = palette.accent,
+                        fontSize = 11.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    SmallPillButton("Reset Offset", palette) {
+                        viewModel.clearCompassAlignmentOffset()
+                    }
+                }
+            } else {
+                Text(
+                    text = "Tip: Tap the Moon or any bright planet on the sky map, point your phone physically at it, and tap \"Align\" for sub-degree accuracy.",
+                    color = palette.fgMuted,
+                    fontSize = 11.sp
+                )
+            }
+        }
     }
 }
 

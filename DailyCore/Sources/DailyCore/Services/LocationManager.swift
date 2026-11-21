@@ -29,6 +29,16 @@ public final class LocationManager: NSObject, CLLocationManagerDelegate, Observa
         return nil
     }
 
+    /// Returns the observer's ellipsoidal/barometric GPS elevation above sea level in meters when valid.
+    public var lastKnownAltitudeMeters: Double? {
+        guard let location = clManager.location,
+              location.verticalAccuracy >= 0,
+              abs(location.timestamp.timeIntervalSinceNow) < 3600 else {
+            return nil
+        }
+        return max(-450.0, min(9000.0, location.altitude))
+    }
+
     /// Requests current GPS location with a strict timeout (default 10s).
     public func requestCurrentLocation(timeoutSeconds: TimeInterval = 10) async throws -> (latitude: Double, longitude: Double) {
         // 1. Check & request authorization

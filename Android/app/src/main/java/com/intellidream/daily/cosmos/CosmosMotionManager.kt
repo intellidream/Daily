@@ -7,6 +7,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.os.SystemClock
 import android.view.Surface
 import android.view.WindowManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,30 +19,60 @@ import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+enum class AndroidCosmosSensorMode {
+    UNAVAILABLE,
+    STANDBY_AUTO_LIFT,
+    ACTIVE_LIVE_SKY,
+    PAUSED_AFTER_DRAG,
+    MANUAL_OFF
+}
 
 data class DeviceAttitude(
     val azimuthDegrees: Double = 180.0,
     val altitudeDegrees: Double = 45.0,
     val rollDegrees: Double = 0.0,
+    val rightNWZ0: Double = 0.0,
+    val rightNWZ1: Double = 1.0,
+    val rightNWZ2: Double = 0.0,
+    val upNWZ0: Double = 0.0,
+    val upNWZ1: Double = 0.0,
+    val upNWZ2: Double = 1.0,
+    val forwardNWZ0: Double = -1.0,
+    val forwardNWZ1: Double = 0.0,
+    val forwardNWZ2: Double = 0.0,
+    val hasValidBasis: Boolean = false,
     val magneticDeclinationDegrees: Double = 0.0,
+    val magneticFieldMicroTesla: Double = 0.0,
+    val expectedFieldMicroTesla: Double = 49.0,
+    val azimuthOffsetDegrees: Double = 0.0,
     val accuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
     val isRelativeGyroFallback: Boolean = false,
+    val isGyroLockIgnoreMagnet: Boolean = false,
+    val isGyroscopeLessHardware: Boolean = false,
+    val hasMagneticInterference: Boolean = false,
+    val sensorMode: AndroidCosmosSensorMode = AndroidCosmosSensorMode.UNAVAILABLE,
     val hingeAngleDegrees: Float? = null
 ) {
     val needsCompassCalibration: Boolean
-        get() = !isRelativeGyroFallback &&
-            (accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE || accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW)
+        get() = !isRelativeGyroFallback && !isGyroLockIgnoreMagnet &&
+            (accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE ||
+                accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW ||
+                hasMagneticInterference)
 }
 
 /**
- * Validated 120Hz optical-axis sensor fusion manager for Android phones & foldables:
- * - Uses Quaternion SLERP smoothing with adaptive velocity gain (jitter-free while stationary, zero-lag slewing).
- * - Remaps sensor axes dynamically for Display.rotation (portrait, landscape, unfolded Z Fold 8).
- * - Projects the back-camera optical axis [0, 0, -1] directly in ENU without Euler gimbal lock at Zenith (+90°).
- * - Applies NOAA World Magnetic Model (GeomagneticField) declination so Azimuth is referenced to True North.
- * - Monitors Sensor.TYPE_HINGE_ANGLE on foldables for Tabletop Flex Mode tilt awareness.
+ * Stellarium-grade 90Hz–120Hz 9-DOF optical-axis sensor fusion manager for Android phones & foldables:
+ * - Tier 1: `TYPE_ROTATION_VECTOR` (Gyroscope + Accelerometer + Magnetometer) + NOAA WMM True North declination.
+ * - Tier 2: `TYPE_GAME_ROTATION_VECTOR` (Gyroscope + Accelerometer) for Balcony / MagSafe Gyro-Lock mode.
+ * - Tier 3: `TYPE_GEOMAGNETIC_ROTATION_VECTOR` or `ACCELEROMETER + MAGNETIC_FIELD` fallback for gyroscope-less hardware.
+ * - FOV-adaptive quaternion SLERP stabilization (acts like optical image stabilization in Binocular/Telescope zoom).
+ * - Automatic Lift-to-Sky activation (> +15° sustained for >= 250ms) with instant disengage on manual 1-finger drag.
+ * - Real-time ambient magnetic flux norm (µT) anomaly detection + 1-tap celestial "Align on Target" calibration.
  */
 class CosmosMotionManager(context: Context) : SensorEventListener {
     private val appContext = context.applicationContext
@@ -49,19 +80,39 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
     private val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
 
     private val primaryRotationSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-    private val fallbackGameSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
-    private val activeRotationSensor: Sensor? = primaryRotationSensor ?: fallbackGameSensor
+    private val gameRotationSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+    private val geomagneticRotationSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
+    private val accelerometerSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val magneticFieldSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val hingeSensor: Sensor? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         sensorManager?.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
     } else {
         null
     }
 
-    val hasSensorHardware: Boolean get() = activeRotationSensor != null
-    val isUsingRelativeFallback: Boolean get() = primaryRotationSensor == null && fallbackGameSensor != null
+    val hasSensorHardware: Boolean
+        get() = primaryRotationSensor != null ||
+            gameRotationSensor != null ||
+            geomagneticRotationSensor != null ||
+            (accelerometerSensor != null && magneticFieldSensor != null)
+
+    val hasHardwareGyroscope: Boolean
+        get() = primaryRotationSensor != null || gameRotationSensor != null
+
+    val isUsingRelativeFallbackDefault: Boolean
+        get() = primaryRotationSensor == null && gameRotationSensor != null && geomagneticRotationSensor == null
+
+    var onAutoLiftEngaged: (() -> Unit)? = null
+
+    private var currentSensorMode: AndroidCosmosSensorMode =
+        if (hasSensorHardware) AndroidCosmosSensorMode.STANDBY_AUTO_LIFT else AndroidCosmosSensorMode.UNAVAILABLE
 
     private val _attitude = MutableStateFlow(
-        DeviceAttitude(isRelativeGyroFallback = isUsingRelativeFallback)
+        DeviceAttitude(
+            isRelativeGyroFallback = isUsingRelativeFallbackDefault,
+            isGyroscopeLessHardware = hasSensorHardware && !hasHardwareGyroscope,
+            sensorMode = currentSensorMode
+        )
     )
     val attitude: StateFlow<DeviceAttitude> = _attitude.asStateFlow()
 
@@ -69,18 +120,41 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
     val isTracking: StateFlow<Boolean> = _isTracking.asStateFlow()
 
     private var declinationDegrees: Double = 0.0
+    private var expectedFieldMicroTesla: Double = 49.0
+    private var measuredFieldMicroTesla: Double = 0.0
     private var currentAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
+    private var magSensorAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
     private var currentHingeAngle: Float? = null
+    private var activeDisplayRotation: Int? = null
+    private var currentFovDegrees: Double = 65.0
+    private var isTabletopPosture: Boolean = false
+
+    private var isGyroLockIgnoreMagnet: Boolean = false
+    private var gyroAnchorOffsetDegrees: Double = 0.0
+    private var azimuthOffsetDegrees: Double = 0.0
+    private var lastRawTrueAzimuthDegrees: Double = 180.0
+    private var lastValidAzimuthRadians: Double = Math.PI
+
+    // Lift-to-Sky hysteresis (> +15° sustained >= 250ms)
+    private var liftAboveThresholdSinceMs: Long = 0L
+    private var hasLoweredSinceDragPause: Boolean = true
+    private var dragPausedAtMs: Long = 0L
 
     // Reusable pre-allocated buffers (zero GC pressure at 120Hz)
-    private val rawQuat = FloatArray(4) // [w, x, y, z] from SensorManager.getQuaternionFromVector
+    private val rawQuat = FloatArray(4) // [w, x, y, z]
     private val smoothedQuat = FloatArray(4)
-    private val quatForMatrix = FloatArray(4) // [x, y, z, w] expected by getRotationMatrixFromVector
+    private val quatForMatrix = FloatArray(4) // [x, y, z, w]
     private val rotationMatrix = FloatArray(9)
     private val remappedMatrix = FloatArray(9)
+    private val gravityBuf = FloatArray(3)
+    private val magBuf = FloatArray(3)
+    private var hasGravitySample = false
+    private var hasMagSample = false
     private var hasInitialQuat = false
+    private var activeCompositeSensor: Sensor? = null
+    private var usingRawAccelMagFallback = false
 
-    fun updateObserverLocation(latitude: Double, longitude: Double, elevationMeters: Double = 0.0) {
+    fun updateObserverLocation(latitude: Double, longitude: Double, elevationMeters: Double = 50.0) {
         val field = GeomagneticField(
             latitude.toFloat(),
             longitude.toFloat(),
@@ -88,31 +162,162 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             System.currentTimeMillis()
         )
         declinationDegrees = field.declination.toDouble()
+        expectedFieldMicroTesla = (field.fieldStrength / 1000.0).coerceIn(22.0, 68.0)
     }
 
-    fun startTracking() {
-        if (_isTracking.value) return
-        val rot = activeRotationSensor
-        if (rot != null) {
-            hasInitialQuat = false
-            sensorManager?.registerListener(this, rot, SensorManager.SENSOR_DELAY_GAME)
-        }
-        if (hingeSensor != null) {
-            sensorManager?.registerListener(this, hingeSensor, SensorManager.SENSOR_DELAY_UI)
-        }
-        _isTracking.value = rot != null
+    fun updateDisplayRotation(rotation: Int?) {
+        activeDisplayRotation = rotation
     }
 
-    fun startHingeMonitoringOnly() {
-        if (hingeSensor != null && !_isTracking.value) {
-            sensorManager?.registerListener(this, hingeSensor, SensorManager.SENSOR_DELAY_UI)
-        }
+    fun updateCurrentFov(fovDegrees: Double) {
+        currentFovDegrees = fovDegrees.coerceIn(0.5, 130.0)
     }
 
-    fun stopTracking() {
+    fun updateTabletopPosture(isTabletop: Boolean) {
+        isTabletopPosture = isTabletop
+    }
+
+    fun beginObservatorySession(autoLiftEnabled: Boolean = true) {
+        if (!hasSensorHardware) {
+            currentSensorMode = AndroidCosmosSensorMode.UNAVAILABLE
+            publishModeOnly()
+            return
+        }
+        liftAboveThresholdSinceMs = 0L
+        hasLoweredSinceDragPause = true
+        if (currentSensorMode == AndroidCosmosSensorMode.UNAVAILABLE) {
+            currentSensorMode = if (autoLiftEnabled) AndroidCosmosSensorMode.STANDBY_AUTO_LIFT else AndroidCosmosSensorMode.MANUAL_OFF
+        }
+        when (currentSensorMode) {
+            AndroidCosmosSensorMode.ACTIVE_LIVE_SKY -> {
+                registerHardwareSensors(highFrequency = true)
+                _isTracking.value = true
+            }
+            AndroidCosmosSensorMode.STANDBY_AUTO_LIFT,
+            AndroidCosmosSensorMode.PAUSED_AFTER_DRAG -> {
+                registerHardwareSensors(highFrequency = false)
+                _isTracking.value = false
+            }
+            else -> {
+                startHingeMonitoringOnly()
+                _isTracking.value = false
+            }
+        }
+        publishModeOnly()
+    }
+
+    fun endObservatorySession() {
         sensorManager?.unregisterListener(this)
         _isTracking.value = false
         hasInitialQuat = false
+        liftAboveThresholdSinceMs = 0L
+        if (hasSensorHardware && currentSensorMode != AndroidCosmosSensorMode.MANUAL_OFF) {
+            currentSensorMode = AndroidCosmosSensorMode.STANDBY_AUTO_LIFT
+        }
+        publishModeOnly()
+    }
+
+    fun startTracking() {
+        if (!hasSensorHardware) return
+        hasInitialQuat = false
+        liftAboveThresholdSinceMs = 0L
+        currentSensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
+        registerHardwareSensors(highFrequency = true)
+        _isTracking.value = true
+        publishModeOnly()
+    }
+
+    fun stopTracking(explicitUserOff: Boolean = true) {
+        _isTracking.value = false
+        hasInitialQuat = false
+        liftAboveThresholdSinceMs = 0L
+        if (explicitUserOff) {
+            currentSensorMode = if (hasSensorHardware) AndroidCosmosSensorMode.MANUAL_OFF else AndroidCosmosSensorMode.UNAVAILABLE
+            sensorManager?.unregisterListener(this)
+            startHingeMonitoringOnly()
+        } else {
+            currentSensorMode = if (hasSensorHardware) AndroidCosmosSensorMode.PAUSED_AFTER_DRAG else AndroidCosmosSensorMode.UNAVAILABLE
+            hasLoweredSinceDragPause = false
+            dragPausedAtMs = SystemClock.elapsedRealtime()
+            registerHardwareSensors(highFrequency = false)
+        }
+        publishModeOnly()
+    }
+
+    fun startHingeMonitoringOnly() {
+        if (hingeSensor != null && !_isTracking.value && currentSensorMode == AndroidCosmosSensorMode.MANUAL_OFF) {
+            sensorManager?.registerListener(this, hingeSensor, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    fun setGyroLockIgnoreMagnet(enabled: Boolean) {
+        if (!hasHardwareGyroscope || isGyroLockIgnoreMagnet == enabled) return
+        val curAz = _attitude.value.azimuthDegrees
+        isGyroLockIgnoreMagnet = enabled
+        hasInitialQuat = false
+        if (currentSensorMode == AndroidCosmosSensorMode.ACTIVE_LIVE_SKY ||
+            currentSensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT ||
+            currentSensorMode == AndroidCosmosSensorMode.PAUSED_AFTER_DRAG
+        ) {
+            registerHardwareSensors(highFrequency = currentSensorMode == AndroidCosmosSensorMode.ACTIVE_LIVE_SKY)
+            gyroAnchorOffsetDegrees = if (enabled) {
+                normalizeSignedDegrees(curAz - lastRawTrueAzimuthDegrees)
+            } else {
+                0.0
+            }
+        }
+        publishModeOnly()
+    }
+
+    fun alignAzimuthToTarget(trueTargetAzimuthDegrees: Double) {
+        azimuthOffsetDegrees = normalizeSignedDegrees(
+            trueTargetAzimuthDegrees - lastRawTrueAzimuthDegrees - gyroAnchorOffsetDegrees
+        )
+        if (_attitude.value.hasMagneticInterference && hasHardwareGyroscope && !isGyroLockIgnoreMagnet) {
+            setGyroLockIgnoreMagnet(true)
+            azimuthOffsetDegrees = normalizeSignedDegrees(
+                trueTargetAzimuthDegrees - lastRawTrueAzimuthDegrees - gyroAnchorOffsetDegrees
+            )
+        } else {
+            publishModeOnly()
+        }
+    }
+
+    fun clearAzimuthAlignmentOffset() {
+        azimuthOffsetDegrees = 0.0
+        publishModeOnly()
+    }
+
+    private fun registerHardwareSensors(highFrequency: Boolean) {
+        sensorManager?.unregisterListener(this)
+        val delay = if (highFrequency) SensorManager.SENSOR_DELAY_GAME else SensorManager.SENSOR_DELAY_UI
+
+        val chosenComposite: Sensor? = when {
+            isGyroLockIgnoreMagnet && gameRotationSensor != null -> gameRotationSensor
+            primaryRotationSensor != null -> primaryRotationSensor
+            gameRotationSensor != null -> gameRotationSensor
+            geomagneticRotationSensor != null -> geomagneticRotationSensor
+            else -> null
+        }
+
+        activeCompositeSensor = chosenComposite
+        usingRawAccelMagFallback = (chosenComposite == null && accelerometerSensor != null && magneticFieldSensor != null)
+
+        if (chosenComposite != null) {
+            sensorManager?.registerListener(this, chosenComposite, delay)
+        } else if (usingRawAccelMagFallback) {
+            sensorManager?.registerListener(this, accelerometerSensor, delay)
+            sensorManager?.registerListener(this, magneticFieldSensor, delay)
+        }
+
+        // Monitor raw magnetic field norm (µT) when magnetometer exists so MagSafe/balcony interference is caught immediately
+        if (magneticFieldSensor != null && !usingRawAccelMagFallback && !isGyroLockIgnoreMagnet) {
+            sensorManager?.registerListener(this, magneticFieldSensor, SensorManager.SENSOR_DELAY_UI)
+        }
+
+        if (hingeSensor != null) {
+            sensorManager?.registerListener(this, hingeSensor, SensorManager.SENSOR_DELAY_UI)
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -127,10 +332,40 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             return
         }
 
-        if (event.sensor.type != activeRotationSensor?.type) return
+        if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            if (event.values.size >= 3) {
+                val bx = event.values[0]
+                val by = event.values[1]
+                val bz = event.values[2]
+                measuredFieldMicroTesla = sqrt((bx * bx + by * by + bz * bz).toDouble())
+                if (usingRawAccelMagFallback) {
+                    magBuf[0] = bx; magBuf[1] = by; magBuf[2] = bz
+                    hasMagSample = true
+                }
+            }
+            if (event.accuracy >= 0) {
+                magSensorAccuracy = event.accuracy
+            }
+            if (!usingRawAccelMagFallback) return
+        }
 
-        // 1. Extract unit quaternion [w, x, y, z]
-        SensorManager.getQuaternionFromVector(rawQuat, event.values)
+        if (usingRawAccelMagFallback) {
+            if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && event.values.size >= 3) {
+                gravityBuf[0] = event.values[0]
+                gravityBuf[1] = event.values[1]
+                gravityBuf[2] = event.values[2]
+                hasGravitySample = true
+            }
+            if (!hasGravitySample || !hasMagSample) return
+            if (!SensorManager.getRotationMatrix(rotationMatrix, null, gravityBuf, magBuf)) return
+            matrixToQuaternion(rotationMatrix, rawQuat)
+        } else {
+            if (event.sensor.type != activeCompositeSensor?.type) return
+            SensorManager.getQuaternionFromVector(rawQuat, event.values)
+            if (event.accuracy >= 0) {
+                currentAccuracy = event.accuracy
+            }
+        }
 
         if (!hasInitialQuat) {
             System.arraycopy(rawQuat, 0, smoothedQuat, 0, 4)
@@ -139,16 +374,14 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             slerpAdaptive(smoothedQuat, rawQuat)
         }
 
-        // 2. Convert smoothed quaternion [x, y, z, w] -> 3x3 ENU rotation matrix
         quatForMatrix[0] = smoothedQuat[1]
         quatForMatrix[1] = smoothedQuat[2]
         quatForMatrix[2] = smoothedQuat[3]
         quatForMatrix[3] = smoothedQuat[0]
         SensorManager.getRotationMatrixFromVector(rotationMatrix, quatForMatrix)
 
-        // 3. Remap axes for current Display rotation (portrait, landscape, unfolded tablet)
         @Suppress("DEPRECATION")
-        val displayRotation = windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        val displayRotation = activeDisplayRotation ?: windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
         val (axisX, axisY) = when (displayRotation) {
             Surface.ROTATION_90 -> Pair(SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X)
             Surface.ROTATION_180 -> Pair(SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y)
@@ -157,73 +390,184 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         }
         SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remappedMatrix)
 
-        // 4. Optical-axis sky vector in ENU:
-        // Screen-space forward out the rear camera is (0, 0, -1); screen-up is (0, 1, 0); screen-right is (1, 0, 0).
-        // remappedMatrix is row-major:
-        //   East  = m[0]*sx + m[1]*sy + m[2]*sz
-        //   North = m[3]*sx + m[4]*sy + m[5]*sz
-        //   Up    = m[6]*sx + m[7]*sy + m[8]*sz
-        val fEast = -remappedMatrix[2].toDouble()
-        val fNorth = -remappedMatrix[5].toDouble()
-        val fUp = -remappedMatrix[8].toDouble()
-
-        val uEast = remappedMatrix[1].toDouble()
-        val uNorth = remappedMatrix[4].toDouble()
-        val uUp = remappedMatrix[7].toDouble()
-
-        val rEast = remappedMatrix[0].toDouble()
+        // Screen basis in Magnetic ENU:
+        // Screen-Right = (1, 0, 0), Screen-Up = (0, 1, 0), Optical-Forward = (0, 0, -1).
+        val rMagE = remappedMatrix[0].toDouble()
+        val rMagN = remappedMatrix[3].toDouble()
         val rUp = remappedMatrix[6].toDouble()
 
-        val altDeg = Math.toDegrees(asin(fUp.coerceIn(-1.0, 1.0)))
+        val uMagE = remappedMatrix[1].toDouble()
+        val uMagN = remappedMatrix[4].toDouble()
+        val uUp = remappedMatrix[7].toDouble()
 
-        // Singularity-free azimuth: smoothly transitions to -screenUp horizontal projection near exact Zenith/Nadir
-        val horizLen = hypot(fEast, fNorth)
-        val magAzRad = if (horizLen > 1e-2) {
-            atan2(fEast, fNorth)
-        } else {
-            val sign = if (fUp >= 0.0) -1.0 else 1.0
-            atan2(sign * uEast, sign * uNorth)
-        }
-        val magAzDeg = (Math.toDegrees(magAzRad) + 360.0) % 360.0
-        val trueAzDeg = if (isUsingRelativeFallback) {
-            magAzDeg
-        } else {
-            (magAzDeg + declinationDegrees + 360.0) % 360.0
+        val fMagE = -remappedMatrix[2].toDouble()
+        val fMagN = -remappedMatrix[5].toDouble()
+        val fUp = -remappedMatrix[8].toDouble()
+
+        val altRad = asin(fUp.coerceIn(-1.0, 1.0))
+        val altDeg = Math.toDegrees(altRad)
+
+        // Standby Auto-Lift State Machine (> +15° sustained >= 250ms; skipped in foldable tabletop flex posture)
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!isTabletopPosture) {
+            if (currentSensorMode == AndroidCosmosSensorMode.STANDBY_AUTO_LIFT) {
+                if (altDeg >= 15.0) {
+                    if (liftAboveThresholdSinceMs == 0L) {
+                        liftAboveThresholdSinceMs = nowMs
+                    } else if ((nowMs - liftAboveThresholdSinceMs) >= 250L) {
+                        liftAboveThresholdSinceMs = 0L
+                        engageFromAutoLift()
+                    }
+                } else {
+                    liftAboveThresholdSinceMs = 0L
+                }
+            } else if (currentSensorMode == AndroidCosmosSensorMode.PAUSED_AFTER_DRAG) {
+                if (altDeg < -5.0 && (nowMs - dragPausedAtMs) > 1200L) {
+                    hasLoweredSinceDragPause = true
+                } else if (hasLoweredSinceDragPause && altDeg >= 20.0 && (nowMs - dragPausedAtMs) > 2000L) {
+                    if (liftAboveThresholdSinceMs == 0L) {
+                        liftAboveThresholdSinceMs = nowMs
+                    } else if ((nowMs - liftAboveThresholdSinceMs) >= 300L) {
+                        liftAboveThresholdSinceMs = 0L
+                        engageFromAutoLift()
+                    }
+                } else {
+                    liftAboveThresholdSinceMs = 0L
+                }
+            }
         }
 
-        // Horizon roll angle (degrees of screen tilt around the optical axis)
-        val rollDeg = if (horizLen > 1e-2) {
-            Math.toDegrees(atan2(rUp, uUp))
-        } else {
-            0.0
+        val isRelativeOnly = isGyroLockIgnoreMagnet ||
+            (activeCompositeSensor?.type == Sensor.TYPE_GAME_ROTATION_VECTOR)
+
+        // Raw True North azimuth (with WMM declination only) for 1-tap Target-Align reference
+        val declOnlyRad = Math.toRadians(if (isRelativeOnly) 0.0 else declinationDegrees)
+        val cd0 = cos(declOnlyRad)
+        val sd0 = sin(declOnlyRad)
+        val rawTrueE = fMagE * cd0 + fMagN * sd0
+        val rawTrueN = -fMagE * sd0 + fMagN * cd0
+        if (hypot(rawTrueE, rawTrueN) > 1e-3) {
+            lastRawTrueAzimuthDegrees = (Math.toDegrees(atan2(rawTrueE, rawTrueN)) + 360.0) % 360.0
         }
 
-        val acc = if (event.accuracy >= 0) event.accuracy else currentAccuracy
-        currentAccuracy = acc
+        if (currentSensorMode != AndroidCosmosSensorMode.ACTIVE_LIVE_SKY) return
+
+        // Full Eastward rotation: WMM declination + Gyro-Lock anchor + Celestial Target-Align offset
+        val totalEastDeg = (if (isRelativeOnly) 0.0 else declinationDegrees) +
+            gyroAnchorOffsetDegrees +
+            azimuthOffsetDegrees
+        val rotRad = Math.toRadians(totalEastDeg)
+        val cd = cos(rotRad)
+        val sd = sin(rotRad)
+
+        // Convert Magnetic ENU -> True Geographic NWZ (`+X = North, +Y = West = -East, +Z = Up`)
+        val rTrueE = rMagE * cd + rMagN * sd
+        val rTrueN = -rMagE * sd + rMagN * cd
+        val rxNWZ = rTrueN; val ryNWZ = -rTrueE; val rzNWZ = rUp
+
+        val uTrueE = uMagE * cd + uMagN * sd
+        val uTrueN = -uMagE * sd + uMagN * cd
+        val uxNWZ = uTrueN; val uyNWZ = -uTrueE; val uzNWZ = uUp
+
+        val fTrueE = fMagE * cd + fMagN * sd
+        val fTrueN = -fMagE * sd + fMagN * cd
+        val fxNWZ = fTrueN; val fyNWZ = -fTrueE; val fzNWZ = fUp
+
+        // Singularity-free azimuth & positive-clockwise horizon roll
+        val horizLen = hypot(fxNWZ, fyNWZ)
+        val azRad = if (horizLen > 1e-3) {
+            var a = atan2(-fyNWZ, fxNWZ)
+            if (a < 0.0) a += 2.0 * Math.PI
+            lastValidAzimuthRadians = a
+            a
+        } else {
+            val upHoriz = hypot(uxNWZ, uyNWZ)
+            if (upHoriz > 1e-3) {
+                val sign = if (fzNWZ >= 0.0) -1.0 else 1.0
+                var a = atan2(-sign * uyNWZ, sign * uxNWZ)
+                if (a < 0.0) a += 2.0 * Math.PI
+                lastValidAzimuthRadians = a
+                a
+            } else {
+                lastValidAzimuthRadians
+            }
+        }
+
+        val cosAz = cos(azRad); val sinAz = sin(azRad)
+        val cosAlt = cos(altRad); val sinAlt = sin(altRad)
+        val r0x = -sinAz; val r0y = -cosAz
+        val u0x = -sinAlt * cosAz; val u0y = sinAlt * sinAz; val u0z = cosAlt
+
+        val projUpOnRight = uxNWZ * r0x + uyNWZ * r0y
+        val projUpOnUp = uxNWZ * u0x + uyNWZ * u0y + uzNWZ * u0z
+        val rollDeg = Math.toDegrees(atan2(projUpOnRight, projUpOnUp))
+
+        val highThresh = max(72.0, expectedFieldMicroTesla * 1.48)
+        val lowThresh = min(18.0, expectedFieldMicroTesla * 0.42)
+        val magAnomaly = !isRelativeOnly && measuredFieldMicroTesla > 0.5 &&
+            (measuredFieldMicroTesla > highThresh || measuredFieldMicroTesla < lowThresh)
+
+        val effectiveAcc = if (isRelativeOnly) {
+            SensorManager.SENSOR_STATUS_ACCURACY_HIGH
+        } else {
+            min(currentAccuracy, magSensorAccuracy)
+        }
 
         _attitude.value = DeviceAttitude(
-            azimuthDegrees = trueAzDeg,
-            altitudeDegrees = altDeg,
+            azimuthDegrees = Math.toDegrees(azRad),
+            altitudeDegrees = altDeg.coerceIn(-89.9, 90.0),
             rollDegrees = rollDeg,
+            rightNWZ0 = rxNWZ, rightNWZ1 = ryNWZ, rightNWZ2 = rzNWZ,
+            upNWZ0 = uxNWZ, upNWZ1 = uyNWZ, upNWZ2 = uzNWZ,
+            forwardNWZ0 = fxNWZ, forwardNWZ1 = fyNWZ, forwardNWZ2 = fzNWZ,
+            hasValidBasis = true,
             magneticDeclinationDegrees = declinationDegrees,
-            accuracy = acc,
-            isRelativeGyroFallback = isUsingRelativeFallback,
+            magneticFieldMicroTesla = measuredFieldMicroTesla,
+            expectedFieldMicroTesla = expectedFieldMicroTesla,
+            azimuthOffsetDegrees = azimuthOffsetDegrees,
+            accuracy = effectiveAcc,
+            isRelativeGyroFallback = isRelativeOnly && !isGyroLockIgnoreMagnet,
+            isGyroLockIgnoreMagnet = isGyroLockIgnoreMagnet,
+            isGyroscopeLessHardware = !hasHardwareGyroscope,
+            hasMagneticInterference = magAnomaly,
+            sensorMode = currentSensorMode,
             hingeAngleDegrees = currentHingeAngle
         )
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        if (sensor?.type == activeRotationSensor?.type) {
+        if (sensor?.type == activeCompositeSensor?.type) {
             currentAccuracy = accuracy
-            _attitude.value = _attitude.value.copy(accuracy = accuracy)
+        } else if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            magSensorAccuracy = accuracy
         }
     }
 
-    /**
-     * In-place adaptive quaternion SLERP on [w, x, y, z]:
-     * Small angular deltas (<0.5°) use alpha=0.09 to suppress magnetometer/MEMS noise;
-     * fast slews (>6°) ramp alpha up to 0.42 for crisp 120Hz responsiveness.
-     */
+    private fun engageFromAutoLift() {
+        currentSensorMode = AndroidCosmosSensorMode.ACTIVE_LIVE_SKY
+        registerHardwareSensors(highFrequency = true)
+        _isTracking.value = true
+        publishModeOnly()
+        onAutoLiftEngaged?.invoke()
+    }
+
+    private fun publishModeOnly() {
+        val highThresh = max(72.0, expectedFieldMicroTesla * 1.48)
+        val lowThresh = min(18.0, expectedFieldMicroTesla * 0.42)
+        val isRel = isGyroLockIgnoreMagnet || (activeCompositeSensor?.type == Sensor.TYPE_GAME_ROTATION_VECTOR)
+        val magAnomaly = !isRel && measuredFieldMicroTesla > 0.5 &&
+            (measuredFieldMicroTesla > highThresh || measuredFieldMicroTesla < lowThresh)
+        _attitude.value = _attitude.value.copy(
+            sensorMode = currentSensorMode,
+            hasValidBasis = currentSensorMode == AndroidCosmosSensorMode.ACTIVE_LIVE_SKY && _attitude.value.hasValidBasis,
+            isGyroLockIgnoreMagnet = isGyroLockIgnoreMagnet,
+            azimuthOffsetDegrees = azimuthOffsetDegrees,
+            magneticDeclinationDegrees = declinationDegrees,
+            expectedFieldMicroTesla = expectedFieldMicroTesla,
+            hasMagneticInterference = magAnomaly
+        )
+    }
+
     private fun slerpAdaptive(current: FloatArray, target: FloatArray) {
         var tw = target[0]
         var tx = target[1]
@@ -238,7 +582,12 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
         val clampedDot = dot.coerceIn(-1f, 1f)
         val omega = acos(clampedDot.toDouble())
         val angleDeg = Math.toDegrees(omega)
-        val t = ((angleDeg - 0.25) / 6.0).coerceIn(0.09, 0.42).toFloat()
+
+        // Stronger tremor suppression for gyroscope-less compass hardware and high-magnification binocular/scope FOV
+        val fovGain = sqrt((currentFovDegrees / 60.0).coerceIn(0.04, 1.5))
+        val minT = if (hasHardwareGyroscope) (0.085 * fovGain).coerceAtLeast(0.022) else (0.040 * fovGain).coerceAtLeast(0.018)
+        val maxT = if (hasHardwareGyroscope) (0.46 * fovGain + 0.06).coerceIn(0.20, 0.54) else 0.24
+        val t = (((angleDeg - 0.20) / 6.0) * fovGain).coerceIn(minT, maxT).toFloat()
 
         if (clampedDot > 0.9995f) {
             current[0] += t * (tw - current[0])
@@ -266,5 +615,40 @@ class CosmosMotionManager(context: Context) : SensorEventListener {
             current[2] /= norm
             current[3] /= norm
         }
+    }
+
+    private fun matrixToQuaternion(m: FloatArray, outWxyz: FloatArray) {
+        val trace = m[0] + m[4] + m[8]
+        if (trace > 0f) {
+            val s = 0.5f / sqrt(trace + 1.0f)
+            outWxyz[0] = 0.25f / s
+            outWxyz[1] = (m[7] - m[5]) * s
+            outWxyz[2] = (m[2] - m[6]) * s
+            outWxyz[3] = (m[3] - m[1]) * s
+        } else if (m[0] > m[4] && m[0] > m[8]) {
+            val s = 2.0f * sqrt(1.0f + m[0] - m[4] - m[8])
+            outWxyz[0] = (m[7] - m[5]) / s
+            outWxyz[1] = 0.25f * s
+            outWxyz[2] = (m[1] + m[3]) / s
+            outWxyz[3] = (m[2] + m[6]) / s
+        } else if (m[4] > m[8]) {
+            val s = 2.0f * sqrt(1.0f + m[4] - m[0] - m[8])
+            outWxyz[0] = (m[2] - m[6]) / s
+            outWxyz[1] = (m[1] + m[3]) / s
+            outWxyz[2] = 0.25f * s
+            outWxyz[3] = (m[5] + m[7]) / s
+        } else {
+            val s = 2.0f * sqrt(1.0f + m[8] - m[0] - m[4])
+            outWxyz[0] = (m[3] - m[1]) / s
+            outWxyz[1] = (m[2] + m[6]) / s
+            outWxyz[2] = (m[5] + m[7]) / s
+            outWxyz[3] = 0.25f * s
+        }
+    }
+
+    private fun normalizeSignedDegrees(deg: Double): Double {
+        var d = (deg + 180.0) % 360.0
+        if (d < 0.0) d += 360.0
+        return d - 180.0
     }
 }

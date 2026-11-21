@@ -46,6 +46,11 @@ public final class CosmosCameraController {
     public var fov: Double = 60.0 // 0.5° (High-Power Telescope) ... 120.0° (Wide Dome)
     public var isZenithPlanisphereLocked: Bool = false
     public var hoverLocation: CGPoint? = nil
+    public var customBasisNWZ: (
+        right: (Double, Double, Double),
+        up: (Double, Double, Double),
+        forward: (Double, Double, Double)
+    )? = nil
 
     public init() {}
 
@@ -59,6 +64,14 @@ public final class CosmosCameraController {
 
     public var effectiveRoll: Double {
         isZenithPlanisphereLocked ? 0.0 : roll
+    }
+
+    public var effectiveBasisNWZ: (
+        right: (Double, Double, Double),
+        up: (Double, Double, Double),
+        forward: (Double, Double, Double)
+    )? {
+        isZenithPlanisphereLocked ? nil : customBasisNWZ
     }
 }
 
@@ -276,6 +289,7 @@ public struct ProjectedSkyScene {
     public let planets: [ProjectedPlanet]
     public let issState: ProjectedIssState?
     public let horizonPoints: [CGPoint]
+    public let nadirScreenUnitVector: CGPoint
     public let cardinals: [(label: String, x: Double, y: Double, isPrimary: Bool)]
     public let zenithPoint: CGPoint?
     public let targetGuide: SkyTargetGuideState?
@@ -372,6 +386,10 @@ public final class CosmosViewModel: ObservableObject {
         return weatherService.currentWeather?.coord?.lon ?? 26.1025
     }
 
+    public var observerElevationMeters: Double {
+        LocationManager.shared.lastKnownAltitudeMeters ?? 85.0
+    }
+
     public var observerLocationName: String {
         weatherService.currentLocationName.isEmpty ? "Local Horizon" : weatherService.currentLocationName
     }
@@ -431,6 +449,25 @@ public final class CosmosViewModel: ObservableObject {
     public func onObservatoryAppear() {
         isObservatoryActive = true
         scrubberAnchorDate = Date()
+        motionService.updateObserverLocation(
+            latitude: observerLatitude,
+            longitude: observerLongitude,
+            elevationMeters: observerElevationMeters
+        )
+        motionService.updateCurrentFov(camera.fov)
+        motionService.onAutoLiftEngaged = { [weak self] in
+            guard let self = self else { return }
+            #if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            #endif
+            self.camera.isZenithPlanisphereLocked = false
+            if !self.isLiveTime && self.playbackSpeedMultiplier == 0.0 {
+                self.resetToLive()
+            }
+            self.isMotionTrackingEnabled = true
+            self.showTransientBanner("Live Sky Active · Point phone at the sky")
+        }
+        motionService.beginObservatorySession(autoLiftEnabled: true)
         startLiveClock()
         recomputeEphemeris()
     }
@@ -442,10 +479,10 @@ public final class CosmosViewModel: ObservableObject {
         playbackTimer?.cancel()
         playbackTimer = nil
         playbackSpeedMultiplier = 0.0
-        if isMotionTrackingEnabled {
-            isMotionTrackingEnabled = false
-            motionService.stopTracking()
-        }
+        isMotionTrackingEnabled = false
+        camera.customBasisNWZ = nil
+        camera.roll = 0.0
+        motionService.endObservatorySession()
     }
 
     // MARK: - Subscriptions
@@ -455,6 +492,7 @@ public final class CosmosViewModel: ObservableObject {
             .sink { [weak self] az in
                 guard let self = self, self.isMotionTrackingEnabled else { return }
                 self.camera.azimuth = az
+                self.camera.customBasisNWZ = self.motionService.currentBasisNWZ
             }
             .store(in: &cancellables)
 
@@ -462,6 +500,7 @@ public final class CosmosViewModel: ObservableObject {
             .sink { [weak self] alt in
                 guard let self = self, self.isMotionTrackingEnabled else { return }
                 self.camera.altitude = alt
+                self.camera.customBasisNWZ = self.motionService.currentBasisNWZ
             }
             .store(in: &cancellables)
 
@@ -469,8 +508,29 @@ public final class CosmosViewModel: ObservableObject {
             .sink { [weak self] roll in
                 guard let self = self, self.isMotionTrackingEnabled else { return }
                 self.camera.roll = roll
+                self.camera.customBasisNWZ = self.motionService.currentBasisNWZ
             }
             .store(in: &cancellables)
+
+        #if canImport(UIKit)
+        NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
+            .sink { [weak self] _ in
+                guard let self = self, self.isObservatoryActive else { return }
+                self.motionService.endObservatorySession()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                guard let self = self, self.isObservatoryActive else { return }
+                if self.isMotionTrackingEnabled {
+                    self.motionService.startTracking()
+                } else {
+                    self.motionService.beginObservatorySession(autoLiftEnabled: self.motionService.sensorMode != .manualOff)
+                }
+            }
+            .store(in: &cancellables)
+        #endif
 
         liveService.$stargazingConditions
             .sink { [weak self] _ in
@@ -579,11 +639,44 @@ public final class CosmosViewModel: ObservableObject {
         isMotionTrackingEnabled.toggle()
         if isMotionTrackingEnabled {
             camera.isZenithPlanisphereLocked = false
+            if !isLiveTime && playbackSpeedMultiplier == 0.0 {
+                resetToLive()
+            }
+            motionService.updateObserverLocation(
+                latitude: observerLatitude,
+                longitude: observerLongitude,
+                elevationMeters: observerElevationMeters
+            )
+            motionService.updateCurrentFov(camera.fov)
             motionService.startTracking()
         } else {
+            camera.customBasisNWZ = nil
             camera.roll = 0.0
-            motionService.stopTracking()
+            motionService.stopTracking(explicitUserOff: true)
         }
+    }
+
+    public func resumeLiveSky() {
+        guard motionService.isAvailable else { return }
+        camera.isZenithPlanisphereLocked = false
+        if !isLiveTime && playbackSpeedMultiplier == 0.0 {
+            resetToLive()
+        }
+        isMotionTrackingEnabled = true
+        motionService.updateObserverLocation(
+            latitude: observerLatitude,
+            longitude: observerLongitude,
+            elevationMeters: observerElevationMeters
+        )
+        motionService.updateCurrentFov(camera.fov)
+        motionService.startTracking()
+    }
+
+    public func alignCompassToTarget(_ target: CosmosTarget) {
+        let live = liveMetrics(for: target)
+        motionService.alignAzimuth(toTrueTargetAzimuth: live.azimuthDegrees)
+        let off = motionService.azimuthOffsetDegrees
+        showTransientBanner(String(format: "Compass aligned to %@ (%+.1f° offset)", target.name, off))
     }
 
     // MARK: - Camera Gestures & Zoom Presets
@@ -591,8 +684,9 @@ public final class CosmosViewModel: ObservableObject {
     public func handlePan(deltaX: Double, deltaY: Double, viewportWidth: Double, viewportHeight: Double) {
         if isMotionTrackingEnabled {
             isMotionTrackingEnabled = false
+            camera.customBasisNWZ = nil
             camera.roll = 0.0
-            motionService.stopTracking()
+            motionService.stopTracking(explicitUserOff: false)
         }
         if camera.isZenithPlanisphereLocked {
             camera.isZenithPlanisphereLocked = false
@@ -613,12 +707,20 @@ public final class CosmosViewModel: ObservableObject {
         guard deltaMagnification > 0.01 else { return }
         let oldFov = camera.fov
         let newFov = max(0.5, min(120.0, oldFov / pow(deltaMagnification, 0.92)))
+        motionService.updateCurrentFov(newFov)
 
-        // Cursor-centered zoom when zooming with desktop scroll wheel / trackpad hover
+        // When Live Sky sensor tracking is active, zoom strictly along the live optical reticle without breaking gyro lock!
+        if isMotionTrackingEnabled {
+            camera.fov = newFov
+            return
+        }
+
+        // Cursor-centered zoom when zooming with desktop scroll wheel / trackpad hover / manual mode
         if let anchor = anchorPoint, let size = viewportSize, size.width > 10, size.height > 10, !camera.isZenithPlanisphereLocked {
             let beforeMat = astronomyService.makeProjectionMatrix(
                 observerLatitudeDegrees: observerLatitude,
                 observerLongitudeDegrees: observerLongitude,
+                observerElevationMeters: observerElevationMeters,
                 date: simulationDate,
                 cameraAzimuthDegrees: camera.azimuth,
                 cameraAltitudeDegrees: camera.altitude,
@@ -632,6 +734,7 @@ public final class CosmosViewModel: ObservableObject {
                 let afterMat = astronomyService.makeProjectionMatrix(
                     observerLatitudeDegrees: observerLatitude,
                     observerLongitudeDegrees: observerLongitude,
+                    observerElevationMeters: observerElevationMeters,
                     date: simulationDate,
                     cameraAzimuthDegrees: camera.azimuth,
                     cameraAltitudeDegrees: camera.altitude,
@@ -655,6 +758,7 @@ public final class CosmosViewModel: ObservableObject {
     }
 
     public func applyZoomPreset(_ preset: CosmosZoomPreset) {
+        motionService.updateCurrentFov(preset.fovDegrees)
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
             camera.fov = preset.fovDegrees
         }
@@ -663,8 +767,9 @@ public final class CosmosViewModel: ObservableObject {
     public func centerOn(target: CosmosTarget) {
         if isMotionTrackingEnabled {
             isMotionTrackingEnabled = false
+            camera.customBasisNWZ = nil
             camera.roll = 0.0
-            motionService.stopTracking()
+            motionService.stopTracking(explicitUserOff: false)
         }
         camera.isZenithPlanisphereLocked = false
         let live = liveMetrics(for: target)
@@ -708,7 +813,7 @@ public final class CosmosViewModel: ObservableObject {
         }
 
         var count = 0
-        let obs3 = (latitude: obs.latitude, longitude: obs.longitude, elevation: 50.0)
+        let obs3 = (latitude: obs.latitude, longitude: obs.longitude, elevation: observerElevationMeters)
         for p in [CelestialBody.mercury, .venus, .mars, .jupiter, .saturn, .uranus, .neptune] {
             if astronomyService.coordinates(of: p, for: obs3, at: simulationDate).altitudeDegrees > 0.0 {
                 count += 1
@@ -721,7 +826,7 @@ public final class CosmosViewModel: ObservableObject {
 
     public func liveMetrics(for target: CosmosTarget) -> CosmosTargetLiveMetrics {
         let obs = (latitude: observerLatitude, longitude: observerLongitude)
-        let obs3 = (latitude: observerLatitude, longitude: observerLongitude, elevation: 50.0)
+        let obs3 = (latitude: observerLatitude, longitude: observerLongitude, elevation: observerElevationMeters)
 
         switch target.kind {
         case .body(let body):
@@ -913,6 +1018,7 @@ public final class CosmosViewModel: ObservableObject {
         let vh = max(1.0, Double(size.height))
         let obsLat = observerLatitude
         let obsLon = observerLongitude
+        let obsElev = observerElevationMeters
         let date = simulationDate
         let camAz = camera.effectiveAzimuth
         let camAlt = camera.effectiveAltitude
@@ -922,16 +1028,18 @@ public final class CosmosViewModel: ObservableObject {
         let mat = astronomyService.makeProjectionMatrix(
             observerLatitudeDegrees: obsLat,
             observerLongitudeDegrees: obsLon,
+            observerElevationMeters: obsElev,
             date: date,
             cameraAzimuthDegrees: camAz,
             cameraAltitudeDegrees: camAlt,
             cameraRollDegrees: camRoll,
+            customBasisNWZ: camera.effectiveBasisNWZ,
             fovDegrees: currentFov,
             viewportWidth: vw,
             viewportHeight: vh
         )
 
-        let obs3 = (latitude: obsLat, longitude: obsLon, elevation: 50.0)
+        let obs3 = (latitude: obsLat, longitude: obsLon, elevation: obsElev)
         let sunCoords = astronomyService.coordinates(of: .sun, for: obs3, at: date)
         let sunPt: CGPoint? = mat.projectHorizontal(
             azimuthDegrees: sunCoords.azimuthDegrees,
@@ -1268,7 +1376,7 @@ public final class CosmosViewModel: ObservableObject {
             }
         }
 
-        // 12. Horizon Curve, Cardinals & Zenith
+        // 12. 360° Roll-Invariant Horizon Curve, Screen-Nadir Ground Vector, Cardinals & Zenith
         var hPoints: [CGPoint] = []
         hPoints.reserveCapacity(91)
         if camera.isZenithPlanisphereLocked {
@@ -1279,20 +1387,29 @@ public final class CosmosViewModel: ObservableObject {
                 }
             }
         } else {
-            var lastX: Double = -.infinity
-            for offset in stride(from: -102, through: 102, by: 3) {
-                let azDeg = (camAz + Double(offset) + 360.0).truncatingRemainder(dividingBy: 360.0)
+            let centerAz = (hypot(mat.fx, mat.fy) > 1e-3)
+                ? ((atan2(-mat.fy, mat.fx) * (180.0 / .pi)) + 360.0).truncatingRemainder(dividingBy: 360.0)
+                : camAz
+            let maxMargin = max(vw, vh) * 1.35
+            for offset in stride(from: -114, through: 114, by: 3) {
+                let azDeg = (centerAz + Double(offset) + 360.0).truncatingRemainder(dividingBy: 360.0)
                 let azRad = azDeg * (.pi / 180.0)
                 let hx = cos(azRad)
                 let hy = -sin(azRad)
                 let cz = mat.fx * hx + mat.fy * hy
-                guard cz > 0.05,
-                      let p = mat.projectHorizontal(azimuthDegrees: azDeg, altitudeDegrees: 0.0, margin: max(vw, vh) * 0.9),
-                      p.x > lastX else { continue }
-                lastX = p.x
+                guard cz > 0.04,
+                      let p = mat.projectHorizontal(azimuthDegrees: azDeg, altitudeDegrees: 0.0, margin: maxMargin) else { continue }
                 hPoints.append(CGPoint(x: p.x, y: p.y))
             }
         }
+
+        // Unit screen vector pointing toward Earth's Nadir `(0, 0, -1)` regardless of device roll angle (0°..360°)
+        let rawDownX = -mat.rz
+        let rawDownY = mat.uz
+        let downLen = hypot(rawDownX, rawDownY)
+        let nadirScreenVec = (downLen > 1e-4)
+            ? CGPoint(x: rawDownX / downLen, y: rawDownY / downLen)
+            : CGPoint(x: 0.0, y: 1.0)
 
         let cardinalDefs: [(String, Double, Bool)] = [
             ("N", 0.0, true), ("NE", 45.0, false),
@@ -1412,6 +1529,7 @@ public final class CosmosViewModel: ObservableObject {
             planets: projectedPlanets,
             issState: issProjected,
             horizonPoints: hPoints,
+            nadirScreenUnitVector: nadirScreenVec,
             cardinals: cards,
             zenithPoint: zPt,
             targetGuide: guide,

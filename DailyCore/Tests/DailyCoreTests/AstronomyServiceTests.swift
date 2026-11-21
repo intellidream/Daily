@@ -310,4 +310,106 @@ final class AstronomyServiceTests: XCTestCase {
         let atacamaBortle = catalog.bortleClass(latitude: -24.6272, longitude: -70.4042)
         XCTAssertGreaterThan(bucharestBortle, atacamaBortle)
     }
+
+    func testCameraRollClockwiseHorizonAlignmentAndCustomSensorBasis() {
+        let service = AstronomyService.shared
+        let now = Date(timeIntervalSince1970: 1_761_772_800)
+
+        // Looking due North (Az=0, Alt=0), tilt phone +30° clockwise (top of phone toward East):
+        // Eastern horizon point (Az=30°, Alt=0°) must appear ABOVE vertical center (y < 400),
+        // Western horizon point (Az=330°, Alt=0°) must appear BELOW vertical center (y > 400).
+        let eastPt = service.projectHorizontal(
+            azimuthDegrees: 30.0,
+            altitudeDegrees: 0.0,
+            cameraAzimuthDegrees: 0.0,
+            cameraAltitudeDegrees: 0.0,
+            cameraRollDegrees: 30.0,
+            fovDegrees: 90.0,
+            viewportWidth: 1000.0,
+            viewportHeight: 800.0
+        )
+        let westPt = service.projectHorizontal(
+            azimuthDegrees: 330.0,
+            altitudeDegrees: 0.0,
+            cameraAzimuthDegrees: 0.0,
+            cameraAltitudeDegrees: 0.0,
+            cameraRollDegrees: 30.0,
+            fovDegrees: 90.0,
+            viewportWidth: 1000.0,
+            viewportHeight: 800.0
+        )
+        XCTAssertNotNil(eastPt)
+        XCTAssertNotNil(westPt)
+        XCTAssertGreaterThan(eastPt!.x, 500.0)
+        XCTAssertLessThan(eastPt!.y, 400.0, "Clockwise device tilt must lift East horizon on screen")
+        XCTAssertLessThan(westPt!.x, 500.0)
+        XCTAssertGreaterThan(westPt!.y, 400.0, "Clockwise device tilt must lower West horizon on screen")
+
+        // Verify direct 3x3 orthonormal quaternion basis matches Euler cameraRollDegrees identically
+        let rollRad = 30.0 * (.pi / 180.0)
+        let customBasis = (
+            right: (0.0, -cos(rollRad), -sin(rollRad)),
+            up: (0.0, -sin(rollRad), cos(rollRad)),
+            forward: (1.0, 0.0, 0.0)
+        )
+        let matEuler = service.makeProjectionMatrix(
+            observerLatitudeDegrees: bucharest.latitude,
+            observerLongitudeDegrees: bucharest.longitude,
+            observerElevationMeters: bucharest.elevation,
+            date: now,
+            cameraAzimuthDegrees: 0.0,
+            cameraAltitudeDegrees: 0.0,
+            cameraRollDegrees: 30.0,
+            fovDegrees: 90.0,
+            viewportWidth: 1000.0,
+            viewportHeight: 800.0
+        )
+        let matCustom = service.makeProjectionMatrix(
+            observerLatitudeDegrees: bucharest.latitude,
+            observerLongitudeDegrees: bucharest.longitude,
+            observerElevationMeters: bucharest.elevation,
+            date: now,
+            cameraAzimuthDegrees: 0.0,
+            cameraAltitudeDegrees: 0.0,
+            customBasisNWZ: customBasis,
+            fovDegrees: 90.0,
+            viewportWidth: 1000.0,
+            viewportHeight: 800.0
+        )
+        XCTAssertEqual(matEuler.rx, matCustom.rx, accuracy: 1e-9)
+        XCTAssertEqual(matEuler.ry, matCustom.ry, accuracy: 1e-9)
+        XCTAssertEqual(matEuler.rz, matCustom.rz, accuracy: 1e-9)
+        XCTAssertEqual(matEuler.ux, matCustom.ux, accuracy: 1e-9)
+        XCTAssertEqual(matEuler.uy, matCustom.uy, accuracy: 1e-9)
+        XCTAssertEqual(matEuler.uz, matCustom.uz, accuracy: 1e-9)
+    }
+
+    func testOfflineWMM2025GeomagneticDeclinationAndFieldIntensity() {
+        let service = AstronomyService.shared
+        let now = Date(timeIntervalSince1970: 1_795_220_000) // late 2026
+
+        let buch = service.geomagneticFieldEstimate(
+            latitudeDegrees: bucharest.latitude,
+            longitudeDegrees: bucharest.longitude,
+            elevationMeters: bucharest.elevation,
+            at: now
+        )
+        // Bucharest declination is East (+5°..+10°), ambient field ~46..54 µT
+        XCTAssertGreaterThan(buch.declinationDegrees, 4.5)
+        XCTAssertLessThan(buch.declinationDegrees, 10.5)
+        XCTAssertGreaterThan(buch.expectedIntensityMicroTesla, 44.0)
+        XCTAssertLessThan(buch.expectedIntensityMicroTesla, 56.0)
+
+        let nyc = service.geomagneticFieldEstimate(
+            latitudeDegrees: 40.7128,
+            longitudeDegrees: -74.0060,
+            elevationMeters: 15.0,
+            at: now
+        )
+        // New York declination is West (-15°..-8°)
+        XCTAssertLessThan(nyc.declinationDegrees, -8.0)
+        XCTAssertGreaterThan(nyc.declinationDegrees, -16.0)
+        XCTAssertGreaterThan(nyc.expectedIntensityMicroTesla, 45.0)
+        XCTAssertLessThan(nyc.expectedIntensityMicroTesla, 56.0)
+    }
 }

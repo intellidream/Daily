@@ -84,6 +84,24 @@
                     AutomationProperties.Name="Search Astronomical Catalog" />
 
                 <Button
+                    x:Name="LiveSkySensorButton"
+                    Visibility="Collapsed"
+                    Click="LiveSkySensorButton_Click"
+                    Height="36"
+                    CornerRadius="18"
+                    Background="#1FFFFFFF"
+                    BorderBrush="#33FFFFFF"
+                    BorderThickness="1"
+                    Padding="12,0"
+                    AutomationProperties.Name="Toggle Live Sky Orientation Sensor"
+                    ToolTipService.ToolTip="Point Windows 2-in-1 / Tablet toward the sky using built-in 9-axis sensors">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="LiveSkySensorIcon" Glyph="&#xE819;" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="#FF00E5FF" />
+                        <TextBlock x:Name="LiveSkySensorText" Text="Live Sky" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    </StackPanel>
+                </Button>
+
+                <Button
                     x:Name="ZenithLockButton"
                     Click="ZenithLockButton_Click"
                     Height="36"

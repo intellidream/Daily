@@ -645,6 +645,106 @@ public final class AstronomyService: Sendable {
         )
     }
 
+    // MARK: - Offline NOAA WMM-2025 Geomagnetic Declination & Ambient Field Estimate
+
+    /// Computes local magnetic declination (degrees East of True North) and expected ambient field strength (µT)
+    /// from the public-domain NOAA/NCEI World Magnetic Model (WMM-2025, epoch 2025.0–2030.0) without network I/O.
+    public func geomagneticFieldEstimate(
+        latitudeDegrees: Double,
+        longitudeDegrees: Double,
+        elevationMeters: Double = 0.0,
+        at date: Date = Date()
+    ) -> (declinationDegrees: Double, expectedIntensityMicroTesla: Double) {
+        let coeffs: [(n: Int, m: Int, g0: Double, h0: Double, dg: Double, dh: Double)] = [
+            (1, 0, -29351.8,    0.0,  12.0,   0.0),
+            (1, 1,  -1410.8, 4545.4,   9.7, -21.5),
+            (2, 0,  -2556.6,    0.0, -11.6,   0.0),
+            (2, 1,   2951.1,-3133.6,  -5.2, -27.7),
+            (2, 2,   1649.3, -815.1,  -8.0, -12.1),
+            (3, 0,   1361.0,    0.0,  -1.3,   0.0),
+            (3, 1,  -2404.1,  -56.6,  -4.2,   4.0),
+            (3, 2,   1243.8,  237.5,   0.4,  -0.3),
+            (3, 3,    453.6, -549.5, -15.6,  -4.1)
+        ]
+
+        let decimalYear = 1970.0 + (date.timeIntervalSince1970 / (365.2425 * 86400.0))
+        let dt = max(-1.0, min(6.0, decimalYear - 2025.0))
+
+        let a = 6_378_137.0
+        let f = 1.0 / 298.257223563
+        let e2 = f * (2.0 - f)
+        let rlat = max(-89.99, min(89.99, latitudeDegrees)) * Self.deg2rad
+        let rlon = longitudeDegrees * Self.deg2rad
+        let slat = sin(rlat)
+        let clat = cos(rlat)
+
+        let nCurv = a / sqrt(1.0 - e2 * slat * slat)
+        let xp = (nCurv + elevationMeters) * clat
+        let zp = (nCurv * (1.0 - e2) + elevationMeters) * slat
+        let r = max(1_000.0, hypot(xp, zp))
+        let gcLat = atan2(zp, xp)
+        let theta = (.pi * 0.5) - gcLat
+        let st = max(1e-8, sin(theta))
+        let ct = cos(theta)
+        let re = 6_371_200.0
+
+        var p = Array(repeating: Array(repeating: 0.0, count: 4), count: 4)
+        var dp = Array(repeating: Array(repeating: 0.0, count: 4), count: 4)
+        p[0][0] = 1.0
+        for n in 1...3 {
+            p[n][n] = st * p[n - 1][n - 1]
+            dp[n][n] = st * dp[n - 1][n - 1] + ct * p[n - 1][n - 1]
+            for m in 0..<n {
+                if n == 1 && m == 0 {
+                    p[1][0] = ct * p[0][0]
+                    dp[1][0] = -st * p[0][0] + ct * dp[0][0]
+                } else {
+                    let num = Double((n - 1) * (n - 1) - m * m)
+                    let den = Double((2 * n - 1) * (2 * n - 3))
+                    let k = num / den
+                    p[n][m] = ct * p[n - 1][m] - k * p[n - 2][m]
+                    dp[n][m] = -st * p[n - 1][m] + ct * dp[n - 1][m] - k * dp[n - 2][m]
+                }
+            }
+        }
+
+        var schmidt = Array(repeating: Array(repeating: 1.0, count: 4), count: 4)
+        for n in 1...3 {
+            schmidt[n][0] = schmidt[n - 1][0] * Double(2 * n - 1) / Double(n)
+            schmidt[n][1] = schmidt[n][0] * sqrt(Double(2 * n) / Double(n + 1))
+            if n >= 2 {
+                for m in 2...n {
+                    schmidt[n][m] = schmidt[n][m - 1] * sqrt(Double(n - m + 1) / Double(n + m))
+                }
+            }
+        }
+
+        var br = 0.0, bt = 0.0, bp = 0.0
+        for c in coeffs {
+            let g = c.g0 + dt * c.dg
+            let h = c.h0 + dt * c.dh
+            let snm = schmidt[c.n][c.m]
+            let pnm = p[c.n][c.m] * snm
+            let dpnm = dp[c.n][c.m] * snm
+            let ratio = pow(re / r, Double(c.n + 2))
+            let cm = cos(Double(c.m) * rlon)
+            let sm = sin(Double(c.m) * rlon)
+            let gh = g * cm + h * sm
+            br += Double(c.n + 1) * ratio * gh * pnm
+            bt += -ratio * gh * dpnm
+            bp += ratio * Double(c.m) * (g * sm - h * cm) * pnm / st
+        }
+
+        let psi = gcLat - rlat
+        let bxNorth = -bt * cos(psi) - br * sin(psi)
+        let byEast = bp
+        let bzDown = bt * sin(psi) - br * cos(psi)
+
+        let declDeg = atan2(byEast, bxNorth) * Self.rad2deg
+        let intensityMicroTesla = sqrt(bxNorth * bxNorth + byEast * byEast + bzDown * bzDown) / 1000.0
+        return (declDeg, intensityMicroTesla)
+    }
+
     // MARK: - Unified 3D Matrix Stereographic Projection (Zero-Trig Per-Star)
 
     /// Builds the per-frame `SkyProjectionMatrix` combining `Astronomy_Rotation_EQJ_HOR` with the orthonormal
@@ -652,6 +752,7 @@ public final class AstronomyService: Sendable {
     public func makeProjectionMatrix(
         observerLatitudeDegrees: Double,
         observerLongitudeDegrees: Double,
+        observerElevationMeters: Double = 0.0,
         date: Date,
         cameraAzimuthDegrees: Double,
         cameraAltitudeDegrees: Double,
@@ -662,7 +763,11 @@ public final class AstronomyService: Sendable {
         viewportHeight: Double
     ) -> SkyProjectionMatrix {
         var aTime = makeAstroTime(from: date)
-        let obs = makeObserver(latitude: observerLatitudeDegrees, longitude: observerLongitudeDegrees)
+        let obs = makeObserver(
+            latitude: observerLatitudeDegrees,
+            longitude: observerLongitudeDegrees,
+            elevationMeters: observerElevationMeters
+        )
         let rot = Astronomy_Rotation_EQJ_HOR(&aTime, obs)
 
         // Astronomy Engine stores rot column-major: target.x = rot[0][0]*x + rot[1][0]*y + rot[2][0]*z
@@ -687,20 +792,22 @@ public final class AstronomyService: Sendable {
             fy = -cos(alt) * sin(az)
             fz = sin(alt)
 
-            // Singularity-free right & up vectors across all altitudes [-90°, +90°] including exact Zenith
+            // Singularity-free right & up vectors across all altitudes [-90°, +90°] including exact Zenith.
+            // Positive `cameraRollDegrees` = clockwise device tilt around optical forward `f`:
+            // u = cos(roll)*u0 + sin(roll)*r0, r = cos(roll)*r0 - sin(roll)*u0.
             let r0x = -sin(az), r0y = -cos(az), r0z = 0.0
             let u0x = -sin(alt) * cos(az)
             let u0y = sin(alt) * sin(az)
             let u0z = cos(alt)
 
             let cr = cos(roll), sr = sin(roll)
-            rx = cr * r0x + sr * u0x
-            ry = cr * r0y + sr * u0y
-            rz = cr * r0z + sr * u0z
+            rx = cr * r0x - sr * u0x
+            ry = cr * r0y - sr * u0y
+            rz = cr * r0z - sr * u0z
 
-            ux = -sr * r0x + cr * u0x
-            uy = -sr * r0y + cr * u0y
-            uz = -sr * r0z + cr * u0z
+            ux = sr * r0x + cr * u0x
+            uy = sr * r0y + cr * u0y
+            uz = sr * r0z + cr * u0z
         }
 
         // Compose M = C * H once per frame
@@ -792,8 +899,8 @@ public final class AstronomyService: Sendable {
         let r0x = -sin(az), r0y = -cos(az), r0z = 0.0
         let u0x = -sin(alt) * cos(az), u0y = sin(alt) * sin(az), u0z = cos(alt)
         let cr = cos(roll), sr = sin(roll)
-        let rx = cr * r0x + sr * u0x, ry = cr * r0y + sr * u0y, rz = cr * r0z + sr * u0z
-        let ux = -sr * r0x + cr * u0x, uy = -sr * r0y + cr * u0y, uz = -sr * r0z + cr * u0z
+        let rx = cr * r0x - sr * u0x, ry = cr * r0y - sr * u0y, rz = cr * r0z - sr * u0z
+        let ux = sr * r0x + cr * u0x, uy = sr * r0y + cr * u0y, uz = sr * r0z + cr * u0z
 
         let tAz = azimuthDegrees * Self.deg2rad
         let tAlt = altitudeDegrees * Self.deg2rad

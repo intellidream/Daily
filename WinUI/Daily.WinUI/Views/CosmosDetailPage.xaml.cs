@@ -23,6 +23,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Devices.Sensors;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
@@ -65,8 +66,13 @@ namespace Daily_WinUI.Views
         // Camera State (60–120Hz interactive)
         private double _cameraAzimuth = 180.0;
         private double _cameraAltitude = 35.0;
+        private double _cameraRoll = 0.0;
         private double _fieldOfView = 75.0;
         private bool _isZenithPlanisphereLocked;
+
+        // Optional Windows 2-in-1 / Tablet IMU Sensor (auto-hidden on Desktop/VM without hardware IMU)
+        private OrientationSensor? _winOrientationSensor;
+        private bool _isLiveSkySensorActive;
 
         // Layer & Mode State
         private bool _isNightVision;
@@ -183,6 +189,7 @@ namespace Daily_WinUI.Views
             }
 
             ApplyPaletteToChrome();
+            InitializeOptionalTabletSensors();
             UpdateResponsiveDeckLayout(RootLayout.ActualWidth);
             SkyCanvas.Invalidate();
 
@@ -192,6 +199,7 @@ namespace Daily_WinUI.Views
 
         private void CosmosDetailPage_Unloaded(object sender, RoutedEventArgs e)
         {
+            StopOptionalTabletSensors();
             StopTimers();
         }
 
@@ -384,10 +392,11 @@ namespace Daily_WinUI.Views
 
             DateTime simUtc = CurrentSimulationUtc;
             double renderAlt = _isZenithPlanisphereLocked ? 90.0 : _cameraAltitude;
+            double renderRoll = _isZenithPlanisphereLocked ? 0.0 : _cameraRoll;
             var matrix = _astronomyService.MakeProjectionMatrix(
                 _latitude, _longitude, _elevationMeters,
                 simUtc,
-                _cameraAzimuth, renderAlt, 0.0,
+                _cameraAzimuth, renderAlt, renderRoll,
                 _fieldOfView, w, h);
 
             _hitTargets.Clear();
@@ -1454,7 +1463,13 @@ namespace Daily_WinUI.Views
                 double dx = pos.X - _lastPointerPos.X;
                 double dy = pos.Y - _lastPointerPos.Y;
                 if (Math.Abs(pos.X - _dragStartPos.X) > 4.0 || Math.Abs(pos.Y - _dragStartPos.Y) > 4.0)
+                {
                     _dragMoved = true;
+                    if (_isLiveSkySensorActive)
+                    {
+                        StopOptionalTabletSensors();
+                    }
+                }
 
                 _lastPointerPos = pos;
                 double degPerPx = Math.Max(0.015, _fieldOfView / Math.Max(320.0, Math.Min(SkyCanvas.ActualWidth, SkyCanvas.ActualHeight)));
@@ -2884,14 +2899,106 @@ namespace Daily_WinUI.Views
 
         private void ResetCameraButton_Click(object sender, RoutedEventArgs e)
         {
+            StopOptionalTabletSensors();
             _isZenithPlanisphereLocked = false;
             ZenithLockText.Text = "Horizon Dome";
             _cameraAzimuth = 180.0;
             _cameraAltitude = 35.0;
+            _cameraRoll = 0.0;
             _fieldOfView = 75.0;
             UpdateZoomPresetHighlight();
             UpdateCameraHudOnly();
             SkyCanvas.Invalidate();
+        }
+
+        // ── Optional Windows 11 2-in-1 / Tablet 9-Axis IMU Auto-Detection ───────
+        // Remains 100% hidden (`Visibility.Collapsed`) on Desktop PCs & Parallels VMs without IMU sensors.
+
+        private void InitializeOptionalTabletSensors()
+        {
+            try
+            {
+                _winOrientationSensor = OrientationSensor.GetDefault();
+                LiveSkySensorButton.Visibility = _winOrientationSensor != null
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+            catch
+            {
+                _winOrientationSensor = null;
+                LiveSkySensorButton.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void LiveSkySensorButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_winOrientationSensor == null) return;
+            if (_isLiveSkySensorActive)
+            {
+                StopOptionalTabletSensors();
+            }
+            else
+            {
+                _isZenithPlanisphereLocked = false;
+                ZenithLockText.Text = "Horizon Dome";
+                if (_timeOffset != TimeSpan.Zero)
+                {
+                    TimeTravel_ResetLive(this, new RoutedEventArgs());
+                }
+                _winOrientationSensor.ReportInterval = Math.Max(_winOrientationSensor.MinimumReportInterval, 16u);
+                _winOrientationSensor.ReadingChanged += OnWinOrientationReadingChanged;
+                _isLiveSkySensorActive = true;
+                UpdateLiveSkySensorButtonVisual();
+            }
+        }
+
+        private void StopOptionalTabletSensors()
+        {
+            if (_winOrientationSensor != null && _isLiveSkySensorActive)
+            {
+                try { _winOrientationSensor.ReadingChanged -= OnWinOrientationReadingChanged; } catch { }
+            }
+            _isLiveSkySensorActive = false;
+            _cameraRoll = 0.0;
+            UpdateLiveSkySensorButtonVisual();
+        }
+
+        private void UpdateLiveSkySensorButtonVisual()
+        {
+            if (LiveSkySensorButton.Visibility != Visibility.Visible) return;
+            Color accent = _isNightVision ? Color.FromArgb(255, 255, 24, 36) : Color.FromArgb(255, 0, 229, 255);
+            LiveSkySensorButton.Background = new SolidColorBrush(_isLiveSkySensorActive
+                ? Color.FromArgb(55, accent.R, accent.G, accent.B)
+                : Color.FromArgb(31, 255, 255, 255));
+            LiveSkySensorText.Text = _isLiveSkySensorActive ? "Live Sky ON" : "Live Sky";
+        }
+
+        private void OnWinOrientationReadingChanged(OrientationSensor sender, OrientationSensorReadingChangedEventArgs args)
+        {
+            var m = args.Reading.RotationMatrix;
+            // Optical axis looking out back of tablet screen is (0, 0, -1) in ENU:
+            double fEast = -m.M13;
+            double fNorth = -m.M23;
+            double fUp = -m.M33;
+            double altDeg = Math.Asin(Math.Clamp(fUp, -1.0, 1.0)) * (180.0 / Math.PI);
+            double azDeg = (Math.Atan2(fEast, fNorth) * (180.0 / Math.PI) + 360.0) % 360.0;
+            double uEast = m.M12, uNorth = m.M22, uUp = m.M32;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_isLiveSkySensorActive) return;
+                _cameraAzimuth = azDeg;
+                _cameraAltitude = Math.Clamp(altDeg, -85.0, 90.0);
+                double azR = azDeg * (Math.PI / 180.0);
+                double altR = altDeg * (Math.PI / 180.0);
+                double r0E = Math.Cos(azR), r0N = -Math.Sin(azR);
+                double u0E = -Math.Sin(altR) * Math.Sin(azR), u0N = -Math.Sin(altR) * Math.Cos(azR), u0U = Math.Cos(altR);
+                double projR = uEast * r0E + uNorth * r0N;
+                double projU = uEast * u0E + uNorth * u0N + uUp * u0U;
+                _cameraRoll = Math.Atan2(projR, projU) * (180.0 / Math.PI);
+                UpdateCameraHudOnly();
+                SkyCanvas.Invalidate();
+            });
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)

@@ -573,10 +573,11 @@ object AstronomyService {
         customBasisNWZ: Array<DoubleArray>? = null, // [0]=right(3), [1]=up(3), [2]=forward(3)
         fovDegrees: Double = 60.0,
         viewportWidth: Double,
-        viewportHeight: Double
+        viewportHeight: Double,
+        observerElevationMeters: Double = 0.0
     ): SkyProjectionMatrix {
         val time = makeTime(millis)
-        val obs = Observer(observerLatitudeDegrees, observerLongitudeDegrees, 0.0)
+        val obs = Observer(observerLatitudeDegrees, observerLongitudeDegrees, observerElevationMeters)
         val rot = rotationEqjHor(time, obs)
 
         val h00 = rot.rot[0][0]; val h01 = rot.rot[1][0]; val h02 = rot.rot[2][0]
@@ -600,19 +601,20 @@ object AstronomyService {
             fy = -cos(alt) * sin(az)
             fz = sin(alt)
 
+            // Positive `cameraRollDegrees` = clockwise device tilt around optical forward `f`
             val r0x = -sin(az); val r0y = -cos(az); val r0z = 0.0
             val u0x = -sin(alt) * cos(az)
             val u0y = sin(alt) * sin(az)
             val u0z = cos(alt)
 
             val cr = cos(roll); val sr = sin(roll)
-            rx = cr * r0x + sr * u0x
-            ry = cr * r0y + sr * u0y
-            rz = cr * r0z + sr * u0z
+            rx = cr * r0x - sr * u0x
+            ry = cr * r0y - sr * u0y
+            rz = cr * r0z - sr * u0z
 
-            ux = -sr * r0x + cr * u0x
-            uy = -sr * r0y + cr * u0y
-            uz = -sr * r0z + cr * u0z
+            ux = sr * r0x + cr * u0x
+            uy = sr * r0y + cr * u0y
+            uz = sr * r0z + cr * u0z
         }
 
         val m00 = rx * h00 + ry * h10 + rz * h20
@@ -695,8 +697,8 @@ object AstronomyService {
         val r0x = -sin(az); val r0y = -cos(az); val r0z = 0.0
         val u0x = -sin(alt) * cos(az); val u0y = sin(alt) * sin(az); val u0z = cos(alt)
         val cr = cos(roll); val sr = sin(roll)
-        val rx = cr * r0x + sr * u0x; val ry = cr * r0y + sr * u0y; val rz = cr * r0z + sr * u0z
-        val ux = -sr * r0x + cr * u0x; val uy = -sr * r0y + cr * u0y; val uz = -sr * r0z + cr * u0z
+        val rx = cr * r0x - sr * u0x; val ry = cr * r0y - sr * u0y; val rz = cr * r0z - sr * u0z
+        val ux = sr * r0x + cr * u0x; val uy = sr * r0y + cr * u0y; val uz = sr * r0z + cr * u0z
 
         val tAz = azimuthDegrees * DEG2RAD
         val tAlt = altitudeDegrees * DEG2RAD

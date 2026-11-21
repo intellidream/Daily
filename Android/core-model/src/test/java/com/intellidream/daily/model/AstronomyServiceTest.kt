@@ -298,4 +298,69 @@ class AstronomyServiceTest {
 
         assertEquals("Cosmos & Observatory", DashboardWidgetType.Cosmos.title)
     }
+
+    @Test
+    fun testCameraRollClockwiseHorizonAlignmentAndCustomSensorBasis() {
+        val eastPt = AstronomyService.projectHorizontal(
+            azimuthDegrees = 30.0,
+            altitudeDegrees = 0.0,
+            cameraAzimuthDegrees = 0.0,
+            cameraAltitudeDegrees = 0.0,
+            cameraRollDegrees = 30.0,
+            fovDegrees = 90.0,
+            viewportWidth = 1000.0,
+            viewportHeight = 800.0
+        )
+        val westPt = AstronomyService.projectHorizontal(
+            azimuthDegrees = 330.0,
+            altitudeDegrees = 0.0,
+            cameraAzimuthDegrees = 0.0,
+            cameraAltitudeDegrees = 0.0,
+            cameraRollDegrees = 30.0,
+            fovDegrees = 90.0,
+            viewportWidth = 1000.0,
+            viewportHeight = 800.0
+        )
+        assertNotNull(eastPt)
+        assertNotNull(westPt)
+        assertTrue(eastPt!!.first > 500.0)
+        assertTrue("Clockwise device tilt must lift East horizon on screen", eastPt.second < 400.0)
+        assertTrue(westPt!!.first < 500.0)
+        assertTrue("Clockwise device tilt must lower West horizon on screen", westPt.second > 400.0)
+
+        val rollRad = Math.toRadians(30.0)
+        val customBasis = arrayOf(
+            doubleArrayOf(0.0, -cos(rollRad), -sin(rollRad)),
+            doubleArrayOf(0.0, -sin(rollRad), cos(rollRad)),
+            doubleArrayOf(1.0, 0.0, 0.0)
+        )
+        val matEuler = AstronomyService.makeProjectionMatrix(
+            observerLatitudeDegrees = 44.4323,
+            observerLongitudeDegrees = 26.1063,
+            millis = 1_761_772_800_000L,
+            cameraAzimuthDegrees = 0.0,
+            cameraAltitudeDegrees = 0.0,
+            cameraRollDegrees = 30.0,
+            fovDegrees = 90.0,
+            viewportWidth = 1000.0,
+            viewportHeight = 800.0
+        )
+        val matCustom = AstronomyService.makeProjectionMatrix(
+            observerLatitudeDegrees = 44.4323,
+            observerLongitudeDegrees = 26.1063,
+            millis = 1_761_772_800_000L,
+            cameraAzimuthDegrees = 0.0,
+            cameraAltitudeDegrees = 0.0,
+            customBasisNWZ = customBasis,
+            fovDegrees = 90.0,
+            viewportWidth = 1000.0,
+            viewportHeight = 800.0
+        )
+        assertEquals(matEuler.rx, matCustom.rx, 1e-9)
+        assertEquals(matEuler.ry, matCustom.ry, 1e-9)
+        assertEquals(matEuler.rz, matCustom.rz, 1e-9)
+        assertEquals(matEuler.ux, matCustom.ux, 1e-9)
+        assertEquals(matEuler.uy, matCustom.uy, 1e-9)
+        assertEquals(matEuler.uz, matCustom.uz, 1e-9)
+    }
 }
