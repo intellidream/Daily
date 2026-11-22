@@ -234,3 +234,29 @@ TagDoS supports one-way, on-demand task import from **Microsoft To Do** and **Go
   - **All Streams (`S1..SN`)**: Displays every stream with clickable stream headers (jumping to `S{i}`), reminder indicators, focus-pill `✓` / `↻` quick actions, all interactive pills (tap to edit), and active memo previews.
   - **All Quick Notes**: Displays all Quick Notes below (pinned first) with inline `+ New Note` creation and tap-to-edit support.
 
+---
+
+## 11. Cross-Platform Sync Parity, Cluster Pull Gestures & Inline Widget Pill Controls
+
+### 11.1 Bi-Directional Android Supabase Sync & Cross-Platform Hardening
+- **Android Supabase Sync (`TagdosRemoteService` + `TagdosRepository`)**:
+  - `Android/core-network/src/main/java/com/intellidream/daily/network/TagdosRemoteService.kt` implements full PostgREST read/write sync for `public.tagdos_streams` (`onConflict = "user_id,stream_number"` omitting `id` to prevent reorder key collisions and serializing explicit `null` for cleared `reminder_time`) and `public.tagdos_quick_notes`.
+  - `TagdosRepository` protects starter seeds via `isUntouchedSeedStream` / `isUntouchedSeedNote` (and `updatedAt = 0L` on fresh installs) so starter templates never overwrite existing cloud streams/notes.
+  - Local mutations coalesce behind a `500ms` debounced push (`scheduleCloudPush`), while `syncWithSupabase(userId, force)` enforces a `15s` cooldown (`15_000L`) under a `Mutex` (bypassed by explicit pull-to-refresh with `force = true`), wired into `DailyApp`, `MainActivity`, and `TagdosNotesHubView`.
+- **Apple ISO-8601 Fractional-Second Hardening (`DailyCore`)**:
+  - `TagdosStore.makeSupabaseDecoder()` decodes both `.withFractionalSeconds` (emitted by Windows/.NET and Android `Instant`) and whole-second ISO-8601 timestamps, while initializing starter seeds with `Date(timeIntervalSince1970: 0)` and `save(triggerCloudSync: false)`.
+- **Windows WinUI Sync Hardening (`Services/TagdosService.cs`)**:
+  - Added `_realtimeLock` in `SetupRealtimeAsync` to eliminate duplicate startup Realtime subscriptions, expanded non-dirty remote diff detection to include `ReminderTime` and `ActiveMemos`, and added completion diagnostics (`SyncWithRemoteAsync completed (...)`) in `sync_debug.log`.
+
+### 11.2 iOS Intentional Cluster Pull Gesture (`UIGestureRecognizerRepresentable`)
+- **Non-Blocking Vertical Scroll**: Replaced SwiftUI `.highPriorityGesture(DragGesture)` on `SwipeableClusterCard` (`iOS/Daily/Views/Tagdos/TagdosNotesHubView.swift`) with `ClusterHorizontalPullGesture` backed by `UIPanGestureRecognizer` + `UIGestureRecognizerDelegate`.
+- **Deliberate Pull Mechanics**: Requires horizontal-dominant velocity (`abs(v.x) > abs(v.y) * 2.4 && abs(v.x) > 30`) and a `22pt` pull deadzone before claiming the touch, preventing slight diagonal thumb movement from locking vertical list scrolling while preserving haptic pull-right (`+ Tag`) and pull-left (`Alert`) actions plus tappable edge hints.
+
+### 11.3 Circular Raw Text / Syntax Header Button (iOS & macOS)
+- Updated the top-right Raw Text / Canvas toggle button in both `iOS/Daily/Views/Tagdos/TagdosNotesHubView.swift` (`32x32`) and `MacOS/Daily/Views/Tagdos/TagdosNotesHubView.swift` (`36x36`) to use a matching circular glass pill silhouette paired cleanly with the neighboring circular Import button and Android header controls.
+
+### 11.4 Inline Widget `✓` & `↻` Quick Actions Over Scrolling Pills Row
+- **Clean Stream Header**: Across iOS, macOS, Android (`TagdosNotesDashboardCard.kt` & `DailyTagdosGlanceWidget.kt`), and Windows WinUI 3 (`TagdosWidgetControl.xaml` & `DesktopTagdosWidgetView.xaml`), each widget/dashboard stream header displays only the stream title on the left and the optional `🔔 HH:mm` schedule indicator on the right.
+- **Pills Row with Floating Right Actions**: The `✓` (complete focus pill) and `↻` (recycle to back) buttons now sit inline on the right edge of each stream's pills row above a subtle horizontal fade scrim, with trailing scroll padding so horizontal/flowing pills slide cleanly underneath the action buttons.
+
+
