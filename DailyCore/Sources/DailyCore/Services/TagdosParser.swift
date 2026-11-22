@@ -138,39 +138,81 @@ public struct TagdosParser: Sendable {
 
     // MARK: - DSL Detection & Import Helpers
 
-    /// Returns true if `text` already conforms to TagDoS DSL (e.g., `MG/GM/TG & FSH/LDL`, `C$T`, `EXP!`, `5K`).
+    /// Returns true if `text` already conforms to TagDoS DSL (e.g., `MG/GM/TG & FSH/LDL`, `MG/GM & CRR vg/PL 98`, `C$T`, `EXP!`, `5K`).
     public func isAlreadyTagdosDsl(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+
+        let lower = trimmed.lowercased()
+        if lower.contains("http://") || lower.contains("https://") || lower.contains("www.") {
+            return false
+        }
 
         if trimmed.contains("/") || trimmed.contains("&") {
             let clusters = trimmed.components(separatedBy: "&")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
             guard !clusters.isEmpty else { return false }
-            var totalTokens = 0
-            for cluster in clusters {
-                let tokens = cluster.components(separatedBy: "/")
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                if tokens.isEmpty { return false }
-                for token in tokens {
-                    if token.rangeOfCharacter(from: .whitespacesAndNewlines) != nil || token.count > 16 {
+
+            if trimmed.contains("/") {
+                var totalTokens = 0
+                var hasSpaceInsideToken = false
+                var hasMnemonicSignal = false
+                for cluster in clusters {
+                    let tokens = cluster.components(separatedBy: "/")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    if tokens.isEmpty { return false }
+                    for token in tokens {
+                        let words = token.components(separatedBy: .whitespacesAndNewlines)
+                            .filter { !$0.isEmpty }
+                        if token.count > 24 || words.count > 3 {
+                            return false
+                        }
+                        if words.count > 1 {
+                            hasSpaceInsideToken = true
+                        }
+                        if token.contains("$") || token.contains("€") || token.contains("!") {
+                            hasMnemonicSignal = true
+                        }
+                        for w in words {
+                            let wLetters = w.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+                            if wLetters.count >= 2 && wLetters.allSatisfy({ CharacterSet.uppercaseLetters.contains($0) }) {
+                                hasMnemonicSignal = true
+                            }
+                        }
+                        totalTokens += 1
+                    }
+                }
+                guard totalTokens >= 2 || clusters.count >= 2 else { return false }
+                return !hasSpaceInsideToken || hasMnemonicSignal
+            } else {
+                guard clusters.count >= 2 else { return false }
+                var hasMnemonicSignal = false
+                for cluster in clusters {
+                    let words = cluster.components(separatedBy: .whitespacesAndNewlines)
+                        .filter { !$0.isEmpty }
+                    if cluster.count > 24 || words.count > 3 {
                         return false
                     }
-                    totalTokens += 1
+                    let lettersOnly = cluster.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+                    let isAllCaps = !lettersOnly.isEmpty && lettersOnly.allSatisfy { CharacterSet.uppercaseLetters.contains($0) }
+                    let hasGlyph = cluster.contains("$") || cluster.contains("€") || cluster.contains("!") ||
+                        cluster.rangeOfCharacter(from: .decimalDigits) != nil
+                    if hasGlyph || isAllCaps || cluster.count <= 5 {
+                        hasMnemonicSignal = true
+                    }
                 }
+                return hasMnemonicSignal
             }
-            return totalTokens >= 1
         }
 
         // Single-token check: no spaces, compact length, and mnemonic formatting
         guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
-              trimmed.count <= 10 else {
+              trimmed.count <= 12 else {
             return false
         }
-        let lower = trimmed.lowercased()
-        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.contains(".com") {
+        if lower.contains(".com") {
             return false
         }
         let hasSemanticGlyph = trimmed.contains("$") || trimmed.contains("€") || trimmed.contains("!") ||
@@ -247,12 +289,14 @@ public struct TagdosParser: Sendable {
         isHighImportance: Bool = false
     ) -> (tagOrDsl: String, isAlreadyDsl: Bool, memoEntry: String?) {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rawNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cleanNotes = rawNotes.caseInsensitiveCompare(cleanTitle) == .orderedSame ? "" : rawNotes
         let isDsl = isAlreadyTagdosDsl(cleanTitle)
         let tag = isDsl ? cleanTitle : proposeMnemonic(for: cleanTitle, isHighImportance: isHighImportance)
 
         if isDsl {
-            let memo = cleanNotes.isEmpty ? nil : "• [\(tag)] \(cleanNotes)"
+            // Plain notes only without any [DSL] prefix or title duplication
+            let memo = cleanNotes.isEmpty ? nil : cleanNotes
             return (tag, true, memo)
         } else {
             let memo = cleanNotes.isEmpty

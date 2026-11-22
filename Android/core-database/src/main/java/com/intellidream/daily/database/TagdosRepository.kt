@@ -156,246 +156,113 @@ class TagdosRepository(
 
     // MARK: - Stream Mutations
 
-    fun updateStreamRawText(streamId: String, newRawText: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            var updated = TagdosParser.parseStream(
-                rawText = newRawText,
-                title = stream.customTitle ?: stream.title,
-                id = stream.id,
-                streamReminder = stream.streamReminder,
-                orderIndex = stream.orderIndex,
-                existingStream = stream
-            )
-            val customTitle = stream.customTitle
-            if (customTitle.isNullOrBlank()) {
-                updated = updated.copy(title = updated.autoDetectedTitle, customTitle = null)
-            } else {
-                updated = updated.copy(customTitle = customTitle, title = customTitle)
-            }
-            updated = updated.copy(
-                activeMemos = stream.activeMemos,
-                attachments = stream.attachments,
-                updatedAt = System.currentTimeMillis()
-            )
+    private fun TagDoStream.toEntity(syncedAt: Long? = null): TagdoStreamEntity =
+        TagdoStreamEntity(
+            id = id,
+            orderIndex = orderIndex,
+            title = title,
+            customTitle = customTitle,
+            rawText = rawText,
+            streamReminder = streamReminder,
+            activeMemos = activeMemos,
+            updatedAt = updatedAt,
+            syncedAt = syncedAt
+        )
 
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
+    private fun persistStreamUpdate(updated: TagDoStream) {
+        val current = _streams.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == updated.id }
+        if (idx >= 0) {
+            current[idx] = updated
+        } else {
+            current.add(updated)
+            current.sortBy { it.orderIndex }
         }
+        _streams.value = current
+        scope.launch(ioDispatcher) {
+            tagdosDao.upsertStream(updated.toEntity(syncedAt = null))
+        }
+    }
+
+    fun updateStreamRawText(streamId: String, newRawText: String) {
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        var updated = TagdosParser.parseStream(
+            rawText = newRawText,
+            title = stream.customTitle ?: stream.title,
+            id = stream.id,
+            streamReminder = stream.streamReminder,
+            orderIndex = stream.orderIndex,
+            existingStream = stream
+        )
+        val customTitle = stream.customTitle?.trim()?.takeIf { it.isNotEmpty() }
+        updated = if (customTitle == null) {
+            updated.copy(title = updated.autoDetectedTitle, customTitle = null)
+        } else {
+            updated.copy(customTitle = customTitle, title = customTitle)
+        }
+        updated = updated.copy(
+            activeMemos = stream.activeMemos,
+            attachments = stream.attachments,
+            updatedAt = System.currentTimeMillis()
+        )
+        persistStreamUpdate(updated)
     }
 
     fun updateStreamTitle(streamId: String, newTitle: String?) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val clean = newTitle?.trim()
-            val (finalTitle, finalCustom) = if (!clean.isNullOrEmpty()) {
-                clean to clean
-            } else {
-                stream.autoDetectedTitle to null
-            }
-
-            val updated = stream.copy(
-                title = finalTitle,
-                customTitle = finalCustom,
-                updatedAt = System.currentTimeMillis()
-            )
-
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        val clean = newTitle?.trim()
+        val (finalTitle, finalCustom) = if (!clean.isNullOrEmpty()) {
+            clean to clean
+        } else {
+            stream.autoDetectedTitle to null
         }
+
+        val updated = stream.copy(
+            title = finalTitle,
+            customTitle = finalCustom,
+            updatedAt = System.currentTimeMillis()
+        )
+        persistStreamUpdate(updated)
     }
 
     fun setStreamReminder(streamId: String, date: Long?) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = stream.copy(
-                streamReminder = date,
-                updatedAt = System.currentTimeMillis()
-            )
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(stream.copy(streamReminder = date, updatedAt = System.currentTimeMillis()))
     }
 
     fun updateStreamMemos(streamId: String, memos: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = stream.copy(
-                activeMemos = memos,
-                updatedAt = System.currentTimeMillis()
-            )
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(stream.copy(activeMemos = memos, updatedAt = System.currentTimeMillis()))
     }
 
     fun recyclePillToBack(streamId: String, pillId: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = TagdosParser.recyclePillToBack(stream, pillId)
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(TagdosParser.recyclePillToBack(stream, pillId))
     }
 
     fun togglePillCompletion(streamId: String, pillId: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = TagdosParser.togglePillCompletion(stream, pillId)
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(TagdosParser.togglePillCompletion(stream, pillId))
     }
 
     fun removePill(streamId: String, pillId: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = TagdosParser.removePill(stream, pillId)
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(TagdosParser.removePill(stream, pillId))
     }
 
     fun movePillToFront(streamId: String, pillId: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = TagdosParser.movePillToFront(stream, pillId)
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(TagdosParser.movePillToFront(stream, pillId))
     }
 
     fun addPill(streamId: String, clusterIndex: Int, text: String) {
-        scope.launch(ioDispatcher) {
-            val stream = _streams.value.firstOrNull { it.id == streamId } ?: return@launch
-            val updated = TagdosParser.addPill(stream, clusterIndex, text)
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(TagdosParser.addPill(stream, clusterIndex, text))
     }
 
     fun updatePillText(streamId: String, pillId: String, newText: String) {
-        val current = _streams.value.toMutableList()
-        val idx = current.indexOfFirst { it.id == streamId }
-        if (idx < 0) return
-        val updated = TagdosParser.updatePillText(current[idx], pillId, newText)
-        current[idx] = updated
-        _streams.value = current
-
-        scope.launch(ioDispatcher) {
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        persistStreamUpdate(TagdosParser.updatePillText(stream, pillId, newText))
     }
 
     fun createStream(
@@ -405,38 +272,73 @@ class TagdosRepository(
     ): String {
         val current = _streams.value.toMutableList()
         val nextOrderIndex = (current.maxOfOrNull { it.orderIndex } ?: -1) + 1
-        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
-        val newId = UUID.randomUUID().toString()
-        var stream = TagdosParser.parseStream(
-            rawText = rawText,
-            title = cleanTitle ?: "Stream ${nextOrderIndex + 1}",
-            id = newId,
-            orderIndex = nextOrderIndex
-        )
-        stream = if (cleanTitle != null) {
-            stream.copy(customTitle = cleanTitle, title = cleanTitle, activeMemos = activeMemos)
-        } else {
-            stream.copy(customTitle = null, title = stream.autoDetectedTitle, activeMemos = activeMemos)
-        }
+        val stream = buildNewStream(title, rawText, activeMemos, nextOrderIndex)
         current.add(stream)
         _streams.value = current
 
         scope.launch(ioDispatcher) {
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = stream.id,
-                    orderIndex = stream.orderIndex,
-                    title = stream.title,
-                    customTitle = stream.customTitle,
-                    rawText = stream.rawText,
-                    streamReminder = stream.streamReminder,
-                    activeMemos = stream.activeMemos,
-                    updatedAt = System.currentTimeMillis(),
-                    syncedAt = null
-                )
-            )
+            tagdosDao.upsertStream(stream.toEntity(syncedAt = null))
         }
-        return newId
+        return stream.id
+    }
+
+    private fun buildNewStream(
+        title: String?,
+        rawText: String,
+        activeMemos: String,
+        orderIndex: Int
+    ): TagDoStream {
+        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+        val newId = UUID.randomUUID().toString()
+        var stream = TagdosParser.parseStream(
+            rawText = rawText,
+            title = cleanTitle ?: "Stream ${orderIndex + 1}",
+            id = newId,
+            orderIndex = orderIndex
+        )
+        stream = if (cleanTitle != null) {
+            stream.copy(customTitle = cleanTitle, title = cleanTitle, activeMemos = activeMemos, updatedAt = System.currentTimeMillis())
+        } else {
+            stream.copy(customTitle = null, title = stream.autoDetectedTitle, activeMemos = activeMemos, updatedAt = System.currentTimeMillis())
+        }
+        return stream
+    }
+
+    fun moveStream(fromIndex: Int, toIndex: Int) {
+        val current = _streams.value
+        if (fromIndex !in current.indices || toIndex !in current.indices || fromIndex == toIndex) return
+        val reordered = current.toMutableList()
+        val item = reordered.removeAt(fromIndex)
+        reordered.add(toIndex, item)
+        applyReorderedStreams(reordered)
+    }
+
+    fun reorderStreams(orderedIds: List<String>) {
+        val current = _streams.value
+        val byId = current.associateBy { it.id }.toMutableMap()
+        val reordered = mutableListOf<TagDoStream>()
+        for (id in orderedIds) {
+            byId.remove(id)?.let { reordered.add(it) }
+        }
+        for (s in current) {
+            if (byId.containsKey(s.id)) reordered.add(s)
+        }
+        if (reordered.map { it.id } == current.map { it.id }) return
+        applyReorderedStreams(reordered)
+    }
+
+    private fun applyReorderedStreams(reordered: List<TagDoStream>) {
+        val now = System.currentTimeMillis()
+        val reindexed = reordered.mapIndexed { idx, stream ->
+            val shifted = stream.copy(orderIndex = idx, updatedAt = now)
+            val custom = shifted.customTitle?.trim()?.takeIf { it.isNotEmpty() }
+            if (custom == null) shifted.copy(title = shifted.autoDetectedTitle, customTitle = null)
+            else shifted.copy(title = custom, customTitle = custom)
+        }
+        _streams.value = reindexed
+        scope.launch(ioDispatcher) {
+            tagdosDao.upsertStreams(reindexed.map { it.toEntity(syncedAt = null) })
+        }
     }
 
     fun deleteStream(streamId: String) {
@@ -457,21 +359,164 @@ class TagdosRepository(
 
         scope.launch(ioDispatcher) {
             tagdosDao.deleteStreamById(streamId)
-            val reindexed = reindexedDomain.map { stream ->
-                TagdoStreamEntity(
-                    id = stream.id,
-                    orderIndex = stream.orderIndex,
-                    title = stream.title,
-                    customTitle = stream.customTitle,
-                    rawText = stream.rawText,
-                    streamReminder = stream.streamReminder,
-                    activeMemos = stream.activeMemos,
-                    updatedAt = stream.updatedAt,
-                    syncedAt = null
-                )
-            }
-            tagdosDao.upsertStreams(reindexed)
+            tagdosDao.upsertStreams(reindexedDomain.map { it.toEntity(syncedAt = null) })
         }
+    }
+
+    sealed class TagdosTaskImportTarget {
+        data class ReplaceStream(val streamId: String) : TagdosTaskImportTarget()
+        data class AppendToStream(val streamId: String) : TagdosTaskImportTarget()
+        data class NewStream(val title: String) : TagdosTaskImportTarget()
+    }
+
+    data class TagdosTaskImportItem(
+        val dslOrTag: String,
+        val memoLine: String?,
+        val target: TagdosTaskImportTarget
+    )
+
+    fun importExternalTaskBatch(items: List<TagdosTaskImportItem>): String? {
+        if (items.isEmpty()) return null
+        val current = _streams.value.toMutableList()
+        val touchedEntities = linkedMapOf<String, TagdoStreamEntity>()
+        var firstAffectedId: String? = null
+        val now = System.currentTimeMillis()
+
+        // 1. Replace targets
+        val replaceOrder = mutableListOf<String>()
+        val replaceGroups = linkedMapOf<String, MutableList<TagdosTaskImportItem>>()
+        for (item in items) {
+            val target = item.target
+            if (target is TagdosTaskImportTarget.ReplaceStream) {
+                if (!replaceGroups.containsKey(target.streamId)) replaceOrder.add(target.streamId)
+                replaceGroups.getOrPut(target.streamId) { mutableListOf() }.add(item)
+            }
+        }
+
+        for (streamId in replaceOrder) {
+            val group = replaceGroups[streamId] ?: continue
+            val idx = current.indexOfFirst { it.id == streamId }
+            if (idx < 0) continue
+            val existing = current[idx]
+            val combinedDsl = combineImportedDslChunks(group.map { it.dslOrTag })
+            val combinedMemos = group.mapNotNull { it.memoLine?.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+
+            var updated = TagdosParser.parseStream(
+                rawText = combinedDsl,
+                title = existing.customTitle ?: existing.title,
+                id = existing.id,
+                streamReminder = existing.streamReminder,
+                orderIndex = existing.orderIndex,
+                existingStream = null
+            )
+            val custom = existing.customTitle?.trim()?.takeIf { it.isNotEmpty() }
+            updated = if (custom == null) {
+                updated.copy(title = updated.autoDetectedTitle, customTitle = null, activeMemos = combinedMemos, attachments = existing.attachments, updatedAt = now)
+            } else {
+                updated.copy(customTitle = custom, title = custom, activeMemos = combinedMemos, attachments = existing.attachments, updatedAt = now)
+            }
+            current[idx] = updated
+            touchedEntities[updated.id] = updated.toEntity(syncedAt = null)
+            if (firstAffectedId == null) firstAffectedId = updated.id
+        }
+
+        // 2. Append targets
+        val appendOrder = mutableListOf<String>()
+        val appendGroups = linkedMapOf<String, MutableList<TagdosTaskImportItem>>()
+        for (item in items) {
+            val target = item.target
+            if (target is TagdosTaskImportTarget.AppendToStream) {
+                if (!appendGroups.containsKey(target.streamId)) appendOrder.add(target.streamId)
+                appendGroups.getOrPut(target.streamId) { mutableListOf() }.add(item)
+            }
+        }
+
+        for (streamId in appendOrder) {
+            val group = appendGroups[streamId] ?: continue
+            val idx = current.indexOfFirst { it.id == streamId }
+            if (idx < 0) continue
+            val existing = current[idx]
+            val combinedDsl = combineImportedDslChunks(group.map { it.dslOrTag })
+            val combinedMemos = group.mapNotNull { it.memoLine?.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+            val existingRaw = existing.rawText.trim()
+            val newRaw = when {
+                existingRaw.isEmpty() -> combinedDsl
+                combinedDsl.isEmpty() -> existingRaw
+                else -> "$existingRaw & $combinedDsl"
+            }
+            val existingMemos = existing.activeMemos.trim()
+            val mergedMemos = when {
+                existingMemos.isEmpty() -> combinedMemos
+                combinedMemos.isEmpty() -> existingMemos
+                else -> "$existingMemos\n$combinedMemos"
+            }
+
+            var updated = TagdosParser.parseStream(
+                rawText = newRaw,
+                title = existing.customTitle ?: existing.title,
+                id = existing.id,
+                streamReminder = existing.streamReminder,
+                orderIndex = existing.orderIndex,
+                existingStream = existing
+            )
+            val custom = existing.customTitle?.trim()?.takeIf { it.isNotEmpty() }
+            updated = if (custom == null) {
+                updated.copy(title = updated.autoDetectedTitle, customTitle = null, activeMemos = mergedMemos, attachments = existing.attachments, updatedAt = now)
+            } else {
+                updated.copy(customTitle = custom, title = custom, activeMemos = mergedMemos, attachments = existing.attachments, updatedAt = now)
+            }
+            current[idx] = updated
+            touchedEntities[updated.id] = updated.toEntity(syncedAt = null)
+            if (firstAffectedId == null) firstAffectedId = updated.id
+        }
+
+        // 3. New Stream targets
+        val namedOrder = mutableListOf<String>()
+        val namedGroups = linkedMapOf<String, MutableList<TagdosTaskImportItem>>()
+        val unnamedItems = mutableListOf<TagdosTaskImportItem>()
+
+        for (item in items) {
+            val target = item.target
+            if (target is TagdosTaskImportTarget.NewStream) {
+                val cleanTitle = target.title.trim()
+                if (cleanTitle.isEmpty()) {
+                    unnamedItems.add(item)
+                } else {
+                    if (!namedGroups.containsKey(cleanTitle)) namedOrder.add(cleanTitle)
+                    namedGroups.getOrPut(cleanTitle) { mutableListOf() }.add(item)
+                }
+            }
+        }
+
+        for (titleKey in namedOrder) {
+            val group = namedGroups[titleKey] ?: continue
+            val combinedDsl = combineImportedDslChunks(group.map { it.dslOrTag })
+            val combinedMemos = group.mapNotNull { it.memoLine?.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+            val nextIdx = (current.maxOfOrNull { it.orderIndex } ?: -1) + 1
+            val created = buildNewStream(titleKey, combinedDsl, combinedMemos, nextIdx)
+            current.add(created)
+            touchedEntities[created.id] = created.toEntity(syncedAt = null)
+            if (firstAffectedId == null) firstAffectedId = created.id
+        }
+
+        for (item in unnamedItems) {
+            val combinedDsl = combineImportedDslChunks(listOf(item.dslOrTag))
+            val memo = item.memoLine?.trim().orEmpty()
+            val nextIdx = (current.maxOfOrNull { it.orderIndex } ?: -1) + 1
+            val created = buildNewStream(null, combinedDsl, memo, nextIdx)
+            current.add(created)
+            touchedEntities[created.id] = created.toEntity(syncedAt = null)
+            if (firstAffectedId == null) firstAffectedId = created.id
+        }
+
+        if (touchedEntities.isNotEmpty()) {
+            _streams.value = current
+            val toSave = touchedEntities.values.toList()
+            scope.launch(ioDispatcher) {
+                tagdosDao.upsertStreams(toSave)
+            }
+        }
+        return firstAffectedId
     }
 
     fun importExternalTasks(
@@ -483,75 +528,17 @@ class TagdosRepository(
     ): String {
         val combinedDsl = combineImportedDslChunks(rawDslChunks)
         val combinedMemos = memoLines.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
-
-        if (mode == "new") {
-            return createStream(title = newStreamTitle, rawText = combinedDsl, activeMemos = combinedMemos)
+        val target: TagdosTaskImportTarget = when {
+            mode == "new" -> TagdosTaskImportTarget.NewStream(newStreamTitle.orEmpty())
+            mode == "replace" && targetStreamId != null && _streams.value.any { it.id == targetStreamId } ->
+                TagdosTaskImportTarget.ReplaceStream(targetStreamId)
+            targetStreamId != null && _streams.value.any { it.id == targetStreamId } ->
+                TagdosTaskImportTarget.AppendToStream(targetStreamId)
+            else -> TagdosTaskImportTarget.NewStream(newStreamTitle.orEmpty())
         }
-
-        val current = _streams.value.toMutableList()
-        val idx = current.indexOfFirst { it.id == targetStreamId }
-        if (idx < 0) {
-            return createStream(title = newStreamTitle, rawText = combinedDsl, activeMemos = combinedMemos)
-        }
-        val existing = current[idx]
-
-        val newRaw: String
-        val mergedMemos: String
-        val preserveExisting: TagDoStream?
-
-        if (mode == "replace") {
-            newRaw = combinedDsl
-            mergedMemos = combinedMemos
-            preserveExisting = null
-        } else {
-            val existingRaw = existing.rawText.trim()
-            newRaw = when {
-                existingRaw.isEmpty() -> combinedDsl
-                combinedDsl.isEmpty() -> existingRaw
-                else -> "$existingRaw & $combinedDsl"
-            }
-            val existingMemos = existing.activeMemos.trim()
-            mergedMemos = when {
-                existingMemos.isEmpty() -> combinedMemos
-                combinedMemos.isEmpty() -> existingMemos
-                else -> "$existingMemos\n$combinedMemos"
-            }
-            preserveExisting = existing
-        }
-
-        var updated = TagdosParser.parseStream(
-            rawText = newRaw,
-            title = existing.customTitle ?: existing.title,
-            id = existing.id,
-            streamReminder = existing.streamReminder,
-            orderIndex = existing.orderIndex,
-            existingStream = preserveExisting
-        )
-        val existingCustomTitle = existing.customTitle
-        updated = if (existingCustomTitle.isNullOrBlank()) {
-            updated.copy(title = updated.autoDetectedTitle, customTitle = null, activeMemos = mergedMemos, updatedAt = System.currentTimeMillis())
-        } else {
-            updated.copy(customTitle = existingCustomTitle, title = existingCustomTitle, activeMemos = mergedMemos, updatedAt = System.currentTimeMillis())
-        }
-        current[idx] = updated
-        _streams.value = current
-
-        scope.launch(ioDispatcher) {
-            tagdosDao.upsertStream(
-                TagdoStreamEntity(
-                    id = updated.id,
-                    orderIndex = updated.orderIndex,
-                    title = updated.title,
-                    customTitle = updated.customTitle,
-                    rawText = updated.rawText,
-                    streamReminder = updated.streamReminder,
-                    activeMemos = updated.activeMemos,
-                    updatedAt = updated.updatedAt,
-                    syncedAt = null
-                )
-            )
-        }
-        return existing.id
+        return importExternalTaskBatch(
+            listOf(TagdosTaskImportItem(combinedDsl, combinedMemos.ifEmpty { null }, target))
+        ) ?: createStream(title = newStreamTitle, rawText = combinedDsl, activeMemos = combinedMemos)
     }
 
     private fun combineImportedDslChunks(chunks: List<String>): String {

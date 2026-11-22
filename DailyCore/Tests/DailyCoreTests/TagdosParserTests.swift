@@ -23,6 +23,7 @@ final class TagdosParserTests: XCTestCase {
         let parser = TagdosParser.shared
 
         XCTAssertTrue(parser.isAlreadyTagdosDsl("MG/GM/TG & FSH/LDL"))
+        XCTAssertTrue(parser.isAlreadyTagdosDsl("CRR vg/PL 98 & DOC sign"))
         XCTAssertTrue(parser.isAlreadyTagdosDsl("C$T"))
         XCTAssertTrue(parser.isAlreadyTagdosDsl("EXP!"))
         XCTAssertTrue(parser.isAlreadyTagdosDsl("5K"))
@@ -31,6 +32,7 @@ final class TagdosParserTests: XCTestCase {
         XCTAssertFalse(parser.isAlreadyTagdosDsl("Pay electricity bill"))
         XCTAssertFalse(parser.isAlreadyTagdosDsl("Schedule dentist appointment"))
         XCTAssertFalse(parser.isAlreadyTagdosDsl("Groceries"))
+        XCTAssertFalse(parser.isAlreadyTagdosDsl("Meet John on 12/05 about budget proposal"))
     }
 
     func testPrepareImportItemHandlesDslAndNaturalLanguageDifferently() {
@@ -40,6 +42,11 @@ final class TagdosParserTests: XCTestCase {
         XCTAssertTrue(dslPrep.isAlreadyDsl)
         XCTAssertEqual(dslPrep.tagOrDsl, "FIT/GYM & RUN/5K")
         XCTAssertNil(dslPrep.memoEntry)
+
+        let dslWithNotes = parser.prepareImportItem(title: "CRR vg/PL 98", notes: "Plain memo body", isHighImportance: false)
+        XCTAssertTrue(dslWithNotes.isAlreadyDsl)
+        XCTAssertEqual(dslWithNotes.tagOrDsl, "CRR vg/PL 98")
+        XCTAssertEqual(dslWithNotes.memoEntry, "Plain memo body")
 
         let prosePrep = parser.prepareImportItem(
             title: "Pay electricity bill",

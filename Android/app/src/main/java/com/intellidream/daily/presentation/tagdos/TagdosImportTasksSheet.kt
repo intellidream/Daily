@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -28,7 +29,10 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
@@ -41,7 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.model.TagDoStream
 import com.intellidream.daily.model.TagdosParser
 import com.intellidream.daily.network.ExternalTaskAccount
 import com.intellidream.daily.network.ExternalTaskList
@@ -67,6 +72,22 @@ import com.intellidream.daily.network.ExternalTasksAuthException
 import com.intellidream.daily.network.TagdosExternalTasksService
 import kotlinx.coroutines.launch
 
+private sealed interface AndroidTargetChoice {
+    data class ReplaceStream(val streamId: String) : AndroidTargetChoice
+    data class AppendToStream(val streamId: String) : AndroidTargetChoice
+    data object NewStream : AndroidTargetChoice
+
+    fun shortLabel(streams: List<TagDoStream>): String = when (this) {
+        is ReplaceStream -> streams.firstOrNull { it.id == streamId }?.let {
+            "Replace S${it.orderIndex + 1} (${it.displayTitle})"
+        } ?: "Replace Stream"
+        is AppendToStream -> streams.firstOrNull { it.id == streamId }?.let {
+            "Append S${it.orderIndex + 1} (${it.displayTitle})"
+        } ?: "Append Stream"
+        is NewStream -> "+ New Stream"
+    }
+}
+
 private data class AndroidImportDraft(
     val id: String,
     val originalTitle: String,
@@ -74,7 +95,9 @@ private data class AndroidImportDraft(
     val isHighImportance: Boolean,
     val isAlreadyDsl: Boolean,
     val editedTag: String,
-    val isSelected: Boolean = true
+    val isSelected: Boolean = false,
+    val targetChoice: AndroidTargetChoice,
+    val newStreamTitle: String = ""
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,7 +120,8 @@ fun TagdosImportTasksSheet(
     var selectedAccountId by remember { mutableStateOf<String?>(null) }
     var taskLists by remember { mutableStateOf<List<ExternalTaskList>>(emptyList()) }
     var selectedListId by remember { mutableStateOf<String?>(null) }
-    val drafts = remember { mutableStateListOf<AndroidImportDraft>() }
+    val stagedByTaskKey = remember { mutableStateMapOf<String, AndroidImportDraft>() }
+    var visibleTaskKeys by remember { mutableStateOf<List<String>>(emptyList()) }
 
     var isAuthenticating by remember { mutableStateOf(false) }
     var isLoadingLists by remember { mutableStateOf(false) }
@@ -105,18 +129,26 @@ fun TagdosImportTasksSheet(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var needsReauth by remember { mutableStateOf(false) }
 
-    var destinationMode by remember { mutableStateOf("append") } // "append", "replace", "new"
-    var targetStreamId by remember { mutableStateOf(initialStreamId ?: streams.firstOrNull()?.id) }
-    var newStreamTitle by remember { mutableStateOf("") }
+    var defaultTargetChoice by remember {
+        val fallbackId = initialStreamId ?: streams.firstOrNull()?.id
+        mutableStateOf<AndroidTargetChoice>(
+            if (fallbackId != null) AndroidTargetChoice.ReplaceStream(fallbackId) else AndroidTargetChoice.NewStream
+        )
+    }
+
+    fun resolveValidChoice(choice: AndroidTargetChoice): AndroidTargetChoice = when (choice) {
+        is AndroidTargetChoice.ReplaceStream ->
+            if (streams.any { it.id == choice.streamId }) choice else AndroidTargetChoice.NewStream
+        is AndroidTargetChoice.AppendToStream ->
+            if (streams.any { it.id == choice.streamId }) choice else AndroidTargetChoice.NewStream
+        is AndroidTargetChoice.NewStream -> choice
+    }
 
     val providerAccounts = remember(allAccounts, selectedProvider) {
         allAccounts.filter { it.provider == selectedProvider }
     }
     val selectedAccount = remember(providerAccounts, selectedAccountId) {
         providerAccounts.firstOrNull { it.id == selectedAccountId } ?: providerAccounts.firstOrNull()
-    }
-    val selectedList = remember(taskLists, selectedListId) {
-        taskLists.firstOrNull { it.id == selectedListId }
     }
 
     suspend fun loadTasks(account: ExternalTaskAccount, listId: String) {
@@ -125,24 +157,31 @@ fun TagdosImportTasksSheet(
         needsReauth = false
         try {
             val items = TagdosExternalTasksService.fetchTasks(account, listId)
-            drafts.clear()
+            val fallbackTarget = resolveValidChoice(defaultTargetChoice)
+            val nextKeys = mutableListOf<String>()
             items.forEach { item ->
-                val (tagOrDsl, isDsl, _) = TagdosParser.prepareImportItem(
-                    title = item.title,
-                    notes = item.notes,
-                    isHighImportance = item.isHighImportance
-                )
-                drafts.add(
-                    AndroidImportDraft(
-                        id = item.id,
+                val key = "${account.provider.name}::${account.id}::$listId::${item.id}"
+                nextKeys.add(key)
+                if (!stagedByTaskKey.containsKey(key)) {
+                    val (tagOrDsl, isDsl, _) = TagdosParser.prepareImportItem(
+                        title = item.title,
+                        notes = item.notes,
+                        isHighImportance = item.isHighImportance
+                    )
+                    stagedByTaskKey[key] = AndroidImportDraft(
+                        id = key,
                         originalTitle = item.title,
                         originalNotes = item.notes,
                         isHighImportance = item.isHighImportance,
                         isAlreadyDsl = isDsl,
-                        editedTag = tagOrDsl
+                        editedTag = tagOrDsl,
+                        isSelected = false,
+                        targetChoice = fallbackTarget,
+                        newStreamTitle = ""
                     )
-                )
+                }
             }
+            visibleTaskKeys = nextKeys
         } catch (e: ExternalTasksAuthException) {
             errorMessage = e.message
             needsReauth = e.needsReauth
@@ -157,14 +196,13 @@ fun TagdosImportTasksSheet(
         isLoadingLists = true
         errorMessage = null
         needsReauth = false
-        drafts.clear()
+        visibleTaskKeys = emptyList()
         try {
             val lists = TagdosExternalTasksService.fetchTaskLists(account)
             taskLists = lists
             val def = lists.firstOrNull { it.isDefault } ?: lists.firstOrNull()
             selectedListId = def?.id
             if (def != null) {
-                if (newStreamTitle.isBlank()) newStreamTitle = def.title
                 loadTasks(account, def.id)
             }
         } catch (e: ExternalTasksAuthException) {
@@ -195,7 +233,12 @@ fun TagdosImportTasksSheet(
     }
 
     LaunchedEffect(Unit) {
-        if (targetStreamId == null) targetStreamId = streams.firstOrNull()?.id
+        if (resolveValidChoice(defaultTargetChoice) == AndroidTargetChoice.NewStream) {
+            val fallbackId = initialStreamId ?: streams.firstOrNull()?.id
+            if (fallbackId != null) {
+                defaultTargetChoice = AndroidTargetChoice.ReplaceStream(fallbackId)
+            }
+        }
         TagdosExternalTasksService.refreshAvailableAccounts()
         val accountsNow = TagdosExternalTasksService.accounts.value
         val currentAcc = accountsNow.firstOrNull { it.provider == selectedProvider } ?: accountsNow.firstOrNull()
@@ -206,7 +249,15 @@ fun TagdosImportTasksSheet(
         }
     }
 
-    val selectedCount = drafts.count { it.isSelected && it.editedTag.isNotBlank() }
+    val visibleSet = visibleTaskKeys.toSet()
+    val visibleSelected = visibleTaskKeys.mapNotNull { stagedByTaskKey[it] }
+        .filter { it.isSelected && it.editedTag.isNotBlank() }
+    val offListSelected = stagedByTaskKey.values
+        .filter { !visibleSet.contains(it.id) && it.isSelected && it.editedTag.isNotBlank() }
+        .sortedBy { it.id }
+    val selectedDraftsOrdered = visibleSelected + offListSelected
+    val selectedCount = selectedDraftsOrdered.size
+    val offListSelectedCount = offListSelected.size
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -238,31 +289,35 @@ fun TagdosImportTasksSheet(
                 )
                 Button(
                     onClick = {
-                        val chosen = drafts.filter { it.isSelected && it.editedTag.isNotBlank() }
+                        val chosen = selectedDraftsOrdered
                         if (chosen.isNotEmpty()) {
-                            val dslChunks = mutableListOf<String>()
-                            val memoLines = mutableListOf<String>()
-                            for (item in chosen) {
-                                val tag = item.editedTag.trim()
-                                dslChunks.add(tag)
-                                val notes = item.originalNotes?.trim().orEmpty()
-                                if (item.isAlreadyDsl) {
-                                    if (notes.isNotEmpty()) memoLines.add("• [$tag] $notes")
+                            val batchItems = chosen.map { draft ->
+                                val tag = draft.editedTag.trim()
+                                val notes = draft.originalNotes?.trim().orEmpty()
+                                val memoLine: String? = if (draft.isAlreadyDsl) {
+                                    notes.takeIf { it.isNotEmpty() }
                                 } else {
-                                    memoLines.add(
-                                        if (notes.isEmpty()) "• [$tag] ${item.originalTitle}"
-                                        else "• [$tag] ${item.originalTitle} — $notes"
-                                    )
+                                    if (notes.isEmpty()) "• [$tag] ${draft.originalTitle}"
+                                    else "• [$tag] ${draft.originalTitle} — $notes"
                                 }
+                                val target: TagdosRepository.TagdosTaskImportTarget = when (val c = resolveValidChoice(draft.targetChoice)) {
+                                    is AndroidTargetChoice.ReplaceStream ->
+                                        TagdosRepository.TagdosTaskImportTarget.ReplaceStream(c.streamId)
+                                    is AndroidTargetChoice.AppendToStream ->
+                                        TagdosRepository.TagdosTaskImportTarget.AppendToStream(c.streamId)
+                                    is AndroidTargetChoice.NewStream ->
+                                        TagdosRepository.TagdosTaskImportTarget.NewStream(draft.newStreamTitle)
+                                }
+                                TagdosRepository.TagdosTaskImportItem(
+                                    dslOrTag = tag,
+                                    memoLine = memoLine,
+                                    target = target
+                                )
                             }
-                            val resultId = repository.importExternalTasks(
-                                mode = destinationMode,
-                                targetStreamId = targetStreamId,
-                                newStreamTitle = newStreamTitle,
-                                rawDslChunks = dslChunks,
-                                memoLines = memoLines
-                            )
-                            onImported(resultId)
+                            val resultId = repository.importExternalTaskBatch(batchItems)
+                            if (resultId != null) {
+                                onImported(resultId)
+                            }
                             onDismiss()
                         }
                     },
@@ -311,7 +366,7 @@ fun TagdosImportTasksSheet(
                                     needsReauth = false
                                     taskLists = emptyList()
                                     selectedListId = null
-                                    drafts.clear()
+                                    visibleTaskKeys = emptyList()
                                     val nextAcc = allAccounts.firstOrNull { it.provider == provider }
                                     selectedAccountId = nextAcc?.id
                                     if (nextAcc != null) {
@@ -478,9 +533,6 @@ fun TagdosImportTasksSheet(
                                         .background(if (isSel) ThemeColors.accentCyan else Color.White.copy(alpha = 0.08f))
                                         .clickable {
                                             selectedListId = list.id
-                                            if (newStreamTitle.isBlank() || taskLists.any { it.title == newStreamTitle }) {
-                                                newStreamTitle = list.title
-                                            }
                                             scope.launch { loadTasks(selectedAccount, list.id) }
                                         }
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -500,15 +552,65 @@ fun TagdosImportTasksSheet(
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ThemeColors.accentCyan, strokeWidth = 2.dp)
                                 Text("Fetching active tasks...", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
                             }
-                        } else if (drafts.isEmpty()) {
+                        } else if (visibleTaskKeys.isEmpty()) {
                             Text("No active tasks in this list.", fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f))
                         } else {
+                            // Default target bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White.copy(alpha = 0.045f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Default:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.65f)
+                                )
+                                AndroidTargetDropdownPill(
+                                    choice = resolveValidChoice(defaultTargetChoice),
+                                    streams = streams,
+                                    onSelect = { defaultTargetChoice = it }
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                val visibleCheckedCount = visibleTaskKeys.count { stagedByTaskKey[it]?.isSelected == true }
+                                if (visibleCheckedCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(ThemeColors.accentPurple.copy(alpha = 0.45f))
+                                            .clickable {
+                                                val chosen = resolveValidChoice(defaultTargetChoice)
+                                                visibleTaskKeys.forEach { key ->
+                                                    val cur = stagedByTaskKey[key]
+                                                    if (cur != null && cur.isSelected) {
+                                                        stagedByTaskKey[key] = cur.copy(targetChoice = chosen)
+                                                    }
+                                                }
+                                            }
+                                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = "Apply ($visibleCheckedCount)",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("${drafts.size} active tasks", fontSize = 11.sp, color = Color.White.copy(alpha = 0.6f))
+                                Text("${visibleTaskKeys.size} active tasks", fontSize = 11.sp, color = Color.White.copy(alpha = 0.6f))
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text(
                                         text = "Select All",
@@ -516,7 +618,9 @@ fun TagdosImportTasksSheet(
                                         fontWeight = FontWeight.Bold,
                                         color = ThemeColors.accentCyan,
                                         modifier = Modifier.clickable {
-                                            for (i in drafts.indices) drafts[i] = drafts[i].copy(isSelected = true)
+                                            visibleTaskKeys.forEach { key ->
+                                                stagedByTaskKey[key]?.let { stagedByTaskKey[key] = it.copy(isSelected = true) }
+                                            }
                                         }
                                     )
                                     Text(
@@ -525,20 +629,23 @@ fun TagdosImportTasksSheet(
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White.copy(alpha = 0.6f),
                                         modifier = Modifier.clickable {
-                                            for (i in drafts.indices) drafts[i] = drafts[i].copy(isSelected = false)
+                                            visibleTaskKeys.forEach { key ->
+                                                stagedByTaskKey[key]?.let { stagedByTaskKey[key] = it.copy(isSelected = false) }
+                                            }
                                         }
                                     )
                                 }
                             }
 
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                drafts.forEachIndexed { index, draft ->
+                                visibleTaskKeys.forEach { key ->
+                                    val draft = stagedByTaskKey[key] ?: return@forEach
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(Color.White.copy(alpha = if (draft.isSelected) 0.055f else 0.025f))
-                                            .border(1.dp, Color.White.copy(alpha = 0.09f), RoundedCornerShape(12.dp))
+                                            .border(1.dp, Color.White.copy(alpha = if (draft.isSelected) 0.16f else 0.08f), RoundedCornerShape(12.dp))
                                             .padding(10.dp),
                                         verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
@@ -552,12 +659,12 @@ fun TagdosImportTasksSheet(
                                                 tint = if (draft.isSelected) ThemeColors.accentCyan else Color.White.copy(alpha = 0.4f),
                                                 modifier = Modifier
                                                     .size(20.dp)
-                                                    .clickable { drafts[index] = draft.copy(isSelected = !draft.isSelected) }
+                                                    .clickable { stagedByTaskKey[key] = draft.copy(isSelected = !draft.isSelected) }
                                             )
 
                                             OutlinedTextField(
                                                 value = draft.editedTag,
-                                                onValueChange = { drafts[index] = draft.copy(editedTag = it) },
+                                                onValueChange = { stagedByTaskKey[key] = draft.copy(editedTag = it) },
                                                 singleLine = true,
                                                 modifier = Modifier.weight(1f),
                                                 textStyle = TextStyle(
@@ -608,100 +715,99 @@ fun TagdosImportTasksSheet(
                                                 modifier = Modifier.padding(start = 28.dp)
                                             )
                                         }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 28.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            AndroidTargetDropdownPill(
+                                                choice = resolveValidChoice(draft.targetChoice),
+                                                streams = streams,
+                                                onSelect = { chosen ->
+                                                    stagedByTaskKey[key] = draft.copy(
+                                                        targetChoice = chosen,
+                                                        isSelected = true
+                                                    )
+                                                }
+                                            )
+
+                                            if (resolveValidChoice(draft.targetChoice) is AndroidTargetChoice.NewStream) {
+                                                OutlinedTextField(
+                                                    value = draft.newStreamTitle,
+                                                    onValueChange = { stagedByTaskKey[key] = draft.copy(newStreamTitle = it) },
+                                                    placeholder = { Text("Optional title...", fontSize = 11.sp) },
+                                                    singleLine = true,
+                                                    modifier = Modifier.weight(1f),
+                                                    textStyle = TextStyle(fontSize = 11.sp, color = Color.White),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = ThemeColors.accentCyan,
+                                                        unfocusedBorderColor = Color.White.copy(alpha = 0.14f)
+                                                    ),
+                                                    shape = RoundedCornerShape(6.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Destination Section
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White.copy(alpha = 0.04f))
-                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text("DESTINATION", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.5f))
+                    // Batch Summary Card
+                    if (selectedCount > 0) {
+                        val groupedCounts = linkedMapOf<AndroidTargetChoice, Int>()
+                        selectedDraftsOrdered.forEach { d ->
+                            val c = resolveValidChoice(d.targetChoice)
+                            groupedCounts[c] = (groupedCounts[c] ?: 0) + 1
+                        }
+                        val hasReplace = groupedCounts.keys.any { it is AndroidTargetChoice.ReplaceStream }
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("append" to "Append", "replace" to "Replace", "new" to "New Stream").forEach { (key, label) ->
-                                val isSel = destinationMode == key
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(if (isSel) ThemeColors.accentCyan else Color.White.copy(alpha = 0.08f))
-                                        .clickable {
-                                            destinationMode = key
-                                            if (key == "new" && newStreamTitle.isBlank()) {
-                                                newStreamTitle = selectedList?.title ?: "Imported Stream"
-                                            }
-                                        }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.04f))
+                                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "BATCH SUMMARY ($selectedCount TASK${if (selectedCount == 1) "" else "S"})",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.5f)
+                                )
+                                if (offListSelectedCount > 0) {
                                     Text(
-                                        text = label,
-                                        fontSize = 11.5.sp,
+                                        text = "$offListSelectedCount from other list${if (offListSelectedCount == 1) "" else "s"}",
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isSel) Color.Black else Color.White
+                                        color = ThemeColors.accentCyan
                                     )
                                 }
                             }
-                        }
 
-                        if (destinationMode == "new") {
-                            OutlinedTextField(
-                                value = newStreamTitle,
-                                onValueChange = { newStreamTitle = it },
-                                label = { Text("New Stream Title") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    focusedBorderColor = ThemeColors.accentCyan,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                                    focusedLabelColor = ThemeColors.accentCyan,
-                                    unfocusedLabelColor = Color.White.copy(alpha = 0.6f)
-                                ),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                        } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                streams.forEach { stream ->
-                                    val isTarget = targetStreamId == stream.id
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(if (isTarget) ThemeColors.accentPurple.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.06f))
-                                            .border(1.dp, if (isTarget) ThemeColors.accentPurple else Color.White.copy(alpha = 0.12f), CircleShape)
-                                            .clickable { targetStreamId = stream.id }
-                                            .padding(horizontal = 10.dp, vertical = 7.dp)
-                                    ) {
-                                        Text(
-                                            text = "S${stream.orderIndex + 1}: ${stream.displayTitle}",
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isTarget) Color.White else Color.White.copy(alpha = 0.7f),
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
+                            groupedCounts.forEach { (choice, count) ->
+                                Text(
+                                    text = "• $count task${if (count == 1) "" else "s"} → ${choice.shortLabel(streams)}",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White.copy(alpha = 0.88f)
+                                )
                             }
 
-                            if (destinationMode == "replace") {
+                            if (hasReplace) {
                                 Text(
-                                    text = "Warning: Existing pills and active memos in the selected stream will be replaced.",
-                                    fontSize = 11.sp,
+                                    text = "Note: Replace targets clear existing pills and active memos on those streams before combining the mapped tasks.",
+                                    fontSize = 10.5.sp,
                                     color = ThemeColors.accentOrange
                                 )
                             }
@@ -711,6 +817,77 @@ fun TagdosImportTasksSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun AndroidTargetDropdownPill(
+    choice: AndroidTargetChoice,
+    streams: List<TagDoStream>,
+    onSelect: (AndroidTargetChoice) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val isReplace = choice is AndroidTargetChoice.ReplaceStream
+    val tint = if (isReplace) ThemeColors.accentOrange else ThemeColors.accentCyan
+
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(tint.copy(alpha = 0.15f))
+                .clickable { expanded = true }
+                .padding(horizontal = 9.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = choice.shortLabel(streams),
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = tint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                imageVector = Icons.Rounded.ArrowDropDown,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            streams.forEach { s ->
+                DropdownMenuItem(
+                    text = { Text("Replace S${s.orderIndex + 1}: ${s.displayTitle}") },
+                    onClick = {
+                        expanded = false
+                        onSelect(AndroidTargetChoice.ReplaceStream(s.id))
+                    }
+                )
+            }
+            HorizontalDivider()
+            streams.forEach { s ->
+                DropdownMenuItem(
+                    text = { Text("Append S${s.orderIndex + 1}: ${s.displayTitle}") },
+                    onClick = {
+                        expanded = false
+                        onSelect(AndroidTargetChoice.AppendToStream(s.id))
+                    }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("+ New Stream") },
+                onClick = {
+                    expanded = false
+                    onSelect(AndroidTargetChoice.NewStream)
+                }
+            )
         }
     }
 }

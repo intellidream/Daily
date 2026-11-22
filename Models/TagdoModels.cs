@@ -68,6 +68,22 @@ namespace Daily.Models
         }
     }
 
+    public enum TagdosTaskImportMode
+    {
+        Replace,
+        Append,
+        NewStream
+    }
+
+    public sealed class TagdosTaskImportItem
+    {
+        public string DslOrTag { get; set; } = string.Empty;
+        public string? MemoLine { get; set; }
+        public TagdosTaskImportMode Mode { get; set; } = TagdosTaskImportMode.Replace;
+        public string? TargetStreamId { get; set; }
+        public string? NewStreamTitle { get; set; }
+    }
+
     public class TagDoQuickNote
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();

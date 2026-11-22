@@ -838,14 +838,30 @@ public final class TagdosExternalTasksService: ObservableObject {
     }
 
     private static func stripHtml(_ html: String) -> String {
-        let noTags = html.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-        let decoded = noTags
+        var text = html
+            .replacingOccurrences(of: "(?is)<head[^>]*>.*?</head>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "(?is)<style[^>]*>.*?</style>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "(?i)<br\\s*/?>|</(p|div|li|h[1-6]|tr)>", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&#160;", with: " ")
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        return decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+
+        let lines = text
+            .components(separatedBy: .newlines)
+            .map { line in
+                line.replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+        text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text
     }
 
     private static func parseFlexibleDate(_ raw: String) -> Date? {

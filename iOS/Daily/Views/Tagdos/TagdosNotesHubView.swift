@@ -28,6 +28,10 @@ public struct TagdosNotesHubView: View {
     // Stream Rename Sheet state
     @State private var showingRenameSheet: Bool = false
     @State private var editingStreamTitle: String = ""
+    @State private var confirmDeleteStream: Bool = false
+
+    // Stream Reorder Sheet state
+    @State private var showingReorderSheet: Bool = false
 
     // External Tasks Import Sheet state
     @State private var showingImportSheet: Bool = false
@@ -161,7 +165,12 @@ public struct TagdosNotesHubView: View {
         }
         .sheet(isPresented: $showingRenameSheet) {
             renameStreamSheet
-                .presentationDetents([.height(280)])
+                .presentationDetents([.height(340)])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingReorderSheet) {
+            reorderStreamsSheet
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingImportSheet) {
@@ -294,7 +303,14 @@ public struct TagdosNotesHubView: View {
                                         )
                                 )
                             
-                            if let driving = stream.drivingPill {
+                            let trimmedCustom = stream.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let trimmedCustom, !trimmedCustom.isEmpty {
+                                Text(trimmedCustom)
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(isSelected ? .white : Color.white.opacity(0.85))
+                                    .lineLimit(1)
+                                    .frame(maxWidth: 110, alignment: .leading)
+                            } else if let driving = stream.drivingPill {
                                 Text(driving.rawText)
                                     .font(.system(size: 11, weight: .bold, design: .rounded))
                                     .foregroundColor(isSelected ? .white : Color.white.opacity(0.85))
@@ -319,6 +335,40 @@ public struct TagdosNotesHubView: View {
                                 )
                         )
                     }
+                    .contextMenu {
+                        if index > 0 {
+                            Button {
+                                moveStreamPreservingSelection(from: index, to: index - 1)
+                            } label: {
+                                Label("Move Left", systemImage: "arrow.left")
+                            }
+                        }
+                        if index < store.streams.count - 1 {
+                            Button {
+                                moveStreamPreservingSelection(from: index, to: index + 1)
+                            } label: {
+                                Label("Move Right", systemImage: "arrow.right")
+                            }
+                        }
+                        Button {
+                            triggerHaptic()
+                            selectedStreamIndex = index
+                            rawTextBuffer = stream.rawText
+                            editingStreamTitle = stream.customTitle ?? stream.title
+                            confirmDeleteStream = false
+                            showingRenameSheet = true
+                        } label: {
+                            Label("Rename Stream...", systemImage: "pencil")
+                        }
+                        if store.streams.count > 1 {
+                            Button {
+                                triggerHaptic()
+                                showingReorderSheet = true
+                            } label: {
+                                Label("Reorder Streams...", systemImage: "arrow.left.arrow.right")
+                            }
+                        }
+                    }
                 }
 
                 // Add New Stream Button
@@ -342,6 +392,24 @@ public struct TagdosNotesHubView: View {
                         )
                 }
                 .accessibilityLabel("New Stream")
+
+                if store.streams.count > 1 {
+                    Button {
+                        triggerHaptic()
+                        showingReorderSheet = true
+                    } label: {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(ThemeColors.accentPurple)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(ThemeColors.accentPurple.opacity(0.15))
+                                    .overlay(Circle().strokeBorder(ThemeColors.accentPurple.opacity(0.35), lineWidth: 1))
+                            )
+                    }
+                    .accessibilityLabel("Reorder Streams")
+                }
 
                 // Notes Tab
                 let isNotesSelected = selectedStreamIndex >= store.streams.count
@@ -406,6 +474,7 @@ public struct TagdosNotesHubView: View {
             Button {
                 triggerHaptic()
                 editingStreamTitle = stream.customTitle ?? stream.title
+                confirmDeleteStream = false
                 showingRenameSheet = true
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
@@ -801,7 +870,7 @@ public struct TagdosNotesHubView: View {
 
     // MARK: - Rename Stream Sheet
     private var renameStreamSheet: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             HStack {
                 Text("Rename Stream")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -825,6 +894,44 @@ public struct TagdosNotesHubView: View {
                 .padding(12)
                 .background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            if store.streams.count > 1, selectedStreamIndex < store.streams.count {
+                HStack(spacing: 10) {
+                    Button {
+                        moveStreamPreservingSelection(from: selectedStreamIndex, to: selectedStreamIndex - 1)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.left")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Move Left")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundColor(selectedStreamIndex > 0 ? ThemeColors.accentCyan : Color.white.opacity(0.25))
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(selectedStreamIndex > 0 ? 0.08 : 0.03))
+                        .clipShape(Capsule())
+                    }
+                    .disabled(selectedStreamIndex == 0)
+
+                    Button {
+                        moveStreamPreservingSelection(from: selectedStreamIndex, to: selectedStreamIndex + 1)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text("Move Right")
+                                .font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundColor(selectedStreamIndex < store.streams.count - 1 ? ThemeColors.accentCyan : Color.white.opacity(0.25))
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(selectedStreamIndex < store.streams.count - 1 ? 0.08 : 0.03))
+                        .clipShape(Capsule())
+                    }
+                    .disabled(selectedStreamIndex >= store.streams.count - 1)
+                }
+            }
 
             HStack(spacing: 12) {
                 Button("Cancel") {
@@ -851,28 +958,155 @@ public struct TagdosNotesHubView: View {
             }
 
             if store.streams.count > 1, let stream = currentStream {
-                Button(role: .destructive) {
-                    triggerHaptic()
-                    store.deleteStream(streamId: stream.id)
-                    selectedStreamIndex = min(selectedStreamIndex, max(0, store.streams.count - 1))
-                    showingRenameSheet = false
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Delete Stream")
-                            .font(.system(size: 13, weight: .semibold))
+                if confirmDeleteStream {
+                    HStack(spacing: 10) {
+                        Button("Keep Stream") {
+                            confirmDeleteStream = false
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+
+                        Button(role: .destructive) {
+                            triggerHaptic()
+                            store.deleteStream(streamId: stream.id)
+                            selectedStreamIndex = min(selectedStreamIndex, max(0, store.streams.count - 1))
+                            confirmDeleteStream = false
+                            showingRenameSheet = false
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash.fill")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text("Confirm Delete")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(ThemeColors.accentPink.opacity(0.75))
+                            .clipShape(Capsule())
+                        }
                     }
-                    .foregroundColor(ThemeColors.accentPink)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
-                    .background(ThemeColors.accentPink.opacity(0.1))
-                    .clipShape(Capsule())
+                } else {
+                    Button(role: .destructive) {
+                        triggerHaptic()
+                        confirmDeleteStream = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Delete Stream")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(ThemeColors.accentPink)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(ThemeColors.accentPink.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
                 }
             }
         }
         .padding(20)
         .background(Color(hex: "081426"))
+    }
+
+    private func moveStreamPreservingSelection(from: Int, to: Int) {
+        let activeId = currentStream?.id
+        triggerHaptic()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            store.moveStream(fromIndex: from, toIndex: to)
+            if let activeId, let updatedIdx = store.streams.firstIndex(where: { $0.id == activeId }) {
+                selectedStreamIndex = updatedIdx
+            }
+        }
+    }
+
+    // MARK: - Reorder Streams Sheet
+    private var reorderStreamsSheet: some View {
+        NavigationStack {
+            List {
+                ForEach(Array(store.streams.enumerated()), id: \.element.id) { index, stream in
+                    HStack(spacing: 12) {
+                        Text("S\(index + 1)")
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(ThemeColors.accentPurple))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(stream.displayTitle)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            if let driving = stream.drivingPill, stream.customTitle != nil {
+                                Text(driving.rawText)
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        Spacer()
+
+                        HStack(spacing: 6) {
+                            Button {
+                                moveStreamPreservingSelection(from: index, to: index - 1)
+                            } label: {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(index > 0 ? .white : .white.opacity(0.25))
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.white.opacity(index > 0 ? 0.1 : 0.03))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(index == 0)
+
+                            Button {
+                                moveStreamPreservingSelection(from: index, to: index + 1)
+                            } label: {
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(index < store.streams.count - 1 ? .white : .white.opacity(0.25))
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.white.opacity(index < store.streams.count - 1 ? 0.1 : 0.03))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(index >= store.streams.count - 1)
+                        }
+                    }
+                    .listRowBackground(Color.white.opacity(0.05))
+                }
+                .onMove { source, destination in
+                    var ids = store.streams.map(\.id)
+                    ids.move(fromOffsets: source, toOffset: destination)
+                    let activeId = currentStream?.id
+                    triggerHaptic()
+                    store.reorderStreams(orderedIds: ids)
+                    if let activeId, let updatedIdx = store.streams.firstIndex(where: { $0.id == activeId }) {
+                        selectedStreamIndex = updatedIdx
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color(hex: "081426"))
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Reorder Streams")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        showingReorderSheet = false
+                    }
+                    .foregroundColor(ThemeColors.accentCyan)
+                }
+            }
+        }
     }
 
     // MARK: - Reminder Sheet

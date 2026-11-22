@@ -285,32 +285,68 @@ object TagdosParser {
     // MARK: - DSL Detection & Import Helpers
 
     /**
-     * Returns true if [text] already conforms to TagDoS DSL (e.g., `MG/GM/TG & FSH/LDL`, `C$T`, `EXP!`, `5K`).
+     * Returns true if [text] already conforms to TagDoS DSL (e.g., `MG/GM/TG & FSH/LDL`, `MG/GM & CRR vg/PL 98`, `C$T`, `EXP!`, `5K`).
      */
     fun isAlreadyTagdosDsl(text: String): Boolean {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return false
 
+        val lower = trimmed.lowercase()
+        if (lower.contains("http://") || lower.contains("https://") || lower.contains("www.")) {
+            return false
+        }
+
         if (trimmed.contains("/") || trimmed.contains("&")) {
             val clusters = trimmed.split("&").map { it.trim() }.filter { it.isNotEmpty() }
             if (clusters.isEmpty()) return false
-            var totalTokens = 0
-            for (cluster in clusters) {
-                val tokens = cluster.split("/").map { it.trim() }.filter { it.isNotEmpty() }
-                if (tokens.isEmpty()) return false
-                for (token in tokens) {
-                    if (token.any { it.isWhitespace() } || token.length > 16) return false
-                    totalTokens++
+
+            if (trimmed.contains("/")) {
+                var totalTokens = 0
+                var hasSpaceInsideToken = false
+                var hasMnemonicSignal = false
+                for (cluster in clusters) {
+                    val tokens = cluster.split("/").map { it.trim() }.filter { it.isNotEmpty() }
+                    if (tokens.isEmpty()) return false
+                    for (token in tokens) {
+                        val words = token.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                        if (token.length > 24 || words.size > 3) return false
+                        if (words.size > 1) {
+                            hasSpaceInsideToken = true
+                        }
+                        if (token.contains("$") || token.contains("€") || token.contains("!")) {
+                            hasMnemonicSignal = true
+                        }
+                        for (w in words) {
+                            val wLetters = w.filter { it.isLetter() }
+                            if (wLetters.length >= 2 && wLetters.all { it.isUpperCase() }) {
+                                hasMnemonicSignal = true
+                            }
+                        }
+                        totalTokens++
+                    }
                 }
+                if (totalTokens < 2 && clusters.size < 2) return false
+                return !hasSpaceInsideToken || hasMnemonicSignal
+            } else {
+                if (clusters.size < 2) return false
+                var hasMnemonicSignal = false
+                for (cluster in clusters) {
+                    val words = cluster.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                    if (cluster.length > 24 || words.size > 3) return false
+                    val lettersOnly = cluster.filter { it.isLetter() }
+                    val isAllCaps = lettersOnly.isNotEmpty() && lettersOnly.all { it.isUpperCase() }
+                    val hasGlyph = cluster.contains("$") || cluster.contains("€") || cluster.contains("!") ||
+                        cluster.any { it.isDigit() }
+                    if (hasGlyph || isAllCaps || cluster.length <= 5) {
+                        hasMnemonicSignal = true
+                    }
+                }
+                return hasMnemonicSignal
             }
-            return totalTokens >= 1
         }
 
-        if (trimmed.any { it.isWhitespace() } || trimmed.length > 10) return false
-        val lower = trimmed.lowercase()
-        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.contains(".com")) {
-            return false
-        }
+        if (trimmed.any { it.isWhitespace() } || trimmed.length > 12) return false
+        if (lower.contains(".com")) return false
         val hasSemanticGlyph = trimmed.contains("$") || trimmed.contains("€") || trimmed.contains("!") ||
             trimmed.any { it.isDigit() }
         if (hasSemanticGlyph) return true
@@ -376,12 +412,14 @@ object TagdosParser {
         isHighImportance: Boolean = false
     ): Triple<String, Boolean, String?> {
         val cleanTitle = title.trim()
-        val cleanNotes = notes?.trim().orEmpty()
+        val rawNotes = notes?.trim().orEmpty()
+        val cleanNotes = if (rawNotes.equals(cleanTitle, ignoreCase = true)) "" else rawNotes
         val isDsl = isAlreadyTagdosDsl(cleanTitle)
         val tag = if (isDsl) cleanTitle else proposeMnemonic(cleanTitle, isHighImportance)
 
         return if (isDsl) {
-            val memo = if (cleanNotes.isEmpty()) null else "• [$tag] $cleanNotes"
+            // Plain notes only without any [DSL] prefix or title duplication
+            val memo = cleanNotes.ifEmpty { null }
             Triple(tag, true, memo)
         } else {
             val memo = if (cleanNotes.isEmpty()) "• [$tag] $cleanTitle" else "• [$tag] $cleanTitle — $cleanNotes"

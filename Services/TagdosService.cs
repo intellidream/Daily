@@ -46,6 +46,8 @@ namespace Daily.Services
         private RealtimeChannel? _notesRealtimeChannel;
         private string? _realtimeUserId;
         private long _lastLocalPushMs = 0;
+        private readonly Dictionary<int, string> _remoteSlotIdByNumber = new();
+        private readonly object _remoteSlotLock = new();
         private CancellationTokenSource? _realtimeDebounceCts;
         private readonly IGotrueClient<User, Session>.AuthEventHandler? _authListener;
 
@@ -317,6 +319,24 @@ namespace Daily.Services
         public async Task SaveStreamAsync(TagDoStream stream)
         {
             await EnsureLoadedAsync().ConfigureAwait(false);
+            await SaveStreamInternalAsync(stream, notify: true, pushRemote: true).ConfigureAwait(false);
+        }
+
+        private async Task SaveStreamInternalAsync(TagDoStream stream, bool notify, bool pushRemote)
+        {
+            if (!string.IsNullOrWhiteSpace(stream.CustomTitle))
+            {
+                stream.CustomTitle = stream.CustomTitle.Trim();
+                stream.Title = stream.CustomTitle;
+            }
+            else
+            {
+                stream.CustomTitle = null;
+                if (string.IsNullOrWhiteSpace(stream.Title))
+                {
+                    stream.Title = TagdosParser.AutoDetectStreamTitle(stream.RawText, stream.OrderIndex);
+                }
+            }
 
             var conn = _databaseService.Connection;
             var local = new LocalTagdoStream
@@ -337,7 +357,7 @@ namespace Daily.Services
 
             lock (_cachedStreams)
             {
-                var idx = _cachedStreams.FindIndex(s => s.Id == stream.Id || s.OrderIndex == stream.OrderIndex);
+                var idx = _cachedStreams.FindIndex(s => s.Id == stream.Id);
                 if (idx >= 0)
                 {
                     _cachedStreams[idx] = stream;
@@ -346,10 +366,17 @@ namespace Daily.Services
                 {
                     _cachedStreams.Add(stream);
                 }
+                _cachedStreams.Sort((a, b) => a.OrderIndex.CompareTo(b.OrderIndex));
             }
 
-            DataChanged?.Invoke(this, EventArgs.Empty);
-            _ = Task.Run(() => PushSingleStreamAsync(local));
+            if (notify)
+            {
+                DataChanged?.Invoke(this, EventArgs.Empty);
+            }
+            if (pushRemote)
+            {
+                _ = Task.Run(() => PushSingleStreamAsync(local));
+            }
         }
 
         public async Task UpdateStreamRawTextAsync(string streamId, string newRawText)
@@ -365,11 +392,15 @@ namespace Daily.Services
             {
                 var parsed = TagdosParser.ParseStream(newRawText, stream.OrderIndex, stream.Title, stream.StreamReminder, stream.ActiveMemos, stream.AttachmentsJson, stream.CustomTitle);
                 parsed.Id = stream.Id;
+                if (string.IsNullOrWhiteSpace(parsed.CustomTitle))
+                {
+                    parsed.Title = TagdosParser.AutoDetectStreamTitle(parsed.RawText, parsed.OrderIndex);
+                }
                 await SaveStreamAsync(parsed).ConfigureAwait(false);
             }
         }
 
-        public async Task UpdateStreamTitleAsync(string streamId, string newTitle)
+        public async Task UpdateStreamTitleAsync(string streamId, string? newTitle)
         {
             await EnsureLoadedAsync().ConfigureAwait(false);
             TagDoStream? stream = null;
@@ -380,7 +411,17 @@ namespace Daily.Services
 
             if (stream != null)
             {
-                stream.CustomTitle = newTitle;
+                var clean = newTitle?.Trim();
+                if (!string.IsNullOrWhiteSpace(clean))
+                {
+                    stream.CustomTitle = clean;
+                    stream.Title = clean;
+                }
+                else
+                {
+                    stream.CustomTitle = null;
+                    stream.Title = TagdosParser.AutoDetectStreamTitle(stream.RawText, stream.OrderIndex);
+                }
                 await SaveStreamAsync(stream).ConfigureAwait(false);
             }
         }
@@ -428,19 +469,120 @@ namespace Daily.Services
                 nextOrderIndex = _cachedStreams.Count > 0 ? _cachedStreams.Max(s => s.OrderIndex) + 1 : 0;
             }
 
+            var stream = BuildNewStream(title, rawText, activeMemos, nextOrderIndex);
+            await SaveStreamAsync(stream).ConfigureAwait(false);
+            return stream;
+        }
+
+        private static TagDoStream BuildNewStream(string? title, string rawText, string activeMemos, int orderIndex)
+        {
             var cleanTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
-            var defaultTitle = $"Stream {nextOrderIndex + 1}";
+            var resolvedTitle = cleanTitle ?? TagdosParser.AutoDetectStreamTitle(rawText, orderIndex);
             var stream = TagdosParser.ParseStream(
                 rawText,
-                nextOrderIndex,
-                cleanTitle ?? defaultTitle,
+                orderIndex,
+                resolvedTitle,
                 null,
                 activeMemos,
                 "[]",
                 cleanTitle);
-
-            await SaveStreamAsync(stream).ConfigureAwait(false);
             return stream;
+        }
+
+        public async Task MoveStreamAsync(int fromIndex, int toIndex)
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+            List<TagDoStream> reordered;
+            lock (_cachedStreams)
+            {
+                var ordered = _cachedStreams.OrderBy(s => s.OrderIndex).ToList();
+                if (fromIndex < 0 || fromIndex >= ordered.Count || toIndex < 0 || toIndex >= ordered.Count || fromIndex == toIndex)
+                    return;
+                var item = ordered[fromIndex];
+                ordered.RemoveAt(fromIndex);
+                ordered.Insert(toIndex, item);
+                reordered = ordered;
+            }
+            await ApplyReorderedStreamsAsync(reordered).ConfigureAwait(false);
+        }
+
+        public async Task ReorderStreamsAsync(List<string> orderedIds)
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+            List<TagDoStream> reordered;
+            lock (_cachedStreams)
+            {
+                var current = _cachedStreams.OrderBy(s => s.OrderIndex).ToList();
+                var byId = current.ToDictionary(s => s.Id, s => s);
+                reordered = new List<TagDoStream>();
+                foreach (var id in orderedIds)
+                {
+                    if (byId.Remove(id, out var found))
+                        reordered.Add(found);
+                }
+                foreach (var s in current)
+                {
+                    if (byId.ContainsKey(s.Id))
+                        reordered.Add(s);
+                }
+                if (reordered.Select(s => s.Id).SequenceEqual(current.Select(s => s.Id)))
+                    return;
+            }
+            await ApplyReorderedStreamsAsync(reordered).ConfigureAwait(false);
+        }
+
+        private async Task ApplyReorderedStreamsAsync(List<TagDoStream> reordered)
+        {
+            var conn = _databaseService.Connection;
+            var localsToPush = new List<LocalTagdoStream>();
+            var nowTicks = DateTime.UtcNow.Ticks;
+
+            for (int i = 0; i < reordered.Count; i++)
+            {
+                var s = reordered[i];
+                s.OrderIndex = i;
+                if (!string.IsNullOrWhiteSpace(s.CustomTitle))
+                {
+                    s.Title = s.CustomTitle.Trim();
+                }
+                else
+                {
+                    s.CustomTitle = null;
+                    s.Title = TagdosParser.AutoDetectStreamTitle(s.RawText, i);
+                }
+
+                var local = new LocalTagdoStream
+                {
+                    Id = s.Id,
+                    OrderIndex = i,
+                    Title = s.Title,
+                    CustomTitle = s.CustomTitle,
+                    RawText = s.RawText,
+                    StreamReminderTicks = s.StreamReminder?.Ticks,
+                    ActiveMemos = s.ActiveMemos ?? string.Empty,
+                    AttachmentsJson = string.IsNullOrWhiteSpace(s.AttachmentsJson) ? "[]" : s.AttachmentsJson,
+                    UpdatedAtTicks = nowTicks,
+                    SyncedAtTicks = null
+                };
+                await conn.InsertOrReplaceAsync(local).ConfigureAwait(false);
+                localsToPush.Add(local);
+            }
+
+            lock (_cachedStreams)
+            {
+                _cachedStreams.Clear();
+                _cachedStreams.AddRange(reordered);
+            }
+
+            DataChanged?.Invoke(this, EventArgs.Empty);
+
+            _ = Task.Run(async () =>
+            {
+                foreach (var ls in localsToPush)
+                {
+                    await PushSingleStreamAsync(ls).ConfigureAwait(false);
+                }
+            });
         }
 
         public async Task DeleteStreamAsync(string streamId)
@@ -465,6 +607,10 @@ namespace Daily.Services
             {
                 var s = remaining[i];
                 s.OrderIndex = i;
+                if (string.IsNullOrWhiteSpace(s.CustomTitle))
+                {
+                    s.Title = TagdosParser.AutoDetectStreamTitle(s.RawText, i);
+                }
                 var local = new LocalTagdoStream
                 {
                     Id = s.Id,
@@ -488,9 +634,17 @@ namespace Daily.Services
                 _cachedStreams.AddRange(remaining);
             }
 
+            int newCount = remaining.Count;
+            lock (_remoteSlotLock)
+            {
+                foreach (var overflowKey in _remoteSlotIdByNumber.Keys.Where(k => k > newCount).ToList())
+                {
+                    _remoteSlotIdByNumber.Remove(overflowKey);
+                }
+            }
+
             DataChanged?.Invoke(this, EventArgs.Empty);
 
-            int newCount = remaining.Count;
             _ = Task.Run(async () =>
             {
                 if (_supabaseClient != null)
@@ -528,6 +682,195 @@ namespace Daily.Services
             });
         }
 
+        public async Task<string?> ImportExternalTaskBatchAsync(List<TagdosTaskImportItem> items)
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+            if (items == null || items.Count == 0) return null;
+
+            string? firstAffectedId = null;
+            var touchedStreams = new List<TagDoStream>();
+
+            // 1. Replace targets
+            var replaceOrder = new List<string>();
+            var replaceGroups = new Dictionary<string, List<TagdosTaskImportItem>>();
+            foreach (var item in items)
+            {
+                if (item.Mode == TagdosTaskImportMode.Replace && !string.IsNullOrEmpty(item.TargetStreamId))
+                {
+                    if (!replaceGroups.ContainsKey(item.TargetStreamId)) replaceOrder.Add(item.TargetStreamId);
+                    if (!replaceGroups.TryGetValue(item.TargetStreamId, out var list))
+                    {
+                        list = new List<TagdosTaskImportItem>();
+                        replaceGroups[item.TargetStreamId] = list;
+                    }
+                    list.Add(item);
+                }
+            }
+
+            foreach (var streamId in replaceOrder)
+            {
+                TagDoStream? existing;
+                lock (_cachedStreams) { existing = _cachedStreams.FirstOrDefault(s => s.Id == streamId); }
+                if (existing == null) continue;
+
+                var group = replaceGroups[streamId];
+                var combinedDsl = CombineImportedDslChunks(group.Select(g => g.DslOrTag).ToList());
+                var combinedMemos = string.Join("\n", group.Select(g => g.MemoLine?.Trim() ?? "").Where(m => !string.IsNullOrEmpty(m)));
+
+                var updated = TagdosParser.ParseStream(
+                    combinedDsl,
+                    existing.OrderIndex,
+                    existing.Title,
+                    existing.StreamReminder,
+                    combinedMemos,
+                    existing.AttachmentsJson,
+                    existing.CustomTitle);
+                updated.Id = existing.Id;
+                if (string.IsNullOrWhiteSpace(updated.CustomTitle))
+                {
+                    updated.Title = TagdosParser.AutoDetectStreamTitle(updated.RawText, updated.OrderIndex);
+                }
+                else
+                {
+                    updated.CustomTitle = updated.CustomTitle.Trim();
+                    updated.Title = updated.CustomTitle;
+                }
+
+                await SaveStreamInternalAsync(updated, notify: false, pushRemote: false).ConfigureAwait(false);
+                touchedStreams.Add(updated);
+                firstAffectedId ??= updated.Id;
+            }
+
+            // 2. Append targets
+            var appendOrder = new List<string>();
+            var appendGroups = new Dictionary<string, List<TagdosTaskImportItem>>();
+            foreach (var item in items)
+            {
+                if (item.Mode == TagdosTaskImportMode.Append && !string.IsNullOrEmpty(item.TargetStreamId))
+                {
+                    if (!appendGroups.ContainsKey(item.TargetStreamId)) appendOrder.Add(item.TargetStreamId);
+                    if (!appendGroups.TryGetValue(item.TargetStreamId, out var list))
+                    {
+                        list = new List<TagdosTaskImportItem>();
+                        appendGroups[item.TargetStreamId] = list;
+                    }
+                    list.Add(item);
+                }
+            }
+
+            foreach (var streamId in appendOrder)
+            {
+                TagDoStream? existing;
+                lock (_cachedStreams) { existing = _cachedStreams.FirstOrDefault(s => s.Id == streamId); }
+                if (existing == null) continue;
+
+                var group = appendGroups[streamId];
+                var combinedDsl = CombineImportedDslChunks(group.Select(g => g.DslOrTag).ToList());
+                var combinedMemos = string.Join("\n", group.Select(g => g.MemoLine?.Trim() ?? "").Where(m => !string.IsNullOrEmpty(m)));
+
+                var existingRaw = (existing.RawText ?? string.Empty).Trim();
+                var newRaw = string.IsNullOrEmpty(existingRaw)
+                    ? combinedDsl
+                    : (string.IsNullOrEmpty(combinedDsl) ? existingRaw : $"{existingRaw} & {combinedDsl}");
+                var existingMemos = (existing.ActiveMemos ?? string.Empty).Trim();
+                var mergedMemos = string.IsNullOrEmpty(existingMemos)
+                    ? combinedMemos
+                    : (string.IsNullOrEmpty(combinedMemos) ? existingMemos : $"{existingMemos}\n{combinedMemos}");
+
+                var updated = TagdosParser.ParseStream(
+                    newRaw,
+                    existing.OrderIndex,
+                    existing.Title,
+                    existing.StreamReminder,
+                    mergedMemos,
+                    existing.AttachmentsJson,
+                    existing.CustomTitle);
+                updated.Id = existing.Id;
+                if (string.IsNullOrWhiteSpace(updated.CustomTitle))
+                {
+                    updated.Title = TagdosParser.AutoDetectStreamTitle(updated.RawText, updated.OrderIndex);
+                }
+                else
+                {
+                    updated.CustomTitle = updated.CustomTitle.Trim();
+                    updated.Title = updated.CustomTitle;
+                }
+
+                await SaveStreamInternalAsync(updated, notify: false, pushRemote: false).ConfigureAwait(false);
+                if (!touchedStreams.Any(t => t.Id == updated.Id)) touchedStreams.Add(updated);
+                else touchedStreams[touchedStreams.FindIndex(t => t.Id == updated.Id)] = updated;
+                firstAffectedId ??= updated.Id;
+            }
+
+            // 3. New Stream targets
+            var namedOrder = new List<string>();
+            var namedGroups = new Dictionary<string, List<TagdosTaskImportItem>>();
+            var unnamedItems = new List<TagdosTaskImportItem>();
+            foreach (var item in items)
+            {
+                if (item.Mode == TagdosTaskImportMode.NewStream)
+                {
+                    var cleanTitle = item.NewStreamTitle?.Trim() ?? string.Empty;
+                    if (string.IsNullOrEmpty(cleanTitle))
+                    {
+                        unnamedItems.Add(item);
+                    }
+                    else
+                    {
+                        if (!namedGroups.ContainsKey(cleanTitle)) namedOrder.Add(cleanTitle);
+                        if (!namedGroups.TryGetValue(cleanTitle, out var list))
+                        {
+                            list = new List<TagdosTaskImportItem>();
+                            namedGroups[cleanTitle] = list;
+                        }
+                        list.Add(item);
+                    }
+                }
+            }
+
+            foreach (var titleKey in namedOrder)
+            {
+                var group = namedGroups[titleKey];
+                var combinedDsl = CombineImportedDslChunks(group.Select(g => g.DslOrTag).ToList());
+                var combinedMemos = string.Join("\n", group.Select(g => g.MemoLine?.Trim() ?? "").Where(m => !string.IsNullOrEmpty(m)));
+                int nextIdx;
+                lock (_cachedStreams) { nextIdx = _cachedStreams.Count > 0 ? _cachedStreams.Max(s => s.OrderIndex) + 1 : 0; }
+                var created = BuildNewStream(titleKey, combinedDsl, combinedMemos, nextIdx);
+                await SaveStreamInternalAsync(created, notify: false, pushRemote: false).ConfigureAwait(false);
+                touchedStreams.Add(created);
+                firstAffectedId ??= created.Id;
+            }
+
+            foreach (var item in unnamedItems)
+            {
+                var combinedDsl = CombineImportedDslChunks(new List<string> { item.DslOrTag });
+                var memo = item.MemoLine?.Trim() ?? string.Empty;
+                int nextIdx;
+                lock (_cachedStreams) { nextIdx = _cachedStreams.Count > 0 ? _cachedStreams.Max(s => s.OrderIndex) + 1 : 0; }
+                var created = BuildNewStream(null, combinedDsl, memo, nextIdx);
+                await SaveStreamInternalAsync(created, notify: false, pushRemote: false).ConfigureAwait(false);
+                touchedStreams.Add(created);
+                firstAffectedId ??= created.Id;
+            }
+
+            if (touchedStreams.Count > 0)
+            {
+                DataChanged?.Invoke(this, EventArgs.Empty);
+                var conn = _databaseService.Connection;
+                var allIds = touchedStreams.Select(t => t.Id).ToHashSet();
+                _ = Task.Run(async () =>
+                {
+                    var allLocals = await conn.Table<LocalTagdoStream>().ToListAsync().ConfigureAwait(false);
+                    foreach (var ls in allLocals.Where(l => allIds.Contains(l.Id)))
+                    {
+                        await PushSingleStreamAsync(ls).ConfigureAwait(false);
+                    }
+                });
+            }
+
+            return firstAffectedId;
+        }
+
         public async Task<TagDoStream> ImportExternalTasksAsync(
             string mode,
             string? targetStreamId,
@@ -540,54 +883,33 @@ namespace Daily.Services
             string combinedDsl = CombineImportedDslChunks(rawDslChunks);
             string combinedMemos = string.Join("\n", memoLines.Select(m => m.Trim()).Where(m => !string.IsNullOrEmpty(m)));
 
-            if (string.Equals(mode, "new", StringComparison.OrdinalIgnoreCase))
-            {
-                return await CreateStreamAsync(newStreamTitle, combinedDsl, combinedMemos).ConfigureAwait(false);
-            }
-
-            TagDoStream? existing;
+            TagDoStream? target = null;
             lock (_cachedStreams)
             {
-                existing = _cachedStreams.FirstOrDefault(s => s.Id == targetStreamId);
+                target = _cachedStreams.FirstOrDefault(s => s.Id == targetStreamId);
             }
 
-            if (existing == null)
+            TagdosTaskImportMode mappedMode = string.Equals(mode, "new", StringComparison.OrdinalIgnoreCase) || target == null
+                ? TagdosTaskImportMode.NewStream
+                : (string.Equals(mode, "replace", StringComparison.OrdinalIgnoreCase) ? TagdosTaskImportMode.Replace : TagdosTaskImportMode.Append);
+
+            var id = await ImportExternalTaskBatchAsync(new List<TagdosTaskImportItem>
             {
-                return await CreateStreamAsync(newStreamTitle, combinedDsl, combinedMemos).ConfigureAwait(false);
-            }
+                new TagdosTaskImportItem
+                {
+                    DslOrTag = combinedDsl,
+                    MemoLine = string.IsNullOrEmpty(combinedMemos) ? null : combinedMemos,
+                    Mode = mappedMode,
+                    TargetStreamId = target?.Id,
+                    NewStreamTitle = newStreamTitle
+                }
+            }).ConfigureAwait(false);
 
-            string newRaw;
-            string mergedMemos;
-            if (string.Equals(mode, "replace", StringComparison.OrdinalIgnoreCase))
+            lock (_cachedStreams)
             {
-                newRaw = combinedDsl;
-                mergedMemos = combinedMemos;
+                return _cachedStreams.FirstOrDefault(s => s.Id == id)
+                    ?? _cachedStreams.OrderByDescending(s => s.OrderIndex).First();
             }
-            else
-            {
-                var existingRaw = (existing.RawText ?? string.Empty).Trim();
-                newRaw = string.IsNullOrEmpty(existingRaw)
-                    ? combinedDsl
-                    : (string.IsNullOrEmpty(combinedDsl) ? existingRaw : $"{existingRaw} & {combinedDsl}");
-
-                var existingMemos = (existing.ActiveMemos ?? string.Empty).Trim();
-                mergedMemos = string.IsNullOrEmpty(existingMemos)
-                    ? combinedMemos
-                    : (string.IsNullOrEmpty(combinedMemos) ? existingMemos : $"{existingMemos}\n{combinedMemos}");
-            }
-
-            var updated = TagdosParser.ParseStream(
-                newRaw,
-                existing.OrderIndex,
-                existing.Title,
-                existing.StreamReminder,
-                mergedMemos,
-                existing.AttachmentsJson,
-                existing.CustomTitle);
-            updated.Id = existing.Id;
-
-            await SaveStreamAsync(updated).ConfigureAwait(false);
-            return updated;
         }
 
         private static string CombineImportedDslChunks(List<string> chunks)
@@ -792,21 +1114,28 @@ namespace Daily.Services
 
                 if (remoteStreams.Count > 0)
                 {
+                    lock (_remoteSlotLock)
+                    {
+                        _remoteSlotIdByNumber.Clear();
+                        foreach (var r in remoteStreams)
+                        {
+                            if (!string.IsNullOrWhiteSpace(r.Id))
+                                _remoteSlotIdByNumber[r.StreamNumber] = r.Id;
+                        }
+                    }
+
                     var remoteStreamNumbers = remoteStreams.Select(r => r.StreamNumber).ToHashSet();
-                    var maxRemoteUpdatedUtc = remoteStreams.Max(r => r.UpdatedAt.Kind == DateTimeKind.Utc ? r.UpdatedAt : r.UpdatedAt.ToUniversalTime());
+                    int maxRemoteNum = remoteStreams.Max(r => r.StreamNumber);
 
                     foreach (var orphanLocal in localStreams.ToList())
                     {
                         int localNum = orphanLocal.OrderIndex + 1;
-                        if (!remoteStreamNumbers.Contains(localNum) && !IsUntouchedSeedStream(orphanLocal))
+                        // Only prune clean, previously synced overflow rows deleted remotely; never drop dirty local rows
+                        if (orphanLocal.SyncedAtTicks != null && localNum > maxRemoteNum && !IsUntouchedSeedStream(orphanLocal))
                         {
-                            var localUpd = new DateTime(orphanLocal.UpdatedAtTicks, DateTimeKind.Utc);
-                            if (orphanLocal.SyncedAtTicks != null || localUpd <= maxRemoteUpdatedUtc)
-                            {
-                                await conn.DeleteAsync(orphanLocal).ConfigureAwait(false);
-                                localStreams.Remove(orphanLocal);
-                                anyLocalUpdatedFromRemote = true;
-                            }
+                            await conn.DeleteAsync(orphanLocal).ConfigureAwait(false);
+                            localStreams.Remove(orphanLocal);
+                            anyLocalUpdatedFromRemote = true;
                         }
                     }
 
@@ -843,12 +1172,18 @@ namespace Daily.Services
                                 ? remote.Attachments.ToString(Newtonsoft.Json.Formatting.None)
                                 : "[]";
 
+                            var autoTitle = TagdosParser.AutoDetectStreamTitle(remote.RawSyntax ?? string.Empty, orderIdx);
+                            var trimmedRemoteTitle = (remote.Title ?? string.Empty).Trim();
+                            var customTitle = !string.IsNullOrWhiteSpace(trimmedRemoteTitle) && !string.Equals(trimmedRemoteTitle, autoTitle, StringComparison.Ordinal)
+                                ? trimmedRemoteTitle
+                                : null;
+
                             var updatedLocal = new LocalTagdoStream
                             {
                                 Id = remote.Id,
                                 OrderIndex = orderIdx,
-                                Title = remote.Title ?? string.Empty,
-                                CustomTitle = !string.IsNullOrWhiteSpace(remote.Title) ? remote.Title : null,
+                                Title = !string.IsNullOrWhiteSpace(trimmedRemoteTitle) ? trimmedRemoteTitle : autoTitle,
+                                CustomTitle = customTitle,
                                 RawText = remote.RawSyntax ?? string.Empty,
                                 StreamReminderTicks = reminderTicks,
                                 ActiveMemos = remote.ActiveMemos ?? string.Empty,
@@ -860,78 +1195,19 @@ namespace Daily.Services
                             await conn.InsertOrReplaceAsync(updatedLocal).ConfigureAwait(false);
                             anyLocalUpdatedFromRemote = true;
                         }
-                        else if (existing != null && !string.Equals(existing.Id, remote.Id, StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Adopt canonical remote UUID before pushing local dirty edit
-                            var oldId = existing.Id;
-                            existing.Id = remote.Id;
-                            await conn.DeleteAsync<LocalTagdoStream>(oldId).ConfigureAwait(false);
-                            await conn.InsertOrReplaceAsync(existing).ConfigureAwait(false);
-                        }
                     }
                 }
 
-                // Refresh localStreams snapshot and push dirty (or initial when remote is completely empty)
+                // Refresh localStreams snapshot and push dirty / missing-remote (or initial when remote is completely empty)
                 localStreams = await conn.Table<LocalTagdoStream>().OrderBy(s => s.OrderIndex).ToListAsync().ConfigureAwait(false);
+                var existingRemoteNums = remoteStreams.Select(r => r.StreamNumber).ToHashSet();
                 var streamsToPush = remoteStreams.Count == 0
                     ? localStreams
-                    : localStreams.Where(s => s.SyncedAtTicks == null && !IsUntouchedSeedStream(s)).ToList();
+                    : localStreams.Where(s => (s.SyncedAtTicks == null && !IsUntouchedSeedStream(s)) || !existingRemoteNums.Contains(s.OrderIndex + 1)).ToList();
 
                 foreach (var ls in streamsToPush)
                 {
-                    var effectiveTitle = !string.IsNullOrWhiteSpace(ls.CustomTitle) ? ls.CustomTitle! : ls.Title;
-                    string? reminderStr = null;
-                    if (ls.StreamReminderTicks.HasValue)
-                    {
-                        var dt = new DateTime(ls.StreamReminderTicks.Value, DateTimeKind.Utc);
-                        reminderStr = $"{dt.Hour:D2}:{dt.Minute:D2}";
-                    }
-
-                    JToken attachmentsToken;
-                    try
-                    {
-                        attachmentsToken = string.IsNullOrWhiteSpace(ls.AttachmentsJson)
-                            ? new JArray()
-                            : JToken.Parse(ls.AttachmentsJson);
-                    }
-                    catch
-                    {
-                        attachmentsToken = new JArray();
-                    }
-
-                    var updatedUtc = ls.UpdatedAtTicks > DateTime.UnixEpoch.Ticks
-                        ? new DateTime(ls.UpdatedAtTicks, DateTimeKind.Utc)
-                        : DateTime.UtcNow;
-
-                    var remotePayload = new RemoteTagdoStream
-                    {
-                        Id = Guid.TryParse(ls.Id, out _) ? ls.Id : Guid.NewGuid().ToString(),
-                        UserId = userId,
-                        StreamNumber = ls.OrderIndex + 1,
-                        Title = effectiveTitle,
-                        RawSyntax = ls.RawText ?? string.Empty,
-                        ReminderTime = reminderStr,
-                        ActiveMemos = ls.ActiveMemos ?? string.Empty,
-                        Attachments = attachmentsToken,
-                        UpdatedAt = updatedUtc
-                    };
-
-                    Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                    await ExecuteWithAuthAsync(
-                        () => _supabaseClient.From<RemoteTagdoStream>().Upsert(
-                            remotePayload,
-                            new Supabase.Postgrest.QueryOptions
-                            {
-                                OnConflict = "user_id,stream_number",
-                                Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
-                            }),
-                        $"Tagdos.PushStream({ls.OrderIndex + 1})").ConfigureAwait(false);
-                    Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-
-                    ls.Id = remotePayload.Id;
-                    ls.UpdatedAtTicks = updatedUtc.Ticks;
-                    ls.SyncedAtTicks = DateTime.UtcNow.Ticks;
-                    await conn.InsertOrReplaceAsync(ls).ConfigureAwait(false);
+                    await UpsertLocalStreamToRemoteAsync(ls, userId).ConfigureAwait(false);
                 }
 
                 // ── 2. Pull & Merge Quick Notes (tagdos_quick_notes) ─────────────────
@@ -1165,6 +1441,88 @@ namespace Daily.Services
             }, token);
         }
 
+        private string ResolveRemoteRowIdForSlot(int streamNumber, string localId)
+        {
+            lock (_remoteSlotLock)
+            {
+                if (_remoteSlotIdByNumber.TryGetValue(streamNumber, out var existingSlotId) && !string.IsNullOrWhiteSpace(existingSlotId))
+                {
+                    return existingSlotId;
+                }
+
+                // Never reuse a local ID that currently owns a different remote slot (prevents PK 23505 on reorder)
+                if (Guid.TryParse(localId, out _) && !_remoteSlotIdByNumber.Values.Contains(localId))
+                {
+                    return localId;
+                }
+                return Guid.NewGuid().ToString();
+            }
+        }
+
+        private async Task UpsertLocalStreamToRemoteAsync(LocalTagdoStream ls, string userId)
+        {
+            if (_supabaseClient == null) return;
+
+            int streamNum = ls.OrderIndex + 1;
+            var effectiveTitle = !string.IsNullOrWhiteSpace(ls.CustomTitle) ? ls.CustomTitle! : ls.Title;
+            string? reminderStr = null;
+            if (ls.StreamReminderTicks.HasValue)
+            {
+                var dt = new DateTime(ls.StreamReminderTicks.Value, DateTimeKind.Utc);
+                reminderStr = $"{dt.Hour:D2}:{dt.Minute:D2}";
+            }
+
+            JToken attachmentsToken;
+            try
+            {
+                attachmentsToken = string.IsNullOrWhiteSpace(ls.AttachmentsJson)
+                    ? new JArray()
+                    : JToken.Parse(ls.AttachmentsJson);
+            }
+            catch
+            {
+                attachmentsToken = new JArray();
+            }
+
+            var updatedUtc = ls.UpdatedAtTicks > DateTime.UnixEpoch.Ticks
+                ? new DateTime(ls.UpdatedAtTicks, DateTimeKind.Utc)
+                : DateTime.UtcNow;
+
+            var remotePayload = new RemoteTagdoStream
+            {
+                Id = ResolveRemoteRowIdForSlot(streamNum, ls.Id),
+                UserId = userId,
+                StreamNumber = streamNum,
+                Title = effectiveTitle,
+                RawSyntax = ls.RawText ?? string.Empty,
+                ReminderTime = reminderStr,
+                ActiveMemos = ls.ActiveMemos ?? string.Empty,
+                Attachments = attachmentsToken,
+                UpdatedAt = updatedUtc
+            };
+
+            Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            await ExecuteWithAuthAsync(
+                () => _supabaseClient.From<RemoteTagdoStream>().Upsert(
+                    remotePayload,
+                    new Supabase.Postgrest.QueryOptions
+                    {
+                        OnConflict = "user_id,stream_number",
+                        Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
+                    }),
+                $"Tagdos.PushStream({streamNum})").ConfigureAwait(false);
+            Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+            lock (_remoteSlotLock)
+            {
+                _remoteSlotIdByNumber[streamNum] = remotePayload.Id;
+            }
+
+            ls.UpdatedAtTicks = updatedUtc.Ticks;
+            ls.SyncedAtTicks = DateTime.UtcNow.Ticks;
+            await _databaseService.Connection.InsertOrReplaceAsync(ls).ConfigureAwait(false);
+        }
+
         private async Task PushSingleStreamAsync(LocalTagdoStream ls)
         {
             if (_supabaseClient == null) return;
@@ -1176,59 +1534,7 @@ namespace Daily.Services
                 var userId = _supabaseClient.Auth.CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId)) return;
 
-                var effectiveTitle = !string.IsNullOrWhiteSpace(ls.CustomTitle) ? ls.CustomTitle! : ls.Title;
-                string? reminderStr = null;
-                if (ls.StreamReminderTicks.HasValue)
-                {
-                    var dt = new DateTime(ls.StreamReminderTicks.Value, DateTimeKind.Utc);
-                    reminderStr = $"{dt.Hour:D2}:{dt.Minute:D2}";
-                }
-
-                JToken attachmentsToken;
-                try
-                {
-                    attachmentsToken = string.IsNullOrWhiteSpace(ls.AttachmentsJson)
-                        ? new JArray()
-                        : JToken.Parse(ls.AttachmentsJson);
-                }
-                catch
-                {
-                    attachmentsToken = new JArray();
-                }
-
-                var updatedUtc = ls.UpdatedAtTicks > DateTime.UnixEpoch.Ticks
-                    ? new DateTime(ls.UpdatedAtTicks, DateTimeKind.Utc)
-                    : DateTime.UtcNow;
-
-                var remotePayload = new RemoteTagdoStream
-                {
-                    Id = Guid.TryParse(ls.Id, out _) ? ls.Id : Guid.NewGuid().ToString(),
-                    UserId = userId,
-                    StreamNumber = ls.OrderIndex + 1,
-                    Title = effectiveTitle,
-                    RawSyntax = ls.RawText ?? string.Empty,
-                    ReminderTime = reminderStr,
-                    ActiveMemos = ls.ActiveMemos ?? string.Empty,
-                    Attachments = attachmentsToken,
-                    UpdatedAt = updatedUtc
-                };
-
-                Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                await ExecuteWithAuthAsync(
-                    () => _supabaseClient.From<RemoteTagdoStream>().Upsert(
-                        remotePayload,
-                        new Supabase.Postgrest.QueryOptions
-                        {
-                            OnConflict = "user_id,stream_number",
-                            Returning = Supabase.Postgrest.QueryOptions.ReturnType.Minimal
-                        }),
-                    $"Tagdos.PushSingleStream({ls.OrderIndex + 1})").ConfigureAwait(false);
-                Interlocked.Exchange(ref _lastLocalPushMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-
-                ls.Id = remotePayload.Id;
-                ls.UpdatedAtTicks = updatedUtc.Ticks;
-                ls.SyncedAtTicks = DateTime.UtcNow.Ticks;
-                await _databaseService.Connection.InsertOrReplaceAsync(ls).ConfigureAwait(false);
+                await UpsertLocalStreamToRemoteAsync(ls, userId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

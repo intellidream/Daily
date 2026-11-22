@@ -15,7 +15,8 @@ struct TagdosImportTasksSheet: View {
     @State private var selectedAccountId: String? = nil
     @State private var taskLists: [ExternalTaskList] = []
     @State private var selectedListId: String? = nil
-    @State private var draftItems: [ImportTaskDraft] = []
+    @State private var stagedByTaskKey: [String: ImportTaskDraft] = [:]
+    @State private var visibleTaskKeys: [String] = []
 
     @State private var isAuthenticating: Bool = false
     @State private var isLoadingLists: Bool = false
@@ -23,9 +24,7 @@ struct TagdosImportTasksSheet: View {
     @State private var errorMessage: String? = nil
     @State private var needsPermissionReauth: Bool = false
 
-    @State private var destinationMode: TagdosStore.TagdosImportDestinationMode = .appendToStream
-    @State private var targetStreamId: UUID? = nil
-    @State private var newStreamTitle: String = ""
+    @State private var defaultTargetChoice: ImportRowTargetChoice? = nil
 
     private var providerAccounts: [ExternalTaskAccount] {
         externalService.accounts.filter { $0.provider == selectedProvider }
@@ -42,8 +41,45 @@ struct TagdosImportTasksSheet: View {
         taskLists.first(where: { $0.id == selectedListId })
     }
 
+    private var effectiveDefaultTarget: ImportRowTargetChoice {
+        if let choice = defaultTargetChoice, isValidTargetChoice(choice) {
+            return choice
+        }
+        if let firstId = initialStreamId ?? store.streams.first?.id {
+            return .replaceStream(firstId)
+        }
+        return .newStream
+    }
+
+    private var selectedDraftsOrdered: [ImportTaskDraft] {
+        let visibleSet = Set(visibleTaskKeys)
+        let visibleSelected = visibleTaskKeys.compactMap { stagedByTaskKey[$0] }.filter {
+            $0.isSelected && !$0.editedTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let offListSelected = stagedByTaskKey.values
+            .filter { !visibleSet.contains($0.id) && $0.isSelected && !$0.editedTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { $0.id < $1.id }
+        return visibleSelected + offListSelected
+    }
+
     private var selectedCount: Int {
-        draftItems.filter { $0.isSelected && !$0.editedTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        selectedDraftsOrdered.count
+    }
+
+    private var offListSelectedCount: Int {
+        let visibleSet = Set(visibleTaskKeys)
+        return stagedByTaskKey.values.filter {
+            !visibleSet.contains($0.id) && $0.isSelected && !$0.editedTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
+
+    private func isValidTargetChoice(_ choice: ImportRowTargetChoice) -> Bool {
+        switch choice {
+        case .replaceStream(let id), .appendToStream(let id):
+            return store.streams.contains(where: { $0.id == id })
+        case .newStream:
+            return true
+        }
     }
 
     var body: some View {
@@ -57,7 +93,9 @@ struct TagdosImportTasksSheet: View {
                         accountSection
                         if selectedAccount != nil {
                             listsAndTasksSection
-                            destinationSection
+                        }
+                        if selectedCount > 0 {
+                            importSummarySection
                         }
                     }
                     .padding(16)
@@ -82,8 +120,8 @@ struct TagdosImportTasksSheet: View {
             }
         }
         .task {
-            if targetStreamId == nil {
-                targetStreamId = initialStreamId ?? store.streams.first?.id
+            if defaultTargetChoice == nil, let streamId = initialStreamId ?? store.streams.first?.id {
+                defaultTargetChoice = .replaceStream(streamId)
             }
             await externalService.refreshAvailableAccounts()
             if selectedAccount == nil, let firstAny = externalService.accounts.first {
@@ -101,7 +139,7 @@ struct TagdosImportTasksSheet: View {
             needsPermissionReauth = false
             taskLists = []
             selectedListId = nil
-            draftItems = []
+            visibleTaskKeys = []
             selectedAccountId = providerAccounts.first?.id
             if let acc = selectedAccount {
                 Task { await loadLists(for: acc) }
@@ -304,9 +342,6 @@ struct TagdosImportTasksSheet: View {
                             let isSelected = selectedListId == list.id
                             Button {
                                 selectedListId = list.id
-                                if newStreamTitle.isEmpty || taskLists.contains(where: { $0.title == newStreamTitle }) {
-                                    newStreamTitle = list.title
-                                }
                                 if let acc = selectedAccount {
                                     Task { await loadTasks(for: acc, listId: list.id) }
                                 }
@@ -334,120 +369,187 @@ struct TagdosImportTasksSheet: View {
                             .foregroundColor(Color.white.opacity(0.7))
                     }
                     .padding(.vertical, 12)
-                } else if draftItems.isEmpty {
+                } else if visibleTaskKeys.isEmpty {
                     Text("No active tasks in this list.")
                         .font(.system(size: 12))
                         .foregroundColor(Color.white.opacity(0.5))
                         .padding(.vertical, 10)
                 } else {
+                    defaultTargetBar
+
                     HStack {
-                        Text("\(draftItems.count) active tasks")
+                        Text("\(visibleTaskKeys.count) active tasks")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(Color.white.opacity(0.6))
                         Spacer()
                         Button("Select All") {
-                            for idx in draftItems.indices { draftItems[idx].isSelected = true }
+                            for key in visibleTaskKeys {
+                                stagedByTaskKey[key]?.isSelected = true
+                            }
                         }
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(ThemeColors.accentCyan)
                         Text("•").foregroundColor(Color.white.opacity(0.3))
                         Button("Clear") {
-                            for idx in draftItems.indices { draftItems[idx].isSelected = false }
+                            for key in visibleTaskKeys {
+                                stagedByTaskKey[key]?.isSelected = false
+                            }
                         }
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(Color.white.opacity(0.6))
                     }
 
                     VStack(spacing: 8) {
-                        ForEach($draftItems) { $draft in
-                            ImportTaskDraftRow(draft: $draft)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Destination Section
-
-    private var destinationSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("DESTINATION")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(Color.white.opacity(0.5))
-
-            HStack(spacing: 8) {
-                destinationModeButton(mode: .appendToStream, label: "Append", icon: "plus.rectangle.on.rectangle")
-                destinationModeButton(mode: .replaceStream, label: "Replace", icon: "arrow.triangle.2.circlepath")
-                destinationModeButton(mode: .createNewStream, label: "New Stream", icon: "sparkles.rectangle.stack")
-            }
-
-            if destinationMode == .createNewStream {
-                TextField("New stream title...", text: $newStreamTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Color.white.opacity(0.08))
-                    .cornerRadius(10)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(store.streams) { stream in
-                            let isTarget = targetStreamId == stream.id
-                            Button {
-                                targetStreamId = stream.id
-                            } label: {
-                                Text("S\(stream.orderIndex + 1): \(stream.displayTitle)")
-                                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                                    .foregroundColor(isTarget ? .white : Color.white.opacity(0.7))
-                                    .lineLimit(1)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        Capsule()
-                                            .fill(isTarget ? ThemeColors.accentPurple.opacity(0.45) : Color.white.opacity(0.06))
-                                            .overlay(Capsule().strokeBorder(isTarget ? ThemeColors.accentPurple : Color.white.opacity(0.12), lineWidth: 1))
-                                    )
+                        ForEach(visibleTaskKeys, id: \.self) { key in
+                            if let draftBinding = bindingForDraft(key: key) {
+                                ImportTaskDraftRow(
+                                    draft: draftBinding,
+                                    streams: store.streams
+                                )
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
+            }
+        }
+    }
 
-                if destinationMode == .replaceStream {
-                    Text("Warning: Existing pills and active memos in the selected stream will be replaced.")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(ThemeColors.accentOrange)
+    private func bindingForDraft(key: String) -> Binding<ImportTaskDraft>? {
+        guard stagedByTaskKey[key] != nil else { return nil }
+        return Binding(
+            get: { stagedByTaskKey[key]! },
+            set: { stagedByTaskKey[key] = $0 }
+        )
+    }
+
+    private var defaultTargetBar: some View {
+        HStack(spacing: 8) {
+            Text("Default:")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundColor(Color.white.opacity(0.65))
+
+            Menu {
+                targetChoiceMenuItems { choice in
+                    defaultTargetChoice = choice
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(effectiveDefaultTarget.shortLabel(for: store.streams))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundColor(ThemeColors.accentCyan)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(ThemeColors.accentCyan.opacity(0.14))
+                .clipShape(Capsule())
+            }
+
+            Spacer()
+
+            let visibleSelectedCount = visibleTaskKeys.filter { stagedByTaskKey[$0]?.isSelected == true }.count
+            if visibleSelectedCount > 0 {
+                Button("Apply to \(visibleSelectedCount) checked") {
+                    let chosenTarget = effectiveDefaultTarget
+                    for key in visibleTaskKeys where stagedByTaskKey[key]?.isSelected == true {
+                        stagedByTaskKey[key]?.targetChoice = chosenTarget
+                    }
+                }
+                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(ThemeColors.accentPurple.opacity(0.45))
+                .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.045))
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func targetChoiceMenuItems(onSelect: @escaping (ImportRowTargetChoice) -> Void) -> some View {
+        Section("Replace Stream") {
+            ForEach(store.streams) { stream in
+                Button("Replace S\(stream.orderIndex + 1): \(stream.displayTitle)") {
+                    onSelect(.replaceStream(stream.id))
                 }
             }
         }
-        .padding(14)
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(14)
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        Section("Append to Stream") {
+            ForEach(store.streams) { stream in
+                Button("Append S\(stream.orderIndex + 1): \(stream.displayTitle)") {
+                    onSelect(.appendToStream(stream.id))
+                }
+            }
+        }
+        Section("Create Stream") {
+            Button("+ New Stream") {
+                onSelect(.newStream)
+            }
+        }
     }
 
-    private func destinationModeButton(mode: TagdosStore.TagdosImportDestinationMode, label: String, icon: String) -> some View {
-        let isSelected = destinationMode == mode
-        return Button {
-            destinationMode = mode
-            if mode == .createNewStream && newStreamTitle.isEmpty {
-                newStreamTitle = selectedList?.title ?? "Imported Stream"
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .bold))
-                Text(label)
-                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
-            }
-            .foregroundColor(isSelected ? .black : .white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(isSelected ? ThemeColors.accentCyan : Color.white.opacity(0.08))
-            .cornerRadius(10)
+    // MARK: - Staged Batch Summary Section
+
+    private var importSummarySection: some View {
+        let groupedSummary = buildBatchSummaryLines()
+        let hasReplace = selectedDraftsOrdered.contains {
+            if case .replaceStream = $0.targetChoice { return true }
+            return false
         }
-        .buttonStyle(.plain)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("BATCH SUMMARY (\(selectedCount) TASK\(selectedCount == 1 ? "" : "S"))")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.5))
+                Spacer()
+                if offListSelectedCount > 0 {
+                    Text("\(offListSelectedCount) from other list\(offListSelectedCount == 1 ? "" : "s")")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentCyan)
+                }
+            }
+
+            ForEach(groupedSummary, id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.88))
+            }
+
+            if hasReplace {
+                Text("Note: Replace targets clear existing pills and active memos on those streams before combining the mapped tasks.")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundColor(ThemeColors.accentOrange)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    private func buildBatchSummaryLines() -> [String] {
+        var counts: [ImportRowTargetChoice: Int] = [:]
+        var order: [ImportRowTargetChoice] = []
+        for draft in selectedDraftsOrdered {
+            let resolved = isValidTargetChoice(draft.targetChoice) ? draft.targetChoice : .newStream
+            if counts[resolved] == nil {
+                order.append(resolved)
+            }
+            counts[resolved, default: 0] += 1
+        }
+        return order.map { choice in
+            let c = counts[choice, default: 0]
+            return "• \(c) task\(c == 1 ? "" : "s") → \(choice.shortLabel(for: store.streams))"
+        }
     }
 
     // MARK: - Actions
@@ -479,7 +581,7 @@ struct TagdosImportTasksSheet: View {
         isLoadingLists = true
         errorMessage = nil
         needsPermissionReauth = false
-        draftItems = []
+        visibleTaskKeys = []
         defer { isLoadingLists = false }
 
         do {
@@ -488,9 +590,6 @@ struct TagdosImportTasksSheet: View {
             let defaultList = lists.first(where: \.isDefault) ?? lists.first
             selectedListId = defaultList?.id
             if let list = defaultList {
-                if newStreamTitle.isEmpty {
-                    newStreamTitle = list.title
-                }
                 await loadTasks(for: account, listId: list.id)
             }
         } catch let authErr as ExternalTasksAuthError {
@@ -513,21 +612,31 @@ struct TagdosImportTasksSheet: View {
 
         do {
             let items = try await externalService.fetchTasks(for: account, listId: listId)
-            draftItems = items.map { item in
-                let prep = TagdosParser.shared.prepareImportItem(
-                    title: item.title,
-                    notes: item.notes,
-                    isHighImportance: item.isHighImportance
-                )
-                return ImportTaskDraft(
-                    id: item.id,
-                    originalTitle: item.title,
-                    originalNotes: item.notes,
-                    isHighImportance: item.isHighImportance,
-                    isAlreadyDsl: prep.isAlreadyDsl,
-                    editedTag: prep.tagOrDsl
-                )
+            var keys: [String] = []
+            let fallbackTarget = effectiveDefaultTarget
+            for item in items {
+                let key = "\(account.provider.rawValue)::\(account.id)::\(listId)::\(item.id)"
+                keys.append(key)
+                if stagedByTaskKey[key] == nil {
+                    let prep = TagdosParser.shared.prepareImportItem(
+                        title: item.title,
+                        notes: item.notes,
+                        isHighImportance: item.isHighImportance
+                    )
+                    stagedByTaskKey[key] = ImportTaskDraft(
+                        id: key,
+                        originalTitle: item.title,
+                        originalNotes: item.notes,
+                        isHighImportance: item.isHighImportance,
+                        isAlreadyDsl: prep.isAlreadyDsl,
+                        editedTag: prep.tagOrDsl,
+                        isSelected: false,
+                        targetChoice: fallbackTarget,
+                        newStreamTitle: ""
+                    )
+                }
             }
+            visibleTaskKeys = keys
         } catch let authErr as ExternalTasksAuthError {
             errorMessage = authErr.localizedDescription
             switch authErr {
@@ -542,41 +651,71 @@ struct TagdosImportTasksSheet: View {
     }
 
     private func performImport() {
-        let chosen = draftItems.filter {
-            $0.isSelected && !$0.editedTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+        let chosen = selectedDraftsOrdered
         guard !chosen.isEmpty else { return }
 
-        var dslChunks: [String] = []
-        var memoLines: [String] = []
-
-        for item in chosen {
-            let tag = item.editedTag.trimmingCharacters(in: .whitespacesAndNewlines)
-            dslChunks.append(tag)
-
-            let notes = item.originalNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if item.isAlreadyDsl {
-                if !notes.isEmpty {
-                    memoLines.append("• [\(tag)] \(notes)")
-                }
+        let batchItems: [TagdosStore.TagdosTaskImportItem] = chosen.map { draft in
+            let tag = draft.editedTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            let notes = draft.originalNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let memoLine: String?
+            if draft.isAlreadyDsl {
+                memoLine = notes.isEmpty ? nil : notes
             } else {
-                if notes.isEmpty {
-                    memoLines.append("• [\(tag)] \(item.originalTitle)")
-                } else {
-                    memoLines.append("• [\(tag)] \(item.originalTitle) — \(notes)")
-                }
+                memoLine = notes.isEmpty
+                    ? "• [\(tag)] \(draft.originalTitle)"
+                    : "• [\(tag)] \(draft.originalTitle) — \(notes)"
             }
+
+            let resolvedChoice = isValidTargetChoice(draft.targetChoice) ? draft.targetChoice : .newStream
+            let storeTarget: TagdosStore.TagdosTaskImportTarget
+            switch resolvedChoice {
+            case .replaceStream(let streamId):
+                storeTarget = .replaceStream(streamId)
+            case .appendToStream(let streamId):
+                storeTarget = .appendToStream(streamId)
+            case .newStream:
+                storeTarget = .newStream(title: draft.newStreamTitle)
+            }
+
+            return TagdosStore.TagdosTaskImportItem(
+                dslOrTag: tag,
+                memoLine: memoLine,
+                target: storeTarget
+            )
         }
 
-        let updatedStream = store.importExternalTasks(
-            mode: destinationMode,
-            targetStreamId: targetStreamId,
-            newStreamTitle: newStreamTitle,
-            rawDslChunks: dslChunks,
-            memoLines: memoLines
-        )
-        onImported(updatedStream.id)
-        dismiss()
+        if let importedStreamId = store.importExternalTaskBatch(batchItems) {
+            onImported(importedStreamId)
+            dismiss()
+        }
+    }
+}
+
+private enum ImportRowTargetChoice: Equatable, Hashable {
+    case replaceStream(UUID)
+    case appendToStream(UUID)
+    case newStream
+
+    func shortLabel(for streams: [TagDoStream]) -> String {
+        switch self {
+        case .replaceStream(let id):
+            if let idx = streams.firstIndex(where: { $0.id == id }) {
+                return "Replace S\(idx + 1) (\(streams[idx].displayTitle))"
+            }
+            return "Replace Stream"
+        case .appendToStream(let id):
+            if let idx = streams.firstIndex(where: { $0.id == id }) {
+                return "Append S\(idx + 1) (\(streams[idx].displayTitle))"
+            }
+            return "Append Stream"
+        case .newStream:
+            return "+ New Stream"
+        }
+    }
+
+    var isReplace: Bool {
+        if case .replaceStream = self { return true }
+        return false
     }
 }
 
@@ -587,11 +726,14 @@ private struct ImportTaskDraft: Identifiable {
     let isHighImportance: Bool
     let isAlreadyDsl: Bool
     var editedTag: String
-    var isSelected: Bool = true
+    var isSelected: Bool
+    var targetChoice: ImportRowTargetChoice
+    var newStreamTitle: String
 }
 
 private struct ImportTaskDraftRow: View {
     @Binding var draft: ImportTaskDraft
+    let streams: [TagDoStream]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -637,10 +779,63 @@ private struct ImportTaskDraftRow: View {
                     .lineLimit(2)
                     .padding(.leading, 24)
             }
+
+            HStack(spacing: 8) {
+                Menu {
+                    Section("Replace Stream") {
+                        ForEach(streams) { stream in
+                            Button("Replace S\(stream.orderIndex + 1): \(stream.displayTitle)") {
+                                draft.targetChoice = .replaceStream(stream.id)
+                                draft.isSelected = true
+                            }
+                        }
+                    }
+                    Section("Append to Stream") {
+                        ForEach(streams) { stream in
+                            Button("Append S\(stream.orderIndex + 1): \(stream.displayTitle)") {
+                                draft.targetChoice = .appendToStream(stream.id)
+                                draft.isSelected = true
+                            }
+                        }
+                    }
+                    Section("Create Stream") {
+                        Button("+ New Stream") {
+                            draft.targetChoice = .newStream
+                            draft.isSelected = true
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: draft.targetChoice.isReplace ? "arrow.triangle.2.circlepath" : (draft.targetChoice == .newStream ? "sparkles" : "plus.rectangle.on.rectangle"))
+                            .font(.system(size: 9.5, weight: .bold))
+                        Text(draft.targetChoice.shortLabel(for: streams))
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8.5, weight: .bold))
+                    }
+                    .foregroundColor(draft.targetChoice.isReplace ? ThemeColors.accentOrange : ThemeColors.accentCyan)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background((draft.targetChoice.isReplace ? ThemeColors.accentOrange : ThemeColors.accentCyan).opacity(0.14))
+                    .clipShape(Capsule())
+                }
+
+                if draft.targetChoice == .newStream {
+                    TextField("Optional title...", text: $draft.newStreamTitle)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(6)
+                }
+            }
+            .padding(.leading, 24)
         }
         .padding(10)
         .background(Color.white.opacity(draft.isSelected ? 0.055 : 0.025))
         .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(draft.isSelected ? 0.16 : 0.08), lineWidth: 1))
     }
 }

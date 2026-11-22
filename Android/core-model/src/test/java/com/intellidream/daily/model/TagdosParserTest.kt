@@ -24,6 +24,7 @@ class TagdosParserTest {
     @Test
     fun dslDetectionRecognizesTagdosSyntaxVsNaturalLanguage() {
         assertTrue(TagdosParser.isAlreadyTagdosDsl("MG/GM/TG & FSH/LDL"))
+        assertTrue(TagdosParser.isAlreadyTagdosDsl("CRR vg/PL 98 & DOC sign"))
         assertTrue(TagdosParser.isAlreadyTagdosDsl("C\$T"))
         assertTrue(TagdosParser.isAlreadyTagdosDsl("EXP!"))
         assertTrue(TagdosParser.isAlreadyTagdosDsl("5K"))
@@ -32,6 +33,7 @@ class TagdosParserTest {
         assertFalse(TagdosParser.isAlreadyTagdosDsl("Pay electricity bill"))
         assertFalse(TagdosParser.isAlreadyTagdosDsl("Schedule dentist appointment"))
         assertFalse(TagdosParser.isAlreadyTagdosDsl("Groceries"))
+        assertFalse(TagdosParser.isAlreadyTagdosDsl("Meet John on 12/05 about budget proposal"))
     }
 
     @Test
@@ -40,6 +42,11 @@ class TagdosParserTest {
         assertTrue(isDsl)
         assertEquals("FIT/GYM & RUN/5K", dslTag)
         assertNull(dslMemo)
+
+        val (dslNotesTag, isNotesDsl, plainMemo) = TagdosParser.prepareImportItem("CRR vg/PL 98", "Plain memo body", false)
+        assertTrue(isNotesDsl)
+        assertEquals("CRR vg/PL 98", dslNotesTag)
+        assertEquals("Plain memo body", plainMemo)
 
         val (proseTag, isProseDsl, proseMemo) = TagdosParser.prepareImportItem(
             title = "Pay electricity bill",

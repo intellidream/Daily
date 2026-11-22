@@ -251,32 +251,128 @@ namespace Daily.Services
             return false;
         }
 
+        public static string AutoDetectStreamTitle(string rawText, int orderIndex)
+        {
+            int streamNum = orderIndex + 1;
+            string upperText = (rawText ?? string.Empty).ToUpperInvariant();
+
+            if (upperText.Contains("WRK") || upperText.Contains("PRJ") || upperText.Contains("CODE") ||
+                upperText.Contains("BUG") || upperText.Contains("DEV") || upperText.Contains("MET"))
+            {
+                return $"Stream {streamNum}: Work & Code";
+            }
+            if (upperText.Contains("FIT") || upperText.Contains("GYM") || upperText.Contains("RUN") ||
+                upperText.Contains("PROT") || upperText.Contains("SLP") || upperText.Contains("CREAT"))
+            {
+                return $"Stream {streamNum}: Health & Fitness";
+            }
+            if (upperText.Contains("FIN") || upperText.Contains("CARD") || upperText.Contains("CASH") ||
+                upperText.Contains("INV") || upperText.Contains("STK") || upperText.Contains("C$T") || upperText.Contains("EUR"))
+            {
+                return $"Stream {streamNum}: Finances & Bills";
+            }
+            if (upperText.Contains("HOM") || upperText.Contains("ORD") || upperText.Contains("CLN") ||
+                upperText.Contains("BUY") || upperText.Contains("MKT") || upperText.Contains("GROC"))
+            {
+                return $"Stream {streamNum}: Home & Life";
+            }
+            if (upperText.Contains("MG") || upperText.Contains("GM") || upperText.Contains("TG") ||
+                upperText.Contains("FSH") || upperText.Contains("LDL"))
+            {
+                return $"Stream {streamNum}: Daily Ops";
+            }
+
+            var parsed = ParseStream(rawText ?? string.Empty, orderIndex, $"Stream {streamNum}");
+            var driving = parsed.DrivingPill?.Text;
+            if (!string.IsNullOrWhiteSpace(driving))
+            {
+                return $"Stream {streamNum}: {driving} Focus";
+            }
+
+            return streamNum switch
+            {
+                1 => "Stream 1: Daily Ops",
+                2 => "Stream 2: Work & Code",
+                3 => "Stream 3: Health & Fitness",
+                4 => "Stream 4: Finances & Bills",
+                5 => "Stream 5: Home & Life",
+                _ => $"Stream {streamNum}"
+            };
+        }
+
         public static bool IsAlreadyTagdosDsl(string text)
         {
             var trimmed = (text ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(trimmed)) return false;
 
+            var lower = trimmed.ToLowerInvariant();
+            if (lower.Contains("http://") || lower.Contains("https://") || lower.Contains("www."))
+            {
+                return false;
+            }
+
             if (trimmed.Contains('/') || trimmed.Contains('&'))
             {
                 var clusters = trimmed.Split('&', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 if (clusters.Length == 0) return false;
-                int totalTokens = 0;
-                foreach (var cluster in clusters)
+
+                if (trimmed.Contains('/'))
                 {
-                    var tokens = cluster.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                    if (tokens.Length == 0) return false;
-                    foreach (var token in tokens)
+                    int totalTokens = 0;
+                    bool hasSpaceInsideToken = false;
+                    bool hasMnemonicSignal = false;
+                    foreach (var cluster in clusters)
                     {
-                        if (token.Any(char.IsWhiteSpace) || token.Length > 16) return false;
-                        totalTokens++;
+                        var tokens = cluster.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                        if (tokens.Length == 0) return false;
+                        foreach (var token in tokens)
+                        {
+                            var words = token.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                            if (token.Length > 24 || words.Length > 3) return false;
+                            if (words.Length > 1)
+                            {
+                                hasSpaceInsideToken = true;
+                            }
+                            if (token.Contains('$') || token.Contains('€') || token.Contains('!'))
+                            {
+                                hasMnemonicSignal = true;
+                            }
+                            foreach (var w in words)
+                            {
+                                var wLetters = w.Where(char.IsLetter).ToArray();
+                                if (wLetters.Length >= 2 && wLetters.All(char.IsUpper))
+                                {
+                                    hasMnemonicSignal = true;
+                                }
+                            }
+                            totalTokens++;
+                        }
                     }
+                    if (totalTokens < 2 && clusters.Length < 2) return false;
+                    return !hasSpaceInsideToken || hasMnemonicSignal;
                 }
-                return totalTokens >= 1;
+                else
+                {
+                    if (clusters.Length < 2) return false;
+                    bool hasMnemonicSignal = false;
+                    foreach (var cluster in clusters)
+                    {
+                        var words = cluster.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                        if (cluster.Length > 24 || words.Length > 3) return false;
+                        var lettersOnly = cluster.Where(char.IsLetter).ToArray();
+                        bool isAllCaps = lettersOnly.Length > 0 && lettersOnly.All(char.IsUpper);
+                        bool hasGlyph = cluster.Contains('$') || cluster.Contains('€') || cluster.Contains('!') || cluster.Any(char.IsDigit);
+                        if (hasGlyph || isAllCaps || cluster.Length <= 5)
+                        {
+                            hasMnemonicSignal = true;
+                        }
+                    }
+                    return hasMnemonicSignal;
+                }
             }
 
-            if (trimmed.Any(char.IsWhiteSpace) || trimmed.Length > 10) return false;
-            var lower = trimmed.ToLowerInvariant();
-            if (lower.StartsWith("http://") || lower.StartsWith("https://") || lower.Contains(".com"))
+            if (trimmed.Any(char.IsWhiteSpace) || trimmed.Length > 12) return false;
+            if (lower.Contains(".com"))
             {
                 return false;
             }
@@ -284,9 +380,9 @@ namespace Daily.Services
             bool hasSemanticGlyph = trimmed.Contains('$') || trimmed.Contains('€') || trimmed.Contains('!') || trimmed.Any(char.IsDigit);
             if (hasSemanticGlyph) return true;
 
-            var lettersOnly = trimmed.Where(char.IsLetter).ToArray();
-            bool isAllCaps = lettersOnly.Length > 0 && lettersOnly.All(char.IsUpper);
-            return isAllCaps || trimmed.Length <= 4;
+            var singleLetters = trimmed.Where(char.IsLetter).ToArray();
+            bool singleAllCaps = singleLetters.Length > 0 && singleLetters.All(char.IsUpper);
+            return singleAllCaps || trimmed.Length <= 4;
         }
 
         private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -372,13 +468,15 @@ namespace Daily.Services
             bool isHighImportance = false)
         {
             string cleanTitle = (title ?? string.Empty).Trim();
-            string cleanNotes = (notes ?? string.Empty).Trim();
+            string rawNotes = (notes ?? string.Empty).Trim();
+            string cleanNotes = rawNotes.Equals(cleanTitle, StringComparison.OrdinalIgnoreCase) ? string.Empty : rawNotes;
             bool isDsl = IsAlreadyTagdosDsl(cleanTitle);
             string tag = isDsl ? cleanTitle : ProposeMnemonic(cleanTitle, isHighImportance);
 
             if (isDsl)
             {
-                string? memo = string.IsNullOrEmpty(cleanNotes) ? null : $"• [{tag}] {cleanNotes}";
+                // Plain notes only without any [DSL] prefix or title duplication
+                string? memo = string.IsNullOrEmpty(cleanNotes) ? null : cleanNotes;
                 return (tag, true, memo);
             }
             else

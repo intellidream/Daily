@@ -3,9 +3,11 @@ package com.intellidream.daily.presentation.tagdos
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Description
@@ -38,6 +43,7 @@ import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,9 +51,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -89,7 +99,7 @@ import java.util.Locale
  * Comprehensive interactive hub for TagDoS mental tag pipelines and quick notes.
  * 1:1 Kotlin port of iOS [TagdosNotesHubView.swift].
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TagdosNotesHubView(
     repository: TagdosRepository,
@@ -112,6 +122,7 @@ fun TagdosNotesHubView(
     var showingAddTagSheet by remember { mutableStateOf(false) }
     var showingReminderPicker by remember { mutableStateOf(false) }
     var showingRenameSheet by remember { mutableStateOf(false) }
+    var showingReorderSheet by remember { mutableStateOf(false) }
     var showingImportSheet by remember { mutableStateOf(false) }
 
     val haptic = LocalHapticFeedback.current
@@ -288,10 +299,18 @@ fun TagdosNotesHubView(
                                 if (isSelected) ThemeColors.accentPurple else Color.White.copy(alpha = 0.12f),
                                 CircleShape
                             )
-                            .clickable {
-                                selectedStreamIndex = index
-                                rawTextBuffer = stream.rawText
-                            }
+                            .combinedClickable(
+                                onClick = {
+                                    selectedStreamIndex = index
+                                    rawTextBuffer = stream.rawText
+                                },
+                                onLongClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    selectedStreamIndex = index
+                                    rawTextBuffer = stream.rawText
+                                    showingRenameSheet = true
+                                }
+                            )
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         // S{N} Mini Badge
@@ -318,13 +337,17 @@ fun TagdosNotesHubView(
                             )
                         }
 
-                        if (driving != null) {
+                        val customTabTitle = stream.customTitle?.trim()?.takeIf { it.isNotEmpty() }
+                        val tabLabel = customTabTitle ?: driving?.rawText
+                        if (tabLabel != null) {
                             Text(
-                                text = driving.rawText,
+                                text = tabLabel,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f),
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 110.dp)
                             )
                         }
 
@@ -359,6 +382,26 @@ fun TagdosNotesHubView(
                         tint = ThemeColors.accentCyan,
                         modifier = Modifier.size(15.dp)
                     )
+                }
+
+                // Reorder Streams Button
+                if (streams.size > 1) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(ThemeColors.accentPurple.copy(alpha = 0.18f))
+                            .border(1.dp, ThemeColors.accentPurple.copy(alpha = 0.38f), CircleShape)
+                            .clickable { showingReorderSheet = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.SwapHoriz,
+                            contentDescription = "Reorder Streams",
+                            tint = ThemeColors.accentPurple,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
 
                 // Dedicated Notes Tab
@@ -503,6 +546,7 @@ fun TagdosNotesHubView(
     }
 
     if (showingRenameSheet && currentStream != null) {
+        val currentIdx = streams.indexOfFirst { it.id == currentStream.id }.coerceAtLeast(0)
         TagdosRenameStreamSheet(
             currentTitle = currentStream.customTitle ?: currentStream.title,
             canDeleteStream = streams.size > 1,
@@ -510,10 +554,44 @@ fun TagdosNotesHubView(
                 repository.deleteStream(currentStream.id)
                 selectedStreamIndex = (selectedStreamIndex).coerceAtMost((streams.size - 2).coerceAtLeast(0))
             },
+            canMoveLeft = currentIdx > 0,
+            canMoveRight = currentIdx < streams.size - 1,
+            onMoveLeft = {
+                if (currentIdx > 0) {
+                    repository.moveStream(currentIdx, currentIdx - 1)
+                    selectedStreamIndex = currentIdx - 1
+                }
+            },
+            onMoveRight = {
+                if (currentIdx < streams.size - 1) {
+                    repository.moveStream(currentIdx, currentIdx + 1)
+                    selectedStreamIndex = currentIdx + 1
+                }
+            },
             onSaveTitle = { newTitle ->
                 repository.updateStreamTitle(currentStream.id, newTitle)
             },
             onDismiss = { showingRenameSheet = false }
+        )
+    }
+
+    if (showingReorderSheet && streams.size > 1) {
+        val activeStreamId = currentStream?.id
+        TagdosReorderStreamsSheet(
+            streams = streams,
+            onMove = { fromIndex, toIndex ->
+                repository.moveStream(fromIndex, toIndex)
+                if (activeStreamId != null) {
+                    if (selectedStreamIndex == fromIndex) {
+                        selectedStreamIndex = toIndex
+                    } else if (selectedStreamIndex in toIndex until fromIndex) {
+                        selectedStreamIndex += 1
+                    } else if (selectedStreamIndex in (fromIndex + 1)..toIndex) {
+                        selectedStreamIndex -= 1
+                    }
+                }
+            },
+            onDismiss = { showingReorderSheet = false }
         )
     }
 
@@ -862,5 +940,126 @@ private fun RawEditorCard(
             ),
             shape = RoundedCornerShape(12.dp)
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TagdosReorderStreamsSheet(
+    streams: List<TagDoStream>,
+    onMove: (fromIndex: Int, toIndex: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF081426),
+        dragHandle = null
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Reorder Streams",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                TextButton(onClick = onDismiss) {
+                    Text("Done", color = ThemeColors.accentCyan, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                streams.forEachIndexed { index, stream ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(ThemeColors.accentPurple),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "S${index + 1}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stream.displayTitle,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            val drivingText = stream.drivingPill?.rawText
+                            if (stream.customTitle != null && !drivingText.isNullOrBlank()) {
+                                Text(
+                                    text = drivingText,
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { onMove(index, index - 1) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowUpward,
+                                contentDescription = "Move Up",
+                                tint = if (index > 0) Color.White else Color.White.copy(alpha = 0.25f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMove(index, index + 1) },
+                            enabled = index < streams.size - 1,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowDownward,
+                                contentDescription = "Move Down",
+                                tint = if (index < streams.size - 1) Color.White else Color.White.copy(alpha = 0.25f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

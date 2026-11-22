@@ -698,13 +698,26 @@ object TagdosExternalTasksService {
     }
 
     private fun stripHtml(html: String): String {
-        return html
+        val stripped = html
+            .replace(Regex("<head[^>]*>.*?</head>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+            .replace(Regex("<style[^>]*>.*?</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+            .replace(Regex("<br\\s*/?>|</(p|div|li|h[1-6]|tr)>", RegexOption.IGNORE_CASE), "\n")
             .replace(Regex("<[^>]+>"), " ")
             .replace("&nbsp;", " ")
+            .replace("&#160;", " ")
+            .replace("\u00A0", " ")
             .replace("&amp;", "&")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
-            .replace(Regex("\\s+"), " ")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+
+        return stripped
+            .lines()
+            .map { it.replace(Regex("[ \\t]+"), " ").trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
             .trim()
     }
 

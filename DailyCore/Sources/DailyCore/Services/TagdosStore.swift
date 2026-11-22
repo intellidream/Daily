@@ -23,6 +23,7 @@ public final class TagdosStore: ObservableObject {
 
     // MARK: - Storage Keys
     private let streamsStorageKey = "daily_tagdos_raw_streams_v1"
+    private let dirtyStreamIdsStorageKey = "daily_tagdos_dirty_stream_ids_v1"
     private let notesStorageKey = "daily_tagdos_quick_notes_v1"
     private let legacyNotesKey = "daily_tagdos_quick_notes_legacy_v1"
 
@@ -40,6 +41,7 @@ public final class TagdosStore: ObservableObject {
     private var lastForegroundSyncAt: Date = .distantPast
     private var lastPushedStreamSignatures: [Int: String] = [:]
     private var lastPushedNoteSignatures: [UUID: String] = [:]
+    private var dirtyStreamIds: Set<UUID> = []
 
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: GroupDefaults.suiteName) ?? UserDefaults.standard
@@ -82,6 +84,11 @@ public final class TagdosStore: ObservableObject {
     }
 
     public func loadFromStorage() {
+        let savedDirtyStrings = groupDefaults.stringArray(forKey: dirtyStreamIdsStorageKey)
+            ?? UserDefaults.standard.stringArray(forKey: dirtyStreamIdsStorageKey)
+            ?? []
+        self.dirtyStreamIds = Set(savedDirtyStrings.compactMap { UUID(uuidString: $0) })
+
         // 1. Load Quick Notes (TagDoQuickNote)
         if let data = groupDefaults.data(forKey: notesStorageKey),
            let decoded = try? JSONDecoder().decode([TagDoQuickNote].self, from: data) {
@@ -136,6 +143,12 @@ public final class TagdosStore: ObservableObject {
         save()
     }
 
+    private func persistDirtyStreamIds() {
+        let dirtyArray = dirtyStreamIds.map { $0.uuidString }
+        groupDefaults.set(dirtyArray, forKey: dirtyStreamIdsStorageKey)
+        UserDefaults.standard.set(dirtyArray, forKey: dirtyStreamIdsStorageKey)
+    }
+
     public func save(triggerCloudSync: Bool = true) {
         // Encode Streams
         if let data = try? JSONEncoder().encode(streams) {
@@ -149,6 +162,7 @@ public final class TagdosStore: ObservableObject {
             UserDefaults.standard.set(notesData, forKey: notesStorageKey)
         }
 
+        persistDirtyStreamIds()
         syncWithWidgets()
 
         if triggerCloudSync {
@@ -177,6 +191,7 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = existing.attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -193,6 +208,7 @@ public final class TagdosStore: ObservableObject {
             streams[index].title = streams[index].autoDetectedTitle
         }
         streams[index].updatedAt = Date()
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -200,6 +216,7 @@ public final class TagdosStore: ObservableObject {
         guard let index = streams.firstIndex(where: { $0.id == streamId }) else { return }
         streams[index].streamReminder = date
         streams[index].updatedAt = Date()
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -207,6 +224,7 @@ public final class TagdosStore: ObservableObject {
         guard let index = streams.firstIndex(where: { $0.id == streamId }) else { return }
         streams[index].activeMemos = memos
         streams[index].updatedAt = Date()
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -217,6 +235,7 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = streams[index].attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -227,6 +246,7 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = streams[index].attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -237,6 +257,7 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = streams[index].attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -247,6 +268,7 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = streams[index].attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -257,6 +279,7 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = streams[index].attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
@@ -267,18 +290,26 @@ public final class TagdosStore: ObservableObject {
         updated.attachments = streams[index].attachments
         updated.updatedAt = Date()
         streams[index] = updated
+        dirtyStreamIds.insert(streamId)
         save()
     }
 
     @discardableResult
     public func createStream(title: String? = nil, rawText: String = "", activeMemos: String = "") -> TagDoStream {
-        let nextOrderIndex = (streams.map { $0.orderIndex }.max() ?? -1) + 1
+        let stream = buildNewStream(title: title, rawText: rawText, activeMemos: activeMemos, orderIndex: (streams.map { $0.orderIndex }.max() ?? -1) + 1)
+        streams.append(stream)
+        dirtyStreamIds.insert(stream.id)
+        save()
+        return stream
+    }
+
+    private func buildNewStream(title: String?, rawText: String, activeMemos: String, orderIndex: Int) -> TagDoStream {
         let cleanTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaultTitle = "Stream \(nextOrderIndex + 1)"
+        let defaultTitle = "Stream \(orderIndex + 1)"
         var stream = TagdosParser.shared.parseStream(
             rawText: rawText,
             title: cleanTitle?.isEmpty == false ? cleanTitle! : defaultTitle,
-            orderIndex: nextOrderIndex
+            orderIndex: orderIndex
         )
         if let cleanTitle, !cleanTitle.isEmpty {
             stream.customTitle = cleanTitle
@@ -289,9 +320,50 @@ public final class TagdosStore: ObservableObject {
         }
         stream.activeMemos = activeMemos
         stream.updatedAt = Date()
-        streams.append(stream)
-        save()
         return stream
+    }
+
+    public func moveStream(fromIndex: Int, toIndex: Int) {
+        guard streams.indices.contains(fromIndex),
+              streams.indices.contains(toIndex),
+              fromIndex != toIndex else { return }
+        var reordered = streams
+        let item = reordered.remove(at: fromIndex)
+        reordered.insert(item, at: toIndex)
+        applyReorderedStreams(reordered)
+    }
+
+    public func reorderStreams(orderedIds: [UUID]) {
+        var byId = Dictionary(uniqueKeysWithValues: streams.map { ($0.id, $0) })
+        var reordered: [TagDoStream] = []
+        for id in orderedIds {
+            if let s = byId.removeValue(forKey: id) {
+                reordered.append(s)
+            }
+        }
+        for s in streams where byId[s.id] != nil {
+            reordered.append(s)
+        }
+        guard reordered.map(\.id) != streams.map(\.id) else { return }
+        applyReorderedStreams(reordered)
+    }
+
+    private func applyReorderedStreams(_ reordered: [TagDoStream]) {
+        var updated = reordered
+        let now = Date()
+        for idx in updated.indices {
+            updated[idx].orderIndex = idx
+            if updated[idx].customTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                updated[idx].title = updated[idx].autoDetectedTitle
+            } else if let custom = updated[idx].customTitle?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                updated[idx].title = custom
+            }
+            updated[idx].updatedAt = now
+            dirtyStreamIds.insert(updated[idx].id)
+        }
+        streams = updated
+        lastPushedStreamSignatures = [:]
+        save()
     }
 
     public func deleteStream(streamId: UUID) {
@@ -299,6 +371,7 @@ public final class TagdosStore: ObservableObject {
               let removeIdx = streams.firstIndex(where: { $0.id == streamId }) else { return }
 
         streams.remove(at: removeIdx)
+        dirtyStreamIds.remove(streamId)
         for idx in 0..<streams.count {
             if streams[idx].orderIndex != idx {
                 streams[idx].orderIndex = idx
@@ -306,8 +379,11 @@ public final class TagdosStore: ObservableObject {
                     streams[idx].title = streams[idx].autoDetectedTitle
                 }
                 streams[idx].updatedAt = Date()
+                dirtyStreamIds.insert(streams[idx].id)
             }
-            lastPushedStreamSignatures.removeValue(forKey: idx + 1)
+            if idx >= removeIdx {
+                lastPushedStreamSignatures.removeValue(forKey: idx + 1)
+            }
         }
         let newCount = streams.count
         lastPushedStreamSignatures = lastPushedStreamSignatures.filter { $0.key <= newCount }
@@ -333,6 +409,172 @@ public final class TagdosStore: ObservableObject {
         case createNewStream
     }
 
+    public enum TagdosTaskImportTarget: Equatable, Hashable, Sendable {
+        case replaceStream(UUID)
+        case appendToStream(UUID)
+        case newStream(title: String)
+    }
+
+    public struct TagdosTaskImportItem: Sendable {
+        public let dslOrTag: String
+        public let memoLine: String?
+        public let target: TagdosTaskImportTarget
+
+        public init(dslOrTag: String, memoLine: String?, target: TagdosTaskImportTarget) {
+            self.dslOrTag = dslOrTag
+            self.memoLine = memoLine
+            self.target = target
+        }
+    }
+
+    @discardableResult
+    public func importExternalTaskBatch(_ items: [TagdosTaskImportItem]) -> UUID? {
+        guard !items.isEmpty else { return nil }
+
+        var firstAffectedId: UUID? = nil
+
+        // 1. Replace Stream targets (preserving first-seen stream order)
+        var replaceOrder: [UUID] = []
+        var replaceGroups: [UUID: [TagdosTaskImportItem]] = [:]
+        for item in items {
+            if case .replaceStream(let streamId) = item.target {
+                if replaceGroups[streamId] == nil { replaceOrder.append(streamId) }
+                replaceGroups[streamId, default: []].append(item)
+            }
+        }
+
+        for streamId in replaceOrder {
+            guard let group = replaceGroups[streamId],
+                  let index = streams.firstIndex(where: { $0.id == streamId }) else { continue }
+            let combinedDsl = Self.combineImportedDslChunks(group.map(\.dslOrTag))
+            let combinedMemos = group.compactMap { $0.memoLine?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            let existing = streams[index]
+            var updated = TagdosParser.shared.parseStream(
+                rawText: combinedDsl,
+                title: existing.customTitle ?? existing.title,
+                id: existing.id,
+                streamReminder: existing.streamReminder,
+                orderIndex: existing.orderIndex,
+                existingStream: nil
+            )
+            updated.customTitle = existing.customTitle
+            if let custom = existing.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+                updated.title = custom
+            } else {
+                updated.title = updated.autoDetectedTitle
+            }
+            updated.activeMemos = combinedMemos
+            updated.attachments = existing.attachments
+            updated.updatedAt = Date()
+            streams[index] = updated
+            dirtyStreamIds.insert(updated.id)
+            if firstAffectedId == nil { firstAffectedId = updated.id }
+        }
+
+        // 2. Append Stream targets
+        var appendOrder: [UUID] = []
+        var appendGroups: [UUID: [TagdosTaskImportItem]] = [:]
+        for item in items {
+            if case .appendToStream(let streamId) = item.target {
+                if appendGroups[streamId] == nil { appendOrder.append(streamId) }
+                appendGroups[streamId, default: []].append(item)
+            }
+        }
+
+        for streamId in appendOrder {
+            guard let group = appendGroups[streamId],
+                  let index = streams.firstIndex(where: { $0.id == streamId }) else { continue }
+            let combinedDsl = Self.combineImportedDslChunks(group.map(\.dslOrTag))
+            let combinedMemos = group.compactMap { $0.memoLine?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            let existing = streams[index]
+            let existingRaw = existing.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newRaw: String
+            if existingRaw.isEmpty {
+                newRaw = combinedDsl
+            } else if combinedDsl.isEmpty {
+                newRaw = existingRaw
+            } else {
+                newRaw = "\(existingRaw) & \(combinedDsl)"
+            }
+            let existingMemos = existing.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines)
+            let mergedMemos: String
+            if existingMemos.isEmpty {
+                mergedMemos = combinedMemos
+            } else if combinedMemos.isEmpty {
+                mergedMemos = existingMemos
+            } else {
+                mergedMemos = "\(existingMemos)\n\(combinedMemos)"
+            }
+            var updated = TagdosParser.shared.parseStream(
+                rawText: newRaw,
+                title: existing.customTitle ?? existing.title,
+                id: existing.id,
+                streamReminder: existing.streamReminder,
+                orderIndex: existing.orderIndex,
+                existingStream: existing
+            )
+            updated.customTitle = existing.customTitle
+            if let custom = existing.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+                updated.title = custom
+            } else {
+                updated.title = updated.autoDetectedTitle
+            }
+            updated.activeMemos = mergedMemos
+            updated.attachments = existing.attachments
+            updated.updatedAt = Date()
+            streams[index] = updated
+            dirtyStreamIds.insert(updated.id)
+            if firstAffectedId == nil { firstAffectedId = updated.id }
+        }
+
+        // 3. New Stream targets (named entries grouped by exact title; blank titles become separate streams)
+        var namedOrder: [String] = []
+        var namedGroups: [String: [TagdosTaskImportItem]] = [:]
+        var unnamedItems: [TagdosTaskImportItem] = []
+
+        for item in items {
+            if case .newStream(let rawTitle) = item.target {
+                let clean = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if clean.isEmpty {
+                    unnamedItems.append(item)
+                } else {
+                    if namedGroups[clean] == nil { namedOrder.append(clean) }
+                    namedGroups[clean, default: []].append(item)
+                }
+            }
+        }
+
+        for titleKey in namedOrder {
+            guard let group = namedGroups[titleKey] else { continue }
+            let combinedDsl = Self.combineImportedDslChunks(group.map(\.dslOrTag))
+            let combinedMemos = group.compactMap { $0.memoLine?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            let nextIdx = (streams.map { $0.orderIndex }.max() ?? -1) + 1
+            let created = buildNewStream(title: titleKey, rawText: combinedDsl, activeMemos: combinedMemos, orderIndex: nextIdx)
+            streams.append(created)
+            dirtyStreamIds.insert(created.id)
+            if firstAffectedId == nil { firstAffectedId = created.id }
+        }
+
+        for item in unnamedItems {
+            let combinedDsl = Self.combineImportedDslChunks([item.dslOrTag])
+            let memo = item.memoLine?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let nextIdx = (streams.map { $0.orderIndex }.max() ?? -1) + 1
+            let created = buildNewStream(title: nil, rawText: combinedDsl, activeMemos: memo, orderIndex: nextIdx)
+            streams.append(created)
+            dirtyStreamIds.insert(created.id)
+            if firstAffectedId == nil { firstAffectedId = created.id }
+        }
+
+        save()
+        return firstAffectedId
+    }
+
     @discardableResult
     public func importExternalTasks(
         mode: TagdosImportDestinationMode,
@@ -347,86 +589,31 @@ public final class TagdosStore: ObservableObject {
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
 
+        let target: TagdosTaskImportTarget
         switch mode {
         case .createNewStream:
-            return createStream(
-                title: newStreamTitle,
-                rawText: combinedDsl,
-                activeMemos: combinedMemos
-            )
-
+            target = .newStream(title: newStreamTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
         case .replaceStream:
-            if let targetId = targetStreamId,
-               let index = streams.firstIndex(where: { $0.id == targetId }) {
-                let existing = streams[index]
-                var updated = TagdosParser.shared.parseStream(
-                    rawText: combinedDsl,
-                    title: existing.customTitle ?? existing.title,
-                    id: existing.id,
-                    streamReminder: existing.streamReminder,
-                    orderIndex: existing.orderIndex,
-                    existingStream: nil
-                )
-                updated.customTitle = existing.customTitle
-                if existing.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                    updated.title = updated.autoDetectedTitle
-                }
-                updated.activeMemos = combinedMemos
-                updated.attachments = existing.attachments
-                updated.updatedAt = Date()
-                streams[index] = updated
-                save()
-                return updated
+            if let targetId = targetStreamId, streams.contains(where: { $0.id == targetId }) {
+                target = .replaceStream(targetId)
             } else {
-                return createStream(title: newStreamTitle, rawText: combinedDsl, activeMemos: combinedMemos)
+                target = .newStream(title: newStreamTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
             }
-
         case .appendToStream:
-            if let targetId = targetStreamId,
-               let index = streams.firstIndex(where: { $0.id == targetId }) {
-                let existing = streams[index]
-                let existingRaw = existing.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-                let newRaw: String
-                if existingRaw.isEmpty {
-                    newRaw = combinedDsl
-                } else if combinedDsl.isEmpty {
-                    newRaw = existingRaw
-                } else {
-                    newRaw = "\(existingRaw) & \(combinedDsl)"
-                }
-
-                let existingMemos = existing.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines)
-                let mergedMemos: String
-                if existingMemos.isEmpty {
-                    mergedMemos = combinedMemos
-                } else if combinedMemos.isEmpty {
-                    mergedMemos = existingMemos
-                } else {
-                    mergedMemos = "\(existingMemos)\n\(combinedMemos)"
-                }
-
-                var updated = TagdosParser.shared.parseStream(
-                    rawText: newRaw,
-                    title: existing.customTitle ?? existing.title,
-                    id: existing.id,
-                    streamReminder: existing.streamReminder,
-                    orderIndex: existing.orderIndex,
-                    existingStream: existing
-                )
-                updated.customTitle = existing.customTitle
-                if existing.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                    updated.title = updated.autoDetectedTitle
-                }
-                updated.activeMemos = mergedMemos
-                updated.attachments = existing.attachments
-                updated.updatedAt = Date()
-                streams[index] = updated
-                save()
-                return updated
+            if let targetId = targetStreamId, streams.contains(where: { $0.id == targetId }) {
+                target = .appendToStream(targetId)
             } else {
-                return createStream(title: newStreamTitle, rawText: combinedDsl, activeMemos: combinedMemos)
+                target = .newStream(title: newStreamTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
             }
         }
+
+        let affectedId = importExternalTaskBatch([
+            TagdosTaskImportItem(dslOrTag: combinedDsl, memoLine: combinedMemos.isEmpty ? nil : combinedMemos, target: target)
+        ])
+        if let affectedId, let found = streams.first(where: { $0.id == affectedId }) {
+            return found
+        }
+        return streams.last ?? createStream(title: newStreamTitle, rawText: combinedDsl, activeMemos: combinedMemos)
     }
 
     private static func combineImportedDslChunks(_ chunks: [String]) -> String {
@@ -478,6 +665,7 @@ public final class TagdosStore: ObservableObject {
         // 2. Add to stream in memory and save locally
         streams[index].attachments.append(attachment)
         streams[index].updatedAt = Date()
+        dirtyStreamIds.insert(streamId)
         save()
 
         // 3. Upload to Supabase Storage in background if authenticated
@@ -493,6 +681,7 @@ public final class TagdosStore: ObservableObject {
                         if let sIdx = self.streams.firstIndex(where: { $0.id == streamId }),
                            let aIdx = self.streams[sIdx].attachments.firstIndex(where: { $0.id == attachment.id }) {
                             self.streams[sIdx].attachments[aIdx].remotePath = remotePath
+                            self.dirtyStreamIds.insert(streamId)
                             self.save()
                         }
                     }
@@ -516,6 +705,7 @@ public final class TagdosStore: ObservableObject {
         let attachment = streams[sIdx].attachments[aIdx]
         streams[sIdx].attachments.remove(at: aIdx)
         streams[sIdx].updatedAt = Date()
+        dirtyStreamIds.insert(streamId)
         save()
 
         await TagdosAttachmentManager.shared.deleteAttachment(attachment)
@@ -639,13 +829,15 @@ public final class TagdosStore: ObservableObject {
                 var merged = self.streams
                 let parser = TagdosParser.shared
                 let remoteNumbers = Set(remoteStreams.map { $0.stream_number })
-                let maxRemoteUpdated = remoteStreams.map { $0.updated_at }.max() ?? .distantPast
+                let maxRemoteNum = remoteStreams.map { $0.stream_number }.max() ?? 0
 
-                // Remove streams that were deleted remotely
+                // Prune only clean, previously pushed overflow streams removed remotely; never drop dirty/unpushed streams
                 merged.removeAll { local in
                     let streamNum = local.orderIndex + 1
-                    guard !remoteNumbers.contains(streamNum) else { return false }
-                    return self.lastPushedStreamSignatures[streamNum] != nil || local.updatedAt <= maxRemoteUpdated
+                    guard streamNum > maxRemoteNum else { return false }
+                    guard !self.dirtyStreamIds.contains(local.id) else { return false }
+                    let sig = self.streamSignature(local)
+                    return self.lastPushedStreamSignatures[streamNum] == sig
                 }
 
                 for remote in remoteStreams {
@@ -659,6 +851,9 @@ public final class TagdosStore: ObservableObject {
 
                     if let localIdx = merged.firstIndex(where: { $0.orderIndex == orderIdx }) {
                         let local = merged[localIdx]
+                        if self.dirtyStreamIds.contains(local.id) && local.updatedAt >= remote.updated_at {
+                            continue
+                        }
                         if remote.updated_at >= local.updatedAt {
                             var updated = parser.parseStream(
                                 rawText: remote.raw_syntax,
@@ -671,13 +866,16 @@ public final class TagdosStore: ObservableObject {
                             let trimmedRemoteTitle = remote.title.trimmingCharacters(in: .whitespacesAndNewlines)
                             if !trimmedRemoteTitle.isEmpty && trimmedRemoteTitle != updated.autoDetectedTitle {
                                 updated.customTitle = trimmedRemoteTitle
+                                updated.title = trimmedRemoteTitle
                             } else {
                                 updated.customTitle = nil
+                                updated.title = updated.autoDetectedTitle
                             }
                             updated.activeMemos = remote.active_memos ?? ""
                             updated.attachments = remote.attachments ?? []
                             updated.updatedAt = remote.updated_at
                             merged[localIdx] = updated
+                            self.dirtyStreamIds.remove(local.id)
                         }
                     } else {
                         var newStream = parser.parseStream(
@@ -689,6 +887,7 @@ public final class TagdosStore: ObservableObject {
                         let trimmedRemoteTitle = remote.title.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmedRemoteTitle.isEmpty && trimmedRemoteTitle != newStream.autoDetectedTitle {
                             newStream.customTitle = trimmedRemoteTitle
+                            newStream.title = trimmedRemoteTitle
                         }
                         newStream.activeMemos = remote.active_memos ?? ""
                         newStream.attachments = remote.attachments ?? []
@@ -700,10 +899,21 @@ public final class TagdosStore: ObservableObject {
                 merged.sort { $0.orderIndex < $1.orderIndex }
                 self.streams = merged
                 self.lastPushedStreamSignatures = [:]
+                var hasDirtyOrMissing = false
                 for s in merged {
-                    self.lastPushedStreamSignatures[s.orderIndex + 1] = self.streamSignature(s)
+                    let streamNum = s.orderIndex + 1
+                    if self.dirtyStreamIds.contains(s.id) || !remoteNumbers.contains(streamNum) {
+                        hasDirtyOrMissing = true
+                    } else {
+                        self.lastPushedStreamSignatures[streamNum] = self.streamSignature(s)
+                    }
                 }
                 self.save(triggerCloudSync: false)
+
+                if hasDirtyOrMissing {
+                    let missingNumbers = Set(merged.map { $0.orderIndex + 1 }).subtracting(remoteNumbers)
+                    await pushAllStreamsToSupabase(userId: userId, forceMissingNumbers: missingNumbers)
+                }
             } else {
                 // Remote has no streams yet: push local initial streams up!
                 await pushAllStreamsToSupabase(userId: userId, forceAll: true)
@@ -774,7 +984,11 @@ public final class TagdosStore: ObservableObject {
         }
     }
 
-    private func pushAllStreamsToSupabase(userId: String, forceAll: Bool = false) async {
+    private func pushAllStreamsToSupabase(
+        userId: String,
+        forceAll: Bool = false,
+        forceMissingNumbers: Set<Int> = []
+    ) async {
         let client = SupabaseService.shared.client
 
         struct StreamPayload: Codable {
@@ -792,10 +1006,13 @@ public final class TagdosStore: ObservableObject {
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "HH:mm"
 
+        var pushedAny = false
         for stream in streams {
             let streamNum = stream.orderIndex + 1
             let sig = streamSignature(stream)
-            if !forceAll, lastPushedStreamSignatures[streamNum] == sig {
+            let isDirty = dirtyStreamIds.contains(stream.id)
+            let isMissingRemote = forceMissingNumbers.contains(streamNum)
+            if !forceAll && !isDirty && !isMissingRemote && lastPushedStreamSignatures[streamNum] == sig {
                 continue
             }
 
@@ -803,7 +1020,7 @@ public final class TagdosStore: ObservableObject {
             let payload = StreamPayload(
                 user_id: userId,
                 stream_number: streamNum,
-                title: stream.title,
+                title: stream.displayTitle,
                 raw_syntax: stream.rawText,
                 reminder_time: reminderStr,
                 active_memos: stream.activeMemos,
@@ -818,10 +1035,18 @@ public final class TagdosStore: ObservableObject {
                     .upsert(payload, onConflict: "user_id,stream_number", returning: .minimal)
                     .execute()
                 lastPushedStreamSignatures[streamNum] = sig
+                if let current = streams.first(where: { $0.id == stream.id }),
+                   streamSignature(current) == sig {
+                    dirtyStreamIds.remove(stream.id)
+                    pushedAny = true
+                }
                 self.lastLocalPushAt = Date()
             } catch {
                 print("[TagdosStore] Failed to upsert stream \(streamNum): \(error.localizedDescription)")
             }
+        }
+        if pushedAny {
+            persistDirtyStreamIds()
         }
     }
 

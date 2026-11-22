@@ -13,11 +13,14 @@ namespace Daily.Services
         Task<TagDoStream?> GetStreamByIndexAsync(int orderIndex);
         Task SaveStreamAsync(TagDoStream stream);
         Task UpdateStreamRawTextAsync(string streamId, string newRawText);
-        Task UpdateStreamTitleAsync(string streamId, string newTitle);
+        Task UpdateStreamTitleAsync(string streamId, string? newTitle);
         Task SetStreamReminderAsync(string streamId, DateTime? reminder);
         Task UpdateStreamMemosAsync(string streamId, string memos, string attachmentsJson);
         Task<TagDoStream> CreateStreamAsync(string? title = null, string rawText = "", string activeMemos = "");
         Task DeleteStreamAsync(string streamId);
+        Task MoveStreamAsync(int fromIndex, int toIndex);
+        Task ReorderStreamsAsync(List<string> orderedIds);
+        Task<string?> ImportExternalTaskBatchAsync(List<TagdosTaskImportItem> items);
         Task<TagDoStream> ImportExternalTasksAsync(string mode, string? targetStreamId, string? newStreamTitle, List<string> rawDslChunks, List<string> memoLines);
 
         Task<List<TagDoQuickNote>> GetQuickNotesAsync();

@@ -3,13 +3,22 @@ package com.intellidream.daily.presentation.tagdos
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -29,7 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.intellidream.daily.designsystem.ThemeColors
 
 /**
- * Bottom sheet to rename a stream or reset it to auto-detected domain title.
+ * Bottom sheet to rename a stream, reset it to auto-detected domain title, reorder it, or safely delete it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,11 +46,16 @@ fun TagdosRenameStreamSheet(
     currentTitle: String,
     canDeleteStream: Boolean = false,
     onDeleteStream: (() -> Unit)? = null,
+    canMoveLeft: Boolean = false,
+    canMoveRight: Boolean = false,
+    onMoveLeft: (() -> Unit)? = null,
+    onMoveRight: (() -> Unit)? = null,
     onSaveTitle: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var text by remember { mutableStateOf(currentTitle) }
+    var text by remember(currentTitle) { mutableStateOf(currentTitle) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -86,6 +100,34 @@ fun TagdosRenameStreamSheet(
                 shape = RoundedCornerShape(12.dp)
             )
 
+            if ((onMoveLeft != null && canMoveLeft) || (onMoveRight != null && canMoveRight)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onMoveLeft?.invoke() },
+                        enabled = canMoveLeft && onMoveLeft != null,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (canMoveLeft) ThemeColors.accentCyan else Color.White.copy(alpha = 0.3f))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Move Left", color = if (canMoveLeft) ThemeColors.accentCyan else Color.White.copy(alpha = 0.3f), fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { onMoveRight?.invoke() },
+                        enabled = canMoveRight && onMoveRight != null,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Move Right", color = if (canMoveRight) ThemeColors.accentCyan else Color.White.copy(alpha = 0.3f), fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (canMoveRight) ThemeColors.accentCyan else Color.White.copy(alpha = 0.3f))
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -119,18 +161,44 @@ fun TagdosRenameStreamSheet(
             }
 
             if (canDeleteStream && onDeleteStream != null) {
-                TextButton(
-                    onClick = {
-                        onDeleteStream()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Delete Stream",
-                        color = ThemeColors.accentPink,
-                        fontWeight = FontWeight.Bold
-                    )
+                if (confirmDelete) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { confirmDelete = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Keep Stream", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                confirmDelete = false
+                                onDeleteStream()
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = ThemeColors.accentPink),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Confirm Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                } else {
+                    TextButton(
+                        onClick = { confirmDelete = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Delete Stream",
+                            color = ThemeColors.accentPink,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

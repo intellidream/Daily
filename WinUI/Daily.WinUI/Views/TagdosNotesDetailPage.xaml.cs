@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -85,8 +86,29 @@ namespace Daily_WinUI.Views
 
             try
             {
+                var prevStreamId = (_selectedStreamIndex >= 0 && _selectedStreamIndex < _streams.Count)
+                    ? _streams[_selectedStreamIndex].Id
+                    : null;
+                bool wasNotesTab = _streams.Count > 0 && _selectedStreamIndex >= _streams.Count;
+
                 _streams = await _tagdosService.GetStreamsAsync();
                 _notes = await _tagdosService.GetQuickNotesAsync();
+
+                int nextIndex;
+                if (wasNotesTab)
+                {
+                    nextIndex = _streams.Count;
+                }
+                else if (!string.IsNullOrEmpty(prevStreamId))
+                {
+                    int matchIdx = _streams.FindIndex(s => s.Id == prevStreamId);
+                    nextIndex = matchIdx >= 0 ? matchIdx : Math.Clamp(_selectedStreamIndex, 0, Math.Max(0, _streams.Count - 1));
+                }
+                else
+                {
+                    nextIndex = Math.Clamp(_selectedStreamIndex, 0, _streams.Count);
+                }
+                _selectedStreamIndex = nextIndex;
 
                 RenderStreamTabs();
                 SelectTab(_selectedStreamIndex);
@@ -155,6 +177,55 @@ namespace Daily_WinUI.Views
 
                 btn.Content = contentStack;
                 btn.Click += (s, ev) => SelectTab(tabIndex);
+
+                var menu = new MenuFlyout();
+                if (tabIndex > 0)
+                {
+                    var moveLeftItem = new MenuFlyoutItem
+                    {
+                        Text = "Move Left",
+                        Icon = new FontIcon { Glyph = "\xE72B", FontFamily = new FontFamily("Segoe Fluent Icons") }
+                    };
+                    moveLeftItem.Click += async (_, __) => await MoveStreamPreservingSelectionAsync(tabIndex, tabIndex - 1);
+                    menu.Items.Add(moveLeftItem);
+                }
+                if (tabIndex < _streams.Count - 1)
+                {
+                    var moveRightItem = new MenuFlyoutItem
+                    {
+                        Text = "Move Right",
+                        Icon = new FontIcon { Glyph = "\xE72A", FontFamily = new FontFamily("Segoe Fluent Icons") }
+                    };
+                    moveRightItem.Click += async (_, __) => await MoveStreamPreservingSelectionAsync(tabIndex, tabIndex + 1);
+                    menu.Items.Add(moveRightItem);
+                }
+                if (menu.Items.Count > 0)
+                {
+                    menu.Items.Add(new MenuFlyoutSeparator());
+                }
+                var renameItem = new MenuFlyoutItem
+                {
+                    Text = "Rename Stream...",
+                    Icon = new FontIcon { Glyph = "\xE70F", FontFamily = new FontFamily("Segoe Fluent Icons") }
+                };
+                renameItem.Click += async (_, __) =>
+                {
+                    SelectTab(tabIndex);
+                    await RenameStreamForIndexAsync(tabIndex);
+                };
+                menu.Items.Add(renameItem);
+                if (_streams.Count > 1)
+                {
+                    var reorderItem = new MenuFlyoutItem
+                    {
+                        Text = "Reorder Streams...",
+                        Icon = new FontIcon { Glyph = "\xE8CB", FontFamily = new FontFamily("Segoe Fluent Icons") }
+                    };
+                    reorderItem.Click += async (_, __) => await ShowReorderStreamsDialogAsync();
+                    menu.Items.Add(reorderItem);
+                }
+                btn.ContextFlyout = menu;
+
                 StreamTabsPanel.Children.Add(btn);
             }
 
@@ -186,6 +257,31 @@ namespace Daily_WinUI.Views
                 SelectTab(Math.Max(0, _streams.Count - 1));
             };
             StreamTabsPanel.Children.Add(addStreamBtn);
+
+            if (_streams.Count > 1)
+            {
+                var reorderBtn = new Button
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x22, 0xAF, 0x52, 0xDE)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0xAF, 0x52, 0xDE)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(14),
+                    Padding = new Thickness(10, 6, 10, 6),
+                    Content = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 4,
+                        Children =
+                        {
+                            new FontIcon { Glyph = "\xE8CB", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 11, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF)) },
+                            new TextBlock { Text = "Reorder", FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF)) }
+                        }
+                    }
+                };
+                ToolTipService.SetToolTip(reorderBtn, "Reorder streams");
+                reorderBtn.Click += async (_, __) => await ShowReorderStreamsDialogAsync();
+                StreamTabsPanel.Children.Add(reorderBtn);
+            }
 
             // Tab N: Quick Notes
             int notesIndex = _streams.Count;
@@ -554,34 +650,357 @@ namespace Daily_WinUI.Views
 
         private async void RenameStream_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedStreamIndex >= _streams.Count) return;
-            var stream = _streams[_selectedStreamIndex];
+            await RenameStreamForIndexAsync(_selectedStreamIndex);
+        }
 
-            var input = new TextBox { Text = stream.DisplayTitle };
+        private async Task RenameStreamForIndexAsync(int index)
+        {
+            if (_tagdosService == null || index < 0 || index >= _streams.Count) return;
+            var stream = _streams[index];
+            int currentIdx = index;
+
+            var input = new TextBox
+            {
+                Text = stream.CustomTitle ?? stream.DisplayTitle,
+                PlaceholderText = "Custom stream title..."
+            };
+
+            var stack = new StackPanel { Spacing = 12, MinWidth = 340 };
+            stack.Children.Add(input);
+
+            Button? moveLeftBtn = null;
+            Button? moveRightBtn = null;
+            if (_streams.Count > 1)
+            {
+                void SyncMoveButtons()
+                {
+                    if (moveLeftBtn != null) moveLeftBtn.IsEnabled = currentIdx > 0;
+                    if (moveRightBtn != null) moveRightBtn.IsEnabled = currentIdx < _streams.Count - 1;
+                }
+
+                moveLeftBtn = new Button
+                {
+                    Content = "← Move Left",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    IsEnabled = currentIdx > 0
+                };
+                moveRightBtn = new Button
+                {
+                    Content = "Move Right →",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    IsEnabled = currentIdx < _streams.Count - 1
+                };
+
+                moveLeftBtn.Click += async (_, __) =>
+                {
+                    if (currentIdx > 0)
+                    {
+                        int from = currentIdx;
+                        currentIdx--;
+                        await MoveStreamPreservingSelectionAsync(from, currentIdx);
+                        SyncMoveButtons();
+                    }
+                };
+                moveRightBtn.Click += async (_, __) =>
+                {
+                    if (currentIdx < _streams.Count - 1)
+                    {
+                        int from = currentIdx;
+                        currentIdx++;
+                        await MoveStreamPreservingSelectionAsync(from, currentIdx);
+                        SyncMoveButtons();
+                    }
+                };
+
+                var moveGrid = new Grid { ColumnSpacing = 8 };
+                moveGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                moveGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                Grid.SetColumn(moveLeftBtn, 0);
+                Grid.SetColumn(moveRightBtn, 1);
+                moveGrid.Children.Add(moveLeftBtn);
+                moveGrid.Children.Add(moveRightBtn);
+                stack.Children.Add(moveGrid);
+            }
+
+            bool deleteConfirmed = false;
+            bool confirmArmed = false;
+
             var dialog = new ContentDialog
             {
                 Title = "Rename Stream",
                 PrimaryButtonText = "Save",
-                SecondaryButtonText = _streams.Count > 1 ? "Delete Stream" : null,
+                SecondaryButtonText = !string.IsNullOrWhiteSpace(stream.CustomTitle) ? "Reset to Auto" : null,
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary,
-                Content = input,
+                Content = stack,
                 XamlRoot = this.XamlRoot
             };
 
-            var res = await dialog.ShowAsync();
-            if (res == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(input.Text))
+            if (_streams.Count > 1)
             {
-                stream.CustomTitle = input.Text.Trim();
-                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
-                RenderStreamTabs();
-                RenderStreamView(stream);
+                var deleteRow = new Grid { ColumnSpacing = 8 };
+                deleteRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                deleteRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var keepBtn = new Button
+                {
+                    Content = "Keep Stream",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Visibility = Visibility.Collapsed
+                };
+
+                var deleteBtn = new Button
+                {
+                    Content = "Delete Stream",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0x5C, 0x8A)),
+                    Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0x5C, 0x8A)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0x5C, 0x8A)),
+                    BorderThickness = new Thickness(1)
+                };
+                Grid.SetColumnSpan(deleteBtn, 2);
+
+                keepBtn.Click += (_, __) =>
+                {
+                    confirmArmed = false;
+                    keepBtn.Visibility = Visibility.Collapsed;
+                    Grid.SetColumn(deleteBtn, 0);
+                    Grid.SetColumnSpan(deleteBtn, 2);
+                    deleteBtn.Content = "Delete Stream";
+                    deleteBtn.Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0x5C, 0x8A));
+                    deleteBtn.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0x5C, 0x8A));
+                };
+
+                deleteBtn.Click += (_, __) =>
+                {
+                    if (!confirmArmed)
+                    {
+                        confirmArmed = true;
+                        keepBtn.Visibility = Visibility.Visible;
+                        Grid.SetColumn(keepBtn, 0);
+                        Grid.SetColumn(deleteBtn, 1);
+                        Grid.SetColumnSpan(deleteBtn, 1);
+                        deleteBtn.Content = "Click again to delete";
+                        deleteBtn.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+                        deleteBtn.Background = new SolidColorBrush(Color.FromArgb(0xCC, 0xD9, 0x2B, 0x58));
+                    }
+                    else
+                    {
+                        deleteConfirmed = true;
+                        dialog.Hide();
+                    }
+                };
+
+                deleteRow.Children.Add(keepBtn);
+                deleteRow.Children.Add(deleteBtn);
+                stack.Children.Add(deleteRow);
             }
-            else if (res == ContentDialogResult.Secondary && _streams.Count > 1 && _tagdosService != null)
+
+            var res = await dialog.ShowAsync();
+            if (deleteConfirmed && _streams.Count > 1)
             {
                 await _tagdosService.DeleteStreamAsync(stream.Id);
-                _selectedStreamIndex = Math.Max(0, _selectedStreamIndex - 1);
+                _selectedStreamIndex = Math.Clamp(currentIdx - 1, 0, Math.Max(0, _streams.Count - 2));
                 await LoadDataAsync();
+            }
+            else if (res == ContentDialogResult.Primary)
+            {
+                await _tagdosService.UpdateStreamTitleAsync(stream.Id, input.Text);
+                await LoadDataAsync();
+            }
+            else if (res == ContentDialogResult.Secondary)
+            {
+                await _tagdosService.UpdateStreamTitleAsync(stream.Id, null);
+                await LoadDataAsync();
+            }
+        }
+
+        private async Task MoveStreamPreservingSelectionAsync(int fromIndex, int toIndex)
+        {
+            if (_tagdosService == null || fromIndex < 0 || toIndex < 0 || fromIndex >= _streams.Count || toIndex >= _streams.Count || fromIndex == toIndex)
+            {
+                return;
+            }
+            var activeId = (_selectedStreamIndex >= 0 && _selectedStreamIndex < _streams.Count)
+                ? _streams[_selectedStreamIndex].Id
+                : null;
+            await _tagdosService.MoveStreamAsync(fromIndex, toIndex);
+            _streams = await _tagdosService.GetStreamsAsync();
+            if (!string.IsNullOrEmpty(activeId))
+            {
+                int updatedIdx = _streams.FindIndex(s => s.Id == activeId);
+                _selectedStreamIndex = updatedIdx >= 0 ? updatedIdx : Math.Clamp(toIndex, 0, Math.Max(0, _streams.Count - 1));
+            }
+            RenderStreamTabs();
+            SelectTab(_selectedStreamIndex);
+        }
+
+        private async Task ShowReorderStreamsDialogAsync()
+        {
+            if (_tagdosService == null || _streams.Count < 2) return;
+
+            var uiRows = new ObservableCollection<Grid>();
+            var listView = new ListView
+            {
+                ItemsSource = uiRows,
+                CanReorderItems = true,
+                AllowDrop = true,
+                CanDragItems = true,
+                SelectionMode = ListViewSelectionMode.None,
+                MaxHeight = 360,
+                MinWidth = 380
+            };
+
+            void RefreshRowBadges()
+            {
+                for (int idx = 0; idx < uiRows.Count; idx++)
+                {
+                    var row = uiRows[idx];
+                    if (row.Children[0] is Border badgeBorder && badgeBorder.Child is TextBlock badgeText)
+                    {
+                        badgeText.Text = $"S{idx + 1}";
+                    }
+                    if (row.Children[2] is StackPanel btnStack && btnStack.Children.Count == 2)
+                    {
+                        if (btnStack.Children[0] is Button upBtn) upBtn.IsEnabled = idx > 0;
+                        if (btnStack.Children[1] is Button downBtn) downBtn.IsEnabled = idx < uiRows.Count - 1;
+                    }
+                }
+            }
+
+            foreach (var stream in _streams)
+            {
+                var rowGrid = new Grid
+                {
+                    Tag = stream.Id,
+                    ColumnSpacing = 10,
+                    Padding = new Thickness(6, 6, 6, 6),
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var badge = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x55, 0xAF, 0x52, 0xDE)),
+                    CornerRadius = new CornerRadius(12),
+                    Width = 30,
+                    Height = 26,
+                    Child = new TextBlock
+                    {
+                        FontSize = 11,
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                Grid.SetColumn(badge, 0);
+                rowGrid.Children.Add(badge);
+
+                var labelStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                labelStack.Children.Add(new TextBlock
+                {
+                    Text = stream.DisplayTitle,
+                    FontSize = 13,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                });
+                var drivingRaw = stream.DrivingPill?.RawText;
+                if (!string.IsNullOrWhiteSpace(stream.CustomTitle) && !string.IsNullOrWhiteSpace(drivingRaw))
+                {
+                    labelStack.Children.Add(new TextBlock
+                    {
+                        Text = drivingRaw,
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+                        TextTrimming = TextTrimming.CharacterEllipsis
+                    });
+                }
+                Grid.SetColumn(labelStack, 1);
+                rowGrid.Children.Add(labelStack);
+
+                var moveStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                var upButton = new Button
+                {
+                    Content = new FontIcon { Glyph = "\xE70E", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 11 },
+                    Padding = new Thickness(7, 5, 7, 5),
+                    CornerRadius = new CornerRadius(8)
+                };
+                var downButton = new Button
+                {
+                    Content = new FontIcon { Glyph = "\xE70D", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 11 },
+                    Padding = new Thickness(7, 5, 7, 5),
+                    CornerRadius = new CornerRadius(8)
+                };
+
+                upButton.Click += (_, __) =>
+                {
+                    int cur = uiRows.IndexOf(rowGrid);
+                    if (cur > 0)
+                    {
+                        uiRows.Move(cur, cur - 1);
+                        RefreshRowBadges();
+                    }
+                };
+                downButton.Click += (_, __) =>
+                {
+                    int cur = uiRows.IndexOf(rowGrid);
+                    if (cur >= 0 && cur < uiRows.Count - 1)
+                    {
+                        uiRows.Move(cur, cur + 1);
+                        RefreshRowBadges();
+                    }
+                };
+
+                moveStack.Children.Add(upButton);
+                moveStack.Children.Add(downButton);
+                Grid.SetColumn(moveStack, 2);
+                rowGrid.Children.Add(moveStack);
+
+                uiRows.Add(rowGrid);
+            }
+
+            RefreshRowBadges();
+            listView.DragItemsCompleted += (_, __) => RefreshRowBadges();
+
+            var container = new StackPanel { Spacing = 8 };
+            container.Children.Add(new TextBlock
+            {
+                Text = "Drag items or use Up/Down arrows to set your preferred stream order (S1..SN).",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+                TextWrapping = TextWrapping.Wrap
+            });
+            container.Children.Add(listView);
+
+            var dialog = new ContentDialog
+            {
+                Title = "Reorder Streams",
+                PrimaryButtonText = "Save Order",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                Content = container,
+                XamlRoot = this.XamlRoot
+            };
+
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            {
+                var orderedIds = uiRows.Select(r => r.Tag as string ?? string.Empty).Where(id => !string.IsNullOrEmpty(id)).ToList();
+                var activeId = (_selectedStreamIndex >= 0 && _selectedStreamIndex < _streams.Count)
+                    ? _streams[_selectedStreamIndex].Id
+                    : null;
+                await _tagdosService.ReorderStreamsAsync(orderedIds);
+                _streams = await _tagdosService.GetStreamsAsync();
+                if (!string.IsNullOrEmpty(activeId))
+                {
+                    int match = _streams.FindIndex(s => s.Id == activeId);
+                    if (match >= 0) _selectedStreamIndex = match;
+                }
+                RenderStreamTabs();
+                SelectTab(_selectedStreamIndex);
             }
         }
 
@@ -934,6 +1353,14 @@ namespace Daily_WinUI.Views
 
         // ── External Tasks Import (Microsoft To Do & Google Tasks) ────────────
 
+        private sealed class WinUiTargetOption
+        {
+            public string Key { get; set; } = string.Empty;
+            public string Label { get; set; } = string.Empty;
+            public bool IsReplace { get; set; }
+            public override string ToString() => Label;
+        }
+
         private sealed class WinUiImportDraft
         {
             public string Id { get; set; } = string.Empty;
@@ -941,7 +1368,24 @@ namespace Daily_WinUI.Views
             public string? OriginalNotes { get; set; }
             public bool IsAlreadyDsl { get; set; }
             public string EditedTag { get; set; } = string.Empty;
-            public bool IsSelected { get; set; } = true;
+            public bool IsSelected { get; set; } = false;
+            public string TargetChoiceKey { get; set; } = "new";
+            public string NewStreamTitle { get; set; } = string.Empty;
+        }
+
+        private static string StripHtmlToPlainText(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+            var cleaned = Regex.Replace(html, "(?is)<head[^>]*>.*?</head>", string.Empty);
+            cleaned = Regex.Replace(cleaned, "(?is)<style[^>]*>.*?</style>", string.Empty);
+            cleaned = Regex.Replace(cleaned, "(?i)<br\\s*/?>", "\n");
+            cleaned = Regex.Replace(cleaned, "(?i)</(p|div|li|tr|h[1-6])>", "\n");
+            cleaned = Regex.Replace(cleaned, "<[^>]+>", " ");
+            cleaned = WebUtility.HtmlDecode(cleaned).Replace("\r\n", "\n").Replace('\r', '\n').Replace('\u00A0', ' ');
+            var lines = cleaned.Split('\n')
+                .Select(l => Regex.Replace(l, "[ \\t]+", " ").Trim())
+                .ToList();
+            return Regex.Replace(string.Join("\n", lines), "\n{3,}", "\n\n").Trim();
         }
 
         private sealed class WinUiTaskListOption
@@ -1034,37 +1478,92 @@ namespace Daily_WinUI.Views
             tasksHeaderRow.Children.Add(selectAllBtn);
             tasksHeaderRow.Children.Add(clearAllBtn);
 
-            var destModeCombo = new ComboBox
+            var targetOptions = new List<WinUiTargetOption>();
+            for (int sIdx = 0; sIdx < _streams.Count; sIdx++)
+            {
+                var st = _streams[sIdx];
+                targetOptions.Add(new WinUiTargetOption
+                {
+                    Key = $"replace:{st.Id}",
+                    Label = $"Replace S{sIdx + 1}: {st.DisplayTitle}",
+                    IsReplace = true
+                });
+            }
+            for (int sIdx = 0; sIdx < _streams.Count; sIdx++)
+            {
+                var st = _streams[sIdx];
+                targetOptions.Add(new WinUiTargetOption
+                {
+                    Key = $"append:{st.Id}",
+                    Label = $"Append S{sIdx + 1}: {st.DisplayTitle}",
+                    IsReplace = false
+                });
+            }
+            targetOptions.Add(new WinUiTargetOption
+            {
+                Key = "new",
+                Label = "+ New Stream",
+                IsReplace = false
+            });
+
+            string fallbackTargetKey = (_selectedStreamIndex >= 0 && _selectedStreamIndex < _streams.Count)
+                ? $"replace:{_streams[_selectedStreamIndex].Id}"
+                : (_streams.Count > 0 ? $"replace:{_streams[0].Id}" : "new");
+
+            var defaultTargetCombo = new ComboBox
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                ItemsSource = new[] { "Append to Stream", "Replace Stream", "Create New Stream" },
-                SelectedIndex = 0
+                ItemsSource = targetOptions,
+                SelectedIndex = Math.Max(0, targetOptions.FindIndex(o => o.Key == fallbackTargetKey))
             };
-
-            var streamItems = _streams.Select((s, idx) => $"S{idx + 1}: {s.DisplayTitle}").ToList();
-            var targetStreamCombo = new ComboBox
+            var applyDefaultBtn = new Button
             {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                ItemsSource = streamItems,
-                SelectedIndex = _selectedStreamIndex < _streams.Count ? _selectedStreamIndex : 0
+                Content = "Apply to Checked",
+                FontSize = 11,
+                Padding = new Thickness(10, 5, 10, 5)
             };
-
-            var newStreamTitleBox = new TextBox
+            var defaultTargetBar = new Grid
             {
-                PlaceholderText = "New stream title...",
+                ColumnSpacing = 8,
                 Visibility = Visibility.Collapsed
+            };
+            defaultTargetBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            defaultTargetBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            defaultTargetBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var defLabel = new TextBlock
+            {
+                Text = "Default:",
+                FontSize = 11.5,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))
+            };
+            Grid.SetColumn(defLabel, 0);
+            Grid.SetColumn(defaultTargetCombo, 1);
+            Grid.SetColumn(applyDefaultBtn, 2);
+            defaultTargetBar.Children.Add(defLabel);
+            defaultTargetBar.Children.Add(defaultTargetCombo);
+            defaultTargetBar.Children.Add(applyDefaultBtn);
+
+            var summaryText = new TextBlock
+            {
+                FontSize = 11.5,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)),
+                Visibility = Visibility.Collapsed,
+                TextWrapping = TextWrapping.Wrap
             };
 
             var replaceWarningText = new TextBlock
             {
-                Text = "Warning: Existing pills and active memos in the selected stream will be replaced.",
+                Text = "Note: Replace targets clear existing pills and active memos on those streams before combining mapped tasks.",
                 FontSize = 11,
                 Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xB3, 0x00)),
                 Visibility = Visibility.Collapsed,
                 TextWrapping = TextWrapping.Wrap
             };
 
-            var drafts = new List<WinUiImportDraft>();
+            var stagedByKey = new Dictionary<string, WinUiImportDraft>();
+            var visibleKeys = new List<string>();
             bool isBusy = false;
 
             var dialog = new ContentDialog
@@ -1076,30 +1575,79 @@ namespace Daily_WinUI.Views
                 IsPrimaryButtonEnabled = false,
                 XamlRoot = this.XamlRoot
             };
-            dialog.Resources["ContentDialogMaxWidth"] = 740.0;
+            dialog.Resources["ContentDialogMaxWidth"] = 780.0;
+
+            List<WinUiImportDraft> GetSelectedDraftsOrdered()
+            {
+                var visibleSet = new HashSet<string>(visibleKeys);
+                var visibleSel = visibleKeys
+                    .Select(k => stagedByKey.TryGetValue(k, out var d) ? d : null)
+                    .Where(d => d != null && d.IsSelected && !string.IsNullOrWhiteSpace(d.EditedTag))
+                    .Cast<WinUiImportDraft>();
+                var offListSel = stagedByKey.Values
+                    .Where(d => !visibleSet.Contains(d.Id) && d.IsSelected && !string.IsNullOrWhiteSpace(d.EditedTag))
+                    .OrderBy(d => d.Id, StringComparer.Ordinal);
+                return visibleSel.Concat(offListSel).ToList();
+            }
 
             void UpdateImportButtonState()
             {
-                int count = drafts.Count(d => d.IsSelected && !string.IsNullOrWhiteSpace(d.EditedTag));
+                var chosenAll = GetSelectedDraftsOrdered();
+                int count = chosenAll.Count;
                 dialog.PrimaryButtonText = count > 0 ? $"Import ({count})" : "Import Selected";
                 dialog.IsPrimaryButtonEnabled = count > 0 && !isBusy;
+
+                if (count == 0)
+                {
+                    summaryText.Visibility = Visibility.Collapsed;
+                    replaceWarningText.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var countsByTarget = new Dictionary<string, int>();
+                var orderKeys = new List<string>();
+                foreach (var d in chosenAll)
+                {
+                    if (!countsByTarget.ContainsKey(d.TargetChoiceKey))
+                    {
+                        orderKeys.Add(d.TargetChoiceKey);
+                        countsByTarget[d.TargetChoiceKey] = 0;
+                    }
+                    countsByTarget[d.TargetChoiceKey]++;
+                }
+
+                var summaryLines = orderKeys.Select(k =>
+                {
+                    var label = targetOptions.FirstOrDefault(o => o.Key == k)?.Label ?? k;
+                    int c = countsByTarget[k];
+                    return $"• {c} task{(c == 1 ? "" : "s")} → {label}";
+                });
+                summaryText.Text = $"Batch Summary ({count} staged):\n" + string.Join("\n", summaryLines);
+                summaryText.Visibility = Visibility.Visible;
+
+                bool hasReplace = chosenAll.Any(d => d.TargetChoiceKey.StartsWith("replace:", StringComparison.Ordinal));
+                replaceWarningText.Visibility = hasReplace ? Visibility.Visible : Visibility.Collapsed;
             }
 
             void RenderDraftRows()
             {
                 tasksPanel.Children.Clear();
-                if (drafts.Count == 0)
+                if (visibleKeys.Count == 0)
                 {
                     tasksHeaderRow.Visibility = Visibility.Collapsed;
+                    defaultTargetBar.Visibility = Visibility.Collapsed;
                     UpdateImportButtonState();
                     return;
                 }
 
-                tasksCountText.Text = $"{drafts.Count} active tasks";
+                tasksCountText.Text = $"{visibleKeys.Count} active tasks";
                 tasksHeaderRow.Visibility = Visibility.Visible;
+                defaultTargetBar.Visibility = Visibility.Visible;
 
-                foreach (var draft in drafts)
+                foreach (var key in visibleKeys)
                 {
+                    if (!stagedByKey.TryGetValue(key, out var draft)) continue;
+
                     var rowBorder = new Border
                     {
                         Background = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)),
@@ -1109,15 +1657,16 @@ namespace Daily_WinUI.Views
                         Padding = new Thickness(10)
                     };
 
-                    var rowStack = new StackPanel { Spacing = 4 };
+                    var rowStack = new StackPanel { Spacing = 6 };
                     var topGrid = new Grid { ColumnSpacing = 8 };
                     topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                     topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                     topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+                    bool suppressEvents = true;
                     var chk = new CheckBox { IsChecked = draft.IsSelected, MinWidth = 0, Padding = new Thickness(0) };
-                    chk.Checked += (_, __) => { draft.IsSelected = true; UpdateImportButtonState(); };
-                    chk.Unchecked += (_, __) => { draft.IsSelected = false; UpdateImportButtonState(); };
+                    chk.Checked += (_, __) => { if (!suppressEvents) { draft.IsSelected = true; UpdateImportButtonState(); } };
+                    chk.Unchecked += (_, __) => { if (!suppressEvents) { draft.IsSelected = false; UpdateImportButtonState(); } };
                     Grid.SetColumn(chk, 0);
                     topGrid.Children.Add(chk);
 
@@ -1175,6 +1724,54 @@ namespace Daily_WinUI.Views
                         });
                     }
 
+                    var targetRowGrid = new Grid
+                    {
+                        ColumnSpacing = 8,
+                        Margin = new Thickness(28, 0, 0, 0)
+                    };
+                    targetRowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    targetRowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                    int optIdx = targetOptions.FindIndex(o => o.Key == draft.TargetChoiceKey);
+                    if (optIdx < 0) optIdx = Math.Max(0, targetOptions.FindIndex(o => o.Key == "new"));
+
+                    var rowTargetCombo = new ComboBox
+                    {
+                        ItemsSource = targetOptions,
+                        SelectedIndex = optIdx,
+                        MinWidth = 190
+                    };
+                    var newTitleBox = new TextBox
+                    {
+                        PlaceholderText = "Optional new stream title...",
+                        Text = draft.NewStreamTitle,
+                        Visibility = draft.TargetChoiceKey == "new" ? Visibility.Visible : Visibility.Collapsed
+                    };
+                    newTitleBox.TextChanged += (_, __) => { draft.NewStreamTitle = newTitleBox.Text; };
+
+                    rowTargetCombo.SelectionChanged += (_, __) =>
+                    {
+                        if (suppressEvents) return;
+                        if (rowTargetCombo.SelectedItem is WinUiTargetOption opt)
+                        {
+                            draft.TargetChoiceKey = opt.Key;
+                            draft.IsSelected = true;
+                            suppressEvents = true;
+                            chk.IsChecked = true;
+                            suppressEvents = false;
+                            newTitleBox.Visibility = opt.Key == "new" ? Visibility.Visible : Visibility.Collapsed;
+                            UpdateImportButtonState();
+                        }
+                    };
+
+                    suppressEvents = false;
+
+                    Grid.SetColumn(rowTargetCombo, 0);
+                    Grid.SetColumn(newTitleBox, 1);
+                    targetRowGrid.Children.Add(rowTargetCombo);
+                    targetRowGrid.Children.Add(newTitleBox);
+                    rowStack.Children.Add(targetRowGrid);
+
                     rowBorder.Child = rowStack;
                     tasksPanel.Children.Add(rowBorder);
                 }
@@ -1184,13 +1781,33 @@ namespace Daily_WinUI.Views
 
             selectAllBtn.Click += (_, __) =>
             {
-                foreach (var d in drafts) d.IsSelected = true;
+                foreach (var k in visibleKeys)
+                {
+                    if (stagedByKey.TryGetValue(k, out var d)) d.IsSelected = true;
+                }
                 RenderDraftRows();
             };
             clearAllBtn.Click += (_, __) =>
             {
-                foreach (var d in drafts) d.IsSelected = false;
+                foreach (var k in visibleKeys)
+                {
+                    if (stagedByKey.TryGetValue(k, out var d)) d.IsSelected = false;
+                }
                 RenderDraftRows();
+            };
+            applyDefaultBtn.Click += (_, __) =>
+            {
+                if (defaultTargetCombo.SelectedItem is WinUiTargetOption chosenOpt)
+                {
+                    foreach (var k in visibleKeys)
+                    {
+                        if (stagedByKey.TryGetValue(k, out var d) && d.IsSelected)
+                        {
+                            d.TargetChoiceKey = chosenOpt.Key;
+                        }
+                    }
+                    RenderDraftRows();
+                }
             };
 
             async Task<string> EnsureValidAccessTokenAsync(LocalCalendarAccount acc)
@@ -1254,9 +1871,11 @@ namespace Daily_WinUI.Views
             {
                 isBusy = true;
                 UpdateImportButtonState();
-                drafts.Clear();
+                visibleKeys.Clear();
                 RenderDraftRows();
                 statusBar.Text = $"Loading tasks from '{listOpt.Title}'...";
+
+                string activeDefaultKey = (defaultTargetCombo.SelectedItem as WinUiTargetOption)?.Key ?? fallbackTargetKey;
 
                 try
                 {
@@ -1288,16 +1907,24 @@ namespace Daily_WinUI.Views
                                 if (status.Equals("completed", StringComparison.OrdinalIgnoreCase)) continue;
                                 var title = item.TryGetProperty("title", out var t) ? t.GetString()?.Trim() ?? "" : "";
                                 if (string.IsNullOrEmpty(title)) continue;
-                                var notes = item.TryGetProperty("notes", out var n) ? n.GetString()?.Trim() : null;
-                                var prep = TagdosParser.PrepareImportItem(title, notes, false);
-                                drafts.Add(new WinUiImportDraft
+                                var rawTaskId = item.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString();
+                                var key = $"{acc.AccountType}::{acc.Id}::{listOpt.Id}::{rawTaskId}";
+                                visibleKeys.Add(key);
+                                if (!stagedByKey.ContainsKey(key))
                                 {
-                                    Id = item.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString(),
-                                    OriginalTitle = title,
-                                    OriginalNotes = string.IsNullOrWhiteSpace(notes) ? null : notes,
-                                    IsAlreadyDsl = prep.IsAlreadyDsl,
-                                    EditedTag = prep.TagOrDsl
-                                });
+                                    var notes = item.TryGetProperty("notes", out var n) ? n.GetString()?.Trim() : null;
+                                    var prep = TagdosParser.PrepareImportItem(title, notes, false);
+                                    stagedByKey[key] = new WinUiImportDraft
+                                    {
+                                        Id = key,
+                                        OriginalTitle = title,
+                                        OriginalNotes = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                                        IsAlreadyDsl = prep.IsAlreadyDsl,
+                                        EditedTag = prep.TagOrDsl,
+                                        IsSelected = false,
+                                        TargetChoiceKey = activeDefaultKey
+                                    };
+                                }
                             }
                         }
                     }
@@ -1329,32 +1956,40 @@ namespace Daily_WinUI.Views
                                 var title = item.TryGetProperty("title", out var t) ? t.GetString()?.Trim() ?? "" : "";
                                 if (string.IsNullOrEmpty(title)) continue;
 
-                                string notes = string.Empty;
-                                if (item.TryGetProperty("body", out var bodyObj))
+                                var rawTaskId = item.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString();
+                                var key = $"{acc.AccountType}::{acc.Id}::{listOpt.Id}::{rawTaskId}";
+                                visibleKeys.Add(key);
+                                if (!stagedByKey.ContainsKey(key))
                                 {
-                                    var rawBody = bodyObj.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
-                                    var cType = bodyObj.TryGetProperty("contentType", out var ct) ? ct.GetString() ?? "" : "";
-                                    notes = cType.Equals("html", StringComparison.OrdinalIgnoreCase)
-                                        ? Regex.Replace(rawBody, "<[^>]+>", " ").Trim()
-                                        : rawBody.Trim();
-                                }
-                                bool isHigh = item.TryGetProperty("importance", out var imp) &&
-                                              string.Equals(imp.GetString(), "high", StringComparison.OrdinalIgnoreCase);
+                                    string notes = string.Empty;
+                                    if (item.TryGetProperty("body", out var bodyObj))
+                                    {
+                                        var rawBody = bodyObj.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
+                                        var cType = bodyObj.TryGetProperty("contentType", out var ct) ? ct.GetString() ?? "" : "";
+                                        notes = cType.Equals("html", StringComparison.OrdinalIgnoreCase)
+                                            ? StripHtmlToPlainText(rawBody)
+                                            : rawBody.Trim();
+                                    }
+                                    bool isHigh = item.TryGetProperty("importance", out var imp) &&
+                                                  string.Equals(imp.GetString(), "high", StringComparison.OrdinalIgnoreCase);
 
-                                var prep = TagdosParser.PrepareImportItem(title, notes, isHigh);
-                                drafts.Add(new WinUiImportDraft
-                                {
-                                    Id = item.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString(),
-                                    OriginalTitle = title,
-                                    OriginalNotes = string.IsNullOrWhiteSpace(notes) ? null : notes,
-                                    IsAlreadyDsl = prep.IsAlreadyDsl,
-                                    EditedTag = prep.TagOrDsl
-                                });
+                                    var prep = TagdosParser.PrepareImportItem(title, notes, isHigh);
+                                    stagedByKey[key] = new WinUiImportDraft
+                                    {
+                                        Id = key,
+                                        OriginalTitle = title,
+                                        OriginalNotes = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                                        IsAlreadyDsl = prep.IsAlreadyDsl,
+                                        EditedTag = prep.TagOrDsl,
+                                        IsSelected = false,
+                                        TargetChoiceKey = activeDefaultKey
+                                    };
+                                }
                             }
                         }
                     }
 
-                    statusBar.Text = drafts.Count == 0
+                    statusBar.Text = visibleKeys.Count == 0
                         ? $"No active tasks found in '{listOpt.Title}'."
                         : $"Ready to import from '{listOpt.Title}'.";
                     RenderDraftRows();
@@ -1375,7 +2010,7 @@ namespace Daily_WinUI.Views
                 isBusy = true;
                 UpdateImportButtonState();
                 listCombo.ItemsSource = null;
-                drafts.Clear();
+                visibleKeys.Clear();
                 RenderDraftRows();
                 statusBar.Text = $"Loading lists for {acc.Email}...";
 
@@ -1452,10 +2087,6 @@ namespace Daily_WinUI.Views
                     if (def != null)
                     {
                         listCombo.SelectedItem = def;
-                        if (string.IsNullOrWhiteSpace(newStreamTitleBox.Text))
-                        {
-                            newStreamTitleBox.Text = def.Title;
-                        }
                         await LoadTasksForListAsync(acc, def);
                     }
                     else
@@ -1488,7 +2119,7 @@ namespace Daily_WinUI.Views
 
                 accountCombo.ItemsSource = filtered;
                 listCombo.ItemsSource = null;
-                drafts.Clear();
+                visibleKeys.Clear();
                 RenderDraftRows();
 
                 if (filtered.Count > 0)
@@ -1514,11 +2145,6 @@ namespace Daily_WinUI.Views
             {
                 if (!isBusy && accountCombo.SelectedItem is WinUiAccountOption opt && listCombo.SelectedItem is WinUiTaskListOption listOpt)
                 {
-                    if (string.IsNullOrWhiteSpace(newStreamTitleBox.Text) ||
-                        (listCombo.ItemsSource is List<WinUiTaskListOption> ls && ls.Any(x => x.Title == newStreamTitleBox.Text)))
-                    {
-                        newStreamTitleBox.Text = listOpt.Title;
-                    }
                     await LoadTasksForListAsync(opt.Account, listOpt);
                 }
             };
@@ -1571,19 +2197,7 @@ namespace Daily_WinUI.Views
                 }
             };
 
-            destModeCombo.SelectionChanged += (_, __) =>
-            {
-                int idx = destModeCombo.SelectedIndex;
-                targetStreamCombo.Visibility = idx == 2 ? Visibility.Collapsed : Visibility.Visible;
-                newStreamTitleBox.Visibility = idx == 2 ? Visibility.Visible : Visibility.Collapsed;
-                replaceWarningText.Visibility = idx == 1 ? Visibility.Visible : Visibility.Collapsed;
-                if (idx == 2 && string.IsNullOrWhiteSpace(newStreamTitleBox.Text) && listCombo.SelectedItem is WinUiTaskListOption l)
-                {
-                    newStreamTitleBox.Text = l.Title;
-                }
-            };
-
-            var contentStack = new StackPanel { Spacing = 10, Width = 580 };
+            var contentStack = new StackPanel { Spacing = 10, Width = 640 };
 
             var providerAndAccountGrid = new Grid { ColumnSpacing = 8 };
             providerAndAccountGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
@@ -1607,19 +2221,10 @@ namespace Daily_WinUI.Views
             contentStack.Children.Add(listGrid);
 
             contentStack.Children.Add(statusBar);
+            contentStack.Children.Add(defaultTargetBar);
             contentStack.Children.Add(tasksHeaderRow);
             contentStack.Children.Add(tasksScroll);
-
-            var destGrid = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 6, 0, 0) };
-            destGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
-            destGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Grid.SetColumn(destModeCombo, 0);
-            Grid.SetColumn(targetStreamCombo, 1);
-            Grid.SetColumn(newStreamTitleBox, 1);
-            destGrid.Children.Add(destModeCombo);
-            destGrid.Children.Add(targetStreamCombo);
-            destGrid.Children.Add(newStreamTitleBox);
-            contentStack.Children.Add(destGrid);
+            contentStack.Children.Add(summaryText);
             contentStack.Children.Add(replaceWarningText);
 
             dialog.Content = contentStack;
@@ -1628,38 +2233,46 @@ namespace Daily_WinUI.Views
             var result = await dialog.ShowAsync();
             if (result == ContentDialogResult.Primary)
             {
-                var chosen = drafts.Where(d => d.IsSelected && !string.IsNullOrWhiteSpace(d.EditedTag)).ToList();
+                var chosen = GetSelectedDraftsOrdered();
                 if (chosen.Count == 0) return;
 
-                var dslChunks = new List<string>();
-                var memoLines = new List<string>();
+                var batchItems = new List<TagdosTaskImportItem>();
                 foreach (var item in chosen)
                 {
                     var tag = item.EditedTag.Trim();
-                    dslChunks.Add(tag);
-                    var notes = item.OriginalNotes?.Trim() ?? "";
-                    if (item.IsAlreadyDsl)
+                    var notes = item.OriginalNotes?.Trim() ?? string.Empty;
+                    string? memoLine = item.IsAlreadyDsl
+                        ? (string.IsNullOrEmpty(notes) ? null : notes)
+                        : (string.IsNullOrEmpty(notes) ? $"• [{tag}] {item.OriginalTitle}" : $"• [{tag}] {item.OriginalTitle} — {notes}");
+
+                    TagdosTaskImportMode mode = TagdosTaskImportMode.NewStream;
+                    string? targetStreamId = null;
+                    if (item.TargetChoiceKey.StartsWith("replace:", StringComparison.Ordinal))
                     {
-                        if (!string.IsNullOrEmpty(notes)) memoLines.Add($"• [{tag}] {notes}");
+                        mode = TagdosTaskImportMode.Replace;
+                        targetStreamId = item.TargetChoiceKey.Substring("replace:".Length);
                     }
-                    else
+                    else if (item.TargetChoiceKey.StartsWith("append:", StringComparison.Ordinal))
                     {
-                        memoLines.Add(string.IsNullOrEmpty(notes) ? $"• [{tag}] {item.OriginalTitle}" : $"• [{tag}] {item.OriginalTitle} — {notes}");
+                        mode = TagdosTaskImportMode.Append;
+                        targetStreamId = item.TargetChoiceKey.Substring("append:".Length);
                     }
+
+                    batchItems.Add(new TagdosTaskImportItem
+                    {
+                        DslOrTag = tag,
+                        MemoLine = memoLine,
+                        Mode = mode,
+                        TargetStreamId = targetStreamId,
+                        NewStreamTitle = item.NewStreamTitle
+                    });
                 }
 
-                string mode = destModeCombo.SelectedIndex switch
-                {
-                    1 => "replace",
-                    2 => "new",
-                    _ => "append"
-                };
-
-                int targetIdx = targetStreamCombo.SelectedIndex;
-                string? targetId = (targetIdx >= 0 && targetIdx < _streams.Count) ? _streams[targetIdx].Id : _streams.FirstOrDefault()?.Id;
-                var resultStream = await _tagdosService.ImportExternalTasksAsync(mode, targetId, newStreamTitleBox.Text, dslChunks, memoLines);
+                var importedId = await _tagdosService.ImportExternalTaskBatchAsync(batchItems);
                 _streams = await _tagdosService.GetStreamsAsync();
-                int newIndex = _streams.FindIndex(s => s.Id == resultStream.Id);
+                int newIndex = !string.IsNullOrEmpty(importedId)
+                    ? _streams.FindIndex(s => s.Id == importedId)
+                    : -1;
                 SelectTab(newIndex >= 0 ? newIndex : Math.Max(0, _streams.Count - 1));
             }
         }
