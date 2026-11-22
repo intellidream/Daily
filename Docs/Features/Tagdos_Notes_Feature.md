@@ -123,16 +123,20 @@ Accessible via Dashboard tap or `daily://tagdos` deep link:
   - Replaced legacy text back button with a clean, circular Liquid Glass back button (`chevron.left` in 32x32 circle, no "Dashboard" label).
   - Integrated interactive edge swipe-to-dismiss gesture (`startX <= 75 && translationX > 50`) for seamless natural navigation.
 - **Stream Switcher Bar**:
-  - Dynamic stream tabs (`S1` to `SN`), a `+` button to create additional streams beyond 5, and a dedicated `Notes` tab.
-  - `S1`–`SN` are rendered inside distinct mini circular badges (`Circle()` with Purple glass accent) to stand out clearly beside the driving tag.
+  - Dynamic stream tabs (`S1` to `SN`) showing `customTitle` on tab pills when set (falling back to the driving tag), a `+` button to create additional streams beyond 5, a **Reorder** button (`S1..SN`), and a dedicated `Notes` tab.
+  - `S1`–`SN` are rendered inside distinct mini circular badges (`Circle()` with Purple glass accent) to stand out clearly beside the stream title/driving tag.
   - Clean `Notes` tab label (`Image(systemName: "note.text")` + `Text("Notes")`), removing redundant trailing emojis.
 - **Clean Cluster Canvas & Inline Pill Editing**:
   - Standalone visual `&` separator rows between cluster cards are omitted in Canvas view on all platforms (maximizing vertical density) while keeping `&` intact inside the serialized DSL and Raw Text editor.
   - Tapping/right-clicking any pill opens inline **Edit Tag** controls (re-classifying semantic color/type on save) alongside Prioritize to Front, Mark Done, Recycle to Back, and Delete.
-- **Dynamic & Custom Stream Naming & Deletion**:
+- **Dynamic & Custom Stream Naming, Safe Rename & Deletion Protection**:
   - Intelligent auto-detection of domain keywords (e.g. Work & Code, Health & Fitness, Finances & Bills, Home & Life, Daily Ops, or Driving Tag focus).
-  - Interactive stream rename sheet allowing custom naming and **Delete Stream** (when more than one stream exists), re-indexing remaining stream order numbers and pruning deleted remote rows in Supabase.
+  - Interactive stream rename sheet/dialog allowing custom naming, **Reset to Auto** (clear custom title), **Move Left / Move Right**, and **2-step Delete Stream confirmation** (`Keep Stream` / `Confirm Delete`) so streams are never deleted by accident.
+  - **Dirty-State & Canonical Slot UUID Sync Protection**: Local renames, edits, reorders, and attachment changes persist a `dirty` set locally across restarts; remote Supabase pulls never prune dirty/unpushed streams and reuse canonical remote slot UUIDs for `(user_id, stream_number)` upserts.
   - Re-detection fallback: if the user deletes or clears the custom name, the system automatically falls back to the auto-detected domain title.
+- **Stream Reordering & Cross-Device Persistence**:
+  - Users can reorder streams via quick **Move Left / Move Right** actions (stream tab context menu / long-press / Rename dialog) or the dedicated **Reorder Streams** UI (drag-and-drop on iOS/macOS/WinUI 3 + explicit Up/Down arrows on all 4 platforms) while preserving the active selected stream.
+  - Reordered `orderIndex = 0..N-1` persists locally and in OS widgets immediately, and syncs to Supabase `stream_number = 1..N`.
 - **100% English UI Standardization**: All TagDoS views, dialogs, action sheets, and fallback quick notes across iOS, macOS, Android, and WinUI 3 are standardized in English.
 - **Collapsible Per-Stream Active Memos (`TagdosActiveMemoView.swift`)**:
   - Compact collapsible header showing memo and attachment count badges, preserving vertical screen space for the cluster canvas.
@@ -187,10 +191,16 @@ TagDoS supports one-way, on-demand task import from **Microsoft To Do** and **Go
 - **Account Reuse & Re-Authentication**: Reads existing connected accounts from `calendar_accounts` (supporting 1-layer and WinUI 2-layer AES-GCM PBKDF2-SHA256 token decryption) and local OAuth cache. If unauthenticated or missing required scopes (`Tasks.Read` for Microsoft Graph, `https://www.googleapis.com/auth/tasks.readonly` for Google Tasks), the Import UI launches PKCE S256 OAuth directly (via `ASWebAuthenticationSession` on Apple platforms, system browser custom-scheme deep link callback on Android, and WinUI Calendar/OAuth flows on Windows).
 - OAuth client IDs/secrets are kept outside Git in ignored configuration files (`Secrets.swift` on Apple, `Android/local.properties` -> `BuildConfig` on Android, `Configuration/Secrets.cs` on Windows).
 
-### 9.2 DSL-Aware Conversion & No Back-Links
-- **Already TagDoS DSL**: If an incoming task title already matches TagDoS shorthand (`IsAlreadyTagdosDsl`), its exact DSL expression is imported directly with **no** mnemonic renaming and **no** redundant memo line (optional task notes still append to `active_memos`).
-- **Natural-Language Tasks**: Proposes an editable uppercase mnemonic (`$` / `€` / `!` inferred from keywords and high-importance flags) and appends `• [TAG] Original Title` (plus notes if present) to `active_memos`.
-- **Destination Modes**: Multi-selected tasks can be imported as **Append to existing stream**, **Replace existing stream** (replacing existing tags/memos cleanly), or **Create New Stream**.
+### 9.2 DSL-Aware Conversion & Plain-Memo Notes
+- **Already TagDoS DSL**: Recognizes single tags, `&` clusters, and `/` pipelines including multi-word tokens with internal spaces (e.g., `CRR vg/PL 98 & DOC sign`) while guarding against URLs (`http://`, `https://`, `www.`) and natural-language phrases with dates.
+  - Its exact DSL expression is parsed directly into pills/clusters with **no** mnemonic renaming and **no** title duplication in `active_memos`.
+  - Any optional task `Notes` body goes into `active_memos` strictly as **clean plain text** (HTML tags/entities decoded and stripped, with **no** `[DSL]` prefix).
+- **Natural-Language Tasks**: Proposes an editable uppercase mnemonic (`$` / `€` / `!` inferred from keywords and high-importance flags) and appends `• [TAG] Original Title` (or `• [TAG] Original Title — Notes`) to `active_memos`.
+
+### 9.3 Per-Task Multi-Stream Batch Import (Cross-List & Cross-Account)
+- **Independent Row Targets**: Each task row provides its own destination selector (**Replace `S1..SN`**, **Append `S1..SN`**, or **+ New Stream** with optional custom title) plus a **"Default target / Apply to checked"** helper for fast triage.
+- **Single-Step Combination**: Multiple tasks mapped to the same `Replace` or `Append` stream combine seamlessly (`/` for single tags, `&` for multi-cluster expressions, and newline-separated `active_memos`) in one batch transaction. Unnamed `+ New Stream` rows each create distinct new auto-titled streams.
+- **Persistent Staging Across Lists & Providers**: Checked tasks, edited DSL tags, and chosen destinations remain staged across list, account, and Microsoft To Do ↔ Google Tasks switches within the import session so users can review everything in the Batch Summary and import once (`Import (N)`).
 - **Pure Local Ownership (Zero Back-Links)**: Once imported, tasks live exclusively as native TagDoS streams and memos with zero external task IDs or write-back sync to Microsoft/Google.
 
 
