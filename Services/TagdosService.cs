@@ -50,8 +50,92 @@ namespace Daily.Services
         private readonly object _remoteSlotLock = new();
         private CancellationTokenSource? _realtimeDebounceCts;
         private readonly IGotrueClient<User, Session>.AuthEventHandler? _authListener;
+        private TagdosNavigationTarget? _pendingNavigation;
 
         public event EventHandler? DataChanged;
+        public event EventHandler? PendingNavigationChanged;
+
+        public TagdosNavigationTarget? PendingNavigation => _pendingNavigation;
+
+        public void RequestNavigation(string? streamId = null, int? clusterIndex = null, string? pillId = null, bool openPillEditor = false)
+        {
+            if (string.IsNullOrWhiteSpace(streamId) && !clusterIndex.HasValue && string.IsNullOrWhiteSpace(pillId))
+                return;
+
+            _pendingNavigation = new TagdosNavigationTarget
+            {
+                StreamId = string.IsNullOrWhiteSpace(streamId) ? null : streamId,
+                ClusterIndex = clusterIndex,
+                PillId = string.IsNullOrWhiteSpace(pillId) ? null : pillId,
+                OpenPillEditor = openPillEditor
+            };
+            PendingNavigationChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void HandleDeepLink(Uri uri)
+        {
+            if (uri == null) return;
+            var query = !string.IsNullOrEmpty(uri.Query)
+                ? uri.Query.TrimStart('?')
+                : (!string.IsNullOrEmpty(uri.Fragment) ? uri.Fragment.TrimStart('#') : string.Empty);
+            if (string.IsNullOrWhiteSpace(query)) return;
+
+            string? streamId = null;
+            int? clusterIndex = null;
+            string? pillId = null;
+            bool openEdit = false;
+
+            foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length != 2) continue;
+                var key = System.Net.WebUtility.UrlDecode(kv[0]);
+                var val = System.Net.WebUtility.UrlDecode(kv[1]);
+                if (key.Equals("streamId", StringComparison.OrdinalIgnoreCase))
+                    streamId = val;
+                else if (key.Equals("clusterIndex", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int cIdx))
+                    clusterIndex = cIdx;
+                else if (key.Equals("pillId", StringComparison.OrdinalIgnoreCase))
+                    pillId = val;
+                else if (key.Equals("edit", StringComparison.OrdinalIgnoreCase) && val == "1")
+                    openEdit = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(pillId))
+                openEdit = true;
+
+            RequestNavigation(streamId, clusterIndex, pillId, openEdit);
+        }
+
+        public TagdosNavigationTarget? ConsumePendingNavigation()
+        {
+            return Interlocked.Exchange(ref _pendingNavigation, null);
+        }
+
+        public async Task ReloadFromLocalAsync()
+        {
+            await _databaseService.InitializeAsync().ConfigureAwait(false);
+            var conn = _databaseService.Connection;
+            var localStreams = await conn.Table<LocalTagdoStream>().OrderBy(s => s.OrderIndex).ToListAsync().ConfigureAwait(false);
+            if (localStreams.Count > 0)
+            {
+                RebuildStreamCacheFromLocal(localStreams);
+                _isLoaded = true;
+                DataChanged?.Invoke(this, EventArgs.Empty);
+
+                var dirty = localStreams.Where(s => s.SyncedAtTicks == null && !IsUntouchedSeedStream(s)).ToList();
+                if (dirty.Count > 0)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        foreach (var ls in dirty)
+                        {
+                            await PushSingleStreamAsync(ls).ConfigureAwait(false);
+                        }
+                    });
+                }
+            }
+        }
 
         public TagdosService(
             IDatabaseService databaseService,
@@ -161,6 +245,7 @@ namespace Daily.Services
                         ls.ActiveMemos,
                         ls.AttachmentsJson,
                         ls.CustomTitle);
+                    TagdosParser.ApplyClusterRemindersSpec(parsed, ls.ClusterRemindersSpec);
                     parsed.Id = ls.Id;
                     _cachedStreams.Add(parsed);
                 }
@@ -347,6 +432,7 @@ namespace Daily.Services
                 CustomTitle = stream.CustomTitle,
                 RawText = stream.RawText,
                 StreamReminderTicks = stream.StreamReminder?.Ticks,
+                ClusterRemindersSpec = TagdosParser.EncodeClusterSpecOnly(stream),
                 ActiveMemos = stream.ActiveMemos ?? string.Empty,
                 AttachmentsJson = string.IsNullOrWhiteSpace(stream.AttachmentsJson) ? "[]" : stream.AttachmentsJson,
                 UpdatedAtTicks = DateTime.UtcNow.Ticks,
@@ -390,7 +476,7 @@ namespace Daily.Services
 
             if (stream != null)
             {
-                var parsed = TagdosParser.ParseStream(newRawText, stream.OrderIndex, stream.Title, stream.StreamReminder, stream.ActiveMemos, stream.AttachmentsJson, stream.CustomTitle);
+                var parsed = TagdosParser.ParseStream(newRawText, stream.OrderIndex, stream.Title, stream.StreamReminder, stream.ActiveMemos, stream.AttachmentsJson, stream.CustomTitle, stream);
                 parsed.Id = stream.Id;
                 if (string.IsNullOrWhiteSpace(parsed.CustomTitle))
                 {
@@ -438,6 +524,22 @@ namespace Daily.Services
             if (stream != null)
             {
                 stream.StreamReminder = reminder;
+                await SaveStreamAsync(stream).ConfigureAwait(false);
+            }
+        }
+
+        public async Task SetClusterReminderAsync(string streamId, int clusterIndex, DateTime? reminder)
+        {
+            await EnsureLoadedAsync().ConfigureAwait(false);
+            TagDoStream? stream = null;
+            lock (_cachedStreams)
+            {
+                stream = _cachedStreams.FirstOrDefault(s => s.Id == streamId);
+            }
+
+            if (stream != null && clusterIndex >= 0 && clusterIndex < stream.Clusters.Count)
+            {
+                stream.Clusters[clusterIndex].ClusterReminder = reminder;
                 await SaveStreamAsync(stream).ConfigureAwait(false);
             }
         }
@@ -559,6 +661,7 @@ namespace Daily.Services
                     CustomTitle = s.CustomTitle,
                     RawText = s.RawText,
                     StreamReminderTicks = s.StreamReminder?.Ticks,
+                    ClusterRemindersSpec = TagdosParser.EncodeClusterSpecOnly(s),
                     ActiveMemos = s.ActiveMemos ?? string.Empty,
                     AttachmentsJson = string.IsNullOrWhiteSpace(s.AttachmentsJson) ? "[]" : s.AttachmentsJson,
                     UpdatedAtTicks = nowTicks,
@@ -619,6 +722,7 @@ namespace Daily.Services
                     CustomTitle = s.CustomTitle,
                     RawText = s.RawText,
                     StreamReminderTicks = s.StreamReminder?.Ticks,
+                    ClusterRemindersSpec = TagdosParser.EncodeClusterSpecOnly(s),
                     ActiveMemos = s.ActiveMemos ?? string.Empty,
                     AttachmentsJson = string.IsNullOrWhiteSpace(s.AttachmentsJson) ? "[]" : s.AttachmentsJson,
                     UpdatedAtTicks = nowTicks,
@@ -784,7 +888,8 @@ namespace Daily.Services
                     existing.StreamReminder,
                     mergedMemos,
                     existing.AttachmentsJson,
-                    existing.CustomTitle);
+                    existing.CustomTitle,
+                    existing);
                 updated.Id = existing.Id;
                 if (string.IsNullOrWhiteSpace(updated.CustomTitle))
                 {
@@ -1167,7 +1272,7 @@ namespace Daily.Services
                                 await conn.DeleteAsync(existing).ConfigureAwait(false);
                             }
 
-                            var reminderTicks = ParseReminderTimeTicks(remote.ReminderTime);
+                            var (reminderTicks, clusterSpec) = TagdosParser.DecodeReminderSpec(remote.ReminderTime);
                             var attachmentsJson = remote.Attachments != null
                                 ? remote.Attachments.ToString(Newtonsoft.Json.Formatting.None)
                                 : "[]";
@@ -1186,6 +1291,7 @@ namespace Daily.Services
                                 CustomTitle = customTitle,
                                 RawText = remote.RawSyntax ?? string.Empty,
                                 StreamReminderTicks = reminderTicks,
+                                ClusterRemindersSpec = clusterSpec,
                                 ActiveMemos = remote.ActiveMemos ?? string.Empty,
                                 AttachmentsJson = string.IsNullOrWhiteSpace(attachmentsJson) ? "[]" : attachmentsJson,
                                 UpdatedAtTicks = remoteUpdatedUtc.Ticks,
@@ -1465,12 +1571,7 @@ namespace Daily.Services
 
             int streamNum = ls.OrderIndex + 1;
             var effectiveTitle = !string.IsNullOrWhiteSpace(ls.CustomTitle) ? ls.CustomTitle! : ls.Title;
-            string? reminderStr = null;
-            if (ls.StreamReminderTicks.HasValue)
-            {
-                var dt = new DateTime(ls.StreamReminderTicks.Value, DateTimeKind.Utc);
-                reminderStr = $"{dt.Hour:D2}:{dt.Minute:D2}";
-            }
+            string? reminderStr = TagdosParser.EncodeReminderSpec(ls.StreamReminderTicks, ls.ClusterRemindersSpec);
 
             JToken attachmentsToken;
             try

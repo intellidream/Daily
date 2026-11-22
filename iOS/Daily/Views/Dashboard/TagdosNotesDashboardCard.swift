@@ -27,21 +27,23 @@ public struct TagdosNotesDashboardCard: View {
     }
 
     public var body: some View {
-        Button(action: onTap) {
-            GlassCard(cornerRadius: 20, padding: size == .small ? 14 : 18) {
-                switch size {
-                case .small:
-                    smallContent
-                case .wide:
-                    wideContent
-                case .tall:
-                    tallContent
-                case .large:
-                    largeContent
-                }
+        GlassCard(cornerRadius: 20, padding: size == .small ? 14 : 18) {
+            switch size {
+            case .small:
+                smallContent
+            case .wide:
+                wideContent
+            case .tall:
+                tallContent
+            case .large:
+                largeContent
             }
         }
-        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .onTapGesture {
+            triggerHaptic()
+            onTap()
+        }
         .dashboardCardFrame(for: size)
     }
 
@@ -104,25 +106,38 @@ public struct TagdosNotesDashboardCard: View {
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(Color.white.opacity(0.45))
 
-                if let driving = driving {
+                if let s1 = stream1, let driving = driving {
                     HStack(spacing: 5) {
-                        Text(driving.rawText)
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundColor(pillColor(for: driving.type))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                        Button {
+                            triggerHaptic()
+                            store.requestEditPill(streamId: s1.id, pillId: driving.id)
+                            onTap()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(driving.rawText)
+                                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                                    .foregroundColor(pillColor(for: driving.type))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
 
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color.white.opacity(0.4))
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 8.5, weight: .bold))
+                                    .foregroundColor(Color.white.opacity(0.45))
+                            }
+                            .padding(.horizontal, 7.5)
+                            .padding(.vertical, 3.5)
+                            .background(
+                                Capsule()
+                                    .fill(pillColor(for: driving.type).opacity(0.15))
+                                    .overlay(Capsule().strokeBorder(pillColor(for: driving.type).opacity(0.35), lineWidth: 1))
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer(minLength: 0)
+
+                        quickActionButtons(streamId: s1.id, pillId: driving.id, size: 22, iconSize: 9.5)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(pillColor(for: driving.type).opacity(0.15))
-                            .overlay(Capsule().strokeBorder(pillColor(for: driving.type).opacity(0.35), lineWidth: 1))
-                    )
                 } else {
                     Text("All Done! 🎉")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -243,7 +258,7 @@ public struct TagdosNotesDashboardCard: View {
                     // Pills row
                     HStack(spacing: 4) {
                         ForEach(stream.activePills.prefix(4)) { pill in
-                            miniPillBadge(pill: pill)
+                            miniPillBadge(pill: pill, streamId: stream.id)
                         }
                     }
                 }
@@ -325,6 +340,9 @@ public struct TagdosNotesDashboardCard: View {
                                 }
                                 .foregroundColor(ThemeColors.accentCyan)
                             }
+                            if let driving = stream.drivingPill {
+                                quickActionButtons(streamId: stream.id, pillId: driving.id, size: 18, iconSize: 8)
+                            }
                         }
 
                         // Horizontal flow of pills
@@ -372,23 +390,64 @@ public struct TagdosNotesDashboardCard: View {
     // MARK: - Row & Pill Helpers
 
     @ViewBuilder
+    private func quickActionButtons(streamId: UUID, pillId: UUID, size: CGFloat, iconSize: CGFloat) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                triggerHaptic()
+                store.togglePillCompletion(streamId: streamId, pillId: pillId)
+            } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: iconSize, weight: .heavy))
+                    .foregroundColor(ThemeColors.accentGreen)
+                    .frame(width: size, height: size)
+                    .background(
+                        Circle()
+                            .fill(ThemeColors.accentGreen.opacity(0.16))
+                            .overlay(Circle().strokeBorder(ThemeColors.accentGreen.opacity(0.4), lineWidth: 0.8))
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                triggerHaptic()
+                store.recyclePillToBack(streamId: streamId, pillId: pillId)
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundColor(ThemeColors.accentCyan)
+                    .frame(width: size, height: size)
+                    .background(
+                        Circle()
+                            .fill(ThemeColors.accentCyan.opacity(0.16))
+                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.4), lineWidth: 0.8))
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
     private func streamRow(stream: TagDoStream, maxPills: Int) -> some View {
         VStack(alignment: .leading, spacing: 2.5) {
-            HStack {
+            HStack(spacing: 5) {
                 Text(stream.displayTitle)
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .foregroundColor(Color.white.opacity(0.8))
+                    .lineLimit(1)
                 Spacer()
                 if let rem = stream.streamReminder {
                     Text(reminderFormatted(rem))
                         .font(.system(size: 8, weight: .bold, design: .rounded))
                         .foregroundColor(ThemeColors.accentCyan)
                 }
+                if let driving = stream.drivingPill {
+                    quickActionButtons(streamId: stream.id, pillId: driving.id, size: 17, iconSize: 7.5)
+                }
             }
 
             HStack(spacing: 4) {
                 ForEach(stream.activePills.prefix(maxPills)) { pill in
-                    miniPillBadge(pill: pill)
+                    miniPillBadge(pill: pill, streamId: stream.id)
                 }
                 if stream.activePills.count > maxPills {
                     Text("+\(stream.activePills.count - maxPills)")
@@ -400,33 +459,47 @@ public struct TagdosNotesDashboardCard: View {
     }
 
     @ViewBuilder
-    private func miniPillBadge(pill: TagDoPill) -> some View {
-        Text(pill.rawText)
-            .font(.system(size: 9, weight: .bold, design: .rounded))
-            .foregroundColor(pillColor(for: pill.type))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2.5)
-            .background(
-                Capsule()
-                    .fill(pillColor(for: pill.type).opacity(0.14))
-                    .overlay(Capsule().strokeBorder(pillColor(for: pill.type).opacity(0.28), lineWidth: 0.8))
-            )
+    private func miniPillBadge(pill: TagDoPill, streamId: UUID) -> some View {
+        Button {
+            triggerHaptic()
+            store.requestEditPill(streamId: streamId, pillId: pill.id)
+            onTap()
+        } label: {
+            Text(pill.rawText)
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundColor(pillColor(for: pill.type))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2.5)
+                .background(
+                    Capsule()
+                        .fill(pillColor(for: pill.type).opacity(0.14))
+                        .overlay(Capsule().strokeBorder(pillColor(for: pill.type).opacity(0.28), lineWidth: 0.8))
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private func interactivePillBadge(pill: TagDoPill, streamId: UUID) -> some View {
-        HStack(spacing: 3) {
-            Text(pill.rawText)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(pillColor(for: pill.type))
+        Button {
+            triggerHaptic()
+            store.requestEditPill(streamId: streamId, pillId: pill.id)
+            onTap()
+        } label: {
+            HStack(spacing: 3) {
+                Text(pill.rawText)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(pillColor(for: pill.type))
+            }
+            .padding(.horizontal, 6.5)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(pillColor(for: pill.type).opacity(0.16))
+                    .overlay(Capsule().strokeBorder(pillColor(for: pill.type).opacity(0.32), lineWidth: 1))
+            )
         }
-        .padding(.horizontal, 6.5)
-        .padding(.vertical, 3)
-        .background(
-            Capsule()
-                .fill(pillColor(for: pill.type).opacity(0.16))
-                .overlay(Capsule().strokeBorder(pillColor(for: pill.type).opacity(0.32), lineWidth: 1))
-        )
+        .buttonStyle(.plain)
     }
 
     private func reminderFormatted(_ date: Date) -> String {

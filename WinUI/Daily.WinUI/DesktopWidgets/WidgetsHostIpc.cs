@@ -181,5 +181,87 @@ namespace Daily_WinUI.DesktopWidgets
                 }
             });
         }
+
+        public static void NotifyMainApp(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command)) return;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    using var client = new NamedPipeClientStream(".", "DailyWinUI_ProtocolPipe", PipeDirection.Out);
+                    using var cts = new CancellationTokenSource(600);
+                    await client.ConnectAsync(cts.Token);
+                    using var writer = new StreamWriter(client) { AutoFlush = true };
+                    await writer.WriteLineAsync(command.AsMemory(), cts.Token);
+                }
+                catch { }
+            });
+        }
+
+        public static void ForwardUriToMainApp(string uriString)
+        {
+            if (string.IsNullOrWhiteSpace(uriString)) return;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    using var client = new NamedPipeClientStream(".", "DailyWinUI_ProtocolPipe", PipeDirection.Out);
+                    using var cts = new CancellationTokenSource(700);
+                    await client.ConnectAsync(cts.Token);
+                    using var writer = new StreamWriter(client) { AutoFlush = true };
+                    await writer.WriteLineAsync(uriString.AsMemory(), cts.Token);
+                    return;
+                }
+                catch
+                {
+                    // Main app is not running; launch it with URI
+                }
+
+                try
+                {
+                    var baseDir = AppContext.BaseDirectory;
+                    var winUiExe = Path.Combine(baseDir, "Daily.WinUI.exe");
+                    if (!File.Exists(winUiExe))
+                    {
+                        var dir = new DirectoryInfo(baseDir);
+                        while (dir != null && !dir.Name.Equals("WinUI", StringComparison.OrdinalIgnoreCase) && dir.Parent != null)
+                        {
+                            dir = dir.Parent;
+                        }
+                        if (dir != null && dir.Name.Equals("WinUI", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var winUiBin = Path.Combine(dir.FullName, "Daily.WinUI", "bin");
+                            if (Directory.Exists(winUiBin))
+                            {
+                                var candidates = Directory.GetFiles(winUiBin, "Daily.WinUI.exe", SearchOption.AllDirectories);
+                                if (candidates.Length > 0)
+                                {
+                                    winUiExe = candidates.OrderByDescending(File.GetLastWriteTimeUtc).First();
+                                }
+                            }
+                        }
+                    }
+
+                    if (File.Exists(winUiExe))
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = winUiExe,
+                            Arguments = $"\"{uriString}\"",
+                            UseShellExecute = true
+                        });
+                    }
+                    else
+                    {
+                        ForwardNavigationToMainApp(3);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[WidgetsHostIpc] ForwardUriToMainApp failed: {ex.Message}");
+                }
+            });
+        }
     }
 }

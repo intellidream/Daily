@@ -168,9 +168,48 @@ namespace Daily_WinUI.Controls
             if (sender is FrameworkElement fe && fe.Tag is ValueTuple<TagDoPill, TagDoStream> tuple)
             {
                 var (pill, stream) = tuple;
-                TagdosParser.TogglePillCompletion(stream, pill.Id);
-                _ = _tagdosService?.SaveStreamAsync(stream);
+                _tagdosService?.RequestNavigation(streamId: stream.Id, pillId: pill.Id, openPillEditor: true);
+                NavigateToHub();
             }
+        }
+
+        private void Stream1Done_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ExecuteQuickStreamAction(0, recycle: false);
+        }
+
+        private void Stream1Recycle_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ExecuteQuickStreamAction(0, recycle: true);
+        }
+
+        private void Stream2Done_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ExecuteQuickStreamAction(1, recycle: false);
+        }
+
+        private void Stream2Recycle_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ExecuteQuickStreamAction(1, recycle: true);
+        }
+
+        private void ExecuteQuickStreamAction(int streamIdx, bool recycle)
+        {
+            if (streamIdx < 0 || streamIdx >= _streams.Count) return;
+            var stream = _streams[streamIdx];
+            var focusPill = stream.AllPills.FirstOrDefault(p => !p.IsCompleted);
+            if (focusPill == null) return;
+
+            if (recycle)
+                TagdosParser.RecyclePillToBack(stream, focusPill.Id);
+            else
+                TagdosParser.TogglePillCompletion(stream, focusPill.Id);
+
+            _ = _tagdosService?.SaveStreamAsync(stream);
         }
 
         private (Color bg, Color border, Color fg) GetPillColors(TagDoPillType type)
@@ -201,6 +240,11 @@ namespace Daily_WinUI.Controls
         }
 
         private void Header_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            NavigateToHub();
+        }
+
+        private void NavigateToHub()
         {
             OpenHubRequested?.Invoke(this, EventArgs.Empty);
 

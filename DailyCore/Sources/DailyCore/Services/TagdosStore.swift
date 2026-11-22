@@ -20,6 +20,7 @@ public final class TagdosStore: ObservableObject {
     @Published public private(set) var isSyncing: Bool = false
     @Published public private(set) var lastSyncedAt: Date? = nil
     @Published public private(set) var cloudSyncError: String? = nil
+    @Published public var pendingNavigation: TagdosNavigationTarget? = nil
 
     // MARK: - Storage Keys
     private let streamsStorageKey = "daily_tagdos_raw_streams_v1"
@@ -68,13 +69,79 @@ public final class TagdosStore: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                let hadDirtyBefore = self.dirtyStreamIds
                 self.loadFromStorage()
+                if self.dirtyStreamIds != hadDirtyBefore && !self.dirtyStreamIds.isEmpty {
+                    self.scheduleCloudPush()
+                }
                 guard Date().timeIntervalSince(self.lastForegroundSyncAt) >= 120 else { return }
                 self.lastForegroundSyncAt = Date()
                 await self.syncWithSupabase()
             }
         }
         #endif
+
+        // Listen for cross-process Widget AppIntent mutations so in-app state & Supabase push stay live
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        let name = CFNotificationName(WidgetDataCoordinator.darwinMutationNotificationName as CFString)
+        CFNotificationCenterAddObserver(
+            center,
+            Unmanaged.passUnretained(self).toOpaque(),
+            { _, _, _, _, _ in
+                DispatchQueue.main.async {
+                    Task { @MainActor in
+                        TagdosStore.shared.reloadFromWidgetMutation()
+                    }
+                }
+            },
+            name.rawValue,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    public func reloadFromWidgetMutation() {
+        loadFromStorage()
+        if !dirtyStreamIds.isEmpty {
+            scheduleCloudPush()
+        }
+    }
+
+    // MARK: - Deep Link & Navigation Routing
+
+    public func handleDeepLink(url: URL) {
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
+        let items = comps.queryItems ?? []
+        let q = Dictionary(uniqueKeysWithValues: items.compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+
+        let streamId = q["streamId"].flatMap { UUID(uuidString: $0) }
+        let clusterIdx = q["clusterIndex"].flatMap { Int($0) }
+        let pillId = q["pillId"].flatMap { UUID(uuidString: $0) }
+        let openEdit = q["edit"] == "1" || pillId != nil
+
+        if streamId != nil || clusterIdx != nil || pillId != nil {
+            pendingNavigation = TagdosNavigationTarget(
+                streamId: streamId,
+                clusterIndex: clusterIdx,
+                pillId: pillId,
+                openPillEditor: openEdit
+            )
+        }
+    }
+
+    public func requestEditPill(streamId: UUID, pillId: UUID) {
+        pendingNavigation = TagdosNavigationTarget(
+            streamId: streamId,
+            clusterIndex: nil,
+            pillId: pillId,
+            openPillEditor: true
+        )
+    }
+
+    public func consumePendingNavigation() {
+        pendingNavigation = nil
     }
 
     // MARK: - Persistence & Hydration
@@ -118,6 +185,7 @@ public final class TagdosStore: ObservableObject {
            !decoded.isEmpty {
             self.streams = decoded
             syncWithWidgets()
+            TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: decoded)
             return
         }
 
@@ -126,6 +194,7 @@ public final class TagdosStore: ObservableObject {
            !decoded.isEmpty {
             self.streams = decoded
             syncWithWidgets()
+            TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: decoded)
             return
         }
 
@@ -218,6 +287,25 @@ public final class TagdosStore: ObservableObject {
         streams[index].updatedAt = Date()
         dirtyStreamIds.insert(streamId)
         save()
+        if date != nil {
+            TagdosNotificationManager.shared.requestAuthorizationAndReschedule(streams: streams)
+        } else {
+            TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: streams)
+        }
+    }
+
+    public func setClusterReminder(streamId: UUID, clusterIndex: Int, date: Date?) {
+        guard let index = streams.firstIndex(where: { $0.id == streamId }),
+              streams[index].clusters.indices.contains(clusterIndex) else { return }
+        streams[index].clusters[clusterIndex].reminderDate = date
+        streams[index].updatedAt = Date()
+        dirtyStreamIds.insert(streamId)
+        save()
+        if date != nil {
+            TagdosNotificationManager.shared.requestAuthorizationAndReschedule(streams: streams)
+        } else {
+            TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: streams)
+        }
     }
 
     public func updateStreamMemos(streamId: UUID, memos: String) {
@@ -364,6 +452,7 @@ public final class TagdosStore: ObservableObject {
         streams = updated
         lastPushedStreamSignatures = [:]
         save()
+        TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: streams)
     }
 
     public func deleteStream(streamId: UUID) {
@@ -388,6 +477,7 @@ public final class TagdosStore: ObservableObject {
         let newCount = streams.count
         lastPushedStreamSignatures = lastPushedStreamSignatures.filter { $0.key <= newCount }
         save()
+        TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: streams)
 
         if let userId = getEffectiveUserId() {
             lastLocalPushAt = Date()
@@ -842,12 +932,8 @@ public final class TagdosStore: ObservableObject {
 
                 for remote in remoteStreams {
                     let orderIdx = max(0, remote.stream_number - 1)
-                    let reminderDate: Date? = {
-                        guard let rt = remote.reminder_time, !rt.isEmpty else { return nil }
-                        let formatter = DateFormatter()
-                        formatter.dateFormat = "HH:mm"
-                        return formatter.date(from: rt)
-                    }()
+                    let decodedSpec = Self.decodeReminderSpec(remote.reminder_time)
+                    let reminderDate = decodedSpec.streamReminder
 
                     if let localIdx = merged.firstIndex(where: { $0.orderIndex == orderIdx }) {
                         let local = merged[localIdx]
@@ -863,6 +949,9 @@ public final class TagdosStore: ObservableObject {
                                 orderIndex: orderIdx,
                                 existingStream: local
                             )
+                            for cIdx in updated.clusters.indices {
+                                updated.clusters[cIdx].reminderDate = decodedSpec.clusterReminders[cIdx]
+                            }
                             let trimmedRemoteTitle = remote.title.trimmingCharacters(in: .whitespacesAndNewlines)
                             if !trimmedRemoteTitle.isEmpty && trimmedRemoteTitle != updated.autoDetectedTitle {
                                 updated.customTitle = trimmedRemoteTitle
@@ -884,6 +973,9 @@ public final class TagdosStore: ObservableObject {
                             streamReminder: reminderDate,
                             orderIndex: orderIdx
                         )
+                        for cIdx in newStream.clusters.indices {
+                            newStream.clusters[cIdx].reminderDate = decodedSpec.clusterReminders[cIdx]
+                        }
                         let trimmedRemoteTitle = remote.title.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmedRemoteTitle.isEmpty && trimmedRemoteTitle != newStream.autoDetectedTitle {
                             newStream.customTitle = trimmedRemoteTitle
@@ -898,6 +990,7 @@ public final class TagdosStore: ObservableObject {
 
                 merged.sort { $0.orderIndex < $1.orderIndex }
                 self.streams = merged
+                TagdosNotificationManager.shared.rescheduleIfAuthorized(streams: merged)
                 self.lastPushedStreamSignatures = [:]
                 var hasDirtyOrMissing = false
                 for s in merged {
@@ -965,8 +1058,58 @@ public final class TagdosStore: ObservableObject {
     }
 
     private func streamSignature(_ stream: TagDoStream) -> String {
-        let rem = stream.streamReminder.map { "\(Int($0.timeIntervalSince1970))" } ?? ""
-        return "\(stream.title)|\(stream.rawText)|\(stream.activeMemos)|\(rem)|\(stream.attachments.count)"
+        let remSpec = Self.encodeReminderSpec(for: stream) ?? ""
+        let doneMask = stream.allPills.map { $0.isCompleted ? "1" : "0" }.joined()
+        return "\(stream.title)|\(stream.rawText)|\(doneMask)|\(stream.activeMemos)|\(remSpec)|\(stream.attachments.count)"
+    }
+
+    public static func encodeReminderSpec(for stream: TagDoStream) -> String? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let streamPart = stream.streamReminder.map { formatter.string(from: $0) } ?? ""
+        var clusterParts: [String] = []
+        for (idx, cluster) in stream.clusters.enumerated() {
+            if let cDate = cluster.reminderDate {
+                clusterParts.append("\(idx)=\(formatter.string(from: cDate))")
+            }
+        }
+
+        if streamPart.isEmpty && clusterParts.isEmpty {
+            return nil
+        }
+        if clusterParts.isEmpty {
+            return streamPart
+        }
+        return "\(streamPart)|\(clusterParts.joined(separator: ","))"
+    }
+
+    public static func decodeReminderSpec(_ raw: String?) -> (streamReminder: Date?, clusterReminders: [Int: Date]) {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return (nil, [:])
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let sections = raw.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        let streamToken = String(sections[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let streamDate = streamToken.isEmpty ? nil : formatter.date(from: streamToken)
+
+        var clusterMap: [Int: Date] = [:]
+        if sections.count > 1 {
+            let pairs = String(sections[1]).split(separator: ",")
+            for pair in pairs {
+                let kv = pair.split(separator: "=", maxSplits: 1)
+                if kv.count == 2,
+                   let idx = Int(kv[0].trimmingCharacters(in: .whitespacesAndNewlines)),
+                   let date = formatter.date(from: String(kv[1]).trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    clusterMap[idx] = date
+                }
+            }
+        }
+        return (streamDate, clusterMap)
     }
 
     private func noteSignature(_ note: TagDoQuickNote) -> String {
@@ -1003,8 +1146,6 @@ public final class TagdosStore: ObservableObject {
         }
 
         let isoFormatter = ISO8601DateFormatter()
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm"
 
         var pushedAny = false
         for stream in streams {
@@ -1016,7 +1157,7 @@ public final class TagdosStore: ObservableObject {
                 continue
             }
 
-            let reminderStr = stream.streamReminder.map { timeFormatter.string(from: $0) }
+            let reminderStr = Self.encodeReminderSpec(for: stream)
             let payload = StreamPayload(
                 user_id: userId,
                 stream_number: streamNum,
@@ -1132,17 +1273,23 @@ public final class TagdosStore: ObservableObject {
     // MARK: - Widget Synchronization
 
     public func syncWithWidgets() {
+        let snapshot = Self.buildWidgetSnapshot(from: streams)
+        WidgetDataCoordinator.shared.updateTagdosSnapshot(snapshot)
+    }
+
+    public nonisolated static func buildWidgetSnapshot(from streams: [TagDoStream]) -> TagdosWidgetSnapshot {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+
         let snapshotStreams = streams.map { stream in
             let driving = stream.drivingPill
-            let reminderStr: String? = {
-                guard let rem = stream.streamReminder else { return nil }
-                let formatter = DateFormatter()
-                formatter.dateFormat = "HH:mm"
-                return formatter.string(from: rem)
-            }()
+            let earliestClusterRem = stream.clusters.compactMap(\.reminderDate).sorted().first
+            let effectiveRem = stream.streamReminder ?? earliestClusterRem
+            let reminderStr = effectiveRem.map { formatter.string(from: $0) }
 
             let snapshotPills = stream.allPills.prefix(10).map { pill in
                 TagdosWidgetSnapshotPill(
+                    id: pill.id.uuidString,
                     text: pill.rawText,
                     typeRaw: pill.type.rawValue,
                     isCompleted: pill.isCompleted
@@ -1156,6 +1303,7 @@ public final class TagdosStore: ObservableObject {
             return TagdosWidgetSnapshotStream(
                 id: stream.id.uuidString,
                 title: stream.displayTitle,
+                drivingPillId: driving?.id.uuidString,
                 drivingPillText: driving?.rawText,
                 drivingPillType: driving?.type.rawValue,
                 activePillsCount: stream.activePills.count,
@@ -1167,21 +1315,18 @@ public final class TagdosStore: ObservableObject {
 
         let totalActive = streams.reduce(0) { $0 + $1.activePills.count }
 
-        let nextReminderStr: String? = {
-            let upcoming = streams.compactMap { $0.streamReminder }.sorted().first
-            guard let date = upcoming else { return nil }
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            return formatter.string(from: date)
-        }()
+        var allReminderDates: [Date] = []
+        for s in streams {
+            if let sr = s.streamReminder { allReminderDates.append(sr) }
+            allReminderDates.append(contentsOf: s.clusters.compactMap(\.reminderDate))
+        }
+        let nextReminderStr = allReminderDates.sorted().first.map { formatter.string(from: $0) }
 
-        let snapshot = TagdosWidgetSnapshot(
+        return TagdosWidgetSnapshot(
             streams: snapshotStreams,
             totalActivePills: totalActive,
             nextReminderFormatted: nextReminderStr,
             lastUpdated: Date()
         )
-
-        WidgetDataCoordinator.shared.updateTagdosSnapshot(snapshot)
     }
 }

@@ -88,7 +88,34 @@ class AdjustLedgerActionCallback : ActionCallback {
     }
 }
 
+class TagdosPillActionCallback : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val streamId = parameters[StreamIdKey].orEmpty()
+        val pillId = parameters[PillIdKey].orEmpty()
+        val action = parameters[ActionKey] ?: "done"
+        if (streamId.isBlank() || pillId.isBlank()) return
+
+        val app = runCatching { DailyApp.instance }.getOrNull() ?: return
+        if (action == "recycle") {
+            app.tagdosRepository.recyclePillToBack(streamId, pillId)
+        } else {
+            app.tagdosRepository.togglePillCompletion(streamId, pillId)
+        }
+        WidgetUpdateHelper.updateTagdosWidgets(context)
+    }
+
+    companion object {
+        val StreamIdKey = ActionParameters.Key<String>("streamId")
+        val PillIdKey = ActionParameters.Key<String>("pillId")
+        val ActionKey = ActionParameters.Key<String>("action")
+    }
+}
+
 object WidgetUpdateHelper {
+    suspend fun updateTagdosWidgets(context: Context) {
+        runCatching { DailyTagdosGlanceWidget().updateAll(context) }
+        runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+    }
     suspend fun updateHabitsWidgets(context: Context, habitType: String? = null) {
         when (habitType) {
             "water" -> {

@@ -8,6 +8,12 @@ namespace Daily.Services
     public interface ITagdosService
     {
         event EventHandler? DataChanged;
+        event EventHandler? PendingNavigationChanged;
+
+        TagdosNavigationTarget? PendingNavigation { get; }
+        void RequestNavigation(string? streamId = null, int? clusterIndex = null, string? pillId = null, bool openPillEditor = false);
+        void HandleDeepLink(Uri uri);
+        TagdosNavigationTarget? ConsumePendingNavigation();
 
         Task<List<TagDoStream>> GetStreamsAsync();
         Task<TagDoStream?> GetStreamByIndexAsync(int orderIndex);
@@ -15,6 +21,8 @@ namespace Daily.Services
         Task UpdateStreamRawTextAsync(string streamId, string newRawText);
         Task UpdateStreamTitleAsync(string streamId, string? newTitle);
         Task SetStreamReminderAsync(string streamId, DateTime? reminder);
+        Task SetClusterReminderAsync(string streamId, int clusterIndex, DateTime? reminder);
+        Task ReloadFromLocalAsync();
         Task UpdateStreamMemosAsync(string streamId, string memos, string attachmentsJson);
         Task<TagDoStream> CreateStreamAsync(string? title = null, string rawText = "", string activeMemos = "");
         Task DeleteStreamAsync(string streamId);

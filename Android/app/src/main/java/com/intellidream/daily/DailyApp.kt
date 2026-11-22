@@ -101,7 +101,14 @@ class DailyApp : Application() {
                 com.intellidream.daily.glance.WidgetUpdateHelper.updateHabitsWidgets(this@DailyApp, habitType)
             }
         }
-        tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao())
+        tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao()).also { repo ->
+            repo.onStreamsChanged = {
+                com.intellidream.daily.tagdos.TagdosNotificationScheduler.rescheduleAll(this@DailyApp, repo.streams.value)
+                appScope.launch {
+                    com.intellidream.daily.glance.WidgetUpdateHelper.updateTagdosWidgets(this@DailyApp)
+                }
+            }
+        }
         newsRemoteService = com.intellidream.daily.network.NewsRemoteService()
         val mediumBridge = com.intellidream.daily.news.MediumWebViewBridge(this)
         val substackBridge = com.intellidream.daily.news.SubstackWebViewBridge(this)

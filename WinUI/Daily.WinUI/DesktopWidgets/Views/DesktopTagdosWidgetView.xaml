@@ -18,22 +18,35 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Tapped="OpenHub_Tapped">
                 <FontIcon Glyph="&#xE82D;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#EC4899"/>
                 <TextBlock Text="TagDoS Tasks" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFFFF"/>
             </StackPanel>
 
             <!-- Active Task Count & Stream -->
-            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                <TextBlock x:Name="SmallTaskCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
-                <TextBlock Text="active tasks" FontSize="10" Foreground="#A0FFFFFF" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="SmallActiveStreamText" Text="Focus: Work ⚡" FontSize="9" Foreground="#F472B6" HorizontalAlignment="Center"/>
+            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4" Tapped="OpenHub_Tapped">
+                <TextBlock x:Name="SmallTaskCountText" Text="0" FontSize="26" FontWeight="Bold" Foreground="#FFFFFFFF" HorizontalAlignment="Center"/>
+                <TextBlock Text="active tags" FontSize="10" Foreground="#A0FFFFFF" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="SmallActiveStreamText" Text="Focus: Work ⚡" FontSize="9" Foreground="#F472B6" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
 
-            <!-- Bottom Pill -->
-            <Border Grid.Row="2" Background="#15EC4899" CornerRadius="8" Padding="6,4,6,4" HorizontalAlignment="Stretch">
-                <TextBlock x:Name="SmallTopTaskText" Text="Next: Complete Review" FontSize="9" Foreground="#F472B6" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
-            </Border>
+            <!-- Bottom Pill + Quick Actions -->
+            <Grid Grid.Row="2" ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="#15EC4899" CornerRadius="8" Padding="6,4,6,4" Tag="0" Tapped="TaskRow_Tapped">
+                    <TextBlock x:Name="SmallTopTaskText" Text="Next: Complete Review" FontSize="9" Foreground="#F472B6" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                </Border>
+                <Border Grid.Column="1" Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="0" Tapped="DoneSlot_Tapped" ToolTipService.ToolTip="Mark done">
+                    <TextBlock Text="✓" FontSize="9" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Border Grid.Column="2" Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="0" Tapped="RecycleSlot_Tapped" ToolTipService.ToolTip="Recycle to back">
+                    <TextBlock Text="↻" FontSize="9" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- ── MEDIUM LAYOUT (360x170) ── -->
@@ -45,7 +58,7 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <Grid Grid.Row="0">
+            <Grid Grid.Row="0" Tapped="OpenHub_Tapped">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Border Width="26" Height="26" CornerRadius="13" Background="#25EC4899">
                         <FontIcon Glyph="&#xE82D;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#EC4899" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -61,39 +74,57 @@
                 </Border>
             </Grid>
 
-            <!-- Center Content: Priority Task Items -->
+            <!-- Center Content: Priority Task Items with Tap-to-Edit & Quick Actions -->
             <StackPanel Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center" Spacing="6">
                 <!-- Task 1 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="8,5,8,5">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="8,5,8,5" Tag="0" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#EC4899" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="Task1Title" Text="Complete weekly finance review" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="Task1Tag" Text="Today" FontSize="10" Foreground="#90FFFFFF"/>
+                        <Ellipse Width="8" Height="8" Fill="#EC4899" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="Task1Title" Text="Complete weekly finance review" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="Task1Tag" Text="Today" FontSize="10" Foreground="#90FFFFFF" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="0" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="0" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
                 <!-- Task 2 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="8,5,8,5">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="8,5,8,5" Tag="1" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#38BDF8" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="Task2Title" Text="Hydration &amp; evening breathwork" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="Task2Tag" Text="Evening" FontSize="10" Foreground="#90FFFFFF"/>
+                        <Ellipse Width="8" Height="8" Fill="#38BDF8" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="Task2Title" Text="Hydration &amp; evening breathwork" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="Task2Tag" Text="Evening" FontSize="10" Foreground="#90FFFFFF" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="1" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="1" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </StackPanel>
 
-            <!-- Bottom Stream Pipeline Status (Clean, no overlap) -->
-            <Border Grid.Row="2" Background="#15EC4899" CornerRadius="8" Padding="10,4,10,4">
+            <!-- Bottom Stream Pipeline Status -->
+            <Border Grid.Row="2" Background="#15EC4899" CornerRadius="8" Padding="10,4,10,4" Tapped="OpenHub_Tapped">
                 <TextBlock x:Name="StreamNamesStatusText" Text="Work · Health · Personal · Tech" FontSize="10" Foreground="#FBCFE8" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
             </Border>
         </Grid>
@@ -108,7 +139,7 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <Grid Grid.Row="0">
+            <Grid Grid.Row="0" Tapped="OpenHub_Tapped">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Border Width="28" Height="28" CornerRadius="14" Background="#25EC4899">
                         <FontIcon Glyph="&#xE82D;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#EC4899" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -124,81 +155,126 @@
                 </Border>
             </Grid>
 
-            <!-- 5 Priority Tasks -->
+            <!-- 5 Priority Tasks with Tap-to-Edit & Quick Actions -->
             <StackPanel Grid.Row="1" Margin="0,10,0,10" VerticalAlignment="Center" Spacing="6">
                 <!-- Large Task 1 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,5,9,5" Tag="0" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#EC4899" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="LargeTask1Title" Text="Complete weekly finance review" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="LargeTask1Tag" Text="Priority 1" FontSize="10" Foreground="#F472B6"/>
+                        <Ellipse Width="8" Height="8" Fill="#EC4899" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask1Title" Text="Complete weekly finance review" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask1Tag" Text="Priority 1" FontSize="10" Foreground="#F472B6" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="0" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="0" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
                 <!-- Large Task 2 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,5,9,5" Tag="1" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#38BDF8" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="LargeTask2Title" Text="Hydration &amp; evening breathwork" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="LargeTask2Tag" Text="Habits" FontSize="10" Foreground="#38BDF8"/>
+                        <Ellipse Width="8" Height="8" Fill="#38BDF8" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask2Title" Text="Hydration &amp; evening breathwork" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask2Tag" Text="Habits" FontSize="10" Foreground="#38BDF8" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="1" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="1" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
                 <!-- Large Task 3 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,5,9,5" Tag="2" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#10B981" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="LargeTask3Title" Text="Review Supabase sync telemetry" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="LargeTask3Tag" Text="Tech" FontSize="10" Foreground="#34D399"/>
+                        <Ellipse Width="8" Height="8" Fill="#10B981" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask3Title" Text="Review Supabase sync telemetry" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask3Tag" Text="Tech" FontSize="10" Foreground="#34D399" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="2" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="2" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
                 <!-- Large Task 4 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,5,9,5" Tag="3" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#F59E0B" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="LargeTask4Title" Text="Plan weekend schedule &amp; tasks" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="LargeTask4Tag" Text="Personal" FontSize="10" Foreground="#FBBF24"/>
+                        <Ellipse Width="8" Height="8" Fill="#F59E0B" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask4Title" Text="Plan weekend schedule &amp; tasks" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask4Tag" Text="Personal" FontSize="10" Foreground="#FBBF24" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="3" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="3" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
                 <!-- Large Task 5 -->
-                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,6,9,6">
-                    <Grid>
+                <Border Background="#15FFFFFF" CornerRadius="8" Padding="9,5,9,5" Tag="4" Tapped="TaskRow_Tapped">
+                    <Grid ColumnSpacing="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" Fill="#A78BFA" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" x:Name="LargeTask5Title" Text="Read Cosmos ephemeris logs" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" x:Name="LargeTask5Tag" Text="Cosmos" FontSize="10" Foreground="#C4B5FD"/>
+                        <Ellipse Width="8" Height="8" Fill="#A78BFA" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="LargeTask5Title" Text="Read Cosmos ephemeris logs" FontSize="11" FontWeight="Medium" Foreground="#FFFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="LargeTask5Tag" Text="Cosmos" FontSize="10" Foreground="#C4B5FD" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="4" Tapped="DoneSlot_Tapped">
+                                <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="4" Tapped="RecycleSlot_Tapped">
+                                <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </StackPanel>
 
             <!-- Quick Notes Box -->
-            <Border Grid.Row="2" Margin="0,0,0,8" Background="#12FFFFFF" CornerRadius="8" Padding="10,6,10,6">
+            <Border Grid.Row="2" Margin="0,0,0,8" Background="#12FFFFFF" CornerRadius="8" Padding="10,6,10,6" Tapped="OpenHub_Tapped">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -212,7 +288,7 @@
             </Border>
 
             <!-- Bottom Streams Summary -->
-            <Border Grid.Row="3" Background="#15EC4899" CornerRadius="8" Padding="10,5,10,5">
+            <Border Grid.Row="3" Background="#15EC4899" CornerRadius="8" Padding="10,5,10,5" Tapped="OpenHub_Tapped">
                 <TextBlock x:Name="LargeStreamsSummary" Text="Streams: Work · Health · Finances · Tech · Personal" FontSize="10" Foreground="#FBCFE8" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
             </Border>
         </Grid>

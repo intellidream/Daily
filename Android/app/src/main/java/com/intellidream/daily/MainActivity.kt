@@ -489,6 +489,7 @@ class MainActivity : ComponentActivity() {
                         selectedTab = NavigationTab.Finances
                     }
                     host.contains("tagdos") || path.contains("tagdos") -> {
+                        tagdosRepository.handleDeepLink(uri.toString())
                         selectedTab = NavigationTab.Tagdos
                     }
                     host.contains("weather") -> {
@@ -623,6 +624,13 @@ fun DailyRootScreen(
 
     var showFoldableBriefing by remember { mutableStateOf(false) }
     var showFullSurfacePrism by remember { mutableStateOf(false) }
+    val pendingTagdosNav by tagdosRepository.pendingNavigation.collectAsState()
+
+    LaunchedEffect(pendingTagdosNav) {
+        if (pendingTagdosNav != null && selectedTab != NavigationTab.Tagdos) {
+            onSelectTab(NavigationTab.Tagdos)
+        }
+    }
 
     LaunchedEffect(selectedTab) {
         if (selectedTab != NavigationTab.Prism) {

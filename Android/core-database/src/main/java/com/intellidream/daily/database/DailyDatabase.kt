@@ -42,7 +42,7 @@ import com.intellidream.daily.database.entity.VitalMetricEntity
         PrismClipEntity::class,
         PrismPinnedSiteEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class DailyDatabase : RoomDatabase() {
@@ -109,6 +109,14 @@ abstract class DailyDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `tagdos_streams` ADD COLUMN `cluster_reminders_json` TEXT NOT NULL DEFAULT '{}'"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): DailyDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -116,7 +124,7 @@ abstract class DailyDatabase : RoomDatabase() {
                     DailyDatabase::class.java,
                     "DailyAndroid.db"
                 )
-                    .addMigrations(MIGRATION_9_10)
+                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance

@@ -116,3 +116,55 @@ public struct AdjustLedgerIntent: AppIntent {
         return .result()
     }
 }
+
+public struct CompleteTagdosPillIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Complete TagDoS Pill"
+    public static var description = IntentDescription("Marks a TagDoS pill as done directly from the widget.")
+
+    @Parameter(title: "Stream ID")
+    public var streamId: String
+
+    @Parameter(title: "Pill ID")
+    public var pillId: String
+
+    public init() {
+        self.streamId = ""
+        self.pillId = ""
+    }
+
+    public init(streamId: String, pillId: String) {
+        self.streamId = streamId
+        self.pillId = pillId
+    }
+
+    public func perform() async throws -> some IntentResult {
+        WidgetDataCoordinator.shared.performTagdosPillAction(streamId: streamId, pillId: pillId, action: "done")
+        return .result()
+    }
+}
+
+public struct RecycleTagdosPillIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Recycle TagDoS Pill"
+    public static var description = IntentDescription("Recycles a TagDoS pill to the back of its cluster directly from the widget.")
+
+    @Parameter(title: "Stream ID")
+    public var streamId: String
+
+    @Parameter(title: "Pill ID")
+    public var pillId: String
+
+    public init() {
+        self.streamId = ""
+        self.pillId = ""
+    }
+
+    public init(streamId: String, pillId: String) {
+        self.streamId = streamId
+        self.pillId = pillId
+    }
+
+    public func perform() async throws -> some IntentResult {
+        WidgetDataCoordinator.shared.performTagdosPillAction(streamId: streamId, pillId: pillId, action: "recycle")
+        return .result()
+    }
+}

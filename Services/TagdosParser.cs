@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Daily.Models;
@@ -27,7 +28,15 @@ namespace Daily.Services
             return TagDoPillType.Standard;
         }
 
-        public static TagDoStream ParseStream(string rawText, int orderIndex, string title, DateTime? reminderTime = null, string activeMemos = "", string attachmentsJson = "[]", string? customTitle = null)
+        public static TagDoStream ParseStream(
+            string rawText,
+            int orderIndex,
+            string title,
+            DateTime? reminderTime = null,
+            string activeMemos = "",
+            string attachmentsJson = "[]",
+            string? customTitle = null,
+            TagDoStream? existingStream = null)
         {
             var stream = new TagDoStream
             {
@@ -46,8 +55,13 @@ namespace Daily.Services
                 return stream;
             }
 
+            var usedClusterIds = new HashSet<string>(StringComparer.Ordinal);
+            var usedPillIds = new HashSet<string>(StringComparer.Ordinal);
+            var existingPills = existingStream?.AllPills.ToList() ?? new List<TagDoPill>();
+
             // Split by " & " or "&" for clusters
             var rawClusters = rawText.Split('&', StringSplitOptions.TrimEntries);
+            int clusterIdx = 0;
             foreach (var rawCluster in rawClusters)
             {
                 if (string.IsNullOrWhiteSpace(rawCluster)) continue;
@@ -63,18 +77,56 @@ namespace Daily.Services
                     bool isCompleted = rawPill.StartsWith('~') || rawPill.StartsWith('-');
                     string cleanText = isCompleted ? rawPill.TrimStart('~', '-').Trim() : rawPill;
 
-                    var type = ClassifyPill(cleanText, isCompleted);
-                    cluster.Pills.Add(new TagDoPill
+                    var existingPill = existingPills.FirstOrDefault(p =>
+                        !usedPillIds.Contains(p.Id) &&
+                        string.Equals(p.Text, cleanText, StringComparison.Ordinal));
+
+                    if (existingPill != null)
                     {
-                        Text = cleanText,
-                        Type = type,
-                        IsCompleted = isCompleted
-                    });
+                        usedPillIds.Add(existingPill.Id);
+                        bool finalDone = isCompleted || existingPill.IsCompleted;
+                        cluster.Pills.Add(new TagDoPill
+                        {
+                            Id = existingPill.Id,
+                            Text = cleanText,
+                            Type = ClassifyPill(cleanText, finalDone),
+                            IsCompleted = finalDone
+                        });
+                    }
+                    else
+                    {
+                        var type = ClassifyPill(cleanText, isCompleted);
+                        cluster.Pills.Add(new TagDoPill
+                        {
+                            Text = cleanText,
+                            Type = type,
+                            IsCompleted = isCompleted
+                        });
+                    }
                 }
 
                 if (cluster.Pills.Count > 0)
                 {
+                    if (existingStream != null)
+                    {
+                        var pillIdSet = cluster.Pills.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+                        var matched = existingStream.Clusters.FirstOrDefault(c =>
+                                !usedClusterIds.Contains(c.Id) &&
+                                c.Pills.Any(p => pillIdSet.Contains(p.Id)))
+                            ?? (clusterIdx < existingStream.Clusters.Count && !usedClusterIds.Contains(existingStream.Clusters[clusterIdx].Id)
+                                ? existingStream.Clusters[clusterIdx]
+                                : null);
+
+                        if (matched != null)
+                        {
+                            usedClusterIds.Add(matched.Id);
+                            cluster.Id = matched.Id;
+                            cluster.ClusterReminder = matched.ClusterReminder;
+                        }
+                    }
+
                     stream.Clusters.Add(cluster);
+                    clusterIdx++;
                 }
             }
 
@@ -486,6 +538,120 @@ namespace Daily.Services
                     : $"• [{tag}] {cleanTitle} — {cleanNotes}";
                 return (tag, false, memo);
             }
+        }
+
+        // ── Zero-Egress Stream & Cluster Reminder Spec ("HH:mm|0=08:45,1=14:15") ──
+
+        public static string EncodeClusterSpecOnly(TagDoStream stream)
+        {
+            if (stream?.Clusters == null || stream.Clusters.Count == 0)
+                return string.Empty;
+
+            var parts = new List<string>();
+            for (int i = 0; i < stream.Clusters.Count; i++)
+            {
+                var cr = stream.Clusters[i].ClusterReminder;
+                if (cr.HasValue)
+                {
+                    parts.Add($"{i}={cr.Value.Hour:D2}:{cr.Value.Minute:D2}");
+                }
+            }
+            return string.Join(",", parts);
+        }
+
+        public static void ApplyClusterRemindersSpec(TagDoStream stream, string? clusterSpec)
+        {
+            if (stream?.Clusters == null || string.IsNullOrWhiteSpace(clusterSpec))
+                return;
+
+            var now = DateTime.UtcNow;
+            foreach (var pair in clusterSpec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var kv = pair.Split('=', 2, StringSplitOptions.TrimEntries);
+                if (kv.Length == 2 &&
+                    int.TryParse(kv[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int idx) &&
+                    idx >= 0 && idx < stream.Clusters.Count &&
+                    TryParseHhMm(kv[1], now, out var dt))
+                {
+                    stream.Clusters[idx].ClusterReminder = dt;
+                }
+            }
+        }
+
+        public static string? EncodeReminderSpec(long? streamReminderTicks, string? clusterSpec)
+        {
+            string streamPart = string.Empty;
+            if (streamReminderTicks.HasValue)
+            {
+                var dt = new DateTime(streamReminderTicks.Value, DateTimeKind.Utc);
+                streamPart = $"{dt.Hour:D2}:{dt.Minute:D2}";
+            }
+            string cleanCluster = (clusterSpec ?? string.Empty).Trim();
+
+            if (string.IsNullOrEmpty(streamPart) && string.IsNullOrEmpty(cleanCluster))
+                return null;
+            if (string.IsNullOrEmpty(cleanCluster))
+                return streamPart;
+            return $"{streamPart}|{cleanCluster}";
+        }
+
+        public static (long? StreamReminderTicks, string ClusterSpec) DecodeReminderSpec(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return (null, string.Empty);
+
+            var trimmed = raw.Trim();
+            var sections = trimmed.Split('|', 2);
+            var now = DateTime.UtcNow;
+
+            long? streamTicks = null;
+            var streamToken = sections[0].Trim();
+            if (!string.IsNullOrEmpty(streamToken))
+            {
+                if (TryParseHhMm(streamToken, now, out var dt))
+                {
+                    streamTicks = dt.Ticks;
+                }
+                else if (DateTime.TryParse(streamToken, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsedDt))
+                {
+                    streamTicks = parsedDt.ToUniversalTime().Ticks;
+                }
+            }
+
+            string clusterSpec = string.Empty;
+            if (sections.Length > 1 && !string.IsNullOrWhiteSpace(sections[1]))
+            {
+                var validPairs = new List<string>();
+                foreach (var pair in sections[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var kv = pair.Split('=', 2, StringSplitOptions.TrimEntries);
+                    if (kv.Length == 2 &&
+                        int.TryParse(kv[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int idx) &&
+                        idx >= 0 &&
+                        TryParseHhMm(kv[1], now, out var dt))
+                    {
+                        validPairs.Add($"{idx}={dt.Hour:D2}:{dt.Minute:D2}");
+                    }
+                }
+                clusterSpec = string.Join(",", validPairs);
+            }
+
+            return (streamTicks, clusterSpec);
+        }
+
+        private static bool TryParseHhMm(string token, DateTime refUtc, out DateTime result)
+        {
+            result = default;
+            var parts = token.Trim().Split(':');
+            if (parts.Length >= 2 &&
+                int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int h) &&
+                int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int m) &&
+                h >= 0 && h < 24 && m >= 0 && m < 60)
+            {
+                result = new DateTime(refUtc.Year, refUtc.Month, refUtc.Day, h, m, 0, DateTimeKind.Utc);
+                return true;
+            }
+            return false;
         }
     }
 }

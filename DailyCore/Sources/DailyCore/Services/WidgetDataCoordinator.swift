@@ -1777,55 +1777,58 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         }
         
         // Resilient fallback: decode raw streams if snapshot has not yet been triggered
-        if let streamsData = store.data(forKey: "daily_tagdos_streams_v1"),
+        if let streamsData = store.data(forKey: "daily_tagdos_raw_streams_v1") ?? store.data(forKey: "daily_tagdos_streams_v1"),
            let streams = try? JSONDecoder().decode([TagDoStream].self, from: streamsData),
            !streams.isEmpty {
-            let snapshotStreams = streams.map { stream in
-                let driving = stream.drivingPill
-                let reminderStr: String? = {
-                    guard let rem = stream.streamReminder else { return nil }
-                    let formatter = DateFormatter()
-                    formatter.dateFormat = "HH:mm"
-                    return formatter.string(from: rem)
-                }()
-                let snapshotPills = stream.allPills.prefix(10).map { pill in
-                    TagdosWidgetSnapshotPill(
-                        text: pill.rawText,
-                        typeRaw: pill.type.rawValue,
-                        isCompleted: pill.isCompleted
-                    )
-                }
-                let memosPreview = stream.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? nil
-                    : String(stream.activeMemos.prefix(60))
-                return TagdosWidgetSnapshotStream(
-                    id: stream.id.uuidString,
-                    title: stream.displayTitle,
-                    drivingPillText: driving?.rawText,
-                    drivingPillType: driving?.type.rawValue,
-                    activePillsCount: stream.activePills.count,
-                    reminderTimeFormatted: reminderStr,
-                    pills: Array(snapshotPills),
-                    activeMemosPreview: memosPreview
-                )
-            }
-            let totalActive = streams.reduce(0) { $0 + $1.activePills.count }
-            let nextReminderStr: String? = {
-                let upcoming = streams.compactMap { $0.streamReminder }.sorted().first
-                guard let date = upcoming else { return nil }
-                let formatter = DateFormatter()
-                formatter.dateFormat = "HH:mm"
-                return formatter.string(from: date)
-            }()
-            return TagdosWidgetSnapshot(
-                streams: snapshotStreams,
-                totalActivePills: totalActive,
-                nextReminderFormatted: nextReminderStr,
-                lastUpdated: Date()
-            )
+            return TagdosStore.buildWidgetSnapshot(from: streams)
         }
         
         return TagdosWidgetSnapshot.empty
+    }
+
+    /// Executes an interactive pill action ("done" or "recycle") directly from WidgetKit AppIntents.
+    public func performTagdosPillAction(streamId: String, pillId: String, action: String) {
+        guard let targetStreamUUID = UUID(uuidString: streamId),
+              let targetPillUUID = UUID(uuidString: pillId) else { return }
+
+        let store = groupDefaults
+        bridgeLock.lock()
+        store.synchronize()
+
+        guard let rawData = store.data(forKey: "daily_tagdos_raw_streams_v1")
+                ?? UserDefaults.standard.data(forKey: "daily_tagdos_raw_streams_v1"),
+              var streams = try? JSONDecoder().decode([TagDoStream].self, from: rawData),
+              let sIdx = streams.firstIndex(where: { $0.id == targetStreamUUID }) else {
+            bridgeLock.unlock()
+            return
+        }
+
+        let parser = TagdosParser.shared
+        let existing = streams[sIdx]
+        var updated: TagDoStream
+        if action == "recycle" {
+            updated = parser.recyclePillToBack(in: existing, pillId: targetPillUUID)
+        } else {
+            updated = parser.togglePillCompletion(in: existing, pillId: targetPillUUID)
+        }
+        updated.activeMemos = existing.activeMemos
+        updated.attachments = existing.attachments
+        updated.updatedAt = Date()
+        streams[sIdx] = updated
+
+        if let encoded = try? JSONEncoder().encode(streams) {
+            store.set(encoded, forKey: "daily_tagdos_raw_streams_v1")
+        }
+
+        var dirtySet = Set(store.stringArray(forKey: "daily_tagdos_dirty_stream_ids_v1") ?? [])
+        dirtySet.insert(targetStreamUUID.uuidString)
+        store.set(Array(dirtySet), forKey: "daily_tagdos_dirty_stream_ids_v1")
+        store.synchronize()
+        bridgeLock.unlock()
+
+        let snapshot = TagdosStore.buildWidgetSnapshot(from: streams)
+        updateTagdosSnapshot(snapshot, bridgeDirectoryURL: nil, defaults: store)
+        postCrossProcessMutationNotification()
     }
 
     // MARK: - Stress Level & Monkey Mascot

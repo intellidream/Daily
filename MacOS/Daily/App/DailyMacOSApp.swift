@@ -1,6 +1,7 @@
 import SwiftUI
 import DailyCore
 import AppKit
+import UserNotifications
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
@@ -118,7 +119,11 @@ private final class MacOSLifecycleCoordinator {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         return .terminateNow
     }
@@ -126,6 +131,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         MacOSWindowManager.shared.activateMainWindow()
         return true
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let deepLink = response.notification.request.content.userInfo["deepLink"] as? String
+        if let deepLink, let url = URL(string: deepLink) {
+            Task { @MainActor in
+                if deepLink.lowercased().contains("tagdos") {
+                    TagdosStore.shared.handleDeepLink(url: url)
+                    MacOSWindowManager.shared.activateMainWindow(selectingTab: .tagdos)
+                }
+            }
+        }
+        completionHandler()
     }
 }
 
@@ -379,6 +409,7 @@ struct DailyMacOSApp: App {
         } else if host == "cosmos" || path.contains("cosmos") {
             targetTab = .cosmos
         } else if host == "tagdos" || path.contains("tagdos") {
+            TagdosStore.shared.handleDeepLink(url: url)
             targetTab = .tagdos
         } else if host == "news" || path.contains("news") {
             targetTab = .news

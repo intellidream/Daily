@@ -58,4 +58,45 @@ class TagdosParserTest {
         assertTrue(proseTag.contains("!"))
         assertEquals("• [$proseTag] Pay electricity bill — Due on Friday", proseMemo)
     }
+
+    @Test
+    fun reminderSpecEncodingAndClusterPreservationRoundTrip() {
+        val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+        fun ts(hhmm: String): Long {
+            val p = hhmm.split(":")
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, p[0].toInt())
+            cal.set(java.util.Calendar.MINUTE, p[1].toInt())
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            return cal.timeInMillis
+        }
+
+        val base = TagdosParser.parseStream(rawText = "MG/GM/TG & FSH/LDL", title = "Daily Ops", streamReminder = ts("17:30"))
+        assertEquals("17:30", TagdosParser.encodeReminderSpec(base))
+
+        val withClusters = base.copy(
+            clusters = listOf(
+                base.clusters[0].copy(reminderTime = ts("08:45")),
+                base.clusters[1].copy(reminderTime = ts("14:15"))
+            )
+        )
+        val encoded = TagdosParser.encodeReminderSpec(withClusters)
+        assertEquals("17:30|0=08:45,1=14:15", encoded)
+
+        val (decodedStream, decodedClusters) = TagdosParser.decodeReminderSpec(encoded)
+        assertEquals("17:30", decodedStream?.let { fmt.format(java.util.Date(it)) })
+        assertEquals("08:45", decodedClusters[0]?.let { fmt.format(java.util.Date(it)) })
+        assertEquals("14:15", decodedClusters[1]?.let { fmt.format(java.util.Date(it)) })
+
+        val reparsed = TagdosParser.parseStream(
+            rawText = "MG/GM/TG/NEW & FSH/LDL",
+            title = "Daily Ops",
+            id = withClusters.id,
+            streamReminder = withClusters.streamReminder,
+            existingStream = withClusters
+        )
+        assertEquals(withClusters.clusters[0].reminderTime, reparsed.clusters[0].reminderTime)
+        assertEquals(withClusters.clusters[1].reminderTime, reparsed.clusters[1].reminderTime)
+    }
 }

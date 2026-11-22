@@ -3,9 +3,11 @@ package com.intellidream.daily.database
 import com.intellidream.daily.database.dao.TagdosDao
 import com.intellidream.daily.database.entity.TagdoQuickNoteEntity
 import com.intellidream.daily.database.entity.TagdoStreamEntity
+import com.intellidream.daily.model.TagDoCluster
 import com.intellidream.daily.model.TagDoPill
 import com.intellidream.daily.model.TagDoQuickNote
 import com.intellidream.daily.model.TagDoStream
+import com.intellidream.daily.model.TagdosNavigationTarget
 import com.intellidream.daily.model.TagdosParser
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +40,80 @@ class TagdosRepository(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    private val _pendingNavigation = MutableStateFlow<TagdosNavigationTarget?>(null)
+    val pendingNavigation: StateFlow<TagdosNavigationTarget?> = _pendingNavigation.asStateFlow()
+
+    var onStreamsChanged: (() -> Unit)? = null
+
+    fun requestNavigation(
+        streamId: String? = null,
+        clusterIndex: Int? = null,
+        pillId: String? = null,
+        openPillEditor: Boolean = false
+    ) {
+        if (streamId != null || clusterIndex != null || pillId != null) {
+            _pendingNavigation.value = TagdosNavigationTarget(
+                streamId = streamId,
+                clusterIndex = clusterIndex,
+                pillId = pillId,
+                openPillEditor = openPillEditor
+            )
+        }
+    }
+
+    fun handleDeepLink(uriString: String) {
+        val qIdx = uriString.indexOf('?')
+        if (qIdx < 0 || qIdx >= uriString.length - 1) return
+        val query = uriString.substring(qIdx + 1).substringBefore('#')
+        val params = linkedMapOf<String, String>()
+        for (part in query.split('&')) {
+            val kv = part.split('=', limit = 2)
+            if (kv.size == 2) {
+                val key = runCatching { java.net.URLDecoder.decode(kv[0], "UTF-8") }.getOrDefault(kv[0])
+                val value = runCatching { java.net.URLDecoder.decode(kv[1], "UTF-8") }.getOrDefault(kv[1])
+                params[key] = value
+            }
+        }
+        val streamId = params["streamId"]?.takeIf { it.isNotBlank() }
+        val clusterIndex = params["clusterIndex"]?.toIntOrNull()
+        val pillId = params["pillId"]?.takeIf { it.isNotBlank() }
+        val openEdit = params["edit"] == "1" || pillId != null
+        requestNavigation(
+            streamId = streamId,
+            clusterIndex = clusterIndex,
+            pillId = pillId,
+            openPillEditor = openEdit
+        )
+    }
+
+    fun consumePendingNavigation() {
+        _pendingNavigation.value = null
+    }
+
+    private fun encodeClusterReminders(clusters: List<TagDoCluster>): String {
+        val parts = clusters.mapIndexedNotNull { idx, c ->
+            c.reminderTime?.let { "$idx=$it" }
+        }
+        return if (parts.isEmpty()) "{}" else parts.joinToString(",")
+    }
+
+    private fun decodeClusterReminders(raw: String?): Map<Int, Long> {
+        val clean = raw?.trim().orEmpty()
+        if (clean.isEmpty() || clean == "{}") return emptyMap()
+        val map = linkedMapOf<Int, Long>()
+        for (pair in clean.split(',')) {
+            val kv = pair.split('=', limit = 2)
+            if (kv.size == 2) {
+                val idx = kv[0].trim().toIntOrNull()
+                val ts = kv[1].trim().toLongOrNull()
+                if (idx != null && ts != null) {
+                    map[idx] = ts
+                }
+            }
+        }
+        return map
+    }
+
     companion object {
         const val DEFAULT_STREAM_1 = "MG/GM/TG & FSH/LDL & C\$T/DUB/14 & PL98/PBZ/SPL/CLN/ROT\$ & BP/ACTE & VER/CLD/DIV\$/CNTR/!MP\$/FCT\$/STK/BON\$ & BIA/€CO & SSD/ELVS/MEIZ & GORN/PICI/CRNA/IOA & CDO/SRN/NLU/NIN/SVS & ITP/CRRvg/Park/Ghis"
         const val DEFAULT_STREAM_2 = "WRK/PRJ/REV & MET/ZOOM/CALL & TKT/BUG/PR & DEPL/REL"
@@ -56,6 +132,7 @@ class TagdosRepository(
                     val currentStreams = _streams.value
                     val parsed = entities.map { entity ->
                         val existing = currentStreams.firstOrNull { it.id == entity.id }
+                        val savedClusterRems = decodeClusterReminders(entity.clusterRemindersJson)
                         val stream = TagdosParser.parseStream(
                             rawText = entity.rawText,
                             title = entity.title,
@@ -64,13 +141,18 @@ class TagdosRepository(
                             orderIndex = entity.orderIndex,
                             existingStream = existing
                         )
+                        val hydratedClusters = stream.clusters.mapIndexed { idx, cluster ->
+                            cluster.copy(reminderTime = savedClusterRems[idx])
+                        }
                         stream.copy(
+                            clusters = hydratedClusters,
                             customTitle = entity.customTitle,
                             activeMemos = entity.activeMemos,
                             updatedAt = entity.updatedAt
                         )
                     }
                     _streams.value = parsed
+                    onStreamsChanged?.invoke()
                 }
             }
         }
@@ -164,6 +246,7 @@ class TagdosRepository(
             customTitle = customTitle,
             rawText = rawText,
             streamReminder = streamReminder,
+            clusterRemindersJson = encodeClusterReminders(clusters),
             activeMemos = activeMemos,
             updatedAt = updatedAt,
             syncedAt = syncedAt
@@ -179,6 +262,7 @@ class TagdosRepository(
             current.sortBy { it.orderIndex }
         }
         _streams.value = current
+        onStreamsChanged?.invoke()
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStream(updated.toEntity(syncedAt = null))
         }
@@ -230,6 +314,15 @@ class TagdosRepository(
         persistStreamUpdate(stream.copy(streamReminder = date, updatedAt = System.currentTimeMillis()))
     }
 
+    fun setClusterReminder(streamId: String, clusterIndex: Int, date: Long?) {
+        val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
+        if (clusterIndex !in stream.clusters.indices) return
+        val updatedClusters = stream.clusters.mapIndexed { idx, c ->
+            if (idx == clusterIndex) c.copy(reminderTime = date) else c
+        }
+        persistStreamUpdate(stream.copy(clusters = updatedClusters, updatedAt = System.currentTimeMillis()))
+    }
+
     fun updateStreamMemos(streamId: String, memos: String) {
         val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
         persistStreamUpdate(stream.copy(activeMemos = memos, updatedAt = System.currentTimeMillis()))
@@ -275,6 +368,7 @@ class TagdosRepository(
         val stream = buildNewStream(title, rawText, activeMemos, nextOrderIndex)
         current.add(stream)
         _streams.value = current
+        onStreamsChanged?.invoke()
 
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStream(stream.toEntity(syncedAt = null))
@@ -336,6 +430,7 @@ class TagdosRepository(
             else shifted.copy(title = custom, customTitle = custom)
         }
         _streams.value = reindexed
+        onStreamsChanged?.invoke()
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStreams(reindexed.map { it.toEntity(syncedAt = null) })
         }
@@ -356,6 +451,7 @@ class TagdosRepository(
             }
         }
         _streams.value = reindexedDomain
+        onStreamsChanged?.invoke()
 
         scope.launch(ioDispatcher) {
             tagdosDao.deleteStreamById(streamId)
@@ -511,6 +607,7 @@ class TagdosRepository(
 
         if (touchedEntities.isNotEmpty()) {
             _streams.value = current
+            onStreamsChanged?.invoke()
             val toSave = touchedEntities.values.toList()
             scope.launch(ioDispatcher) {
                 tagdosDao.upsertStreams(toSave)

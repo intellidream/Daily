@@ -181,6 +181,7 @@ public struct RootView: View {
                     selectedTab = .health
                     HealthDataService.shared.activeSubTab = .stress
                 } else if fullPath.contains("tagdos") {
+                    TagdosStore.shared.handleDeepLink(url: url)
                     selectedTab = .tagdos
                 } else if fullPath.contains("cosmos") || fullPath.contains("sky") || fullPath.contains("astronomy") {
                     selectedTab = .cosmos
@@ -222,6 +223,13 @@ public struct RootView: View {
             if let tab = notification.object as? NavigationTab {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                     selectedTab = tab
+                }
+            }
+        }
+        .onReceive(TagdosStore.shared.$pendingNavigation) { target in
+            if target != nil && selectedTab != .tagdos {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    selectedTab = .tagdos
                 }
             }
         }

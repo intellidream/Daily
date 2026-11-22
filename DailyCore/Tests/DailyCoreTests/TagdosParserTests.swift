@@ -69,4 +69,53 @@ final class TagdosParserTests: XCTestCase {
         let layer2 = TagdosExternalTasksService.encryptToken(layer1, keyScope: userId)
         XCTAssertEqual(TagdosExternalTasksService.decryptToken(layer2, keyScope: userId), plainToken)
     }
+
+    @MainActor
+    func testReminderSpecEncodingClusterPreservationAndWidgetSnapshot() {
+        let parser = TagdosParser.shared
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+
+        let tStream = fmt.date(from: "17:30")!
+        let tCluster0 = fmt.date(from: "08:45")!
+        let tCluster1 = fmt.date(from: "14:15")!
+
+        var stream = parser.parseStream(rawText: "MG/GM/TG & FSH/LDL", title: "Daily Ops", streamReminder: tStream)
+        XCTAssertEqual(TagdosStore.encodeReminderSpec(for: stream), "17:30")
+
+        stream.clusters[0].reminderDate = tCluster0
+        stream.clusters[1].reminderDate = tCluster1
+        let spec = TagdosStore.encodeReminderSpec(for: stream)
+        XCTAssertEqual(spec, "17:30|0=08:45,1=14:15")
+
+        let decoded = TagdosStore.decodeReminderSpec(spec)
+        XCTAssertEqual(decoded.streamReminder.map { fmt.string(from: $0) }, "17:30")
+        XCTAssertEqual(decoded.clusterReminders[0].map { fmt.string(from: $0) }, "08:45")
+        XCTAssertEqual(decoded.clusterReminders[1].map { fmt.string(from: $0) }, "14:15")
+
+        // Cluster-only reminder (no stream reminder)
+        stream.streamReminder = nil
+        let clusterOnlySpec = TagdosStore.encodeReminderSpec(for: stream)
+        XCTAssertEqual(clusterOnlySpec, "|0=08:45,1=14:15")
+        let decodedClusterOnly = TagdosStore.decodeReminderSpec(clusterOnlySpec)
+        XCTAssertNil(decodedClusterOnly.streamReminder)
+        XCTAssertEqual(decodedClusterOnly.clusterReminders[0].map { fmt.string(from: $0) }, "08:45")
+
+        // Preserving cluster reminder across parseStream
+        let reparsed = parser.parseStream(
+            rawText: "MG/GM/TG/NEW & FSH/LDL",
+            title: "Daily Ops",
+            id: stream.id,
+            existingStream: stream
+        )
+        XCTAssertEqual(reparsed.clusters[0].reminderDate, tCluster0)
+        XCTAssertEqual(reparsed.clusters[1].reminderDate, tCluster1)
+
+        // Widget snapshot includes drivingPillId, pill IDs, and earliest cluster/stream reminder
+        let snap = TagdosStore.buildWidgetSnapshot(from: [reparsed])
+        XCTAssertEqual(snap.streams.first?.drivingPillId, reparsed.drivingPill?.id.uuidString)
+        XCTAssertEqual(snap.streams.first?.pills.first?.id, reparsed.activePills.first?.id.uuidString)
+        XCTAssertEqual(snap.nextReminderFormatted, "08:45")
+    }
 }

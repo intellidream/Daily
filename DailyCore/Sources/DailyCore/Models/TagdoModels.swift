@@ -64,11 +64,25 @@ public struct TagDoCluster: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public var pills: [TagDoPill]
     public var rawText: String
+    public var reminderDate: Date?
 
-    public init(id: UUID = UUID(), pills: [TagDoPill], rawText: String) {
+    enum CodingKeys: String, CodingKey {
+        case id, pills, rawText, reminderDate
+    }
+
+    public init(id: UUID = UUID(), pills: [TagDoPill], rawText: String, reminderDate: Date? = nil) {
         self.id = id
         self.pills = pills
         self.rawText = rawText
+        self.reminderDate = reminderDate
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.pills = try container.decodeIfPresent([TagDoPill].self, forKey: .pills) ?? []
+        self.rawText = try container.decodeIfPresent(String.self, forKey: .rawText) ?? ""
+        self.reminderDate = try container.decodeIfPresent(Date.self, forKey: .reminderDate)
     }
 
     public var activePills: [TagDoPill] {
@@ -77,6 +91,29 @@ public struct TagDoCluster: Identifiable, Codable, Equatable, Sendable {
 
     public var completedPills: [TagDoPill] {
         pills.filter { $0.isCompleted }
+    }
+}
+
+/// Deep-link / notification / widget target inside TagDoS Hub.
+public struct TagdosNavigationTarget: Equatable, Sendable {
+    public let requestId: UUID
+    public let streamId: UUID?
+    public let clusterIndex: Int?
+    public let pillId: UUID?
+    public let openPillEditor: Bool
+
+    public init(
+        requestId: UUID = UUID(),
+        streamId: UUID? = nil,
+        clusterIndex: Int? = nil,
+        pillId: UUID? = nil,
+        openPillEditor: Bool = false
+    ) {
+        self.requestId = requestId
+        self.streamId = streamId
+        self.clusterIndex = clusterIndex
+        self.pillId = pillId
+        self.openPillEditor = openPillEditor
     }
 }
 
@@ -306,20 +343,35 @@ public struct TagDoQuickNote: Identifiable, Codable, Equatable, Sendable {
 
 /// Lightweight snapshot for WidgetKit and fast UI rendering.
 public struct TagdosWidgetSnapshotPill: Codable, Sendable {
+    public let id: String
     public let text: String
     public let typeRaw: String
     public let isCompleted: Bool
 
-    public init(text: String, typeRaw: String, isCompleted: Bool) {
+    enum CodingKeys: String, CodingKey {
+        case id, text, typeRaw, isCompleted
+    }
+
+    public init(id: String = "", text: String, typeRaw: String, isCompleted: Bool) {
+        self.id = id
         self.text = text
         self.typeRaw = typeRaw
         self.isCompleted = isCompleted
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        self.text = try c.decode(String.self, forKey: .text)
+        self.typeRaw = try c.decode(String.self, forKey: .typeRaw)
+        self.isCompleted = try c.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
     }
 }
 
 public struct TagdosWidgetSnapshotStream: Codable, Sendable {
     public let id: String
     public let title: String
+    public let drivingPillId: String?
     public let drivingPillText: String?
     public let drivingPillType: String?
     public let activePillsCount: Int
@@ -327,9 +379,14 @@ public struct TagdosWidgetSnapshotStream: Codable, Sendable {
     public let pills: [TagdosWidgetSnapshotPill]
     public let activeMemosPreview: String?
 
+    enum CodingKeys: String, CodingKey {
+        case id, title, drivingPillId, drivingPillText, drivingPillType, activePillsCount, reminderTimeFormatted, pills, activeMemosPreview
+    }
+
     public init(
         id: String,
         title: String,
+        drivingPillId: String? = nil,
         drivingPillText: String?,
         drivingPillType: String?,
         activePillsCount: Int,
@@ -339,12 +396,26 @@ public struct TagdosWidgetSnapshotStream: Codable, Sendable {
     ) {
         self.id = id
         self.title = title
+        self.drivingPillId = drivingPillId
         self.drivingPillText = drivingPillText
         self.drivingPillType = drivingPillType
         self.activePillsCount = activePillsCount
         self.reminderTimeFormatted = reminderTimeFormatted
         self.pills = pills
         self.activeMemosPreview = activeMemosPreview
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.drivingPillId = try c.decodeIfPresent(String.self, forKey: .drivingPillId)
+        self.drivingPillText = try c.decodeIfPresent(String.self, forKey: .drivingPillText)
+        self.drivingPillType = try c.decodeIfPresent(String.self, forKey: .drivingPillType)
+        self.activePillsCount = try c.decodeIfPresent(Int.self, forKey: .activePillsCount) ?? 0
+        self.reminderTimeFormatted = try c.decodeIfPresent(String.self, forKey: .reminderTimeFormatted)
+        self.pills = try c.decodeIfPresent([TagdosWidgetSnapshotPill].self, forKey: .pills) ?? []
+        self.activeMemosPreview = try c.decodeIfPresent(String.self, forKey: .activeMemosPreview)
     }
 }
 

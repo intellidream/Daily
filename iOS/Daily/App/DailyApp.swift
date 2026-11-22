@@ -1,8 +1,38 @@
 import SwiftUI
+import UserNotifications
 import DailyCore
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
+
+private final class DailyNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    static let shared = DailyNotificationDelegate()
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let deepLink = response.notification.request.content.userInfo["deepLink"] as? String
+        if let deepLink, let url = URL(string: deepLink) {
+            Task { @MainActor in
+                if deepLink.lowercased().contains("tagdos") {
+                    TagdosStore.shared.handleDeepLink(url: url)
+                    NotificationCenter.default.post(name: .dailySelectTab, object: NavigationTab.tagdos)
+                }
+            }
+        }
+        completionHandler()
+    }
+}
 
 @main
 struct DailyApp: App {
@@ -10,6 +40,8 @@ struct DailyApp: App {
     @Environment(\.scenePhase) private var scenePhase
     
     public init() {
+        UNUserNotificationCenter.current().delegate = DailyNotificationDelegate.shared
+
         // Wire native Apple HealthKit provider into HealthDataService
         HealthDataService.shared.localDataProvider = HealthKitManager.shared
         

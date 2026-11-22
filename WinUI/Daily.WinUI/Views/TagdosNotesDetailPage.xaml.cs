@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,8 +31,10 @@ namespace Daily_WinUI.Views
         private ITagdosService? _tagdosService;
         private List<TagDoStream> _streams = new();
         private List<TagDoQuickNote> _notes = new();
-        private int _selectedStreamIndex = 0; // 0..4 for Streams 1..5, 5 for Quick Notes
+        private int _selectedStreamIndex = -1; // -1 = All Streams & Notes, 0..N-1 = Streams, N = Quick Notes
         private bool _isRawEditMode = false;
+        private bool _isDialogOpen = false;
+        private readonly Dictionary<int, Border> _clusterBordersByIndex = new();
 
         public TagdosNotesDetailPage()
         {
@@ -52,6 +55,8 @@ namespace Daily_WinUI.Views
             {
                 _tagdosService.DataChanged -= TagdosService_DataChanged;
                 _tagdosService.DataChanged += TagdosService_DataChanged;
+                _tagdosService.PendingNavigationChanged -= TagdosService_PendingNavigationChanged;
+                _tagdosService.PendingNavigationChanged += TagdosService_PendingNavigationChanged;
             }
             _ = LoadDataAsync();
             if (_tagdosService != null)
@@ -65,6 +70,7 @@ namespace Daily_WinUI.Views
             if (_tagdosService != null)
             {
                 _tagdosService.DataChanged -= TagdosService_DataChanged;
+                _tagdosService.PendingNavigationChanged -= TagdosService_PendingNavigationChanged;
             }
         }
 
@@ -73,6 +79,14 @@ namespace Daily_WinUI.Views
             DispatcherQueue.TryEnqueue(() =>
             {
                 _ = LoadDataAsync();
+            });
+        }
+
+        private void TagdosService_PendingNavigationChanged(object? sender, EventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _ = ApplyPendingNavigationIfAnyAsync();
             });
         }
 
@@ -86,6 +100,7 @@ namespace Daily_WinUI.Views
 
             try
             {
+                bool wasAllTab = _selectedStreamIndex == -1;
                 var prevStreamId = (_selectedStreamIndex >= 0 && _selectedStreamIndex < _streams.Count)
                     ? _streams[_selectedStreamIndex].Id
                     : null;
@@ -95,27 +110,87 @@ namespace Daily_WinUI.Views
                 _notes = await _tagdosService.GetQuickNotesAsync();
 
                 int nextIndex;
-                if (wasNotesTab)
+                if (wasAllTab)
+                {
+                    nextIndex = -1;
+                }
+                else if (wasNotesTab)
                 {
                     nextIndex = _streams.Count;
                 }
                 else if (!string.IsNullOrEmpty(prevStreamId))
                 {
                     int matchIdx = _streams.FindIndex(s => s.Id == prevStreamId);
-                    nextIndex = matchIdx >= 0 ? matchIdx : Math.Clamp(_selectedStreamIndex, 0, Math.Max(0, _streams.Count - 1));
+                    nextIndex = matchIdx >= 0 ? matchIdx : Math.Clamp(_selectedStreamIndex, -1, Math.Max(0, _streams.Count - 1));
                 }
                 else
                 {
-                    nextIndex = Math.Clamp(_selectedStreamIndex, 0, _streams.Count);
+                    nextIndex = Math.Clamp(_selectedStreamIndex, -1, _streams.Count);
                 }
                 _selectedStreamIndex = nextIndex;
 
                 RenderStreamTabs();
                 SelectTab(_selectedStreamIndex);
+                await ApplyPendingNavigationIfAnyAsync();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[TagdosNotesDetailPage] Error loading: {ex.Message}");
+            }
+        }
+
+        private async Task ApplyPendingNavigationIfAnyAsync()
+        {
+            var nav = _tagdosService?.ConsumePendingNavigation();
+            if (nav == null) return;
+
+            if (_streams.Count == 0 && _tagdosService != null)
+            {
+                _streams = await _tagdosService.GetStreamsAsync();
+            }
+
+            int targetStreamIdx = -1;
+            if (!string.IsNullOrWhiteSpace(nav.StreamId))
+            {
+                targetStreamIdx = _streams.FindIndex(s => string.Equals(s.Id, nav.StreamId, StringComparison.OrdinalIgnoreCase));
+            }
+            if (targetStreamIdx < 0 && !string.IsNullOrWhiteSpace(nav.PillId))
+            {
+                targetStreamIdx = _streams.FindIndex(s => s.AllPills.Any(p => string.Equals(p.Id, nav.PillId, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            if (targetStreamIdx >= 0 && targetStreamIdx < _streams.Count)
+            {
+                SelectTab(targetStreamIdx);
+                var targetStream = _streams[targetStreamIdx];
+
+                if (nav.OpenPillEditor && !string.IsNullOrWhiteSpace(nav.PillId))
+                {
+                    var targetPill = targetStream.AllPills.FirstOrDefault(p => string.Equals(p.Id, nav.PillId, StringComparison.OrdinalIgnoreCase))
+                        ?? targetStream.DrivingPill;
+                    if (targetPill != null)
+                    {
+                        await Task.Delay(60);
+                        await ShowEditPillDialogAsync(targetStream, targetPill);
+                    }
+                    return;
+                }
+
+                if (nav.ClusterIndex.HasValue && _clusterBordersByIndex.TryGetValue(nav.ClusterIndex.Value, out var clusterBorder))
+                {
+                    await Task.Delay(80);
+                    clusterBorder.StartBringIntoView(new BringIntoViewOptions
+                    {
+                        AnimationDesired = true,
+                        VerticalAlignmentRatio = 0.35
+                    });
+
+                    clusterBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF));
+                    clusterBorder.BorderThickness = new Thickness(2);
+                    await Task.Delay(1800);
+                    clusterBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+                    clusterBorder.BorderThickness = new Thickness(1);
+                }
             }
         }
 
@@ -125,7 +200,54 @@ namespace Daily_WinUI.Views
         {
             StreamTabsPanel.Children.Clear();
 
-            // Tabs for Streams 0..4
+            // Tab -1: All (All Streams & Notes)
+            bool isAllSelected = _selectedStreamIndex == -1;
+            var allBtn = new Button
+            {
+                Background = isAllSelected ? new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0xE5, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x10, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = isAllSelected ? new SolidColorBrush(Color.FromArgb(0x99, 0x00, 0xE5, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(14, 6, 14, 6),
+                Tag = -1
+            };
+            var allStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            allStack.Children.Add(new FontIcon
+            {
+                Glyph = "\xE80A",
+                FontFamily = new FontFamily("Segoe Fluent Icons"),
+                FontSize = 12,
+                Foreground = isAllSelected ? new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)) : new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF))
+            });
+            allStack.Children.Add(new TextBlock
+            {
+                Text = "All",
+                FontSize = 12,
+                FontWeight = isAllSelected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+                Foreground = isAllSelected ? new SolidColorBrush(Microsoft.UI.Colors.White) : new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))
+            });
+            int totalActiveAll = _streams.Sum(s => s.AllPills.Count(p => !p.IsCompleted));
+            if (totalActiveAll > 0)
+            {
+                allStack.Children.Add(new Border
+                {
+                    Background = isAllSelected ? new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE5, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(6, 1, 6, 1),
+                    Child = new TextBlock
+                    {
+                        Text = totalActiveAll.ToString(),
+                        FontSize = 10,
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        Foreground = isAllSelected ? new SolidColorBrush(Microsoft.UI.Colors.White) : new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF))
+                    }
+                });
+            }
+            allBtn.Content = allStack;
+            allBtn.Click += (s, ev) => SelectTab(-1);
+            StreamTabsPanel.Children.Add(allBtn);
+
+            // Tabs for Streams 0..N-1
             for (int i = 0; i < _streams.Count; i++)
             {
                 var stream = _streams[i];
@@ -155,6 +277,19 @@ namespace Daily_WinUI.Views
                     FontWeight = isSelected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
                     Foreground = isSelected ? new SolidColorBrush(Microsoft.UI.Colors.White) : new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))
                 });
+
+                bool hasAnyReminder = stream.StreamReminder.HasValue || stream.Clusters.Any(c => c.ClusterReminder.HasValue);
+                if (hasAnyReminder)
+                {
+                    contentStack.Children.Add(new FontIcon
+                    {
+                        Glyph = "\xE823",
+                        FontFamily = new FontFamily("Segoe Fluent Icons"),
+                        FontSize = 10,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)),
+                        VerticalAlignment = VerticalAlignment.Center
+                    });
+                }
 
                 int activePills = stream.AllPills.Count(p => !p.IsCompleted);
                 if (activePills > 0)
@@ -338,21 +473,396 @@ namespace Daily_WinUI.Views
 
         private void SelectTab(int index)
         {
-            _selectedStreamIndex = Math.Clamp(index, 0, _streams.Count);
+            _selectedStreamIndex = Math.Clamp(index, -1, _streams.Count);
             RenderStreamTabs();
 
-            if (_selectedStreamIndex < _streams.Count)
+            if (_selectedStreamIndex == -1)
             {
+                AllOverviewPanel.Visibility = Visibility.Visible;
+                StreamViewPanel.Visibility = Visibility.Collapsed;
+                QuickNotesViewPanel.Visibility = Visibility.Collapsed;
+                RenderAllOverview();
+            }
+            else if (_selectedStreamIndex < _streams.Count)
+            {
+                AllOverviewPanel.Visibility = Visibility.Collapsed;
                 StreamViewPanel.Visibility = Visibility.Visible;
                 QuickNotesViewPanel.Visibility = Visibility.Collapsed;
                 RenderStreamView(_streams[_selectedStreamIndex]);
             }
             else
             {
+                AllOverviewPanel.Visibility = Visibility.Collapsed;
                 StreamViewPanel.Visibility = Visibility.Collapsed;
                 QuickNotesViewPanel.Visibility = Visibility.Visible;
                 RenderQuickNotes(NoteSearchBox.Text);
             }
+        }
+
+        private void RefreshCurrentTabAfterChange(TagDoStream? modifiedStream = null)
+        {
+            RenderStreamTabs();
+            if (_selectedStreamIndex == -1)
+            {
+                RenderAllOverview();
+            }
+            else if (_selectedStreamIndex >= 0 && _selectedStreamIndex < _streams.Count)
+            {
+                RenderStreamView(modifiedStream ?? _streams[_selectedStreamIndex]);
+            }
+            else
+            {
+                RenderQuickNotes(NoteSearchBox.Text);
+            }
+        }
+
+        // ── ALL OVERVIEW TAB (Large-Widget Style for All Streams & Notes) ────
+
+        private void RenderAllOverview()
+        {
+            AllOverviewPanel.Children.Clear();
+
+            // Card 1: ALL STREAMS
+            var streamsOuterCard = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(18),
+                Padding = new Thickness(18)
+            };
+
+            var streamsStack = new StackPanel { Spacing = 12 };
+
+            var streamsHeader = new Grid();
+            streamsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            streamsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var headerTitleStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+            headerTitleStack.Children.Add(new FontIcon
+            {
+                Glyph = "\xE73A",
+                FontFamily = new FontFamily("Segoe Fluent Icons"),
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xAF, 0x52, 0xDE))
+            });
+            headerTitleStack.Children.Add(new TextBlock
+            {
+                Text = "ALL STREAMS",
+                FontSize = 11,
+                CharacterSpacing = 90,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF))
+            });
+            Grid.SetColumn(headerTitleStack, 0);
+            streamsHeader.Children.Add(headerTitleStack);
+
+            int totalActive = _streams.Sum(s => s.AllPills.Count(p => !p.IsCompleted));
+            var activeCountBadge = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x24, 0x00, 0xE5, 0xFF)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0x00, 0xE5, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10, 3, 10, 3),
+                Child = new TextBlock
+                {
+                    Text = $"{totalActive} active tags",
+                    FontSize = 11,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF))
+                }
+            };
+            Grid.SetColumn(activeCountBadge, 1);
+            streamsHeader.Children.Add(activeCountBadge);
+            streamsStack.Children.Add(streamsHeader);
+
+            for (int idx = 0; idx < _streams.Count; idx++)
+            {
+                var stream = _streams[idx];
+                int streamIndex = idx;
+
+                var streamCard = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(14),
+                    Padding = new Thickness(14, 12, 14, 12)
+                };
+
+                var rowStack = new StackPanel { Spacing = 8 };
+                var rowHeader = new Grid();
+                rowHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var titleBtn = new Button
+                {
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(0),
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+                ToolTipService.SetToolTip(titleBtn, $"Open Stream {streamIndex + 1}");
+                var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+                titleRow.Children.Add(new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x38, 0xAF, 0x52, 0xDE)),
+                    CornerRadius = new CornerRadius(7),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Child = new TextBlock
+                    {
+                        Text = $"S{streamIndex + 1}",
+                        FontSize = 10,
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF))
+                    }
+                });
+                titleRow.Children.Add(new TextBlock
+                {
+                    Text = stream.DisplayTitle,
+                    FontSize = 14,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+
+                DateTime? reminderDisplay = stream.StreamReminder ?? stream.Clusters.FirstOrDefault(c => c.ClusterReminder.HasValue)?.ClusterReminder;
+                if (reminderDisplay.HasValue)
+                {
+                    var remStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+                    remStack.Children.Add(new FontIcon
+                    {
+                        Glyph = "\xE823",
+                        FontFamily = new FontFamily("Segoe Fluent Icons"),
+                        FontSize = 10,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF))
+                    });
+                    remStack.Children.Add(new TextBlock
+                    {
+                        Text = $"{reminderDisplay.Value:HH:mm}",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF))
+                    });
+                    titleRow.Children.Add(remStack);
+                }
+
+                titleRow.Children.Add(new FontIcon
+                {
+                    Glyph = "\xE76C",
+                    FontFamily = new FontFamily("Segoe Fluent Icons"),
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                titleBtn.Content = titleRow;
+                titleBtn.Click += (_, __) => SelectTab(streamIndex);
+                Grid.SetColumn(titleBtn, 0);
+                rowHeader.Children.Add(titleBtn);
+
+                var focusPill = stream.AllPills.FirstOrDefault(p => !p.IsCompleted) ?? stream.DrivingPill;
+                if (focusPill != null)
+                {
+                    var quickActionRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+
+                    var doneQuickBtn = new Button
+                    {
+                        Background = new SolidColorBrush(Color.FromArgb(0x24, 0x00, 0xD0, 0x9C)),
+                        BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xD0, 0x9C)),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(10),
+                        Padding = new Thickness(8, 3, 8, 3),
+                        Content = new TextBlock
+                        {
+                            Text = "✓",
+                            FontSize = 11,
+                            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                            Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xD0, 0x9C))
+                        }
+                    };
+                    ToolTipService.SetToolTip(doneQuickBtn, $"Mark '{focusPill.Text}' done");
+                    doneQuickBtn.Click += async (_, __) =>
+                    {
+                        TagdosParser.TogglePillCompletion(stream, focusPill.Id);
+                        await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                        RefreshCurrentTabAfterChange(stream);
+                    };
+
+                    var recycleQuickBtn = new Button
+                    {
+                        Background = new SolidColorBrush(Color.FromArgb(0x24, 0x00, 0xE5, 0xFF)),
+                        BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE5, 0xFF)),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(10),
+                        Padding = new Thickness(8, 3, 8, 3),
+                        Content = new TextBlock
+                        {
+                            Text = "↻",
+                            FontSize = 11,
+                            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                            Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF))
+                        }
+                    };
+                    ToolTipService.SetToolTip(recycleQuickBtn, $"Recycle '{focusPill.Text}' to back");
+                    recycleQuickBtn.Click += async (_, __) =>
+                    {
+                        TagdosParser.RecyclePillToBack(stream, focusPill.Id);
+                        await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                        RefreshCurrentTabAfterChange(stream);
+                    };
+
+                    quickActionRow.Children.Add(doneQuickBtn);
+                    quickActionRow.Children.Add(recycleQuickBtn);
+                    Grid.SetColumn(quickActionRow, 1);
+                    rowHeader.Children.Add(quickActionRow);
+                }
+
+                rowStack.Children.Add(rowHeader);
+
+                var allPills = stream.AllPills.ToList();
+                if (allPills.Count > 0)
+                {
+                    var pillsFlow = new FlowWrapPanel { HorizontalSpacing = 2, VerticalSpacing = 4 };
+                    foreach (var pill in allPills)
+                    {
+                        pillsFlow.Children.Add(CreateInteractivePillUI(pill, stream, 0));
+                    }
+                    rowStack.Children.Add(pillsFlow);
+                }
+                else
+                {
+                    rowStack.Children.Add(new TextBlock
+                    {
+                        Text = "No active tags in this stream yet.",
+                        FontSize = 11.5,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0x77, 0xFF, 0xFF, 0xFF))
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(stream.ActiveMemos))
+                {
+                    var firstLine = stream.ActiveMemos
+                        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                        .FirstOrDefault()?.Trim();
+                    if (!string.IsNullOrEmpty(firstLine))
+                    {
+                        rowStack.Children.Add(new TextBlock
+                        {
+                            Text = firstLine,
+                            FontSize = 11.5,
+                            MaxLines = 1,
+                            TextTrimming = TextTrimming.CharacterEllipsis,
+                            Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF))
+                        });
+                    }
+                }
+
+                streamCard.Child = rowStack;
+                streamsStack.Children.Add(streamCard);
+            }
+
+            streamsOuterCard.Child = streamsStack;
+            AllOverviewPanel.Children.Add(streamsOuterCard);
+
+            // Card 2: QUICK NOTES
+            var notesOuterCard = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(18),
+                Padding = new Thickness(18)
+            };
+
+            var notesStackOuter = new StackPanel { Spacing = 12 };
+            var notesHeader = new Grid();
+            notesHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            notesHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var notesHeaderLeft = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+            notesHeaderLeft.Children.Add(new FontIcon
+            {
+                Glyph = "\xE70B",
+                FontFamily = new FontFamily("Segoe Fluent Icons"),
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xB3, 0x00))
+            });
+            notesHeaderLeft.Children.Add(new TextBlock
+            {
+                Text = "QUICK NOTES",
+                FontSize = 11,
+                CharacterSpacing = 90,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF))
+            });
+            Grid.SetColumn(notesHeaderLeft, 0);
+            notesHeader.Children.Add(notesHeaderLeft);
+
+            var notesHeaderRight = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var newNoteInlineBtn = new Button
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x22, 0xAF, 0x52, 0xDE)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0xAF, 0x52, 0xDE)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(10, 4, 10, 4),
+                Content = new TextBlock
+                {
+                    Text = "+ New Note",
+                    FontSize = 11,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF))
+                }
+            };
+            newNoteInlineBtn.Click += TopBarAddNote_Click;
+            notesHeaderRight.Children.Add(newNoteInlineBtn);
+
+            var openNotesTabBtn = new Button
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(10, 4, 10, 4),
+                Content = new TextBlock
+                {
+                    Text = $"Notes Tab ({_notes.Count})",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))
+                }
+            };
+            openNotesTabBtn.Click += (_, __) => SelectTab(_streams.Count);
+            notesHeaderRight.Children.Add(openNotesTabBtn);
+
+            Grid.SetColumn(notesHeaderRight, 1);
+            notesHeader.Children.Add(notesHeaderRight);
+            notesStackOuter.Children.Add(notesHeader);
+
+            if (_notes.Count == 0)
+            {
+                notesStackOuter.Children.Add(new TextBlock
+                {
+                    Text = "No quick notes yet. Click '+ New Note' to capture an idea or checklist.",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF))
+                });
+            }
+            else
+            {
+                var orderedNotes = _notes
+                    .OrderByDescending(n => n.IsPinned)
+                    .ThenByDescending(n => n.UpdatedAt)
+                    .ToList();
+                var notesFlow = new FlowWrapPanel { HorizontalSpacing = 10, VerticalSpacing = 10 };
+                foreach (var note in orderedNotes)
+                {
+                    notesFlow.Children.Add(CreateNoteCard(note));
+                }
+                notesStackOuter.Children.Add(notesFlow);
+            }
+
+            notesOuterCard.Child = notesStackOuter;
+            AllOverviewPanel.Children.Add(notesOuterCard);
         }
 
         // ── Stream View & Visual Canvas ──────────────────────────────────────
@@ -375,6 +885,7 @@ namespace Daily_WinUI.Views
         private void RenderClusters(TagDoStream stream)
         {
             ClustersContainer.Children.Clear();
+            _clusterBordersByIndex.Clear();
 
             if (stream.Clusters.Count == 0)
             {
@@ -387,7 +898,7 @@ namespace Daily_WinUI.Views
                     Padding = new Thickness(16),
                     Child = new TextBlock
                     {
-                        Text = "No clusters yet. Click 'Add Tag' or 'Import Tasks' to populate this stream.",
+                        Text = "No tags yet. Click 'Add Tag' or 'Import Tasks' to populate this stream.",
                         FontSize = 12,
                         Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF))
                     }
@@ -398,55 +909,217 @@ namespace Daily_WinUI.Views
             for (int cIdx = 0; cIdx < stream.Clusters.Count; cIdx++)
             {
                 var cluster = stream.Clusters[cIdx];
-                int clusterNum = cIdx + 1;
+                int capturedIdx = cIdx;
+
+                var outerRow = new Grid
+                {
+                    Margin = new Thickness(0, 0, 0, 4),
+                    MinHeight = 50
+                };
+
+                // Hidden background action slots revealed on horizontal drag:
+                // Drag RIGHT (offsetX > 0) reveals LEFT slot (+ Tag)
+                // Drag LEFT  (offsetX < 0) reveals RIGHT slot (🔔 Cluster Notification)
+                var addTagRevealBtn = new Button
+                {
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(4, 0, 0, 0),
+                    Background = new SolidColorBrush(Color.FromArgb(0x33, 0x00, 0xE5, 0xFF)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 0x00, 0xE5, 0xFF)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(12),
+                    Padding = new Thickness(10, 6, 10, 6),
+                    Opacity = 0,
+                    IsHitTestVisible = false,
+                    Content = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 5,
+                        Children =
+                        {
+                            new FontIcon { Glyph = "\xE710", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 11, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)) },
+                            new TextBlock { Text = "Tag", FontSize = 11.5, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)) }
+                        }
+                    }
+                };
+
+                var alertLabel = cluster.ClusterReminder.HasValue ? $"{cluster.ClusterReminder.Value:HH:mm}" : "Alert";
+                var reminderRevealBtn = new Button
+                {
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 4, 0),
+                    Background = new SolidColorBrush(Color.FromArgb(0x33, 0xAF, 0x52, 0xDE)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 0xAF, 0x52, 0xDE)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(12),
+                    Padding = new Thickness(10, 6, 10, 6),
+                    Opacity = 0,
+                    IsHitTestVisible = false,
+                    Content = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 5,
+                        Children =
+                        {
+                            new FontIcon { Glyph = "\xE823", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 11, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF)) },
+                            new TextBlock { Text = alertLabel, FontSize = 11.5, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF)) }
+                        }
+                    }
+                };
+
+                outerRow.Children.Add(addTagRevealBtn);
+                outerRow.Children.Add(reminderRevealBtn);
+
+                var translate = new TranslateTransform();
+                void SyncRevealVisuals(double offsetX)
+                {
+                    translate.X = offsetX;
+                    double leftProgress = Math.Clamp(offsetX / 72.0, 0.0, 1.0);
+                    double rightProgress = Math.Clamp(-offsetX / 72.0, 0.0, 1.0);
+                    addTagRevealBtn.Opacity = leftProgress;
+                    addTagRevealBtn.IsHitTestVisible = offsetX > 24;
+                    reminderRevealBtn.Opacity = rightProgress;
+                    reminderRevealBtn.IsHitTestVisible = offsetX < -24;
+                }
+
+                addTagRevealBtn.Click += async (_, __) =>
+                {
+                    SyncRevealVisuals(0);
+                    await ShowAddTagToClusterDialogAsync(stream, capturedIdx);
+                };
+                reminderRevealBtn.Click += async (_, __) =>
+                {
+                    SyncRevealVisuals(0);
+                    await ShowClusterReminderDialogAsync(stream, capturedIdx);
+                };
 
                 var clusterBorder = new Border
                 {
-                    Background = new SolidColorBrush(Color.FromArgb(0x10, 0xFF, 0xFF, 0xFF)),
+                    Background = new SolidColorBrush(Color.FromArgb(0x16, 0xFF, 0xFF, 0xFF)),
                     BorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
                     BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(12),
-                    Padding = new Thickness(12, 10, 12, 10),
-                    Margin = new Thickness(0, 0, 0, 4)
+                    CornerRadius = new CornerRadius(13),
+                    Padding = new Thickness(6, 8, 6, 8),
+                    RenderTransform = translate,
+                    ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.System
+                };
+                _clusterBordersByIndex[capturedIdx] = clusterBorder;
+
+                clusterBorder.ManipulationDelta += (_, e) =>
+                {
+                    double nextX = Math.Clamp(translate.X + e.Delta.Translation.X, -124.0, 124.0);
+                    SyncRevealVisuals(nextX);
+                };
+                clusterBorder.ManipulationCompleted += async (_, __) =>
+                {
+                    double finalX = translate.X;
+                    if (finalX >= 112.0)
+                    {
+                        SyncRevealVisuals(0);
+                        await ShowAddTagToClusterDialogAsync(stream, capturedIdx);
+                    }
+                    else if (finalX <= -112.0)
+                    {
+                        SyncRevealVisuals(0);
+                        await ShowClusterReminderDialogAsync(stream, capturedIdx);
+                    }
+                    else if (finalX >= 44.0)
+                    {
+                        SyncRevealVisuals(86.0);
+                    }
+                    else if (finalX <= -44.0)
+                    {
+                        SyncRevealVisuals(-86.0);
+                    }
+                    else
+                    {
+                        SyncRevealVisuals(0);
+                    }
+                };
+                clusterBorder.Tapped += (_, e) =>
+                {
+                    if (Math.Abs(translate.X) > 6)
+                    {
+                        e.Handled = true;
+                        SyncRevealVisuals(0);
+                    }
                 };
 
-                var clusterGrid = new Grid();
-                clusterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-                clusterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                var innerGrid = new Grid { ColumnSpacing = 6 };
+                innerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                innerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                innerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                // Cluster Header label
-                var clusterLabel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-                clusterLabel.Children.Add(new TextBlock
+                // Subtle Left Drag Hint (Drag right -> + Tag; also clickable on desktop mouse)
+                var leftHint = new Border
                 {
-                    Text = $"Batch #{clusterNum}",
-                    FontSize = 11,
-                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xAF, 0x52, 0xDE))
-                });
-                clusterLabel.Children.Add(new TextBlock
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    Padding = new Thickness(4, 6, 4, 6),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new Border
+                    {
+                        Width = 3.5,
+                        Height = 20,
+                        CornerRadius = new CornerRadius(2),
+                        Background = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE5, 0xFF))
+                    }
+                };
+                ToolTipService.SetToolTip(leftHint, "Drag right (or click) to add a tag");
+                leftHint.Tapped += (_, e) =>
                 {
-                    Text = $"{cluster.Pills.Count} items",
-                    FontSize = 9.5,
-                    Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF))
-                });
-                Grid.SetColumn(clusterLabel, 0);
-                clusterGrid.Children.Add(clusterLabel);
+                    e.Handled = true;
+                    SyncRevealVisuals(translate.X > 20 ? 0 : 86.0);
+                };
+                Grid.SetColumn(leftHint, 0);
+                innerGrid.Children.Add(leftHint);
 
-                // Pills horizontal flow
-                var pillsWrap = new VariableSizedWrapGrid
+                // Center Content: Optional active reminder badge + pills flow (ZERO "Batch #N" / "Cluster" text!)
+                var centerStack = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+                if (cluster.ClusterReminder.HasValue)
                 {
-                    Orientation = Orientation.Horizontal,
-                    ItemHeight = 36,
+                    var remChip = new Border
+                    {
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Background = new SolidColorBrush(Color.FromArgb(0x22, 0x00, 0xE5, 0xFF)),
+                        BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0x00, 0xE5, 0xFF)),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(9),
+                        Padding = new Thickness(7, 2, 7, 2),
+                        Child = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            Spacing = 4,
+                            Children =
+                            {
+                                new FontIcon { Glyph = "\xE823", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 9.5, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)) },
+                                new TextBlock { Text = $"{cluster.ClusterReminder.Value:HH:mm}", FontSize = 10.5, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)) }
+                            }
+                        }
+                    };
+                    ToolTipService.SetToolTip(remChip, "Edit daily notification for this cluster");
+                    remChip.Tapped += async (_, e) =>
+                    {
+                        e.Handled = true;
+                        await ShowClusterReminderDialogAsync(stream, capturedIdx);
+                    };
+                    centerStack.Children.Add(remChip);
+                }
+
+                var pillsWrap = new FlowWrapPanel
+                {
+                    HorizontalSpacing = 2,
+                    VerticalSpacing = 4,
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
                 for (int pIdx = 0; pIdx < cluster.Pills.Count; pIdx++)
                 {
                     var pill = cluster.Pills[pIdx];
-                    var pillUI = CreateInteractivePillUI(pill, stream, cIdx);
+                    var pillUI = CreateInteractivePillUI(pill, stream, capturedIdx);
                     pillsWrap.Children.Add(pillUI);
 
-                    // Add subtle separator slash between pills in cluster
                     if (pIdx < cluster.Pills.Count - 1)
                     {
                         var slash = new TextBlock
@@ -460,12 +1133,39 @@ namespace Daily_WinUI.Views
                         pillsWrap.Children.Add(slash);
                     }
                 }
+                centerStack.Children.Add(pillsWrap);
 
-                Grid.SetColumn(pillsWrap, 1);
-                clusterGrid.Children.Add(pillsWrap);
+                Grid.SetColumn(centerStack, 1);
+                innerGrid.Children.Add(centerStack);
 
-                clusterBorder.Child = clusterGrid;
-                ClustersContainer.Children.Add(clusterBorder);
+                // Subtle Right Drag Hint (Drag left -> Cluster Notification; also clickable on desktop mouse)
+                var rightHint = new Border
+                {
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    Padding = new Thickness(4, 6, 4, 6),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new Border
+                    {
+                        Width = 3.5,
+                        Height = 20,
+                        CornerRadius = new CornerRadius(2),
+                        Background = new SolidColorBrush(cluster.ClusterReminder.HasValue
+                            ? Color.FromArgb(0xCC, 0x00, 0xE5, 0xFF)
+                            : Color.FromArgb(0x77, 0xAF, 0x52, 0xDE))
+                    }
+                };
+                ToolTipService.SetToolTip(rightHint, "Drag left (or click) to set cluster notification");
+                rightHint.Tapped += (_, e) =>
+                {
+                    e.Handled = true;
+                    SyncRevealVisuals(translate.X < -20 ? 0 : -86.0);
+                };
+                Grid.SetColumn(rightHint, 2);
+                innerGrid.Children.Add(rightHint);
+
+                clusterBorder.Child = innerGrid;
+                outerRow.Children.Add(clusterBorder);
+                ClustersContainer.Children.Add(outerRow);
             }
         }
 
@@ -500,7 +1200,7 @@ namespace Daily_WinUI.Views
 
             pillBorder.Child = textBlock;
 
-            // Context/Action Flyout
+            // Right-click ContextFlyout preserved for power users
             var flyout = new MenuFlyout();
 
             var editItem = new MenuFlyoutItem
@@ -508,28 +1208,7 @@ namespace Daily_WinUI.Views
                 Text = "Edit Tag...",
                 Icon = new FontIcon { Glyph = "\xE70F" }
             };
-            editItem.Click += async (s, e) =>
-            {
-                var input = new TextBox { Text = pill.Text };
-                input.SelectAll();
-                var dlg = new ContentDialog
-                {
-                    Title = "Edit Tag",
-                    PrimaryButtonText = "Save",
-                    CloseButtonText = "Cancel",
-                    DefaultButton = ContentDialogButton.Primary,
-                    Content = input,
-                    XamlRoot = this.XamlRoot
-                };
-                if (await dlg.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(input.Text))
-                {
-                    if (TagdosParser.UpdatePillText(stream, pill.Id, input.Text))
-                    {
-                        await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
-                        RenderStreamView(stream);
-                    }
-                }
-            };
+            editItem.Click += async (s, e) => await ShowEditPillDialogAsync(stream, pill);
             flyout.Items.Add(editItem);
 
             var toggleDoneItem = new MenuFlyoutItem
@@ -537,11 +1216,11 @@ namespace Daily_WinUI.Views
                 Text = pill.IsCompleted ? "Mark Incomplete" : "Mark Done",
                 Icon = new FontIcon { Glyph = "\xE73E" }
             };
-            toggleDoneItem.Click += (s, e) =>
+            toggleDoneItem.Click += async (s, e) =>
             {
                 TagdosParser.TogglePillCompletion(stream, pill.Id);
-                _ = _tagdosService?.SaveStreamAsync(stream);
-                RenderStreamView(stream);
+                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                RefreshCurrentTabAfterChange(stream);
             };
             flyout.Items.Add(toggleDoneItem);
 
@@ -550,11 +1229,11 @@ namespace Daily_WinUI.Views
                 Text = "Recycle to Back",
                 Icon = new FontIcon { Glyph = "\xE777" }
             };
-            recycleItem.Click += (s, e) =>
+            recycleItem.Click += async (s, e) =>
             {
                 TagdosParser.RecyclePillToBack(stream, pill.Id);
-                _ = _tagdosService?.SaveStreamAsync(stream);
-                RenderStreamView(stream);
+                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                RefreshCurrentTabAfterChange(stream);
             };
             flyout.Items.Add(recycleItem);
 
@@ -563,11 +1242,11 @@ namespace Daily_WinUI.Views
                 Text = "Prioritize to Front",
                 Icon = new FontIcon { Glyph = "\xE74B" }
             };
-            moveFrontItem.Click += (s, e) =>
+            moveFrontItem.Click += async (s, e) =>
             {
                 TagdosParser.MovePillToFront(stream, pill.Id);
-                _ = _tagdosService?.SaveStreamAsync(stream);
-                RenderStreamView(stream);
+                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                RefreshCurrentTabAfterChange(stream);
             };
             flyout.Items.Add(moveFrontItem);
 
@@ -578,21 +1257,231 @@ namespace Daily_WinUI.Views
                 Text = "Delete Tag",
                 Icon = new FontIcon { Glyph = "\xE74D" }
             };
-            deleteItem.Click += (s, e) =>
+            deleteItem.Click += async (s, e) =>
             {
                 TagdosParser.RemovePill(stream, pill.Id);
-                _ = _tagdosService?.SaveStreamAsync(stream);
-                RenderStreamView(stream);
+                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                RefreshCurrentTabAfterChange(stream);
             };
             flyout.Items.Add(deleteItem);
 
             pillBorder.ContextFlyout = flyout;
-            pillBorder.Tapped += (s, e) =>
+
+            // Tapping any pill opens Edit Pill dialog directly
+            pillBorder.Tapped += async (s, e) =>
             {
-                flyout.ShowAt(pillBorder);
+                e.Handled = true;
+                await ShowEditPillDialogAsync(stream, pill);
             };
 
             return pillBorder;
+        }
+
+        private async Task ShowEditPillDialogAsync(TagDoStream stream, TagDoPill pill)
+        {
+            if (_isDialogOpen || this.XamlRoot == null) return;
+            _isDialogOpen = true;
+            try
+            {
+                var input = new TextBox
+                {
+                    Text = pill.Text,
+                    PlaceholderText = "e.g. WRK, $100, 45m, EXP!"
+                };
+                input.SelectAll();
+
+                string? quickAction = null;
+                ContentDialog? dlg = null;
+
+                var actionsGrid1 = new Grid { ColumnSpacing = 8 };
+                actionsGrid1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                actionsGrid1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var doneBtn = new Button
+                {
+                    Content = pill.IsCompleted ? "↺ Mark Incomplete" : "✓ Mark Done",
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
+                doneBtn.Click += (_, __) => { quickAction = "done"; dlg?.Hide(); };
+                Grid.SetColumn(doneBtn, 0);
+                actionsGrid1.Children.Add(doneBtn);
+
+                var recycleBtn = new Button
+                {
+                    Content = "↻ Recycle to Back",
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
+                recycleBtn.Click += (_, __) => { quickAction = "recycle"; dlg?.Hide(); };
+                Grid.SetColumn(recycleBtn, 1);
+                actionsGrid1.Children.Add(recycleBtn);
+
+                var actionsGrid2 = new Grid { ColumnSpacing = 8 };
+                actionsGrid2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                actionsGrid2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var frontBtn = new Button
+                {
+                    Content = "↑ Prioritize to Front",
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
+                frontBtn.Click += (_, __) => { quickAction = "front"; dlg?.Hide(); };
+                Grid.SetColumn(frontBtn, 0);
+                actionsGrid2.Children.Add(frontBtn);
+
+                var deleteBtn = new Button
+                {
+                    Content = "Delete Tag",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0x5C, 0x8A)),
+                    Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0x5C, 0x8A)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0x5C, 0x8A)),
+                    BorderThickness = new Thickness(1)
+                };
+                deleteBtn.Click += (_, __) => { quickAction = "delete"; dlg?.Hide(); };
+                Grid.SetColumn(deleteBtn, 1);
+                actionsGrid2.Children.Add(deleteBtn);
+
+                var contentStack = new StackPanel { Spacing = 10, MinWidth = 340 };
+                contentStack.Children.Add(new TextBlock
+                {
+                    Text = $"Stream: {stream.DisplayTitle}",
+                    FontSize = 11.5,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF))
+                });
+                contentStack.Children.Add(input);
+                contentStack.Children.Add(actionsGrid1);
+                contentStack.Children.Add(actionsGrid2);
+
+                dlg = new ContentDialog
+                {
+                    Title = "Edit Tag",
+                    PrimaryButtonText = "Save",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Content = contentStack,
+                    XamlRoot = this.XamlRoot
+                };
+
+                var res = await dlg.ShowAsync();
+                if (!string.IsNullOrEmpty(quickAction))
+                {
+                    switch (quickAction)
+                    {
+                        case "done":
+                            TagdosParser.TogglePillCompletion(stream, pill.Id);
+                            break;
+                        case "recycle":
+                            TagdosParser.RecyclePillToBack(stream, pill.Id);
+                            break;
+                        case "front":
+                            TagdosParser.MovePillToFront(stream, pill.Id);
+                            break;
+                        case "delete":
+                            TagdosParser.RemovePill(stream, pill.Id);
+                            break;
+                    }
+                    await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                    RefreshCurrentTabAfterChange(stream);
+                }
+                else if (res == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(input.Text))
+                {
+                    if (TagdosParser.UpdatePillText(stream, pill.Id, input.Text.Trim()))
+                    {
+                        await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                        RefreshCurrentTabAfterChange(stream);
+                    }
+                }
+            }
+            finally
+            {
+                _isDialogOpen = false;
+            }
+        }
+
+        private async Task ShowAddTagToClusterDialogAsync(TagDoStream stream, int clusterIndex)
+        {
+            if (_isDialogOpen || this.XamlRoot == null) return;
+            _isDialogOpen = true;
+            try
+            {
+                var input = new TextBox { PlaceholderText = "e.g. WRK, $100, 45m, EXP!" };
+                var dialog = new ContentDialog
+                {
+                    Title = "Add Tag",
+                    PrimaryButtonText = "Add",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Content = input,
+                    XamlRoot = this.XamlRoot
+                };
+
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(input.Text))
+                {
+                    TagdosParser.AddPill(stream, clusterIndex, input.Text.Trim());
+                    await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
+                    RefreshCurrentTabAfterChange(stream);
+                }
+            }
+            finally
+            {
+                _isDialogOpen = false;
+            }
+        }
+
+        private async Task ShowClusterReminderDialogAsync(TagDoStream stream, int clusterIndex)
+        {
+            if (_isDialogOpen || this.XamlRoot == null || clusterIndex < 0 || clusterIndex >= stream.Clusters.Count) return;
+            _isDialogOpen = true;
+            try
+            {
+                var cluster = stream.Clusters[clusterIndex];
+                var timePicker = new TimePicker
+                {
+                    Time = cluster.ClusterReminder.HasValue
+                        ? new TimeSpan(cluster.ClusterReminder.Value.Hour, cluster.ClusterReminder.Value.Minute, 0)
+                        : new TimeSpan(9, 0, 0)
+                };
+
+                var leadPill = cluster.Pills.FirstOrDefault()?.Text ?? "Cluster";
+                var stack = new StackPanel { Spacing = 10 };
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"Daily notification for '{leadPill}' in {stream.DisplayTitle}:",
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))
+                });
+                stack.Children.Add(timePicker);
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Cluster Notification",
+                    PrimaryButtonText = "Save",
+                    SecondaryButtonText = cluster.ClusterReminder.HasValue ? "Clear Notification" : null,
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Content = stack,
+                    XamlRoot = this.XamlRoot
+                };
+
+                var res = await dialog.ShowAsync();
+                if (res == ContentDialogResult.Primary)
+                {
+                    var now = DateTime.UtcNow;
+                    var reminder = new DateTime(now.Year, now.Month, now.Day, timePicker.Time.Hours, timePicker.Time.Minutes, 0, DateTimeKind.Utc);
+                    await (_tagdosService?.SetClusterReminderAsync(stream.Id, clusterIndex, reminder) ?? Task.CompletedTask);
+                    await LoadDataAsync();
+                }
+                else if (res == ContentDialogResult.Secondary)
+                {
+                    await (_tagdosService?.SetClusterReminderAsync(stream.Id, clusterIndex, null) ?? Task.CompletedTask);
+                    await LoadDataAsync();
+                }
+            }
+            finally
+            {
+                _isDialogOpen = false;
+            }
         }
 
         private (Color bg, Color border, Color fg) GetPillColors(TagDoPillType type)
@@ -626,26 +1515,9 @@ namespace Daily_WinUI.Views
 
         private async void AddTagButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedStreamIndex >= _streams.Count) return;
+            if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count) return;
             var stream = _streams[_selectedStreamIndex];
-
-            var input = new TextBox { PlaceholderText = "e.g. WRK, $100, 45m, EXP!" };
-            var dialog = new ContentDialog
-            {
-                Title = "Add New Tag to Stream",
-                PrimaryButtonText = "Add",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Primary,
-                Content = input,
-                XamlRoot = this.XamlRoot
-            };
-
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(input.Text))
-            {
-                TagdosParser.AddPill(stream, 0, input.Text);
-                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
-                RenderStreamView(stream);
-            }
+            await ShowAddTagToClusterDialogAsync(stream, 0);
         }
 
         private async void RenameStream_Click(object sender, RoutedEventArgs e)
@@ -1006,39 +1878,47 @@ namespace Daily_WinUI.Views
 
         private async void ChangeReminder_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedStreamIndex >= _streams.Count) return;
-            var stream = _streams[_selectedStreamIndex];
-
-            var timePicker = new TimePicker
+            if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count || _isDialogOpen || this.XamlRoot == null) return;
+            _isDialogOpen = true;
+            try
             {
-                Time = stream.StreamReminder.HasValue
-                    ? new TimeSpan(stream.StreamReminder.Value.Hour, stream.StreamReminder.Value.Minute, 0)
-                    : new TimeSpan(9, 0, 0)
-            };
+                var stream = _streams[_selectedStreamIndex];
 
-            var dialog = new ContentDialog
-            {
-                Title = "Set Stream Reminder Time",
-                PrimaryButtonText = "Save",
-                SecondaryButtonText = "Clear Reminder",
-                CloseButtonText = "Cancel",
-                Content = timePicker,
-                XamlRoot = this.XamlRoot
-            };
+                var timePicker = new TimePicker
+                {
+                    Time = stream.StreamReminder.HasValue
+                        ? new TimeSpan(stream.StreamReminder.Value.Hour, stream.StreamReminder.Value.Minute, 0)
+                        : new TimeSpan(9, 0, 0)
+                };
 
-            var res = await dialog.ShowAsync();
-            if (res == ContentDialogResult.Primary)
-            {
-                var now = DateTime.UtcNow;
-                stream.StreamReminder = new DateTime(now.Year, now.Month, now.Day, timePicker.Time.Hours, timePicker.Time.Minutes, 0, DateTimeKind.Utc);
-                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
-                RenderStreamView(stream);
+                var dialog = new ContentDialog
+                {
+                    Title = "Set Stream Notification Time",
+                    PrimaryButtonText = "Save",
+                    SecondaryButtonText = stream.StreamReminder.HasValue ? "Clear Notification" : null,
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Content = timePicker,
+                    XamlRoot = this.XamlRoot
+                };
+
+                var res = await dialog.ShowAsync();
+                if (res == ContentDialogResult.Primary)
+                {
+                    var now = DateTime.UtcNow;
+                    var reminder = new DateTime(now.Year, now.Month, now.Day, timePicker.Time.Hours, timePicker.Time.Minutes, 0, DateTimeKind.Utc);
+                    await (_tagdosService?.SetStreamReminderAsync(stream.Id, reminder) ?? Task.CompletedTask);
+                    await LoadDataAsync();
+                }
+                else if (res == ContentDialogResult.Secondary)
+                {
+                    await (_tagdosService?.SetStreamReminderAsync(stream.Id, null) ?? Task.CompletedTask);
+                    await LoadDataAsync();
+                }
             }
-            else if (res == ContentDialogResult.Secondary)
+            finally
             {
-                stream.StreamReminder = null;
-                await (_tagdosService?.SaveStreamAsync(stream) ?? Task.CompletedTask);
-                RenderStreamView(stream);
+                _isDialogOpen = false;
             }
         }
 
@@ -1046,23 +1926,21 @@ namespace Daily_WinUI.Views
 
         private void ToggleRawEdit_Click(object sender, RoutedEventArgs e)
         {
+            if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count) return;
             _isRawEditMode = !_isRawEditMode;
-            if (_selectedStreamIndex < _streams.Count)
+            var stream = _streams[_selectedStreamIndex];
+            if (_isRawEditMode)
             {
-                var stream = _streams[_selectedStreamIndex];
-                if (_isRawEditMode)
-                {
-                    VisualCanvasBorder.Visibility = Visibility.Collapsed;
-                    RawEditorBorder.Visibility = Visibility.Visible;
-                    RawSyntaxTextBox.Text = stream.RawText;
-                    ToggleRawEditText.Text = "Visual Mode";
-                }
-                else
-                {
-                    VisualCanvasBorder.Visibility = Visibility.Visible;
-                    RawEditorBorder.Visibility = Visibility.Collapsed;
-                    ToggleRawEditText.Text = "Syntax Mode";
-                }
+                VisualCanvasBorder.Visibility = Visibility.Collapsed;
+                RawEditorBorder.Visibility = Visibility.Visible;
+                RawSyntaxTextBox.Text = stream.RawText;
+                ToggleRawEditText.Text = "Visual Mode";
+            }
+            else
+            {
+                VisualCanvasBorder.Visibility = Visibility.Visible;
+                RawEditorBorder.Visibility = Visibility.Collapsed;
+                ToggleRawEditText.Text = "Syntax Mode";
             }
         }
 
@@ -1076,7 +1954,7 @@ namespace Daily_WinUI.Views
 
         private async void ApplyRawEdit_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedStreamIndex >= _streams.Count) return;
+            if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count) return;
             var stream = _streams[_selectedStreamIndex];
 
             string newRaw = RawSyntaxTextBox.Text.Trim();
@@ -1094,7 +1972,7 @@ namespace Daily_WinUI.Views
 
         private void StreamMemosTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (_selectedStreamIndex >= _streams.Count) return;
+            if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count) return;
             var stream = _streams[_selectedStreamIndex];
 
             if (stream.ActiveMemos != StreamMemosTextBox.Text)
@@ -1113,7 +1991,7 @@ namespace Daily_WinUI.Views
 
         private async void DropFileZone_Drop(object sender, DragEventArgs e)
         {
-            if (_selectedStreamIndex >= _streams.Count) return;
+            if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count) return;
             var stream = _streams[_selectedStreamIndex];
 
             if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
@@ -1264,11 +2142,12 @@ namespace Daily_WinUI.Views
                     Foreground = note.IsPinned ? new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xB3, 0x00)) : new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF))
                 }
             };
+            pinBtn.Tapped += (_, e) => e.Handled = true;
             pinBtn.Click += async (s, e) =>
             {
                 await (_tagdosService?.TogglePinQuickNoteAsync(note.Id) ?? Task.CompletedTask);
                 _notes = await (_tagdosService?.GetQuickNotesAsync() ?? Task.FromResult(new List<TagDoQuickNote>()));
-                RenderQuickNotes(NoteSearchBox.Text);
+                RefreshCurrentTabAfterChange();
             };
             Grid.SetColumn(pinBtn, 1);
             headerGrid.Children.Add(pinBtn);
@@ -1286,11 +2165,12 @@ namespace Daily_WinUI.Views
                     Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0x4D, 0x4D))
                 }
             };
+            deleteBtn.Tapped += (_, e) => e.Handled = true;
             deleteBtn.Click += async (s, e) =>
             {
                 await (_tagdosService?.DeleteQuickNoteAsync(note.Id) ?? Task.CompletedTask);
                 _notes = await (_tagdosService?.GetQuickNotesAsync() ?? Task.FromResult(new List<TagDoQuickNote>()));
-                RenderQuickNotes(NoteSearchBox.Text);
+                RefreshCurrentTabAfterChange();
             };
             Grid.SetColumn(deleteBtn, 2);
             headerGrid.Children.Add(deleteBtn);
@@ -1305,6 +2185,8 @@ namespace Daily_WinUI.Views
                 FontSize = 11.5,
                 Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
                 TextWrapping = TextWrapping.Wrap,
+                MaxLines = 5,
+                TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(0, 6, 0, 8)
             };
             Grid.SetRow(contentBlock, 1);
@@ -1321,33 +2203,92 @@ namespace Daily_WinUI.Views
             grid.Children.Add(footerBlock);
 
             border.Child = grid;
+            border.Tapped += async (_, e) =>
+            {
+                e.Handled = true;
+                await ShowEditNoteDialogAsync(note);
+            };
             return border;
+        }
+
+        private async Task ShowEditNoteDialogAsync(TagDoQuickNote note)
+        {
+            if (_isDialogOpen || this.XamlRoot == null) return;
+            _isDialogOpen = true;
+            try
+            {
+                var titleBox = new TextBox { Text = note.Title, PlaceholderText = "Note title...", Margin = new Thickness(0, 0, 0, 8) };
+                var contentBox = new TextBox { Text = note.Content, PlaceholderText = "Write your thoughts, checklist, or tags...", TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 120 };
+
+                var stack = new StackPanel { MinWidth = 360 };
+                stack.Children.Add(titleBox);
+                stack.Children.Add(contentBox);
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Edit Quick Note",
+                    PrimaryButtonText = "Save",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Content = stack,
+                    XamlRoot = this.XamlRoot
+                };
+
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(titleBox.Text))
+                {
+                    note.Title = titleBox.Text.Trim();
+                    note.Content = contentBox.Text.Trim();
+                    await (_tagdosService?.UpdateQuickNoteAsync(note) ?? Task.CompletedTask);
+                    _notes = await (_tagdosService?.GetQuickNotesAsync() ?? Task.FromResult(new List<TagDoQuickNote>()));
+                    RefreshCurrentTabAfterChange();
+                }
+            }
+            finally
+            {
+                _isDialogOpen = false;
+            }
         }
 
         private async void TopBarAddNote_Click(object sender, RoutedEventArgs e)
         {
-            var titleBox = new TextBox { PlaceholderText = "Note title...", Margin = new Thickness(0, 0, 0, 8) };
-            var contentBox = new TextBox { PlaceholderText = "Write your thoughts, checklist, or tags...", TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 100 };
-
-            var stack = new StackPanel();
-            stack.Children.Add(titleBox);
-            stack.Children.Add(contentBox);
-
-            var dialog = new ContentDialog
+            if (_isDialogOpen || this.XamlRoot == null) return;
+            _isDialogOpen = true;
+            try
             {
-                Title = "Create Quick Note",
-                PrimaryButtonText = "Save",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Primary,
-                Content = stack,
-                XamlRoot = this.XamlRoot
-            };
+                var titleBox = new TextBox { PlaceholderText = "Note title...", Margin = new Thickness(0, 0, 0, 8) };
+                var contentBox = new TextBox { PlaceholderText = "Write your thoughts, checklist, or tags...", TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 100 };
 
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(titleBox.Text))
+                var stack = new StackPanel { MinWidth = 360 };
+                stack.Children.Add(titleBox);
+                stack.Children.Add(contentBox);
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Create Quick Note",
+                    PrimaryButtonText = "Save",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Content = stack,
+                    XamlRoot = this.XamlRoot
+                };
+
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(titleBox.Text))
+                {
+                    await (_tagdosService?.CreateQuickNoteAsync(titleBox.Text.Trim(), contentBox.Text.Trim(), isPinned: false) ?? Task.FromResult(new TagDoQuickNote()));
+                    _notes = await (_tagdosService?.GetQuickNotesAsync() ?? Task.FromResult(new List<TagDoQuickNote>()));
+                    if (_selectedStreamIndex == -1)
+                    {
+                        RefreshCurrentTabAfterChange();
+                    }
+                    else
+                    {
+                        SelectTab(_streams.Count);
+                    }
+                }
+            }
+            finally
             {
-                await (_tagdosService?.CreateQuickNoteAsync(titleBox.Text.Trim(), contentBox.Text.Trim(), isPinned: false) ?? Task.FromResult(new TagDoQuickNote()));
-                _notes = await (_tagdosService?.GetQuickNotesAsync() ?? Task.FromResult(new List<TagDoQuickNote>()));
-                SelectTab(_streams.Count); // Switch to notes tab
+                _isDialogOpen = false;
             }
         }
 
@@ -2484,6 +3425,96 @@ namespace Daily_WinUI.Views
             {
                 mw.OpenDetailWindow(typeof(TagdosNotesDetailPage));
                 mw.NavigateToTab(1);
+            }
+        }
+    }
+
+    internal sealed class FlowWrapPanel : Panel
+    {
+        public double HorizontalSpacing { get; set; } = 4.0;
+        public double VerticalSpacing { get; set; } = 4.0;
+
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            double maxWidth = double.IsInfinity(availableSize.Width) || availableSize.Width <= 0
+                ? double.PositiveInfinity
+                : availableSize.Width;
+
+            double currentRowWidth = 0;
+            double currentRowHeight = 0;
+            double totalWidth = 0;
+            double totalHeight = 0;
+
+            foreach (UIElement child in Children)
+            {
+                child.Measure(new Size(maxWidth, double.PositiveInfinity));
+                Size desired = child.DesiredSize;
+
+                if (currentRowWidth > 0 && currentRowWidth + HorizontalSpacing + desired.Width > maxWidth)
+                {
+                    totalWidth = Math.Max(totalWidth, currentRowWidth);
+                    totalHeight += currentRowHeight + VerticalSpacing;
+                    currentRowWidth = desired.Width;
+                    currentRowHeight = desired.Height;
+                }
+                else
+                {
+                    currentRowWidth = currentRowWidth > 0
+                        ? currentRowWidth + HorizontalSpacing + desired.Width
+                        : desired.Width;
+                    currentRowHeight = Math.Max(currentRowHeight, desired.Height);
+                }
+            }
+
+            totalWidth = Math.Max(totalWidth, currentRowWidth);
+            totalHeight += currentRowHeight;
+
+            return new Size(totalWidth, totalHeight);
+        }
+
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            double maxWidth = finalSize.Width > 0 ? finalSize.Width : double.PositiveInfinity;
+            double x = 0;
+            double y = 0;
+            double rowHeight = 0;
+            int rowStart = 0;
+
+            for (int i = 0; i < Children.Count; i++)
+            {
+                Size desired = Children[i].DesiredSize;
+                if (x > 0 && x + HorizontalSpacing + desired.Width > maxWidth)
+                {
+                    ArrangeRow(rowStart, i, y, rowHeight);
+                    y += rowHeight + VerticalSpacing;
+                    rowStart = i;
+                    x = desired.Width;
+                    rowHeight = desired.Height;
+                }
+                else
+                {
+                    x = x > 0 ? x + HorizontalSpacing + desired.Width : desired.Width;
+                    rowHeight = Math.Max(rowHeight, desired.Height);
+                }
+            }
+
+            if (rowStart < Children.Count)
+            {
+                ArrangeRow(rowStart, Children.Count, y, rowHeight);
+            }
+
+            return finalSize;
+        }
+
+        private void ArrangeRow(int startIndex, int endExclusive, double y, double rowHeight)
+        {
+            double cx = 0;
+            for (int i = startIndex; i < endExclusive; i++)
+            {
+                Size desired = Children[i].DesiredSize;
+                double cy = y + Math.Max(0, (rowHeight - desired.Height) * 0.5);
+                Children[i].Arrange(new Rect(cx, cy, desired.Width, desired.Height));
+                cx += desired.Width + HorizontalSpacing;
             }
         }
     }

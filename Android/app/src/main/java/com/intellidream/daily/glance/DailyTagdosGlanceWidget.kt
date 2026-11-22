@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -12,11 +11,15 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.action.Action
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
@@ -45,14 +48,21 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+data class WidgetPill(
+    val id: String,
+    val text: String,
+    val type: String
+)
+
 data class WidgetStream(
     val id: String,
     val title: String,
+    val drivingPillId: String?,
     val drivingPillText: String,
     val drivingPillType: String,
     val activePillsCount: Int,
     val reminderTime: String?,
-    val pills: List<Pair<String, String>> // text to type
+    val pills: List<WidgetPill>
 )
 
 class DailyTagdosGlanceReceiver : GlanceAppWidgetReceiver() {
@@ -66,65 +76,78 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
         val repoStreams = app?.tagdosRepository?.streams?.value ?: emptyList()
+        val hhmmFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
         val streams = if (repoStreams.isNotEmpty()) {
             repoStreams.map { s ->
-                val pills = s.activePills.map { it.rawText to it.type.name.lowercase(Locale.ROOT) }
-                val driving = s.drivingPill?.rawText ?: (pills.firstOrNull()?.first ?: "TAG")
-                val drivingType = s.drivingPill?.type?.name?.lowercase(Locale.ROOT) ?: "standard"
-                val reminderTime = s.streamReminder?.let {
-                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+                val pills = s.activePills.map {
+                    WidgetPill(
+                        id = it.id,
+                        text = it.rawText,
+                        type = it.type.name.lowercase(Locale.ROOT)
+                    )
+                }
+                val drivingPill = s.drivingPill ?: s.activePills.firstOrNull()
+                val driving = drivingPill?.rawText ?: "TAG"
+                val drivingType = drivingPill?.type?.name?.lowercase(Locale.ROOT) ?: "standard"
+                val candidateTimes = buildList {
+                    s.streamReminder?.let { add(hhmmFormat.format(Date(it))) }
+                    s.clusters.forEach { c ->
+                        c.reminderTime?.let { add(hhmmFormat.format(Date(it))) }
+                    }
                 }
                 WidgetStream(
                     id = s.id,
                     title = s.displayTitle,
+                    drivingPillId = drivingPill?.id,
                     drivingPillText = driving,
                     drivingPillType = drivingType,
                     activePillsCount = s.activePills.size,
-                    reminderTime = reminderTime,
+                    reminderTime = candidateTimes.minOrNull(),
                     pills = pills
                 )
             }
         } else {
             val s1 = WidgetStream(
-                id = "s1",
+                id = "",
                 title = "Daily Ops",
+                drivingPillId = null,
                 drivingPillText = "MG",
                 drivingPillType = "standard",
-                activePillsCount = 12,
+                activePillsCount = 8,
                 reminderTime = "17:30",
                 pills = listOf(
-                    "MG" to "standard",
-                    "GM" to "standard",
-                    "TG" to "standard",
-                    "FSH" to "standard",
-                    "LDL" to "standard",
-                    "C\$T" to "financial",
-                    "DUB" to "standard",
-                    "14" to "temporalOrMetric"
+                    WidgetPill("", "MG", "standard"),
+                    WidgetPill("", "GM", "standard"),
+                    WidgetPill("", "TG", "standard"),
+                    WidgetPill("", "FSH", "standard"),
+                    WidgetPill("", "C\$T", "financial")
                 )
             )
             val s2 = WidgetStream(
-                id = "s2",
+                id = "",
                 title = "Work & Code",
+                drivingPillId = null,
                 drivingPillText = "WRK",
                 drivingPillType = "standard",
-                activePillsCount = 8,
+                activePillsCount = 4,
                 reminderTime = "11:00",
                 pills = listOf(
-                    "WRK" to "standard",
-                    "PRJ" to "standard",
-                    "REV" to "standard",
-                    "MET" to "standard"
+                    WidgetPill("", "WRK", "standard"),
+                    WidgetPill("", "PRJ", "standard"),
+                    WidgetPill("", "REV", "standard"),
+                    WidgetPill("", "MET", "standard")
                 )
             )
             listOf(s1, s2)
         }
 
-        val stream1 = streams.firstOrNull() ?: WidgetStream("s1", "Stream 1", "TAG", "standard", 0, null, emptyList())
-        val stream2 = streams.getOrNull(1) ?: WidgetStream("s2", "Stream 2", "TAG", "standard", 0, null, emptyList())
+        val stream1 = streams.firstOrNull()
+            ?: WidgetStream("", "Stream 1", null, "TAG", "standard", 0, null, emptyList())
+        val stream2 = streams.getOrNull(1)
+            ?: WidgetStream("", "Stream 2", null, "TAG", "standard", 0, null, emptyList())
         val totalActivePills = streams.sumOf { it.activePillsCount }
-        val nextReminderFormatted = streams.firstNotNullOfOrNull { it.reminderTime }
+        val nextReminderFormatted = streams.mapNotNull { it.reminderTime }.minOrNull()
 
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             action = "com.intellidream.daily.ACTION_OPEN_TAGDOS"
@@ -164,6 +187,77 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         }
     }
 
+    private fun buildOpenAction(context: Context, streamId: String, pillId: String? = null): Action {
+        val uriStr = when {
+            streamId.isNotBlank() && !pillId.isNullOrBlank() ->
+                "daily://tagdos?streamId=${Uri.encode(streamId)}&pillId=${Uri.encode(pillId)}&edit=1"
+            streamId.isNotBlank() ->
+                "daily://tagdos?streamId=${Uri.encode(streamId)}"
+            else ->
+                "daily://tagdos"
+        }
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = "com.intellidream.daily.ACTION_TAGDOS_${streamId}_${pillId.orEmpty()}"
+            data = Uri.parse(uriStr)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_TAGDOS)
+        }
+        return actionStartActivity(intent)
+    }
+
+    private fun buildQuickAction(streamId: String, pillId: String, actionType: String): Action {
+        return actionRunCallback<TagdosPillActionCallback>(
+            actionParametersOf(
+                TagdosPillActionCallback.StreamIdKey to streamId,
+                TagdosPillActionCallback.PillIdKey to pillId,
+                TagdosPillActionCallback.ActionKey to actionType
+            )
+        )
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun QuickActionButtons(streamId: String, pillId: String, compact: Boolean = false) {
+        val boxSize = if (compact) 18.dp else 22.dp
+        val fontSize = if (compact) 9.sp else 10.sp
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = GlanceModifier
+                    .size(boxSize)
+                    .background(Color(0x3300E676))
+                    .cornerRadius(9.dp)
+                    .clickable(buildQuickAction(streamId, pillId, "done")),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✓",
+                    style = TextStyle(
+                        color = ColorProvider(Color(0xFF00E676)),
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
+            Spacer(modifier = GlanceModifier.width(3.dp))
+            Box(
+                modifier = GlanceModifier
+                    .size(boxSize)
+                    .background(Color(0x3300E5FF))
+                    .cornerRadius(9.dp)
+                    .clickable(buildQuickAction(streamId, pillId, "recycle")),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "↻",
+                    style = TextStyle(
+                        color = ColorProvider(Color(0xFF00E5FF)),
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
+        }
+    }
+
     // =========================================================================
     // MARK: - 1. SMALL LAYOUT (systemSmall: 2x2)
     // =========================================================================
@@ -172,8 +266,9 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         stream1: WidgetStream,
         totalActivePills: Int
     ) {
+        val context = LocalContext.current
         val driving = stream1.drivingPillText
-        val nextTags = stream1.pills.drop(1).take(2).joinToString(" ➔ ") { it.first }
+        val nextTags = stream1.pills.drop(1).take(2).joinToString(" ➔ ") { it.text }
         val pillColor = resolvePillColor(stream1.drivingPillType)
 
         val watermarkBitmap = WidgetVisualGraphics.createVectorIconBitmap(
@@ -199,7 +294,6 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         )
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
-            // Trailing Subtle Watermark Checklist
             Box(
                 modifier = GlanceModifier.fillMaxSize().padding(end = 2.dp),
                 contentAlignment = Alignment.CenterEnd
@@ -211,11 +305,9 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                 )
             }
 
-            // Foreground Content
             Column(
                 modifier = GlanceModifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)
             ) {
-                // Header Row: Icon + Title on Left, Reminder on Right
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -276,7 +368,6 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.defaultWeight())
 
-                // Center Focus: Driving Pill Hero
                 Column {
                     Text(
                         text = "FOCUS TAG",
@@ -287,27 +378,39 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                         )
                     )
                     Spacer(modifier = GlanceModifier.height(2.dp))
-                    Box(
-                        modifier = GlanceModifier
-                            .background(pillColor.copy(alpha = 0.15f))
-                            .cornerRadius(10.dp)
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = driving,
-                                style = TextStyle(
-                                    color = ColorProvider(pillColor),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
+                        Box(
+                            modifier = GlanceModifier
+                                .background(pillColor.copy(alpha = 0.15f))
+                                .cornerRadius(10.dp)
+                                .clickable(buildOpenAction(context, stream1.id, stream1.drivingPillId))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = driving,
+                                    style = TextStyle(
+                                        color = ColorProvider(pillColor),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 )
-                            )
-                            Spacer(modifier = GlanceModifier.width(4.dp))
-                            Image(
-                                provider = ImageProvider(starIcon),
-                                contentDescription = null,
-                                modifier = GlanceModifier.size(8.dp)
-                            )
+                                Spacer(modifier = GlanceModifier.width(3.dp))
+                                Image(
+                                    provider = ImageProvider(starIcon),
+                                    contentDescription = null,
+                                    modifier = GlanceModifier.size(8.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = GlanceModifier.defaultWeight())
+
+                        if (stream1.id.isNotBlank() && !stream1.drivingPillId.isNullOrBlank()) {
+                            QuickActionButtons(streamId = stream1.id, pillId = stream1.drivingPillId)
                         }
                     }
 
@@ -326,7 +429,6 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.defaultWeight())
 
-                // Footer
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -358,6 +460,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         stream1: WidgetStream,
         stream2: WidgetStream
     ) {
+        val context = LocalContext.current
         val pillColor = resolvePillColor(stream1.drivingPillType)
         val checklistIcon = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.CHECKLIST,
@@ -374,7 +477,6 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             modifier = GlanceModifier.fillMaxSize().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Column (width 104.dp): Driving Hero & Reminder
             Column(
                 modifier = GlanceModifier.width(104.dp).fillMaxHeight()
             ) {
@@ -401,6 +503,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                     modifier = GlanceModifier
                         .background(pillColor.copy(alpha = 0.14f))
                         .cornerRadius(10.dp)
+                        .clickable(buildOpenAction(context, stream1.id, stream1.drivingPillId))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Column {
@@ -408,7 +511,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                             text = stream1.drivingPillText,
                             style = TextStyle(
                                 color = ColorProvider(pillColor),
-                                fontSize = 17.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -425,28 +528,34 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.defaultWeight())
 
-                if (stream1.reminderTime != null) {
-                    Box(
-                        modifier = GlanceModifier
-                            .background(Color(0x2900E5FF))
-                            .cornerRadius(10.dp)
-                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Image(
-                                provider = ImageProvider(bellIcon),
-                                contentDescription = null,
-                                modifier = GlanceModifier.size(8.dp)
-                            )
-                            Spacer(modifier = GlanceModifier.width(3.dp))
-                            Text(
-                                text = stream1.reminderTime,
-                                style = TextStyle(
-                                    color = ColorProvider(Color(0xFF00E5FF)),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (stream1.id.isNotBlank() && !stream1.drivingPillId.isNullOrBlank()) {
+                        QuickActionButtons(streamId = stream1.id, pillId = stream1.drivingPillId, compact = true)
+                    }
+                    if (stream1.reminderTime != null) {
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Box(
+                            modifier = GlanceModifier
+                                .background(Color(0x2900E5FF))
+                                .cornerRadius(10.dp)
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Image(
+                                    provider = ImageProvider(bellIcon),
+                                    contentDescription = null,
+                                    modifier = GlanceModifier.size(7.dp)
                                 )
-                            )
+                                Spacer(modifier = GlanceModifier.width(2.dp))
+                                Text(
+                                    text = stream1.reminderTime,
+                                    style = TextStyle(
+                                        color = ColorProvider(Color(0xFF00E5FF)),
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -454,12 +563,10 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.width(8.dp))
 
-            // Vertical Divider
             Box(modifier = GlanceModifier.width(1.dp).fillMaxHeight().background(Color(0x1FFFFFFF))) {}
 
             Spacer(modifier = GlanceModifier.width(10.dp))
 
-            // Right Column: Stream 1 & Stream 2 Pipelines
             Column(
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight()
             ) {
@@ -498,7 +605,6 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         Column(
             modifier = GlanceModifier.fillMaxSize().padding(14.dp)
         ) {
-            // Header
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -567,29 +673,25 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             }
 
             Spacer(modifier = GlanceModifier.height(8.dp))
-
-            // Divider
             Box(modifier = GlanceModifier.fillMaxWidth().height(1.dp).background(Color(0x1FFFFFFF))) {}
-
             Spacer(modifier = GlanceModifier.height(8.dp))
 
-            // Stack of Streams
             Column(modifier = GlanceModifier.fillMaxWidth()) {
-                for (stream in streams) {
-                    StreamRow(stream)
-                    Spacer(modifier = GlanceModifier.height(6.dp))
+                for (stream in streams.take(5)) {
+                    Box(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 5.dp)) {
+                        StreamRow(stream)
+                    }
                 }
             }
 
             Spacer(modifier = GlanceModifier.defaultWeight())
 
-            // Footer
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Tap to open Tagdos & Notes",
+                    text = "Tap any tag to edit · ✓ Done · ↻ Recycle",
                     style = TextStyle(
                         color = ColorProvider(Color(0x73FFFFFF)),
                         fontSize = 8.5.sp,
@@ -608,6 +710,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
     @androidx.compose.runtime.Composable
     private fun StreamRow(stream: WidgetStream) {
+        val context = LocalContext.current
         Column(modifier = GlanceModifier.fillMaxWidth()) {
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
@@ -615,6 +718,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             ) {
                 Text(
                     text = stream.title,
+                    modifier = GlanceModifier.clickable(buildOpenAction(context, stream.id, null)),
                     style = TextStyle(
                         color = ColorProvider(Color(0xB3FFFFFF)),
                         fontSize = 9.sp,
@@ -631,31 +735,37 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                             fontWeight = FontWeight.Medium
                         )
                     )
+                    Spacer(modifier = GlanceModifier.width(4.dp))
+                }
+                if (stream.id.isNotBlank() && !stream.drivingPillId.isNullOrBlank()) {
+                    QuickActionButtons(streamId = stream.id, pillId = stream.drivingPillId, compact = true)
                 }
             }
 
             Spacer(modifier = GlanceModifier.height(2.dp))
 
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 val visible = stream.pills.take(4)
-                for ((text, type) in visible) {
-                    val color = resolvePillColor(type)
-                    Box(
-                        modifier = GlanceModifier
-                            .background(color.copy(alpha = 0.14f))
-                            .cornerRadius(8.dp)
-                            .padding(horizontal = 4.5.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = text,
-                            style = TextStyle(
-                                color = ColorProvider(color),
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold
+                for (pill in visible) {
+                    val color = resolvePillColor(pill.type)
+                    Box(modifier = GlanceModifier.padding(end = 3.5.dp)) {
+                        Box(
+                            modifier = GlanceModifier
+                                .background(color.copy(alpha = 0.14f))
+                                .cornerRadius(8.dp)
+                                .clickable(buildOpenAction(context, stream.id, pill.id))
+                                .padding(horizontal = 4.5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = pill.text,
+                                style = TextStyle(
+                                    color = ColorProvider(color),
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             )
-                        )
+                        }
                     }
-                    Spacer(modifier = GlanceModifier.width(3.5.dp))
                 }
                 if (stream.activePillsCount > 4) {
                     Text(
@@ -675,7 +785,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         return when (type) {
             "financial" -> Color(0xFF00E676)
             "urgent" -> Color(0xFFFF2D55)
-            "temporalOrMetric" -> Color(0xFFFFB800)
+            "temporalmetrics", "temporalormetric" -> Color(0xFFFFB800)
             else -> Color(0xFF00E5FF)
         }
     }

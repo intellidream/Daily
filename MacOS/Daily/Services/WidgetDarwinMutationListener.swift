@@ -22,6 +22,7 @@ public final class WidgetDarwinMutationListener {
                 DispatchQueue.main.async {
                     Task { @MainActor in
                         SmartLedgerStore.shared.reloadFromStorage()
+                        TagdosStore.shared.reloadFromWidgetMutation()
                         HabitsService.shared.reloadFromLocalStorage()
                         await HabitsService.shared.flushOfflineQueue()
                         await HabitsService.shared.loadDataForSelectedDate()

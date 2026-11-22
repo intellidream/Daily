@@ -10,20 +10,25 @@ public struct TagdosNotesHubView: View {
     @ObservedObject private var store = TagdosStore.shared
     @ObservedObject private var settingsService = SettingsService.shared
 
-    @State private var selectedStreamIndex: Int = 0
+    /// -1 = "All" overview tab, 0..<streams.count = S1..SN, streams.count = "Notes"
+    @State private var selectedStreamIndex: Int = -1
     @State private var isRawEditMode: Bool = false
     @State private var rawTextBuffer: String = ""
+    @State private var isDraggingCluster: Bool = false
+    @State private var highlightedClusterKey: String? = nil
 
     // Pill Action Sheet / Dialog state
     @State private var activePillAction: TagDoPillAction? = nil
     @State private var editingPillText: String = ""
     @State private var newPillClusterIndex: Int = 0
+    @State private var addTagTargetStreamId: UUID? = nil
     @State private var showingAddTagSheet: Bool = false
     @State private var newTagInput: String = ""
 
-    // Stream Reminder Sheet state
+    // Stream & Cluster Reminder Sheet state
     @State private var showingReminderPicker: Bool = false
     @State private var reminderPickerDate: Date = Date()
+    @State private var editingReminderClusterIndex: Int? = nil
 
     // Stream Rename Sheet state
     @State private var showingRenameSheet: Bool = false
@@ -35,6 +40,10 @@ public struct TagdosNotesHubView: View {
 
     // External Tasks Import Sheet state
     @State private var showingImportSheet: Bool = false
+
+    // Quick Note Editor Sheet state (used in "All" tab)
+    @State private var activeOverviewNote: TagDoQuickNote? = nil
+    @State private var isCreatingOverviewNote: Bool = false
 
     public var onNavigateBack: (() -> Void)? = nil
 
@@ -51,8 +60,12 @@ public struct TagdosNotesHubView: View {
         }
     }
 
+    private var isAllTab: Bool {
+        selectedStreamIndex == -1
+    }
+
     private var currentStream: TagDoStream? {
-        guard selectedStreamIndex < store.streams.count else { return nil }
+        guard selectedStreamIndex >= 0 && selectedStreamIndex < store.streams.count else { return nil }
         return store.streams[selectedStreamIndex]
     }
 
@@ -69,56 +82,60 @@ public struct TagdosNotesHubView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Top Navigation Bar
-            navigationBar
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 6)
+        ScrollViewReader { scrollProxy in
+            VStack(spacing: 0) {
+                // Top Navigation Bar
+                navigationBar
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
 
-            // Stream Selector Tabs (1 to 5 + Notes)
-            streamSelectorBar
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 12)
+                // Stream Selector Tabs (All + S1..SN + Notes)
+                streamSelectorBar
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 12)
 
-            // Main Content Body: Interactive Canvas or Raw Text Editor or Quick Notes
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 16) {
-                    if isNotesTab {
-                        TagdosQuickNotesView()
-                    } else {
-                        if isRawEditMode {
-                            rawEditorCard
+                // Main Content Body: All Overview, Interactive Canvas / Raw Editor, or Quick Notes
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        if isAllTab {
+                            allOverviewContent
+                        } else if isNotesTab {
+                            TagdosQuickNotesView()
                         } else {
-                            interactiveCanvasCard
-                        }
+                            if isRawEditMode {
+                                rawEditorCard
+                            } else {
+                                interactiveCanvasCard
+                            }
 
-                        // Per-Stream Active Memos & Attachments
-                        if let stream = currentStream {
-                            TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1)
+                            // Per-Stream Active Memos & Attachments
+                            if let stream = currentStream {
+                                TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1)
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 40)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
-            }
                 .simultaneousGesture(
-                    DragGesture(minimumDistance: 25, coordinateSpace: .local)
+                    DragGesture(minimumDistance: 28, coordinateSpace: .local)
                         .onEnded { value in
+                            guard !isDraggingCluster else { return }
                             let dx = value.translation.width
                             let dy = value.translation.height
                             let startX = value.startLocation.x
-                            guard startX > 75 else { return } // Preserve edge swipe back
+                            guard startX > 75 else { return }
                             guard abs(dx) > abs(dy) * 1.8 && abs(dx) > 55 else { return }
-                            let totalTabs = store.streams.count + 1
-                            if dx > 0 && selectedStreamIndex < totalTabs - 1 {
+                            let maxIndex = store.streams.count
+                            if dx < 0 && selectedStreamIndex < maxIndex {
                                 triggerHaptic()
                                 withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                                     selectedStreamIndex += 1
                                 }
-                            } else if dx < 0 && selectedStreamIndex > 0 {
+                            } else if dx > 0 && selectedStreamIndex > -1 {
                                 triggerHaptic()
                                 withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                                     selectedStreamIndex -= 1
@@ -130,27 +147,38 @@ public struct TagdosNotesHubView: View {
                     await store.syncWithSupabase()
                 }
             }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 20, coordinateSpace: .global)
-                .onEnded { value in
-                    let startX = value.startLocation.x
-                    let translationX = value.translation.width
-                    let translationY = value.translation.height
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                    .onEnded { value in
+                        guard !isDraggingCluster else { return }
+                        let startX = value.startLocation.x
+                        let translationX = value.translation.width
+                        let translationY = value.translation.height
 
-                    // Edge swipe right: started within 75pt of left edge, dragged right > 50pt, horizontally dominant
-                    if startX <= 75 && translationX > 50 && abs(translationX) > abs(translationY) * 1.1 {
-                        handleBack()
+                        if startX <= 75 && translationX > 50 && abs(translationX) > abs(translationY) * 1.1 {
+                            handleBack()
+                        }
                     }
+            )
+            .onAppear {
+                if let stream = currentStream {
+                    rawTextBuffer = stream.rawText
                 }
-        )
-        .onAppear {
-            if let stream = currentStream {
-                rawTextBuffer = stream.rawText
+                if let pending = store.pendingNavigation {
+                    applyPendingNavigation(pending, scrollProxy: scrollProxy)
+                }
             }
-        }
-        .onChange(of: selectedStreamIndex) { _, newIndex in
-            if newIndex < store.streams.count {
-                rawTextBuffer = store.streams[newIndex].rawText
+            .onChange(of: store.pendingNavigation) { _, newTarget in
+                if let target = newTarget {
+                    applyPendingNavigation(target, scrollProxy: scrollProxy)
+                }
+            }
+            .onChange(of: selectedStreamIndex) { _, newIndex in
+                if newIndex >= 0 && newIndex < store.streams.count {
+                    rawTextBuffer = store.streams[newIndex].rawText
+                } else {
+                    isRawEditMode = false
+                }
             }
         }
         .sheet(item: $activePillAction) { action in
@@ -167,8 +195,8 @@ public struct TagdosNotesHubView: View {
         }
         .sheet(isPresented: $showingReminderPicker) {
             reminderSheet
-                .frame(minWidth: 320)
-                .presentationDetents([.height(260)])
+                .frame(minWidth: 340)
+                .presentationDetents([.height(280)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingRenameSheet) {
@@ -187,6 +215,68 @@ public struct TagdosNotesHubView: View {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         selectedStreamIndex = idx
                         rawTextBuffer = store.streams[idx].rawText
+                    }
+                }
+            }
+        }
+        .sheet(item: $activeOverviewNote) { note in
+            MarkdownNoteEditorSheet(
+                note: note,
+                isNew: isCreatingOverviewNote
+            ) { updatedNote in
+                if isCreatingOverviewNote {
+                    store.createQuickNote(title: updatedNote.title, content: updatedNote.content)
+                } else {
+                    store.updateQuickNote(id: updatedNote.id, title: updatedNote.title, content: updatedNote.content)
+                }
+            }
+            .frame(minWidth: 480, minHeight: 380)
+        }
+    }
+
+    // MARK: - Deep-Link & Notification Navigation Handler
+    private func applyPendingNavigation(_ target: TagdosNavigationTarget, scrollProxy: ScrollViewProxy) {
+        defer { store.consumePendingNavigation() }
+
+        if let sid = target.streamId,
+           let idx = store.streams.firstIndex(where: { $0.id == sid }) {
+            let stream = store.streams[idx]
+            isRawEditMode = false
+
+            if target.openPillEditor,
+               let pid = target.pillId,
+               let pill = stream.allPills.first(where: { $0.id == pid }) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                    selectedStreamIndex = idx
+                    rawTextBuffer = stream.rawText
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    editingPillText = pill.rawText
+                    activePillAction = TagDoPillAction(streamId: sid, pill: pill)
+                }
+                return
+            }
+
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                selectedStreamIndex = idx
+                rawTextBuffer = stream.rawText
+            }
+
+            if let cIdx = target.clusterIndex, cIdx >= 0 && cIdx < stream.clusters.count {
+                let clusterKey = "cluster_\(sid.uuidString)_\(cIdx)"
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    highlightedClusterKey = clusterKey
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                        scrollProxy.scrollTo(clusterKey, anchor: .center)
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                    if highlightedClusterKey == clusterKey {
+                        withAnimation(.easeOut(duration: 0.35)) {
+                            highlightedClusterKey = nil
+                        }
                     }
                 }
             }
@@ -252,13 +342,11 @@ public struct TagdosNotesHubView: View {
                 .buttonStyle(.plain)
                 .help("Import tasks from Microsoft To Do or Google Tasks")
 
-                if !isNotesTab {
-                    // Dual Mode Toggle: Canvas vs Raw Edit
+                if currentStream != nil {
                     Button {
                         triggerHaptic()
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                             if isRawEditMode {
-                                // Saving from raw text
                                 if let stream = currentStream {
                                     store.updateStreamRawText(streamId: stream.id, newRawText: rawTextBuffer)
                                 }
@@ -286,12 +374,53 @@ public struct TagdosNotesHubView: View {
         }
     }
 
-    // MARK: - Stream Selector Tabs
+    // MARK: - Stream Selector Tabs (All + S1..SN + Notes)
     private var streamSelectorBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let totalActive = store.streams.reduce(0) { $0 + $1.activePills.count }
+
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                // First Tab: "All" (All Streams & Notes)
+                Button {
+                    triggerHaptic()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedStreamIndex = -1
+                        isRawEditMode = false
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.grid.2x2.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("All")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                        if totalActive > 0 {
+                            Text("\(totalActive)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.white.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .foregroundColor(isAllTab ? .white : Color.white.opacity(0.68))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6.5)
+                    .background(
+                        Capsule()
+                            .fill(isAllTab ? ThemeColors.accentCyan.opacity(0.32) : Color.white.opacity(0.06))
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(isAllTab ? ThemeColors.accentCyan : Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                    )
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
                 ForEach(Array(store.streams.enumerated()), id: \.element.id) { index, stream in
                     let isSelected = selectedStreamIndex == index
+                    let hasAnyReminder = stream.streamReminder != nil || stream.clusters.contains(where: { $0.reminderDate != nil })
+
                     Button {
                         triggerHaptic()
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -312,7 +441,7 @@ public struct TagdosNotesHubView: View {
                                                 .strokeBorder(ThemeColors.accentPurple.opacity(isSelected ? 0.8 : 0.4), lineWidth: 1)
                                         )
                                 )
-                            
+
                             let trimmedCustom = stream.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let trimmedCustom, !trimmedCustom.isEmpty {
                                 Text(trimmedCustom)
@@ -327,7 +456,7 @@ public struct TagdosNotesHubView: View {
                                     .lineLimit(1)
                             }
 
-                            if stream.streamReminder != nil {
+                            if hasAnyReminder {
                                 Image(systemName: "bell.fill")
                                     .font(.system(size: 8))
                                     .foregroundColor(ThemeColors.accentCyan)
@@ -468,6 +597,282 @@ public struct TagdosNotesHubView: View {
         }
     }
 
+    // MARK: - "All" Overview Tab (Large-Widget-Style Full Hub Overview)
+    @ViewBuilder
+    private var allOverviewContent: some View {
+        let totalActive = store.streams.reduce(0) { $0 + $1.activePills.count }
+        let sortedNotes = store.quickNotes.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.updatedAt > $1.updatedAt
+        }
+
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(ThemeColors.accentPurple)
+                    Text("ALL STREAMS")
+                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentPurple)
+
+                    Spacer()
+
+                    Text("\(totalActive) Active Tags")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(ThemeColors.accentCyan.opacity(0.15))
+                        .clipShape(Capsule())
+                }
+
+                Divider().background(Color.white.opacity(0.1))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(store.streams.enumerated()), id: \.element.id) { index, stream in
+                        VStack(alignment: .leading, spacing: 7) {
+                            HStack(spacing: 6) {
+                                Button {
+                                    triggerHaptic()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                                        selectedStreamIndex = index
+                                        rawTextBuffer = stream.rawText
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text("S\(index + 1)")
+                                            .font(.system(size: 9.5, weight: .heavy, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .frame(width: 20, height: 20)
+                                            .background(Circle().fill(ThemeColors.accentPurple.opacity(0.75)))
+
+                                        Text(stream.displayTitle)
+                                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(Color.white.opacity(0.35))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+
+                                Spacer(minLength: 4)
+
+                                if let rem = earliestReminder(for: stream) {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "bell.fill")
+                                            .font(.system(size: 8))
+                                        Text(timeFormatted(rem))
+                                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                    }
+                                    .foregroundColor(ThemeColors.accentCyan)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(ThemeColors.accentCyan.opacity(0.14))
+                                    .clipShape(Capsule())
+                                }
+
+                                Text("\(stream.activePills.count) tags")
+                                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(Color.white.opacity(0.45))
+
+                                if let driving = stream.drivingPill {
+                                    HStack(spacing: 4) {
+                                        Button {
+                                            triggerHaptic()
+                                            store.togglePillCompletion(streamId: stream.id, pillId: driving.id)
+                                        } label: {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 8.5, weight: .heavy))
+                                                .foregroundColor(ThemeColors.accentGreen)
+                                                .frame(width: 20, height: 20)
+                                                .background(
+                                                    Circle()
+                                                        .fill(ThemeColors.accentGreen.opacity(0.16))
+                                                        .overlay(Circle().strokeBorder(ThemeColors.accentGreen.opacity(0.4), lineWidth: 0.8))
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        Button {
+                                            triggerHaptic()
+                                            store.recyclePillToBack(streamId: stream.id, pillId: driving.id)
+                                        } label: {
+                                            Image(systemName: "arrow.triangle.2.circlepath")
+                                                .font(.system(size: 8.5, weight: .bold))
+                                                .foregroundColor(ThemeColors.accentCyan)
+                                                .frame(width: 20, height: 20)
+                                                .background(
+                                                    Circle()
+                                                        .fill(ThemeColors.accentCyan.opacity(0.16))
+                                                        .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.4), lineWidth: 0.8))
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+
+                            let allPills = stream.allPills
+                            if allPills.isEmpty {
+                                Text("No tags yet")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color.white.opacity(0.4))
+                            } else {
+                                let leadingId = stream.drivingPill?.id
+                                FlowLayout(spacing: 6) {
+                                    ForEach(allPills) { pill in
+                                        interactivePill(pill: pill, streamId: stream.id, isLeading: pill.id == leadingId)
+                                    }
+                                }
+                            }
+
+                            let memoTrimmed = stream.activeMemos.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !memoTrimmed.isEmpty {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "doc.text")
+                                        .font(.system(size: 9.5))
+                                        .foregroundColor(Color.white.opacity(0.45))
+                                    Text(memoTrimmed.replacingOccurrences(of: "\n", with: " · "))
+                                        .font(.system(size: 10.5, weight: .medium))
+                                        .foregroundColor(Color.white.opacity(0.6))
+                                        .lineLimit(1)
+                                }
+                                .padding(.top, 2)
+                            }
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color.white.opacity(0.04))
+                                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                        )
+                    }
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(hex: "081426").opacity(0.75))
+                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            )
+
+            // Quick Notes Overview Section (All Quick Notes)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(ThemeColors.accentOrange)
+                        Text("QUICK NOTES")
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundColor(ThemeColors.accentOrange)
+                        if !sortedNotes.isEmpty {
+                            Text("\(sortedNotes.count)")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(Color.white.opacity(0.65))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Spacer()
+
+                    Button {
+                        triggerHaptic()
+                        isCreatingOverviewNote = true
+                        activeOverviewNote = TagDoQuickNote(title: "", content: "")
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .bold))
+                            Text("New Note")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                        }
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(ThemeColors.accentCyan)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider().background(Color.white.opacity(0.1))
+
+                if sortedNotes.isEmpty {
+                    Text("No quick notes yet. Click + New Note to jot down thoughts or markdown checklists.")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .padding(.vertical, 8)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(sortedNotes) { note in
+                            Button {
+                                triggerHaptic()
+                                isCreatingOverviewNote = false
+                                activeOverviewNote = note
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(note.displayTitle)
+                                            .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        if note.isPinned {
+                                            Image(systemName: "pin.fill")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(ThemeColors.accentOrange)
+                                        }
+                                    }
+                                    if !note.previewSnippet.isEmpty {
+                                        Text(note.previewSnippet)
+                                            .font(.system(size: 11.5))
+                                            .foregroundColor(Color.white.opacity(0.65))
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
+                                    }
+                                }
+                                .padding(11)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.white.opacity(0.04))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    store.togglePinQuickNote(id: note.id)
+                                } label: {
+                                    Label(note.isPinned ? "Unpin" : "Pin to Top", systemImage: note.isPinned ? "pin.slash" : "pin")
+                                }
+                                Button(role: .destructive) {
+                                    store.deleteQuickNote(id: note.id)
+                                } label: {
+                                    Label("Delete Note", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(hex: "081426").opacity(0.75))
+                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            )
+        }
+    }
+
     // MARK: - Interactive Canvas Card
     @ViewBuilder
     private var interactiveCanvasCard: some View {
@@ -505,7 +910,7 @@ public struct TagdosNotesHubView: View {
                             .foregroundColor(Color.white.opacity(0.35))
                     }
 
-                    Text("\(stream.activePills.count) active tags • \(stream.clusters.count) clusters")
+                    Text("\(stream.activePills.count) active tags • \(stream.clusters.count) groups")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(Color.white.opacity(0.55))
                 }
@@ -516,6 +921,7 @@ public struct TagdosNotesHubView: View {
 
             Button {
                 triggerHaptic()
+                editingReminderClusterIndex = nil
                 reminderPickerDate = stream.streamReminder ?? Date()
                 showingReminderPicker = true
             } label: {
@@ -537,6 +943,7 @@ public struct TagdosNotesHubView: View {
                 .clipShape(Capsule())
                 .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.3), lineWidth: 1))
             }
+            .buttonStyle(.plain)
         }
     }
 
@@ -544,12 +951,13 @@ public struct TagdosNotesHubView: View {
         VStack(alignment: .leading, spacing: 10) {
             if stream.clusters.isEmpty {
                 HStack {
-                    Text("No clusters yet. Add a tag or import external tasks.")
+                    Text("No tags yet. Add a tag or import external tasks.")
                         .font(.system(size: 12))
                         .foregroundColor(Color.white.opacity(0.5))
                     Spacer()
                     Button {
                         triggerHaptic()
+                        addTagTargetStreamId = stream.id
                         newPillClusterIndex = 0
                         newTagInput = ""
                         showingAddTagSheet = true
@@ -572,53 +980,36 @@ public struct TagdosNotesHubView: View {
                 )
             } else {
                 ForEach(Array(stream.clusters.enumerated()), id: \.element.id) { clusterIndex, cluster in
-                    clusterCardView(clusterIndex: clusterIndex, cluster: cluster, streamId: stream.id)
-                }
-            }
-        }
-    }
-
-    private func clusterCardView(clusterIndex: Int, cluster: TagDoCluster, streamId: UUID) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("CLUSTER \(clusterIndex + 1)")
-                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.45))
-
-                Spacer()
-
-                Button {
-                    triggerHaptic()
-                    newPillClusterIndex = clusterIndex
-                    newTagInput = ""
-                    showingAddTagSheet = true
-                } label: {
-                    HStack(spacing: 2) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 9, weight: .bold))
-                        Text("Tag")
-                            .font(.system(size: 9, weight: .semibold))
+                    let clusterKey = "cluster_\(stream.id.uuidString)_\(clusterIndex)"
+                    SwipeableClusterCard(
+                        cluster: cluster,
+                        isHighlighted: highlightedClusterKey == clusterKey,
+                        reminderFormattedText: cluster.reminderDate.map { timeFormatted($0) },
+                        isDraggingAnyCluster: $isDraggingCluster,
+                        onAddTag: {
+                            triggerHaptic()
+                            addTagTargetStreamId = stream.id
+                            newPillClusterIndex = clusterIndex
+                            newTagInput = ""
+                            showingAddTagSheet = true
+                        },
+                        onSetReminder: {
+                            triggerHaptic()
+                            editingReminderClusterIndex = clusterIndex
+                            reminderPickerDate = cluster.reminderDate ?? Date()
+                            showingReminderPicker = true
+                        }
+                    ) {
+                        FlowLayout(spacing: 6) {
+                            ForEach(Array(cluster.pills.enumerated()), id: \.element.id) { pillIndex, pill in
+                                interactivePill(pill: pill, streamId: stream.id, isLeading: pillIndex == 0)
+                            }
+                        }
                     }
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2.5)
-                    .background(ThemeColors.accentCyan.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-            }
-
-            FlowLayout(spacing: 6) {
-                ForEach(Array(cluster.pills.enumerated()), id: \.element.id) { pillIndex, pill in
-                    interactivePill(pill: pill, streamId: streamId, isLeading: pillIndex == 0)
+                    .id(clusterKey)
                 }
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-        )
     }
 
     // MARK: - Interactive Pill Component
@@ -691,9 +1082,10 @@ public struct TagdosNotesHubView: View {
                         .background(ThemeColors.accentGreen.opacity(0.4))
                         .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
             }
 
-            Text("Format: Cluster1/Pill1/Pill2 & Cluster2/PillA/PillB\nUse $ or € for financial, ! for urgent, numbers for dates/specs.")
+            Text("Format: Group1/Pill1/Pill2 & Group2/PillA/PillB\nUse $ or € for financial, ! for urgent, numbers for dates/specs.")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Color.white.opacity(0.55))
 
@@ -721,7 +1113,6 @@ public struct TagdosNotesHubView: View {
         let canSaveEdit = !trimmedEdit.isEmpty && trimmedEdit != action.pill.rawText
 
         VStack(spacing: 14) {
-            // Inline Pill Text Editor
             HStack(spacing: 8) {
                 TextField("Tag...", text: $editingPillText)
                     .textFieldStyle(.plain)
@@ -759,7 +1150,6 @@ public struct TagdosNotesHubView: View {
             }
 
             VStack(spacing: 10) {
-                // Option 1: Recycle to back (Recurring)
                 Button {
                     triggerHaptic()
                     store.recyclePillToBack(streamId: action.streamId, pillId: action.pill.id)
@@ -780,7 +1170,6 @@ public struct TagdosNotesHubView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Option 2: Toggle Done (Stay in place)
                 Button {
                     triggerHaptic()
                     store.togglePillCompletion(streamId: action.streamId, pillId: action.pill.id)
@@ -801,7 +1190,6 @@ public struct TagdosNotesHubView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Option 3: Move to Front (Prioritize)
                 Button {
                     triggerHaptic()
                     store.movePillToFront(streamId: action.streamId, pillId: action.pill.id)
@@ -822,7 +1210,6 @@ public struct TagdosNotesHubView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Option 4: Delete permanently (One-off)
                 Button {
                     triggerHaptic()
                     store.removePill(streamId: action.streamId, pillId: action.pill.id)
@@ -851,7 +1238,7 @@ public struct TagdosNotesHubView: View {
     // MARK: - Add Tag Sheet
     private var addTagSheet: some View {
         VStack(spacing: 16) {
-            Text("Add New Tag to Cluster")
+            Text("Add New Tag")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
@@ -874,10 +1261,10 @@ public struct TagdosNotesHubView: View {
 
                 Button("Add Tag") {
                     triggerHaptic()
-                    if let stream = currentStream {
+                    if let targetId = addTagTargetStreamId ?? currentStream?.id {
                         let clean = newTagInput.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !clean.isEmpty {
-                            store.addPill(streamId: stream.id, clusterIndex: newPillClusterIndex, text: clean)
+                            store.addPill(streamId: targetId, clusterIndex: newPillClusterIndex, text: clean)
                         }
                     }
                     showingAddTagSheet = false
@@ -923,7 +1310,7 @@ public struct TagdosNotesHubView: View {
                 .background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
-            if store.streams.count > 1, selectedStreamIndex < store.streams.count {
+            if store.streams.count > 1, selectedStreamIndex >= 0, selectedStreamIndex < store.streams.count {
                 HStack(spacing: 10) {
                     Button {
                         moveStreamPreservingSelection(from: selectedStreamIndex, to: selectedStreamIndex - 1)
@@ -1006,7 +1393,7 @@ public struct TagdosNotesHubView: View {
                         Button(role: .destructive) {
                             triggerHaptic()
                             store.deleteStream(streamId: stream.id)
-                            selectedStreamIndex = min(selectedStreamIndex, max(0, store.streams.count - 1))
+                            selectedStreamIndex = min(max(0, selectedStreamIndex), max(0, store.streams.count - 1))
                             confirmDeleteStream = false
                             showingRenameSheet = false
                         } label: {
@@ -1151,18 +1538,48 @@ public struct TagdosNotesHubView: View {
         .background(Color(hex: "081426"))
     }
 
-    // MARK: - Reminder Sheet
+    // MARK: - Stream & Cluster Reminder Sheet
     private var reminderSheet: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Set Stream Reminder")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+        let targetCluster: TagDoCluster? = {
+            guard let cIdx = editingReminderClusterIndex,
+                  let stream = currentStream,
+                  cIdx >= 0 && cIdx < stream.clusters.count else { return nil }
+            return stream.clusters[cIdx]
+        }()
+        let hasExistingReminder: Bool = {
+            if let cluster = targetCluster {
+                return cluster.reminderDate != nil
+            }
+            return currentStream?.streamReminder != nil
+        }()
+        let subtitle: String = {
+            if let cluster = targetCluster {
+                let preview = cluster.pills.prefix(4).map(\.rawText).joined(separator: " / ")
+                return preview.isEmpty ? "Daily notification for this group" : "Group: \(preview)"
+            }
+            return currentStream?.displayTitle ?? "Daily stream notification"
+        }()
+
+        return VStack(spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(editingReminderClusterIndex != nil ? "Set Group Reminder" : "Set Stream Reminder")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text(subtitle)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.55))
+                        .lineLimit(1)
+                }
                 Spacer()
-                if let stream = currentStream, stream.streamReminder != nil {
+                if hasExistingReminder, let stream = currentStream {
                     Button("Clear") {
                         triggerHaptic()
-                        store.setStreamReminder(streamId: stream.id, date: nil)
+                        if let cIdx = editingReminderClusterIndex {
+                            store.setClusterReminder(streamId: stream.id, clusterIndex: cIdx, date: nil)
+                        } else {
+                            store.setStreamReminder(streamId: stream.id, date: nil)
+                        }
                         showingReminderPicker = false
                     }
                     .buttonStyle(.plain)
@@ -1175,10 +1592,14 @@ public struct TagdosNotesHubView: View {
                 .datePickerStyle(.wheel)
                 .labelsHidden()
 
-            Button("Save Reminder") {
+            Button("Save Daily Reminder") {
                 triggerHaptic()
                 if let stream = currentStream {
-                    store.setStreamReminder(streamId: stream.id, date: reminderPickerDate)
+                    if let cIdx = editingReminderClusterIndex {
+                        store.setClusterReminder(streamId: stream.id, clusterIndex: cIdx, date: reminderPickerDate)
+                    } else {
+                        store.setStreamReminder(streamId: stream.id, date: reminderPickerDate)
+                    }
                 }
                 showingReminderPicker = false
             }
@@ -1195,6 +1616,11 @@ public struct TagdosNotesHubView: View {
     }
 
     // MARK: - Color & Formatter Helpers
+    private func earliestReminder(for stream: TagDoStream) -> Date? {
+        let candidates = ([stream.streamReminder] + stream.clusters.map(\.reminderDate)).compactMap { $0 }
+        return candidates.min(by: { timeFormatted($0) < timeFormatted($1) })
+    }
+
     private func pillColor(for type: TagDoPillType) -> Color {
         switch type {
         case .standard: return ThemeColors.accentCyan
@@ -1209,6 +1635,237 @@ public struct TagdosNotesHubView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Swipeable Cluster Card (Drag Right -> Left "+ Tag", Drag Left -> Right "Reminder")
+private struct SwipeableClusterCard<Content: View>: View {
+    let cluster: TagDoCluster
+    let isHighlighted: Bool
+    let reminderFormattedText: String?
+    @Binding var isDraggingAnyCluster: Bool
+    let onAddTag: () -> Void
+    let onSetReminder: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    @State private var offsetX: CGFloat = 0
+    @State private var restingOffsetX: CGFloat = 0
+
+    private let revealWidth: CGFloat = 78
+    private let fullTriggerThreshold: CGFloat = 118
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 0) {
+                if offsetX > 2 {
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            offsetX = 0
+                            restingOffsetX = 0
+                        }
+                        onAddTag()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .heavy))
+                            Text("Tag")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                        }
+                        .foregroundColor(.black)
+                        .frame(width: min(max(offsetX - 6, 48), revealWidth - 4))
+                        .frame(maxHeight: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(ThemeColors.accentCyan)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 3)
+                    .padding(.leading, 2)
+                    .opacity(min(1.0, Double(offsetX) / 36.0))
+                }
+
+                Spacer(minLength: 0)
+
+                if offsetX < -2 {
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            offsetX = 0
+                            restingOffsetX = 0
+                        }
+                        onSetReminder()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: reminderFormattedText != nil ? "bell.fill" : "bell.badge")
+                                .font(.system(size: 11, weight: .bold))
+                            if let rem = reminderFormattedText {
+                                Text(rem)
+                                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            } else {
+                                Text("Alert")
+                                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: min(max(-offsetX - 6, 48), revealWidth - 4))
+                        .frame(maxHeight: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(ThemeColors.accentPurple.opacity(0.88))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(ThemeColors.accentCyan.opacity(0.45), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 3)
+                    .padding(.trailing, 2)
+                    .opacity(min(1.0, Double(-offsetX) / 36.0))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                if let rem = reminderFormattedText {
+                    HStack {
+                        Spacer()
+                        Button {
+                            onSetReminder()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "bell.fill")
+                                    .font(.system(size: 8))
+                                Text(rem)
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                            }
+                            .foregroundColor(ThemeColors.accentCyan)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(ThemeColors.accentCyan.opacity(0.14))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                content()
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: "0D1B30"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(
+                                isHighlighted ? ThemeColors.accentCyan : Color.white.opacity(0.09),
+                                lineWidth: isHighlighted ? 1.8 : 1
+                            )
+                    )
+            )
+            // Subtle Left Edge Hint (Drag Right or Click -> Reveal "+ Tag")
+            .overlay(alignment: .leading) {
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        let next: CGFloat = restingOffsetX > 0 ? 0 : revealWidth
+                        offsetX = next
+                        restingOffsetX = next
+                    }
+                } label: {
+                    Capsule()
+                        .fill(ThemeColors.accentCyan.opacity(0.5))
+                        .frame(width: 3, height: 18)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Drag right (or click edge) to add a tag")
+            }
+            // Subtle Right Edge Hint (Drag Left or Click -> Reveal "Reminder")
+            .overlay(alignment: .trailing) {
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        let next: CGFloat = restingOffsetX < 0 ? 0 : -revealWidth
+                        offsetX = next
+                        restingOffsetX = next
+                    }
+                } label: {
+                    Capsule()
+                        .fill((reminderFormattedText != nil ? ThemeColors.accentCyan : ThemeColors.accentPurple).opacity(0.55))
+                        .frame(width: 3, height: 18)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Drag left (or click edge) to set a group reminder")
+            }
+            .offset(x: offsetX)
+            .onTapGesture {
+                if restingOffsetX != 0 {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        offsetX = 0
+                        restingOffsetX = 0
+                    }
+                }
+            }
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 12, coordinateSpace: .local)
+                    .onChanged { value in
+                        let dx = value.translation.width
+                        let dy = value.translation.height
+                        guard abs(dx) > abs(dy) * 1.15 || isDraggingAnyCluster else { return }
+                        if !isDraggingAnyCluster {
+                            isDraggingAnyCluster = true
+                        }
+                        let proposed = restingOffsetX + dx
+                        if proposed > revealWidth {
+                            offsetX = revealWidth + (proposed - revealWidth) * 0.35
+                        } else if proposed < -revealWidth {
+                            offsetX = -revealWidth + (proposed + revealWidth) * 0.35
+                        } else {
+                            offsetX = proposed
+                        }
+                    }
+                    .onEnded { value in
+                        let totalX = restingOffsetX + value.translation.width
+                        if totalX >= fullTriggerThreshold {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                offsetX = 0
+                                restingOffsetX = 0
+                            }
+                            onAddTag()
+                        } else if totalX <= -fullTriggerThreshold {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                offsetX = 0
+                                restingOffsetX = 0
+                            }
+                            onSetReminder()
+                        } else if totalX > 32 {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                offsetX = revealWidth
+                                restingOffsetX = revealWidth
+                            }
+                        } else if totalX < -32 {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                offsetX = -revealWidth
+                                restingOffsetX = -revealWidth
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                offsetX = 0
+                                restingOffsetX = 0
+                            }
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                            isDraggingAnyCluster = false
+                        }
+                    }
+            )
+        }
+        .clipped()
     }
 }
 

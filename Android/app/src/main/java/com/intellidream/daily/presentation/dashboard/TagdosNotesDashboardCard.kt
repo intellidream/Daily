@@ -3,6 +3,7 @@ package com.intellidream.daily.presentation.dashboard
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,11 +23,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -84,20 +88,24 @@ fun TagdosNotesDashboardCard(
         when (size) {
             DashboardWidgetSize.Small -> SmallTagdosContent(
                 streams = streams,
+                repository = repository,
                 onOpenHub = onNavigateToHub
             )
             DashboardWidgetSize.Wide -> WideTagdosContent(
                 streams = streams,
+                repository = repository,
                 onOpenHub = onNavigateToHub
             )
             DashboardWidgetSize.Tall -> TallTagdosContent(
                 streams = streams,
                 quickNotes = quickNotes,
+                repository = repository,
                 onOpenHub = onNavigateToHub
             )
             DashboardWidgetSize.Large -> LargeTagdosContent(
                 streams = streams,
                 quickNotes = quickNotes,
+                repository = repository,
                 onOpenHub = onNavigateToHub
             )
         }
@@ -125,6 +133,7 @@ private fun formatReminderTime(timestamp: Long?): String {
 @Composable
 private fun SmallTagdosContent(
     streams: List<TagDoStream>,
+    repository: TagdosRepository,
     onOpenHub: () -> Unit
 ) {
     val stream1 = streams.firstOrNull()
@@ -203,30 +212,53 @@ private fun SmallTagdosContent(
                 color = Color.White.copy(alpha = 0.45f)
             )
 
-            if (driving != null) {
+            if (stream1 != null && driving != null) {
                 val color = resolvePillColor(driving.type)
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(color.copy(alpha = 0.15f))
-                        .border(1.dp, color.copy(alpha = 0.35f), CircleShape)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = driving.rawText,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = color,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.45f),
-                        modifier = Modifier.size(12.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = 0.15f))
+                            .border(1.dp, color.copy(alpha = 0.35f), CircleShape)
+                            .clickable {
+                                repository.requestNavigation(
+                                    streamId = stream1.id,
+                                    pillId = driving.id,
+                                    openPillEditor = true
+                                )
+                                onOpenHub()
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = driving.rawText,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = color,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.45f),
+                            modifier = Modifier.size(10.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    DashboardQuickActions(
+                        onComplete = { repository.togglePillCompletion(stream1.id, driving.id) },
+                        onRecycle = { repository.recyclePillToBack(stream1.id, driving.id) },
+                        sizeDp = 22
                     )
                 }
             } else {
@@ -276,6 +308,7 @@ private fun SmallTagdosContent(
 @Composable
 private fun WideTagdosContent(
     streams: List<TagDoStream>,
+    repository: TagdosRepository,
     onOpenHub: () -> Unit
 ) {
     val stream1 = streams.firstOrNull()
@@ -350,18 +383,23 @@ private fun WideTagdosContent(
 
         // Stream 1 Pill Pipeline
         if (stream1 != null) {
-            StreamPipelineRow(stream = stream1, maxPills = 6)
+            StreamPipelineRow(stream = stream1, maxPills = 6, repository = repository, onOpenHub = onOpenHub)
         }
 
         // Stream 2 Pill Pipeline
         if (stream2 != null) {
-            StreamPipelineRow(stream = stream2, maxPills = 6)
+            StreamPipelineRow(stream = stream2, maxPills = 6, repository = repository, onOpenHub = onOpenHub)
         }
     }
 }
 
 @Composable
-private fun StreamPipelineRow(stream: TagDoStream, maxPills: Int) {
+private fun StreamPipelineRow(
+    stream: TagDoStream,
+    maxPills: Int,
+    repository: TagdosRepository,
+    onOpenHub: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -377,25 +415,39 @@ private fun StreamPipelineRow(stream: TagDoStream, maxPills: Int) {
                 fontWeight = FontWeight.Bold,
                 color = Color.White.copy(alpha = 0.85f),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
 
-            if (stream.streamReminder != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Notifications,
-                        contentDescription = null,
-                        tint = ThemeColors.accentCyan,
-                        modifier = Modifier.size(9.dp)
-                    )
-                    Text(
-                        text = formatReminderTime(stream.streamReminder),
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ThemeColors.accentCyan
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                if (stream.streamReminder != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Notifications,
+                            contentDescription = null,
+                            tint = ThemeColors.accentCyan,
+                            modifier = Modifier.size(9.dp)
+                        )
+                        Text(
+                            text = formatReminderTime(stream.streamReminder),
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ThemeColors.accentCyan
+                        )
+                    }
+                }
+                val driving = stream.drivingPill
+                if (driving != null) {
+                    DashboardQuickActions(
+                        onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
+                        onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
+                        sizeDp = 18
                     )
                 }
             }
@@ -410,7 +462,13 @@ private fun StreamPipelineRow(stream: TagDoStream, maxPills: Int) {
         ) {
             val pills = stream.activePills.take(maxPills)
             pills.forEach { pill ->
-                MiniPillBadge(pill = pill)
+                MiniPillBadge(
+                    pill = pill,
+                    onClick = {
+                        repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
+                        onOpenHub()
+                    }
+                )
             }
             if (stream.activePills.size > maxPills) {
                 Box(
@@ -436,6 +494,7 @@ private fun StreamPipelineRow(stream: TagDoStream, maxPills: Int) {
 private fun TallTagdosContent(
     streams: List<TagDoStream>,
     quickNotes: List<TagDoQuickNote>,
+    repository: TagdosRepository,
     onOpenHub: () -> Unit
 ) {
     val totalActive = streams.sumOf { it.activePills.size }
@@ -517,7 +576,13 @@ private fun TallTagdosContent(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         stream.activePills.take(8).forEach { pill ->
-                            MiniPillBadge(pill = pill)
+                            MiniPillBadge(
+                                pill = pill,
+                                onClick = {
+                                    repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
+                                    onOpenHub()
+                                }
+                            )
                         }
                     }
                 }
@@ -562,6 +627,7 @@ private fun TallTagdosContent(
 private fun LargeTagdosContent(
     streams: List<TagDoStream>,
     quickNotes: List<TagDoQuickNote>,
+    repository: TagdosRepository,
     onOpenHub: () -> Unit
 ) {
     val totalActive = streams.sumOf { it.activePills.size }
@@ -658,22 +724,35 @@ private fun LargeTagdosContent(
                             overflow = TextOverflow.Ellipsis
                         )
 
-                        if (stream.streamReminder != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Notifications,
-                                    contentDescription = null,
-                                    tint = ThemeColors.accentCyan,
-                                    modifier = Modifier.size(9.dp)
-                                )
-                                Text(
-                                    text = formatReminderTime(stream.streamReminder),
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ThemeColors.accentCyan
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            if (stream.streamReminder != null) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Notifications,
+                                        contentDescription = null,
+                                        tint = ThemeColors.accentCyan,
+                                        modifier = Modifier.size(9.dp)
+                                    )
+                                    Text(
+                                        text = formatReminderTime(stream.streamReminder),
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ThemeColors.accentCyan
+                                    )
+                                }
+                            }
+                            val driving = stream.drivingPill
+                            if (driving != null) {
+                                DashboardQuickActions(
+                                    onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
+                                    onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
+                                    sizeDp = 18
                                 )
                             }
                         }
@@ -687,7 +766,13 @@ private fun LargeTagdosContent(
                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         stream.activePills.take(8).forEach { pill ->
-                            InteractivePillBadge(pill = pill)
+                            InteractivePillBadge(
+                                pill = pill,
+                                onClick = {
+                                    repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
+                                    onOpenHub()
+                                }
+                            )
                         }
                     }
                 }
@@ -746,15 +831,61 @@ private fun LargeTagdosContent(
     }
 }
 
-// MARK: - Mini Pill Badges
+// MARK: - Mini Pill Badges & Quick Actions
 @Composable
-private fun MiniPillBadge(pill: TagDoPill) {
+private fun DashboardQuickActions(
+    onComplete: () -> Unit,
+    onRecycle: () -> Unit,
+    sizeDp: Int = 20
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(sizeDp.dp)
+                .clip(CircleShape)
+                .background(ThemeColors.accentGreen.copy(alpha = 0.16f))
+                .border(0.8.dp, ThemeColors.accentGreen.copy(alpha = 0.4f), CircleShape)
+                .clickable(onClick = onComplete),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = "Mark Done",
+                tint = ThemeColors.accentGreen,
+                modifier = Modifier.size((sizeDp * 0.55f).dp)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(sizeDp.dp)
+                .clip(CircleShape)
+                .background(ThemeColors.accentCyan.copy(alpha = 0.16f))
+                .border(0.8.dp, ThemeColors.accentCyan.copy(alpha = 0.4f), CircleShape)
+                .clickable(onClick = onRecycle),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Sync,
+                contentDescription = "Recycle Tag",
+                tint = ThemeColors.accentCyan,
+                modifier = Modifier.size((sizeDp * 0.55f).dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniPillBadge(pill: TagDoPill, onClick: () -> Unit) {
     val color = resolvePillColor(pill.type)
     Box(
         modifier = Modifier
             .clip(CircleShape)
             .background(color.copy(alpha = 0.15f))
             .border(0.5.dp, color.copy(alpha = 0.35f), CircleShape)
+            .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
@@ -768,7 +899,7 @@ private fun MiniPillBadge(pill: TagDoPill) {
 }
 
 @Composable
-private fun InteractivePillBadge(pill: TagDoPill) {
+private fun InteractivePillBadge(pill: TagDoPill, onClick: () -> Unit) {
     val color = resolvePillColor(pill.type)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -777,6 +908,7 @@ private fun InteractivePillBadge(pill: TagDoPill) {
             .clip(CircleShape)
             .background(color.copy(alpha = 0.16f))
             .border(1.dp, color.copy(alpha = 0.40f), CircleShape)
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         if (pill.isCompleted) {

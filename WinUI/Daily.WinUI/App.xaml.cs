@@ -356,6 +356,20 @@ public partial class App : Application
                                 }
                             });
                         }
+                        else if (line.Equals("tagdos:external-changed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Pipe] Received tagdos:external-changed command");
+                            var app = App.Current;
+                            app?.DispatcherQueue?.TryEnqueue(() =>
+                            {
+                                app.SuppressWidgetRefreshTemporarily();
+                                var tagdosSvc = app.Services?.GetService<Daily.Services.ITagdosService>();
+                                if (tagdosSvc != null)
+                                {
+                                    _ = tagdosSvc.ReloadFromLocalAsync();
+                                }
+                            });
+                        }
                         else if (line.Equals("companion", StringComparison.OrdinalIgnoreCase) ||
                                  line.Equals("quickdrop", StringComparison.OrdinalIgnoreCase) ||
                                  line.Equals("flyout", StringComparison.OrdinalIgnoreCase))
@@ -876,6 +890,7 @@ public partial class App : Application
         {
             tagdosService.DataChanged += (_, _) => ScheduleDesktopWidgetsRefresh();
         }
+        Daily_WinUI.Services.TagdosNotificationScheduler.Instance.Start(Services);
         if (Services.GetService<Daily.Services.ISyncService>() is { } syncService)
         {
             syncService.OnHabitsPulled += ScheduleDesktopWidgetsRefresh;
@@ -933,6 +948,21 @@ public partial class App : Application
         else if (!string.IsNullOrEmpty(uri.Fragment)) queryToParse = uri.Fragment.TrimStart('#');
 
         LogDebug($"Parsing query/fragment: '{queryToParse}'");
+
+        // Check for TagDoS deep-link (daily://tagdos?streamId=...&clusterIndex=...&pillId=...&edit=1)
+        if (uri.Host.Equals("tagdos", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("tagdos", StringComparison.OrdinalIgnoreCase))
+        {
+            if (App.Current?.MainWindow is MainWindow tagdosMw)
+            {
+                tagdosMw.DispatcherQueue.TryEnqueue(() =>
+                {
+                    App.Current?.Services?.GetService<Daily.Services.ITagdosService>()?.HandleDeepLink(uri);
+                    tagdosMw.ShowAndActivate();
+                    tagdosMw.NavigateToTab(3);
+                });
+                return;
+            }
+        }
 
         // Check for deep-link tab navigation (e.g. com.intellidream.daily.desktop://navigate?tab=5 or daily://prism)
         if (uri.Host.Equals("prism", StringComparison.OrdinalIgnoreCase) || uri.AbsolutePath.Contains("prism", StringComparison.OrdinalIgnoreCase))

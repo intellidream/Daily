@@ -45,8 +45,9 @@ object TagdosParser {
             .filter { it.isNotEmpty() }
 
         val parsedClusters = mutableListOf<TagDoCluster>()
+        val usedExistingClusterIds = mutableSetOf<String>()
 
-        for (rawCluster in rawClusters) {
+        for ((clusterIndex, rawCluster) in rawClusters.withIndex()) {
             // Split cluster by pill separator: `/`
             val rawPillTokens = rawCluster.split("/")
                 .map { it.trim() }
@@ -73,7 +74,28 @@ object TagdosParser {
             }
 
             if (pills.isNotEmpty()) {
-                parsedClusters.add(TagDoCluster(pills = pills, rawText = rawCluster))
+                val pillIdSet = pills.map { it.id }.toSet()
+                val matchedCluster = existingStream?.clusters?.firstOrNull {
+                    !usedExistingClusterIds.contains(it.id) && it.rawText == rawCluster
+                } ?: existingStream?.clusters?.firstOrNull {
+                    !usedExistingClusterIds.contains(it.id) && it.pills.any { p -> pillIdSet.contains(p.id) }
+                } ?: existingStream?.clusters?.getOrNull(clusterIndex)?.takeIf {
+                    !usedExistingClusterIds.contains(it.id)
+                }
+
+                if (matchedCluster != null) {
+                    usedExistingClusterIds.add(matchedCluster.id)
+                    parsedClusters.add(
+                        TagDoCluster(
+                            id = matchedCluster.id,
+                            pills = pills,
+                            rawText = rawCluster,
+                            reminderTime = matchedCluster.reminderTime
+                        )
+                    )
+                } else {
+                    parsedClusters.add(TagDoCluster(pills = pills, rawText = rawCluster))
+                }
             }
         }
 
@@ -425,5 +447,54 @@ object TagdosParser {
             val memo = if (cleanNotes.isEmpty()) "• [$tag] $cleanTitle" else "• [$tag] $cleanTitle — $cleanNotes"
             Triple(tag, false, memo)
         }
+    }
+
+    // MARK: - Zero-Egress Reminder Spec Encoding ("HH:mm|0=08:45,1=14:15")
+
+    fun encodeReminderSpec(stream: TagDoStream): String? {
+        val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+        val streamPart = stream.streamReminder?.let { fmt.format(java.util.Date(it)) } ?: ""
+        val clusterParts = stream.clusters.mapIndexedNotNull { idx, c ->
+            c.reminderTime?.let { "$idx=${fmt.format(java.util.Date(it))}" }
+        }
+        if (streamPart.isEmpty() && clusterParts.isEmpty()) return null
+        if (clusterParts.isEmpty()) return streamPart
+        return "$streamPart|${clusterParts.joinToString(",")}"
+    }
+
+    fun decodeReminderSpec(raw: String?): Pair<Long?, Map<Int, Long>> {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null to emptyMap()
+
+        fun parseHhMm(token: String): Long? {
+            val parts = token.trim().split(":")
+            if (parts.size != 2) return null
+            val h = parts[0].toIntOrNull() ?: return null
+            val m = parts[1].toIntOrNull() ?: return null
+            if (h !in 0..23 || m !in 0..59) return null
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, h)
+            cal.set(java.util.Calendar.MINUTE, m)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            return cal.timeInMillis
+        }
+
+        val sections = trimmed.split("|", limit = 2)
+        val streamEpoch = sections[0].trim().takeIf { it.isNotEmpty() }?.let { parseHhMm(it) }
+        val clusterMap = linkedMapOf<Int, Long>()
+        if (sections.size > 1) {
+            for (pair in sections[1].split(",")) {
+                val kv = pair.split("=", limit = 2)
+                if (kv.size == 2) {
+                    val idx = kv[0].trim().toIntOrNull()
+                    val ts = parseHhMm(kv[1])
+                    if (idx != null && ts != null) {
+                        clusterMap[idx] = ts
+                    }
+                }
+            }
+        }
+        return streamEpoch to clusterMap
     }
 }

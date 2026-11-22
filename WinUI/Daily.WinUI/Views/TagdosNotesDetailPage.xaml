@@ -80,9 +80,12 @@
 
         <!-- ROW 2: Main Content Area -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,0,24,32">
-            <StackPanel x:Name="MainContentContainer" MaxWidth="960" HorizontalAlignment="Center" Spacing="16">
-                <!-- STREAM VIEW (Visible for Streams 1-5) -->
-                <StackPanel x:Name="StreamViewPanel" Spacing="16">
+            <StackPanel x:Name="MainContentContainer" MaxWidth="960" HorizontalAlignment="Stretch" Spacing="16">
+                <!-- ALL OVERVIEW TAB (First tab: All Streams & Notes) -->
+                <StackPanel x:Name="AllOverviewPanel" Spacing="16" />
+
+                <!-- STREAM VIEW (Visible for Streams 1..N) -->
+                <StackPanel x:Name="StreamViewPanel" Visibility="Collapsed" Spacing="16">
                     <!-- Stream Controls & Title Card -->
                     <Border Background="{ThemeResource AppGlassColorBrush}" BorderBrush="{ThemeResource AppGlassBorderColorBrush}" BorderThickness="1" CornerRadius="16" Padding="18">
                         <Grid>

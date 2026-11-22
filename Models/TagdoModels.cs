@@ -35,6 +35,16 @@ namespace Daily.Models
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public List<TagDoPill> Pills { get; set; } = new();
+        public DateTime? ClusterReminder { get; set; }
+    }
+
+    public sealed class TagdosNavigationTarget
+    {
+        public string RequestId { get; set; } = Guid.NewGuid().ToString();
+        public string? StreamId { get; set; }
+        public int? ClusterIndex { get; set; }
+        public string? PillId { get; set; }
+        public bool OpenPillEditor { get; set; }
     }
 
     public class TagDoStream
@@ -111,6 +121,7 @@ namespace Daily.Models
         public string? CustomTitle { get; set; }
         public string RawText { get; set; } = string.Empty;
         public long? StreamReminderTicks { get; set; }
+        public string ClusterRemindersSpec { get; set; } = string.Empty;
         public string ActiveMemos { get; set; } = string.Empty;
         public string AttachmentsJson { get; set; } = "[]";
         public long UpdatedAtTicks { get; set; } = DateTime.UtcNow.Ticks;

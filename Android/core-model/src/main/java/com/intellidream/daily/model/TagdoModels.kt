@@ -59,11 +59,23 @@ data class TagDoPill(
 data class TagDoCluster(
     val id: String = UUID.randomUUID().toString(),
     val pills: List<TagDoPill> = emptyList(),
-    val rawText: String = ""
+    val rawText: String = "",
+    val reminderTime: Long? = null
 ) {
     val activePills: List<TagDoPill> get() = pills.filter { !it.isCompleted }
     val completedPills: List<TagDoPill> get() = pills.filter { it.isCompleted }
 }
+
+/**
+ * Deep-link / notification / widget navigation target inside TagDoS Hub.
+ */
+data class TagdosNavigationTarget(
+    val requestId: String = UUID.randomUUID().toString(),
+    val streamId: String? = null,
+    val clusterIndex: Int? = null,
+    val pillId: String? = null,
+    val openPillEditor: Boolean = false
+)
 
 /**
  * Represents a file, document, or image attachment bound to a specific Tagdos stream.

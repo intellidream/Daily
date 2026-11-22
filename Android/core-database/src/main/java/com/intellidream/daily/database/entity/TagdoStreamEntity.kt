@@ -28,6 +28,9 @@ data class TagdoStreamEntity(
     @ColumnInfo(name = "stream_reminder")
     val streamReminder: Long? = null,
 
+    @ColumnInfo(name = "cluster_reminders_json", defaultValue = "{}")
+    val clusterRemindersJson: String = "{}",
+
     @ColumnInfo(name = "active_memos")
     val activeMemos: String = "",
 

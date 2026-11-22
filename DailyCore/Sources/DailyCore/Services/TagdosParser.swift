@@ -38,8 +38,10 @@ public struct TagdosParser: Sendable {
             .filter { !$0.isEmpty }
 
         var parsedClusters: [TagDoCluster] = []
+        let existingClusters = existingStream?.clusters ?? []
+        var usedExistingClusterIds = Set<UUID>()
 
-        for rawCluster in rawClusters {
+        for (clusterIdx, rawCluster) in rawClusters.enumerated() {
             // Split cluster by pill separator: `/`
             let rawPillTokens = rawCluster.components(separatedBy: "/")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -63,7 +65,25 @@ public struct TagdosParser: Sendable {
             }
 
             if !pills.isEmpty {
-                parsedClusters.append(TagDoCluster(pills: pills, rawText: rawCluster))
+                let pillIds = Set(pills.map(\.id))
+                let matchedExisting = existingClusters.first(where: {
+                    !usedExistingClusterIds.contains($0.id) && $0.rawText == rawCluster
+                }) ?? existingClusters.first(where: {
+                    !usedExistingClusterIds.contains($0.id) && !Set($0.pills.map(\.id)).isDisjoint(with: pillIds)
+                }) ?? (clusterIdx < existingClusters.count && !usedExistingClusterIds.contains(existingClusters[clusterIdx].id)
+                    ? existingClusters[clusterIdx]
+                    : nil)
+
+                if let matchedExisting {
+                    usedExistingClusterIds.insert(matchedExisting.id)
+                }
+
+                parsedClusters.append(TagDoCluster(
+                    id: matchedExisting?.id ?? UUID(),
+                    pills: pills,
+                    rawText: rawCluster,
+                    reminderDate: matchedExisting?.reminderDate
+                ))
             }
         }
 

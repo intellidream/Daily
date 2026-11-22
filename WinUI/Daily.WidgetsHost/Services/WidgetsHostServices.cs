@@ -630,11 +630,36 @@ namespace Daily_WinUI.WidgetsHost.Services
     {
         private readonly IDatabaseService _db;
         public event EventHandler? DataChanged;
+        public event EventHandler? PendingNavigationChanged;
+        public TagdosNavigationTarget? PendingNavigation => null;
 
         public WidgetsHostTagdosService(IDatabaseService db)
         {
             _db = db;
         }
+
+        public void RequestNavigation(string? streamId = null, int? clusterIndex = null, string? pillId = null, bool openPillEditor = false)
+        {
+            var queryParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(streamId)) queryParts.Add($"streamId={Uri.EscapeDataString(streamId)}");
+            if (clusterIndex.HasValue) queryParts.Add($"clusterIndex={clusterIndex.Value}");
+            if (!string.IsNullOrWhiteSpace(pillId)) queryParts.Add($"pillId={Uri.EscapeDataString(pillId)}");
+            if (openPillEditor) queryParts.Add("edit=1");
+            var uri = queryParts.Count > 0
+                ? $"daily://tagdos?{string.Join("&", queryParts)}"
+                : "daily://tagdos";
+            Daily_WinUI.DesktopWidgets.WidgetsHostIpc.ForwardUriToMainApp(uri);
+        }
+
+        public void HandleDeepLink(Uri uri)
+        {
+            if (uri != null)
+            {
+                Daily_WinUI.DesktopWidgets.WidgetsHostIpc.ForwardUriToMainApp(uri.ToString());
+            }
+        }
+
+        public TagdosNavigationTarget? ConsumePendingNavigation() => null;
 
         public async Task<List<TagDoStream>> GetStreamsAsync()
         {
@@ -653,6 +678,7 @@ namespace Daily_WinUI.WidgetsHost.Services
                             ? new DateTime(s.StreamReminderTicks.Value, DateTimeKind.Utc)
                             : null;
                         var parsed = TagdosParser.ParseStream(s.RawText, s.OrderIndex, s.Title, reminder, s.ActiveMemos, s.AttachmentsJson, s.CustomTitle);
+                        TagdosParser.ApplyClusterRemindersSpec(parsed, s.ClusterRemindersSpec);
                         parsed.Id = s.Id;
                         return parsed;
                     }).ToList();
@@ -673,11 +699,50 @@ namespace Daily_WinUI.WidgetsHost.Services
             return streams.FirstOrDefault(s => s.OrderIndex == orderIndex);
         }
 
-        public Task SaveStreamAsync(TagDoStream stream) => Task.CompletedTask;
+        public async Task SaveStreamAsync(TagDoStream stream)
+        {
+            await _db.InitializeAsync();
+            try
+            {
+                var local = new LocalTagdoStream
+                {
+                    Id = stream.Id,
+                    OrderIndex = stream.OrderIndex,
+                    Title = stream.Title,
+                    CustomTitle = stream.CustomTitle,
+                    RawText = stream.RawText,
+                    StreamReminderTicks = stream.StreamReminder?.Ticks,
+                    ClusterRemindersSpec = TagdosParser.EncodeClusterSpecOnly(stream),
+                    ActiveMemos = stream.ActiveMemos ?? string.Empty,
+                    AttachmentsJson = string.IsNullOrWhiteSpace(stream.AttachmentsJson) ? "[]" : stream.AttachmentsJson,
+                    UpdatedAtTicks = DateTime.UtcNow.Ticks,
+                    SyncedAtTicks = null
+                };
+                await _db.Connection.InsertOrReplaceAsync(local);
+                DataChanged?.Invoke(this, EventArgs.Empty);
+                Daily_WinUI.DesktopWidgets.WidgetsHostIpc.NotifyMainApp("tagdos:external-changed");
+            }
+            catch { }
+        }
+
         public Task UpdateStreamRawTextAsync(string streamId, string newRawText) => Task.CompletedTask;
-        public Task UpdateStreamTitleAsync(string streamId, string newTitle) => Task.CompletedTask;
+        public Task UpdateStreamTitleAsync(string streamId, string? newTitle) => Task.CompletedTask;
         public Task SetStreamReminderAsync(string streamId, DateTime? reminder) => Task.CompletedTask;
+        public Task SetClusterReminderAsync(string streamId, int clusterIndex, DateTime? reminder) => Task.CompletedTask;
+        public Task ReloadFromLocalAsync()
+        {
+            DataChanged?.Invoke(this, EventArgs.Empty);
+            return Task.CompletedTask;
+        }
         public Task UpdateStreamMemosAsync(string streamId, string memos, string attachmentsJson) => Task.CompletedTask;
+        public Task<TagDoStream> CreateStreamAsync(string? title = null, string rawText = "", string activeMemos = "") =>
+            Task.FromResult(new TagDoStream { Title = title ?? "Stream" });
+        public Task DeleteStreamAsync(string streamId) => Task.CompletedTask;
+        public Task MoveStreamAsync(int fromIndex, int toIndex) => Task.CompletedTask;
+        public Task ReorderStreamsAsync(List<string> orderedIds) => Task.CompletedTask;
+        public Task<string?> ImportExternalTaskBatchAsync(List<TagdosTaskImportItem> items) => Task.FromResult<string?>(null);
+        public Task<TagDoStream> ImportExternalTasksAsync(string mode, string? targetStreamId, string? newStreamTitle, List<string> rawDslChunks, List<string> memoLines) =>
+            Task.FromResult(new TagDoStream { Title = newStreamTitle ?? "Stream" });
 
         public async Task<List<TagDoQuickNote>> GetQuickNotesAsync()
         {
