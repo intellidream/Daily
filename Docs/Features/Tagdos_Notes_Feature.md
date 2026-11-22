@@ -203,4 +203,34 @@ TagDoS supports one-way, on-demand task import from **Microsoft To Do** and **Go
 - **Persistent Staging Across Lists & Providers**: Checked tasks, edited DSL tags, and chosen destinations remain staged across list, account, and Microsoft To Do ↔ Google Tasks switches within the import session so users can review everything in the Batch Summary and import once (`Import (N)`).
 - **Pure Local Ownership (Zero Back-Links)**: Once imported, tasks live exclusively as native TagDoS streams and memos with zero external task IDs or write-back sync to Microsoft/Google.
 
+---
+
+## 10. Stream & Per-Cluster Notifications, Clean Swipeable Clusters, Widget Pill Actions & `All` Hub Overview
+
+### 10.1 Stream & Per-Cluster Daily Notifications + Deep-Link Routing (Zero Extra Egress)
+- **100% Local OS Scheduling**:
+  - **iOS & macOS (`TagdosNotificationManager`)**: Schedules repeating daily `UNCalendarNotificationTrigger` notifications via `UNUserNotificationCenter` for both stream-level and cluster-level reminders, reconciled automatically whenever streams or reminders change.
+  - **Android (`TagdosNotificationScheduler` & `TagdosReminderReceiver`)**: Schedules idle-aware daily alarms via `AlarmManager.setAndAllowWhileIdle` (falling back gracefully without requiring exact-alarm special permissions), posting high-priority notifications on channel `tagdos_reminders` and rescheduling the next daily occurrence upon firing or device boot.
+  - **Windows WinUI 3 (`TagdosNotificationScheduler`)**: Evaluates active stream and cluster reminder times locally via a lightweight background timer with per-day de-duplication and posts interactive Windows App SDK notifications (`AppNotificationManager`).
+- **Zero-DDL Supabase Persistence**: Per-cluster reminders serialize compactly into the existing `public.tagdos_streams.reminder_time` `TEXT` column (`"HH:mm"` when stream-only, `"HH:mm|0=09:00,2=14:30"` or `"|0=09:00"` when cluster reminders are set), preserving backward compatibility and requiring zero extra tables, columns, or network queries.
+- **Deep-Link Navigation (`daily://tagdos?streamId=<id>&clusterIndex=<idx>`)**: Tapping any stream or cluster notification opens DayOne directly on the **TagDoS** Hub, selects the target stream (`S1..SN`), scrolls smoothly to the target cluster, and highlights its border.
+
+### 10.2 Clean Cluster Cards with Horizontal Drag Reveal & Edge Hints
+- **Headerless Visual Clarity**: Redundant `"CLUSTER 1"` / `"Batch #1"` titles are completely removed from cluster cards across all 4 platforms; only a compact `🔔 HH:mm` chip is shown when a cluster has an active daily notification.
+- **Subtle Edge Hints & Inverse Horizontal Drag Actions**:
+  - Thin vertical accent hint bars on the left (cyan) and right (violet) edges signal horizontal draggability (and support click-to-reveal on desktop pointers).
+  - **Drag Cluster Right (reveals Left slot)**: **`+ Tag`** — adds a new tag directly to that cluster.
+  - **Drag Cluster Left (reveals Right slot)**: **`🔔 Alert`** — sets, updates, or clears that cluster's daily notification time.
+
+### 10.3 Interactive Widget Pill Actions & Tap-Any-Pill-to-Edit
+- **In-Place Widget Quick Actions (Zero Network Egress)**:
+  - **iOS & macOS (`WidgetKit` + `AppIntent`)**: `CompleteTagdosPillIntent` (`✓`) and `RecycleTagdosPillIntent` (`↻`) mutate the shared App Group cache instantaneously, refresh widget timelines, and notify the host app via Darwin notification (`com.intellidream.daily.widget.mutated`).
+  - **Android (`Jetpack Glance` + `ActionCallback`)**: `TagdosPillActionCallback` (`✓` and `↻`) updates Room + Glance cache locally and marks the stream dirty for deferred sync.
+  - **Windows WinUI 3 (`TagdosWidgetControl` & `DesktopTagdosWidgetView`)**: Inline `✓` and `↻` controls mutate local SQLite immediately and notify the main process over the local named pipe (`tagdos:external-changed`).
+- **Tap Any Pill -> Edit Pill**: Tapping any pill in OS Widgets (`daily://tagdos?streamId=<id>&pillId=<pid>&edit=1`), Dashboard cards, the `All` overview tab, or `S1..SN` stream tabs opens the **Edit Tag / Pill Action** sheet or dialog pre-populated for that exact pill.
+
+### 10.4 First Hub Tab: `All` (`All Streams & Notes`)
+- **`[All]` Default First Tab**: Prepended before `S1..SN` (`[All] · [S1] .. [SN] · [+] · [⇄] · [Notes]`), giving an immediate, scrollable executive overview modeled after the Large Widget:
+  - **All Streams (`S1..SN`)**: Displays every stream with clickable stream headers (jumping to `S{i}`), reminder indicators, focus-pill `✓` / `↻` quick actions, all interactive pills (tap to edit), and active memo previews.
+  - **All Quick Notes**: Displays all Quick Notes below (pinned first) with inline `+ New Note` creation and tap-to-edit support.
 
