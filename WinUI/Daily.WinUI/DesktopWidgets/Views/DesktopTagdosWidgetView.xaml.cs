@@ -6,6 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
+using Windows.UI;
 using Daily.Models;
 using Daily.Services;
 
@@ -119,19 +122,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 MediumStreamsSubtitle.Text = $"{streamCount} streams · {totalActive} open tags";
                 MediumFocusBadge.Text = $"Stream: {activeStreamName}";
 
-                Task1Title.Text = activePills.Count > 0
-                    ? activePills[0].Text
-                    : "No pending tags · All caught up! 🌟";
-                Task1Tag.Text = activePills.Count > 0
-                    ? FormatPillTag(activePills[0], "Today")
-                    : "Today";
-
-                Task2Title.Text = activePills.Count > 1
-                    ? activePills[1].Text
-                    : (activePills.Count == 1 ? "Great momentum! Keep it going" : "Click to open TagDoS Hub");
-                Task2Tag.Text = activePills.Count > 1
-                    ? FormatPillTag(activePills[1], "Next")
-                    : (activePills.Count == 1 ? "Next" : "Hub");
+                MediumStreamsHost.Children.Clear();
+                foreach (var stream in streams.Take(2))
+                {
+                    MediumStreamsHost.Children.Add(CreateStreamCardElement(stream));
+                }
 
                 if (StreamNamesStatusText != null)
                 {
@@ -143,20 +138,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 LargeStreamsSubtitle.Text = $"{streamCount} streams · {totalActive} open tags · {quickNotes.Count} notes";
                 LargeFocusBadge.Text = $"Stream: {activeStreamName}";
 
-                LargeTask1Title.Text = activePills.Count > 0 ? activePills[0].Text : "All tags completed! 🌟";
-                LargeTask1Tag.Text = activePills.Count > 0 ? FormatPillTag(activePills[0], "Priority 1") : "Done";
-
-                LargeTask2Title.Text = activePills.Count > 1 ? activePills[1].Text : (activePills.Count == 1 ? "Maintain daily habit streak" : "Take a mindful break");
-                LargeTask2Tag.Text = activePills.Count > 1 ? FormatPillTag(activePills[1], "Priority 2") : "Habits";
-
-                LargeTask3Title.Text = activePills.Count > 2 ? activePills[2].Text : (activePills.Count > 0 ? "Review evening goals & ledger" : "Organize notes");
-                LargeTask3Tag.Text = activePills.Count > 2 ? FormatPillTag(activePills[2], "Priority 3") : "Finances";
-
-                LargeTask4Title.Text = activePills.Count > 3 ? activePills[3].Text : "Sync health telemetry & sleep stages";
-                LargeTask4Tag.Text = activePills.Count > 3 ? FormatPillTag(activePills[3], "Priority 4") : "Health";
-
-                LargeTask5Title.Text = activePills.Count > 4 ? activePills[4].Text : "Stargazing & astronomical briefing";
-                LargeTask5Tag.Text = activePills.Count > 4 ? FormatPillTag(activePills[4], "Priority 5") : "Cosmos";
+                LargeStreamsHost.Children.Clear();
+                foreach (var stream in streams.Take(4))
+                {
+                    LargeStreamsHost.Children.Add(CreateStreamCardElement(stream));
+                }
 
                 var latestNote = quickNotes.OrderByDescending(n => n.UpdatedAt).FirstOrDefault();
                 if (latestNote != null && !string.IsNullOrWhiteSpace(latestNote.Content))
@@ -176,6 +162,269 @@ namespace Daily_WinUI.DesktopWidgets.Views
             {
                 System.Diagnostics.Debug.WriteLine($"[DesktopTagdosWidget] Error refreshing: {ex.Message}");
             }
+        }
+
+        private UIElement CreateStreamCardElement(TagDoStream stream)
+        {
+            var card = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x16, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(9),
+                Padding = new Thickness(9, 5, 9, 5)
+            };
+
+            var stack = new StackPanel { Spacing = 4 };
+
+            // Row 0: Stream Title + Optional Schedule Time Only
+            var titleRow = new Grid { ColumnSpacing = 6 };
+            titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var titleBlock = new TextBlock
+            {
+                Text = stream.DisplayTitle,
+                FontSize = 10.5,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF)),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            titleBlock.Tapped += (_, e) =>
+            {
+                e.Handled = true;
+                NavigateToMainHub(stream.Id, null);
+            };
+            Grid.SetColumn(titleBlock, 0);
+            titleRow.Children.Add(titleBlock);
+
+            DateTime? effectiveRem = stream.StreamReminder ?? stream.Clusters
+                .Where(c => c.ClusterReminder.HasValue)
+                .Select(c => c.ClusterReminder!.Value)
+                .OrderBy(d => d)
+                .FirstOrDefault();
+            if (effectiveRem.HasValue && effectiveRem.Value != default)
+            {
+                var remPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 3,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                remPanel.Children.Add(new FontIcon
+                {
+                    Glyph = "\xE823",
+                    FontFamily = new FontFamily("Segoe Fluent Icons"),
+                    FontSize = 9,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF))
+                });
+                remPanel.Children.Add(new TextBlock
+                {
+                    Text = $"{effectiveRem.Value:HH:mm}",
+                    FontSize = 9.5,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                Grid.SetColumn(remPanel, 1);
+                titleRow.Children.Add(remPanel);
+            }
+            stack.Children.Add(titleRow);
+
+            // Row 1: Scrollable Pills Underneath Floating ✓ / ↻
+            var pillsRowGrid = new Grid();
+            var pillsScroll = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+                HorizontalScrollMode = ScrollMode.Enabled,
+                VerticalScrollMode = ScrollMode.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+            pillsScroll.PointerWheelChanged += (s, e) =>
+            {
+                if (s is ScrollViewer sv && sv.ScrollableWidth > 0)
+                {
+                    int delta = e.GetCurrentPoint(sv).Properties.MouseWheelDelta;
+                    if (delta != 0)
+                    {
+                        sv.ChangeView(Math.Clamp(sv.HorizontalOffset - delta * 0.6, 0, sv.ScrollableWidth), null, null, false);
+                        e.Handled = true;
+                    }
+                }
+            };
+
+            var focusPill = stream.AllPills.FirstOrDefault(p => !p.IsCompleted) ?? stream.DrivingPill;
+            var pillsPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 4,
+                Padding = new Thickness(0, 0, focusPill != null ? 50 : 2, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var displayPills = stream.AllPills.Where(p => !p.IsCompleted).ToList();
+            if (displayPills.Count == 0) displayPills = stream.AllPills.ToList();
+
+            foreach (var pill in displayPills)
+            {
+                (Color bg, Color border, Color fg) = GetPillColors(pill.Type);
+                var pillBorder = new Border
+                {
+                    Background = new SolidColorBrush(bg),
+                    BorderBrush = new SolidColorBrush(border),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Child = new TextBlock
+                    {
+                        Text = pill.Text,
+                        FontSize = 10,
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        Foreground = new SolidColorBrush(fg),
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                pillBorder.Tapped += (_, e) =>
+                {
+                    e.Handled = true;
+                    NavigateToMainHub(stream.Id, pill.Id);
+                };
+                pillsPanel.Children.Add(pillBorder);
+            }
+
+            pillsScroll.Content = pillsPanel;
+            pillsRowGrid.Children.Add(pillsScroll);
+
+            if (focusPill != null)
+            {
+                var overlay = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var scrimBrush = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0, 0),
+                    EndPoint = new Point(1, 0)
+                };
+                scrimBrush.GradientStops.Add(new GradientStop { Color = Color.FromArgb(0x00, 0x0B, 0x15, 0x26), Offset = 0 });
+                scrimBrush.GradientStops.Add(new GradientStop { Color = Color.FromArgb(0xF0, 0x0B, 0x15, 0x26), Offset = 1 });
+                overlay.Children.Add(new Border
+                {
+                    Width = 14,
+                    Height = 22,
+                    Background = scrimBrush,
+                    IsHitTestVisible = false
+                });
+
+                var doneBtn = new Border
+                {
+                    Width = 19,
+                    Height = 19,
+                    CornerRadius = new CornerRadius(9.5),
+                    Background = new SolidColorBrush(Color.FromArgb(0x28, 0x00, 0xE6, 0x76)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE6, 0x76)),
+                    BorderThickness = new Thickness(1),
+                    Child = new TextBlock
+                    {
+                        Text = "✓",
+                        FontSize = 9,
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE6, 0x76)),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                doneBtn.Tapped += async (_, e) =>
+                {
+                    e.Handled = true;
+                    await ExecuteStreamPillActionAsync(stream, focusPill, recycle: false);
+                };
+
+                var recycleBtn = new Border
+                {
+                    Width = 19,
+                    Height = 19,
+                    CornerRadius = new CornerRadius(9.5),
+                    Background = new SolidColorBrush(Color.FromArgb(0x28, 0x00, 0xE5, 0xFF)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE5, 0xFF)),
+                    BorderThickness = new Thickness(1),
+                    Child = new TextBlock
+                    {
+                        Text = "↻",
+                        FontSize = 9,
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                recycleBtn.Tapped += async (_, e) =>
+                {
+                    e.Handled = true;
+                    await ExecuteStreamPillActionAsync(stream, focusPill, recycle: true);
+                };
+
+                var actionCapsule = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x0B, 0x15, 0x26)),
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(2, 1, 0, 1),
+                    Child = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 4,
+                        Children = { doneBtn, recycleBtn }
+                    }
+                };
+                overlay.Children.Add(actionCapsule);
+                pillsRowGrid.Children.Add(overlay);
+            }
+
+            stack.Children.Add(pillsRowGrid);
+            card.Child = stack;
+            return card;
+        }
+
+        private async Task ExecuteStreamPillActionAsync(TagDoStream stream, TagDoPill pill, bool recycle)
+        {
+            if (_tagdosService == null) return;
+            if (recycle)
+                TagdosParser.RecyclePillToBack(stream, pill.Id);
+            else
+                TagdosParser.TogglePillCompletion(stream, pill.Id);
+
+            await _tagdosService.SaveStreamAsync(stream);
+            RefreshData();
+        }
+
+        private static (Color bg, Color border, Color fg) GetPillColors(TagDoPillType type)
+        {
+            return type switch
+            {
+                TagDoPillType.Financial => (
+                    Color.FromArgb(0x22, 0x00, 0xD0, 0x9C),
+                    Color.FromArgb(0x66, 0x00, 0xD0, 0x9C),
+                    Color.FromArgb(0xFF, 0x00, 0xD0, 0x9C)),
+                TagDoPillType.Urgent => (
+                    Color.FromArgb(0x22, 0xFF, 0x2D, 0x55),
+                    Color.FromArgb(0x66, 0xFF, 0x2D, 0x55),
+                    Color.FromArgb(0xFF, 0xFF, 0x2D, 0x55)),
+                TagDoPillType.TemporalOrMetric => (
+                    Color.FromArgb(0x22, 0xFF, 0xB3, 0x00),
+                    Color.FromArgb(0x66, 0xFF, 0xB3, 0x00),
+                    Color.FromArgb(0xFF, 0xFF, 0xB3, 0x00)),
+                TagDoPillType.Completed => (
+                    Color.FromArgb(0x0E, 0xFF, 0xFF, 0xFF),
+                    Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF),
+                    Color.FromArgb(0x77, 0xFF, 0xFF, 0xFF)),
+                _ => (
+                    Color.FromArgb(0x22, 0x00, 0xE5, 0xFF),
+                    Color.FromArgb(0x66, 0x00, 0xE5, 0xFF),
+                    Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF))
+            };
         }
 
         private static int ParseSlotTag(object sender)
@@ -226,13 +475,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 return;
 
             var (stream, pill) = _displayedEntries[slotIndex];
-            if (recycle)
-                TagdosParser.RecyclePillToBack(stream, pill.Id);
-            else
-                TagdosParser.TogglePillCompletion(stream, pill.Id);
-
-            await _tagdosService.SaveStreamAsync(stream);
-            RefreshData();
+            await ExecuteStreamPillActionAsync(stream, pill, recycle);
         }
 
         private void NavigateToMainHub(string? streamId, string? pillId)
@@ -243,6 +486,11 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 {
                     WidgetsHostIpc.ForwardUriToMainApp(
                         $"daily://tagdos?streamId={Uri.EscapeDataString(streamId)}&pillId={Uri.EscapeDataString(pillId)}&edit=1");
+                }
+                else if (!string.IsNullOrWhiteSpace(streamId))
+                {
+                    WidgetsHostIpc.ForwardUriToMainApp(
+                        $"daily://tagdos?streamId={Uri.EscapeDataString(streamId)}");
                 }
                 else
                 {
@@ -264,15 +512,5 @@ namespace Daily_WinUI.DesktopWidgets.Views
             }
 #endif
         }
-
-        private static string FormatPillTag(TagDoPill pill, string fallback) =>
-            pill.Type switch
-            {
-                TagDoPillType.Urgent => "Urgent",
-                TagDoPillType.Financial => "Finances",
-                TagDoPillType.TemporalOrMetric => "Metric",
-                TagDoPillType.Completed => "Done",
-                _ => fallback
-            };
     }
 }

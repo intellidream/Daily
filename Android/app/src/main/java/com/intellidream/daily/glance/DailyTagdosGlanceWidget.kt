@@ -718,64 +718,72 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             ) {
                 Text(
                     text = stream.title,
-                    modifier = GlanceModifier.clickable(buildOpenAction(context, stream.id, null)),
+                    modifier = GlanceModifier.defaultWeight().clickable(buildOpenAction(context, stream.id, null)),
+                    maxLines = 1,
                     style = TextStyle(
                         color = ColorProvider(Color(0xB3FFFFFF)),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
-                Spacer(modifier = GlanceModifier.defaultWeight())
                 if (stream.reminderTime != null) {
-                    Text(
-                        text = stream.reminderTime,
-                        style = TextStyle(
-                            color = ColorProvider(Color(0xFF00E5FF)),
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Medium
+                    Box(modifier = GlanceModifier.padding(start = 4.dp)) {
+                        Text(
+                            text = stream.reminderTime,
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFF00E5FF)),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         )
-                    )
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                }
-                if (stream.id.isNotBlank() && !stream.drivingPillId.isNullOrBlank()) {
-                    QuickActionButtons(streamId = stream.id, pillId = stream.drivingPillId, compact = true)
+                    }
                 }
             }
 
-            Spacer(modifier = GlanceModifier.height(2.dp))
+            Spacer(modifier = GlanceModifier.height(2.5.dp))
 
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                val visible = stream.pills.take(4)
-                for (pill in visible) {
-                    val color = resolvePillColor(pill.type)
-                    Box(modifier = GlanceModifier.padding(end = 3.5.dp)) {
-                        Box(
-                            modifier = GlanceModifier
-                                .background(color.copy(alpha = 0.14f))
-                                .cornerRadius(8.dp)
-                                .clickable(buildOpenAction(context, stream.id, pill.id))
-                                .padding(horizontal = 4.5.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = pill.text,
-                                style = TextStyle(
-                                    color = ColorProvider(color),
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold
+                Row(
+                    modifier = GlanceModifier.defaultWeight(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val visible = stream.pills.take(4)
+                    for (pill in visible) {
+                        val color = resolvePillColor(pill.type)
+                        Box(modifier = GlanceModifier.padding(end = 3.5.dp)) {
+                            Box(
+                                modifier = GlanceModifier
+                                    .background(color.copy(alpha = 0.14f))
+                                    .cornerRadius(8.dp)
+                                    .clickable(buildOpenAction(context, stream.id, pill.id))
+                                    .padding(horizontal = 4.5.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = pill.text,
+                                    style = TextStyle(
+                                        color = ColorProvider(color),
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
-                }
-                if (stream.activePillsCount > 4) {
-                    Text(
-                        text = "+${stream.activePillsCount - 4}",
-                        style = TextStyle(
-                            color = ColorProvider(Color(0x66FFFFFF)),
-                            fontSize = 7.5.sp,
-                            fontWeight = FontWeight.Bold
+                    if (stream.activePillsCount > 4) {
+                        Text(
+                            text = "+${stream.activePillsCount - 4}",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0x66FFFFFF)),
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
+                    }
+                }
+                if (stream.id.isNotBlank() && !stream.drivingPillId.isNullOrBlank()) {
+                    Box(modifier = GlanceModifier.padding(start = 4.dp)) {
+                        QuickActionButtons(streamId = stream.id, pillId = stream.drivingPillId, compact = true)
+                    }
                 }
             }
         }

@@ -325,24 +325,20 @@ public struct TagdosNotesHubView: View {
                     triggerHaptic()
                     showingImportSheet = true
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Import")
-                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                    }
-                    .foregroundColor(ThemeColors.accentCyan)
-                    .padding(.horizontal, 11)
-                    .frame(height: 36)
-                    .background(
-                        Capsule().fill(ThemeColors.accentCyan.opacity(0.14))
-                            .overlay(Capsule().strokeBorder(ThemeColors.accentCyan.opacity(0.35), lineWidth: 1))
-                    )
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(ThemeColors.accentCyan)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle().fill(ThemeColors.accentCyan.opacity(0.16))
+                                .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.35), lineWidth: 1))
+                        )
                 }
                 .buttonStyle(.plain)
                 .help("Import tasks from Microsoft To Do or Google Tasks")
 
                 if currentStream != nil {
+                    let modeColor = isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple
                     Button {
                         triggerHaptic()
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -360,11 +356,11 @@ public struct TagdosNotesHubView: View {
                     } label: {
                         Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
+                            .foregroundColor(modeColor)
                             .frame(width: 36, height: 36)
                             .background(
-                                Circle().fill(Color.white.opacity(0.08))
-                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                                Circle().fill(modeColor.opacity(0.18))
+                                    .overlay(Circle().strokeBorder(modeColor.opacity(0.4), lineWidth: 1))
                             )
                     }
                     .buttonStyle(.plain)

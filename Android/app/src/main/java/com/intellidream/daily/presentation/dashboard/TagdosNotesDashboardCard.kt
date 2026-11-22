@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -127,6 +128,11 @@ private fun formatReminderTime(timestamp: Long?): String {
     if (timestamp == null) return ""
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+private fun effectiveStreamReminder(stream: TagDoStream): Long? {
+    stream.streamReminder?.let { return it }
+    return stream.clusters.mapNotNull { it.reminderTime }.minOrNull()
 }
 
 // MARK: - Small (1x1)
@@ -400,6 +406,7 @@ private fun StreamPipelineRow(
     repository: TagdosRepository,
     onOpenHub: () -> Unit
 ) {
+    val reminderTs = effectiveStreamReminder(stream)
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -419,69 +426,106 @@ private fun StreamPipelineRow(
                 modifier = Modifier.weight(1f)
             )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                if (stream.streamReminder != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Notifications,
-                            contentDescription = null,
-                            tint = ThemeColors.accentCyan,
-                            modifier = Modifier.size(9.dp)
-                        )
-                        Text(
-                            text = formatReminderTime(stream.streamReminder),
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ThemeColors.accentCyan
-                        )
-                    }
-                }
-                val driving = stream.drivingPill
-                if (driving != null) {
-                    DashboardQuickActions(
-                        onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
-                        onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
-                        sizeDp = 18
+            if (reminderTs != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Notifications,
+                        contentDescription = null,
+                        tint = ThemeColors.accentCyan,
+                        modifier = Modifier.size(9.dp)
+                    )
+                    Text(
+                        text = formatReminderTime(reminderTs),
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ThemeColors.accentCyan
                     )
                 }
             }
         }
 
-        // Row of pills (horizontally scrollable/swipeable like iOS)
+        StreamPillsRowWithQuickActions(
+            stream = stream,
+            compact = true,
+            buttonSizeDp = 18,
+            repository = repository,
+            onOpenHub = onOpenHub
+        )
+    }
+}
+
+@Composable
+private fun StreamPillsRowWithQuickActions(
+    stream: TagDoStream,
+    compact: Boolean,
+    buttonSizeDp: Int,
+    repository: TagdosRepository,
+    onOpenHub: () -> Unit
+) {
+    val driving = stream.drivingPill
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterStart
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 5.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            val pills = stream.activePills.take(maxPills)
-            pills.forEach { pill ->
-                MiniPillBadge(
-                    pill = pill,
-                    onClick = {
-                        repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
-                        onOpenHub()
-                    }
-                )
+            stream.activePills.forEach { pill ->
+                if (compact) {
+                    MiniPillBadge(
+                        pill = pill,
+                        onClick = {
+                            repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
+                            onOpenHub()
+                        }
+                    )
+                } else {
+                    InteractivePillBadge(
+                        pill = pill,
+                        onClick = {
+                            repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
+                            onOpenHub()
+                        }
+                    )
+                }
             }
-            if (stream.activePills.size > maxPills) {
+            if (driving != null) {
+                Spacer(modifier = Modifier.width((buttonSizeDp * 2 + 16).dp))
+            }
+        }
+
+        if (driving != null) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(14.dp)
+                        .height(buttonSizeDp.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, Color(0xEC0A1526))
+                            )
+                        )
+                )
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.06f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                        .background(Color(0xEC0A1526))
+                        .padding(start = 2.dp)
                 ) {
-                    Text(
-                        text = "+${stream.activePills.size - maxPills}",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.45f)
+                    DashboardQuickActions(
+                        onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
+                        onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
+                        sizeDp = buttonSizeDp
                     )
                 }
             }
@@ -542,6 +586,7 @@ private fun TallTagdosContent(
             modifier = Modifier.fillMaxWidth()
         ) {
             streams.take(3).forEach { stream ->
+                val remTs = effectiveStreamReminder(stream)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -557,34 +602,37 @@ private fun TallTagdosContent(
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
-                        if (stream.streamReminder != null) {
-                            Text(
-                                text = formatReminderTime(stream.streamReminder),
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ThemeColors.accentCyan
-                            )
+                        if (remTs != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Notifications,
+                                    contentDescription = null,
+                                    tint = ThemeColors.accentCyan,
+                                    modifier = Modifier.size(9.dp)
+                                )
+                                Text(
+                                    text = formatReminderTime(remTs),
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ThemeColors.accentCyan
+                                )
+                            }
                         }
                     }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        stream.activePills.take(8).forEach { pill ->
-                            MiniPillBadge(
-                                pill = pill,
-                                onClick = {
-                                    repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
-                                    onOpenHub()
-                                }
-                            )
-                        }
-                    }
+                    StreamPillsRowWithQuickActions(
+                        stream = stream,
+                        compact = true,
+                        buttonSizeDp = 17,
+                        repository = repository,
+                        onOpenHub = onOpenHub
+                    )
                 }
             }
         }
@@ -706,6 +754,7 @@ private fun LargeTagdosContent(
             modifier = Modifier.fillMaxWidth()
         ) {
             streams.take(4).forEach { stream ->
+                val remTs = effectiveStreamReminder(stream)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -721,60 +770,39 @@ private fun LargeTagdosContent(
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            if (stream.streamReminder != null) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Notifications,
-                                        contentDescription = null,
-                                        tint = ThemeColors.accentCyan,
-                                        modifier = Modifier.size(9.dp)
-                                    )
-                                    Text(
-                                        text = formatReminderTime(stream.streamReminder),
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ThemeColors.accentCyan
-                                    )
-                                }
-                            }
-                            val driving = stream.drivingPill
-                            if (driving != null) {
-                                DashboardQuickActions(
-                                    onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
-                                    onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
-                                    sizeDp = 18
+                        if (remTs != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Notifications,
+                                    contentDescription = null,
+                                    tint = ThemeColors.accentCyan,
+                                    modifier = Modifier.size(9.dp)
+                                )
+                                Text(
+                                    text = formatReminderTime(remTs),
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ThemeColors.accentCyan
                                 )
                             }
                         }
                     }
 
-                    // Horizontal scrolling pill row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        stream.activePills.take(8).forEach { pill ->
-                            InteractivePillBadge(
-                                pill = pill,
-                                onClick = {
-                                    repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
-                                    onOpenHub()
-                                }
-                            )
-                        }
-                    }
+                    // Horizontal scrolling pill row underneath ✓ / ↻
+                    StreamPillsRowWithQuickActions(
+                        stream = stream,
+                        compact = false,
+                        buttonSizeDp = 18,
+                        repository = repository,
+                        onOpenHub = onOpenHub
+                    )
                 }
             }
         }

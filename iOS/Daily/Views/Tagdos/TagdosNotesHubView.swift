@@ -327,7 +327,8 @@ public struct TagdosNotesHubView: View {
             .accessibilityLabel("Import Tasks")
 
             if currentStream != nil {
-                // Dual Mode Toggle: Canvas vs Raw Edit
+                // Dual Mode Toggle: Canvas vs Raw Edit (circular icon matching Import button)
+                let modeColor = isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple
                 Button {
                     triggerHaptic()
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -343,22 +344,15 @@ public struct TagdosNotesHubView: View {
                         isRawEditMode.toggle()
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(isRawEditMode ? "Canvas" : "Raw Text")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                    }
-                    .foregroundColor(isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.18))
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder((isRawEditMode ? ThemeColors.accentGreen : ThemeColors.accentPurple).opacity(0.4), lineWidth: 1)
-                    )
+                    Image(systemName: isRawEditMode ? "square.grid.2x2.fill" : "text.cursor")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(modeColor)
+                        .frame(width: 32, height: 32)
+                        .background(modeColor.opacity(0.18))
+                        .clipShape(Circle())
+                        .overlay(Circle().strokeBorder(modeColor.opacity(0.4), lineWidth: 1))
                 }
+                .accessibilityLabel(isRawEditMode ? "Canvas Mode" : "Raw Text Mode")
             }
         }
         .padding(.horizontal, 16)
@@ -1725,21 +1719,41 @@ private struct SwipeableClusterCard<Content: View>: View {
                             )
                     )
             )
-            // Subtle Left Edge Hint (Drag Right -> + Tag)
+            // Subtle Left Edge Hint (Pull Right -> + Tag, or tap edge to reveal)
             .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(ThemeColors.accentCyan.opacity(0.45))
-                    .frame(width: 2.5, height: 18)
-                    .padding(.leading, 4)
-                    .allowsHitTesting(false)
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        let next: CGFloat = restingOffsetX > 0 ? 0 : revealWidth
+                        offsetX = next
+                        restingOffsetX = next
+                    }
+                } label: {
+                    Capsule()
+                        .fill(ThemeColors.accentCyan.opacity(0.45))
+                        .frame(width: 2.5, height: 18)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            // Subtle Right Edge Hint (Drag Left -> Reminder)
+            // Subtle Right Edge Hint (Pull Left -> Reminder, or tap edge to reveal)
             .overlay(alignment: .trailing) {
-                Capsule()
-                    .fill((reminderFormattedText != nil ? ThemeColors.accentCyan : ThemeColors.accentPurple).opacity(0.5))
-                    .frame(width: 2.5, height: 18)
-                    .padding(.trailing, 4)
-                    .allowsHitTesting(false)
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        let next: CGFloat = restingOffsetX < 0 ? 0 : -revealWidth
+                        offsetX = next
+                        restingOffsetX = next
+                    }
+                } label: {
+                    Capsule()
+                        .fill((reminderFormattedText != nil ? ThemeColors.accentCyan : ThemeColors.accentPurple).opacity(0.5))
+                        .frame(width: 2.5, height: 18)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             .offset(x: offsetX)
             .onTapGesture {
@@ -1750,64 +1764,153 @@ private struct SwipeableClusterCard<Content: View>: View {
                     }
                 }
             }
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 14, coordinateSpace: .local)
-                    .onChanged { value in
-                        let dx = value.translation.width
-                        let dy = value.translation.height
-                        guard abs(dx) > abs(dy) * 1.15 || isDraggingAnyCluster else { return }
-                        if !isDraggingAnyCluster {
-                            isDraggingAnyCluster = true
-                        }
-                        let proposed = restingOffsetX + dx
-                        // Rubber-band beyond revealWidth
-                        if proposed > revealWidth {
-                            offsetX = revealWidth + (proposed - revealWidth) * 0.35
-                        } else if proposed < -revealWidth {
-                            offsetX = -revealWidth + (proposed + revealWidth) * 0.35
-                        } else {
-                            offsetX = proposed
-                        }
-                    }
-                    .onEnded { value in
-                        let totalX = restingOffsetX + value.translation.width
-                        if totalX >= fullTriggerThreshold {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                offsetX = 0
-                                restingOffsetX = 0
-                            }
-                            onAddTag()
-                        } else if totalX <= -fullTriggerThreshold {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                offsetX = 0
-                                restingOffsetX = 0
-                            }
-                            onSetReminder()
-                        } else if totalX > 34 {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                offsetX = revealWidth
-                                restingOffsetX = revealWidth
-                            }
-                        } else if totalX < -34 {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                offsetX = -revealWidth
-                                restingOffsetX = -revealWidth
-                            }
-                        } else {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                offsetX = 0
-                                restingOffsetX = 0
-                            }
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                            isDraggingAnyCluster = false
-                        }
-                    }
+            #if canImport(UIKit)
+            .gesture(
+                ClusterHorizontalPullGesture(
+                    offsetX: $offsetX,
+                    restingOffsetX: $restingOffsetX,
+                    isDraggingAnyCluster: $isDraggingAnyCluster,
+                    revealWidth: revealWidth,
+                    fullTriggerThreshold: 112,
+                    onAddTag: onAddTag,
+                    onSetReminder: onSetReminder
+                )
             )
+            #endif
         }
         .clipped()
     }
 }
+
+#if canImport(UIKit)
+private struct ClusterHorizontalPullGesture: UIGestureRecognizerRepresentable {
+    @Binding var offsetX: CGFloat
+    @Binding var restingOffsetX: CGFloat
+    @Binding var isDraggingAnyCluster: Bool
+    let revealWidth: CGFloat
+    let fullTriggerThreshold: CGFloat
+    let onAddTag: () -> Void
+    let onSetReminder: () -> Void
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var restingOffsetProvider: () -> CGFloat = { 0 }
+        var initialRestingOffset: CGFloat = 0
+        var triggeredSnapHaptic: Bool = false
+        var triggeredFullHaptic: Bool = false
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let v = pan.velocity(in: pan.view)
+            let isResting = abs(restingOffsetProvider()) < 1
+            if isResting {
+                // Only engage on an intentional horizontal pull so vertical scroll never locks
+                return abs(v.x) > abs(v.y) * 2.4 && abs(v.x) > 30
+            } else {
+                return abs(v.x) > abs(v.y) * 1.5
+            }
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        let coordinator = Coordinator()
+        coordinator.restingOffsetProvider = { restingOffsetX }
+        return coordinator
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.maximumNumberOfTouches = 1
+        pan.cancelsTouchesInView = true
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.restingOffsetProvider = { restingOffsetX }
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        let coordinator = context.coordinator
+        switch recognizer.state {
+        case .began:
+            isDraggingAnyCluster = true
+            coordinator.initialRestingOffset = restingOffsetX
+            coordinator.triggeredSnapHaptic = false
+            coordinator.triggeredFullHaptic = false
+
+        case .changed:
+            let rawDx = recognizer.translation(in: recognizer.view).x
+            let effectiveDx: CGFloat
+            if abs(coordinator.initialRestingOffset) < 1 {
+                let deadzone: CGFloat = 22
+                if abs(rawDx) <= deadzone {
+                    effectiveDx = 0
+                } else {
+                    effectiveDx = (rawDx > 0 ? rawDx - deadzone : rawDx + deadzone) * 0.82
+                }
+            } else {
+                effectiveDx = rawDx
+            }
+
+            let proposed = coordinator.initialRestingOffset + effectiveDx
+            let damped: CGFloat
+            if proposed > revealWidth {
+                damped = revealWidth + (proposed - revealWidth) * 0.35
+            } else if proposed < -revealWidth {
+                damped = -revealWidth + (proposed + revealWidth) * 0.35
+            } else {
+                damped = proposed
+            }
+            offsetX = damped
+
+            if !coordinator.triggeredFullHaptic && abs(damped) >= fullTriggerThreshold {
+                coordinator.triggeredFullHaptic = true
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            } else if !coordinator.triggeredSnapHaptic && abs(damped) >= 52 {
+                coordinator.triggeredSnapHaptic = true
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+
+        case .ended, .cancelled, .failed:
+            let finalX = offsetX
+            if finalX >= fullTriggerThreshold {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    offsetX = 0
+                    restingOffsetX = 0
+                }
+                onAddTag()
+            } else if finalX <= -fullTriggerThreshold {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    offsetX = 0
+                    restingOffsetX = 0
+                }
+                onSetReminder()
+            } else if finalX >= 46 {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    offsetX = revealWidth
+                    restingOffsetX = revealWidth
+                }
+            } else if finalX <= -46 {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    offsetX = -revealWidth
+                    restingOffsetX = -revealWidth
+                }
+            } else {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    offsetX = 0
+                    restingOffsetX = 0
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                isDraggingAnyCluster = false
+            }
+
+        default:
+            break
+        }
+    }
+}
+#endif
 
 // MARK: - Action Model for Pill Sheet
 public struct TagDoPillAction: Identifiable {

@@ -2,6 +2,7 @@ package com.intellidream.daily.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import java.util.UUID
 
 /**
@@ -233,4 +234,35 @@ data class TagDoQuickNote(
 data class TagDoPillAction(
     val streamId: String,
     val pill: TagDoPill
+)
+
+/**
+ * Supabase `tagdos_streams` DTO aligned with iOS & WinUI schemas.
+ */
+@Serializable
+data class RemoteTagdoStreamRecord(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String,
+    @SerialName("stream_number") val streamNumber: Int,
+    val title: String = "",
+    @SerialName("raw_syntax") val rawSyntax: String = "",
+    @SerialName("reminder_time") val reminderTime: String? = null,
+    @SerialName("active_memos") val activeMemos: String? = "",
+    val attachments: JsonArray? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+/**
+ * Supabase `tagdos_quick_notes` DTO aligned with iOS & WinUI schemas.
+ */
+@Serializable
+data class RemoteTagdoQuickNoteRecord(
+    val id: String,
+    @SerialName("user_id") val userId: String? = null,
+    val title: String = "",
+    val content: String = "",
+    @SerialName("is_pinned") val isPinned: Boolean = false,
+    val tags: List<String>? = emptyList(),
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
 )

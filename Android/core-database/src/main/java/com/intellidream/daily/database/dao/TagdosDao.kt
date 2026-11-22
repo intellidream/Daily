@@ -18,6 +18,9 @@ interface TagdosDao {
     @Query("SELECT * FROM tagdos_streams ORDER BY order_index ASC")
     fun getAllStreamsFlow(): Flow<List<TagdoStreamEntity>>
 
+    @Query("SELECT * FROM tagdos_streams ORDER BY order_index ASC")
+    suspend fun getAllStreamsOnce(): List<TagdoStreamEntity>
+
     @Query("SELECT * FROM tagdos_streams WHERE id = :id")
     suspend fun getStreamById(id: String): TagdoStreamEntity?
 
@@ -37,6 +40,9 @@ interface TagdosDao {
 
     @Query("SELECT * FROM tagdos_quick_notes ORDER BY is_pinned DESC, updated_at DESC")
     fun getAllNotesFlow(): Flow<List<TagdoQuickNoteEntity>>
+
+    @Query("SELECT * FROM tagdos_quick_notes ORDER BY is_pinned DESC, updated_at DESC")
+    suspend fun getAllNotesOnce(): List<TagdoQuickNoteEntity>
 
     @Query("SELECT * FROM tagdos_quick_notes WHERE id = :id")
     suspend fun getNoteById(id: String): TagdoQuickNoteEntity?

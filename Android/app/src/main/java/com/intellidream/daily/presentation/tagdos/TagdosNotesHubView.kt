@@ -179,11 +179,14 @@ fun TagdosNotesHubView(
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullToRefreshState()
+    LaunchedEffect(Unit) {
+        repository.syncWithSupabase(force = false)
+    }
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             coroutineScope.launch {
-                repository.syncWithSupabase()
+                repository.syncWithSupabase(force = true)
                 pullRefreshState.endRefresh()
             }
         }

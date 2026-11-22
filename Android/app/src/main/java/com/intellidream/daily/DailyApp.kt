@@ -33,6 +33,8 @@ class DailyApp : Application() {
         private set
     lateinit var financeRemoteService: com.intellidream.daily.network.FinanceRemoteService
         private set
+    lateinit var tagdosRemoteService: com.intellidream.daily.network.TagdosRemoteService
+        private set
     lateinit var tagdosRepository: com.intellidream.daily.database.TagdosRepository
         private set
     lateinit var newsRemoteService: com.intellidream.daily.network.NewsRemoteService
@@ -101,7 +103,44 @@ class DailyApp : Application() {
                 com.intellidream.daily.glance.WidgetUpdateHelper.updateHabitsWidgets(this@DailyApp, habitType)
             }
         }
+        tagdosRemoteService = com.intellidream.daily.network.TagdosRemoteService()
         tagdosRepository = com.intellidream.daily.database.TagdosRepository(dailyDatabase.tagdosDao()).also { repo ->
+            repo.syncHandler = object : com.intellidream.daily.database.TagdosSyncHandler {
+                override suspend fun pullStreams(userId: String) =
+                    tagdosRemoteService.pullStreams(userId)
+
+                override suspend fun upsertStream(
+                    userId: String,
+                    streamNumber: Int,
+                    title: String,
+                    rawSyntax: String,
+                    reminderTime: String?,
+                    activeMemos: String,
+                    attachmentsJson: String,
+                    updatedAtIso: String
+                ) = tagdosRemoteService.upsertStream(
+                    userId = userId,
+                    streamNumber = streamNumber,
+                    title = title,
+                    rawSyntax = rawSyntax,
+                    reminderTime = reminderTime,
+                    activeMemos = activeMemos,
+                    attachmentsJson = attachmentsJson,
+                    updatedAtIso = updatedAtIso
+                )
+
+                override suspend fun deleteStreamsOverflow(userId: String, maxStreamNumber: Int) =
+                    tagdosRemoteService.deleteStreamsOverflow(userId, maxStreamNumber)
+
+                override suspend fun pullQuickNotes(userId: String) =
+                    tagdosRemoteService.pullQuickNotes(userId)
+
+                override suspend fun upsertQuickNote(record: com.intellidream.daily.model.RemoteTagdoQuickNoteRecord) =
+                    tagdosRemoteService.upsertQuickNote(record)
+
+                override suspend fun deleteQuickNote(userId: String, noteId: String) =
+                    tagdosRemoteService.deleteQuickNote(userId, noteId)
+            }
             repo.onStreamsChanged = {
                 com.intellidream.daily.tagdos.TagdosNotificationScheduler.rescheduleAll(this@DailyApp, repo.streams.value)
                 appScope.launch {
@@ -236,6 +275,8 @@ class DailyApp : Application() {
                         healthRepository.syncUnsyncedTelemetry()
                         healthRepository.syncUnsyncedVitals()
                         smartLedgerRepository.setUserId(uid)
+                        tagdosRepository.currentUserId = uid
+                        tagdosRepository.syncWithSupabase(uid)
                     }
                 }
             }

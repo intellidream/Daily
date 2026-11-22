@@ -242,25 +242,25 @@ public struct TagdosNotesDashboardCard: View {
             // Stack of 3 streams
             ForEach(store.streams.prefix(3)) { stream in
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack {
+                    HStack(spacing: 5) {
                         Text(stream.displayTitle)
                             .font(.system(size: 9.5, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .lineLimit(1)
-                        Spacer()
-                        if let rem = stream.streamReminder {
-                            Text(reminderFormatted(rem))
-                                .font(.system(size: 8, weight: .semibold))
-                                .foregroundColor(ThemeColors.accentCyan)
+                        Spacer(minLength: 4)
+                        if let rem = effectiveReminder(for: stream) {
+                            HStack(spacing: 2.5) {
+                                Image(systemName: "bell.fill")
+                                    .font(.system(size: 7.5))
+                                Text(reminderFormatted(rem))
+                                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            }
+                            .foregroundColor(ThemeColors.accentCyan)
                         }
                     }
 
-                    // Pills row
-                    HStack(spacing: 4) {
-                        ForEach(stream.activePills.prefix(4)) { pill in
-                            miniPillBadge(pill: pill, streamId: stream.id)
-                        }
-                    }
+                    // Scrollable pills row with floating trailing ✓ / ↻
+                    pillsRowWithQuickActions(stream: stream, compact: true, buttonSize: 17, iconSize: 7)
                 }
                 .padding(.vertical, 2)
             }
@@ -325,34 +325,26 @@ public struct TagdosNotesDashboardCard: View {
             // Render up to 4 Streams
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(store.streams.prefix(4)) { stream in
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
+                    VStack(alignment: .leading, spacing: 3.5) {
+                        HStack(spacing: 6) {
                             Text(stream.displayTitle)
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
-                            Spacer()
-                            if let rem = stream.streamReminder {
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            if let rem = effectiveReminder(for: stream) {
                                 HStack(spacing: 3) {
                                     Image(systemName: "bell.fill")
                                         .font(.system(size: 8))
                                     Text(reminderFormatted(rem))
-                                        .font(.system(size: 8.5, weight: .semibold))
+                                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
                                 }
                                 .foregroundColor(ThemeColors.accentCyan)
                             }
-                            if let driving = stream.drivingPill {
-                                quickActionButtons(streamId: stream.id, pillId: driving.id, size: 18, iconSize: 8)
-                            }
                         }
 
-                        // Horizontal flow of pills
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 5) {
-                                ForEach(stream.activePills.prefix(8)) { pill in
-                                    interactivePillBadge(pill: pill, streamId: stream.id)
-                                }
-                            }
-                        }
+                        // Horizontal scrolling pills underneath trailing ✓ / ↻
+                        pillsRowWithQuickActions(stream: stream, compact: false, buttonSize: 18, iconSize: 8)
                     }
                 }
             }
@@ -426,6 +418,11 @@ public struct TagdosNotesDashboardCard: View {
         }
     }
 
+    private func effectiveReminder(for stream: TagDoStream) -> Date? {
+        if let sr = stream.streamReminder { return sr }
+        return stream.clusters.compactMap(\.reminderDate).sorted().first
+    }
+
     @ViewBuilder
     private func streamRow(stream: TagDoStream, maxPills: Int) -> some View {
         VStack(alignment: .leading, spacing: 2.5) {
@@ -434,25 +431,60 @@ public struct TagdosNotesDashboardCard: View {
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .foregroundColor(Color.white.opacity(0.8))
                     .lineLimit(1)
-                Spacer()
-                if let rem = stream.streamReminder {
-                    Text(reminderFormatted(rem))
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundColor(ThemeColors.accentCyan)
-                }
-                if let driving = stream.drivingPill {
-                    quickActionButtons(streamId: stream.id, pillId: driving.id, size: 17, iconSize: 7.5)
+                Spacer(minLength: 4)
+                if let rem = effectiveReminder(for: stream) {
+                    HStack(spacing: 2.5) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 7.5))
+                        Text(reminderFormatted(rem))
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(ThemeColors.accentCyan)
                 }
             }
 
-            HStack(spacing: 4) {
-                ForEach(stream.activePills.prefix(maxPills)) { pill in
-                    miniPillBadge(pill: pill, streamId: stream.id)
+            pillsRowWithQuickActions(stream: stream, compact: true, buttonSize: 17, iconSize: 7.5)
+        }
+    }
+
+    @ViewBuilder
+    private func pillsRowWithQuickActions(
+        stream: TagDoStream,
+        compact: Bool,
+        buttonSize: CGFloat,
+        iconSize: CGFloat
+    ) -> some View {
+        let hasQuick = stream.drivingPill != nil
+        ZStack(alignment: .trailing) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: compact ? 4 : 5) {
+                    ForEach(stream.activePills) { pill in
+                        if compact {
+                            miniPillBadge(pill: pill, streamId: stream.id)
+                        } else {
+                            interactivePillBadge(pill: pill, streamId: stream.id)
+                        }
+                    }
                 }
-                if stream.activePills.count > maxPills {
-                    Text("+\(stream.activePills.count - maxPills)")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(Color.white.opacity(0.4))
+                .padding(.trailing, hasQuick ? (buttonSize * 2 + 16) : 2)
+            }
+
+            if let driving = stream.drivingPill {
+                HStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [Color(hex: "0A1526").opacity(0.0), Color(hex: "0A1526").opacity(0.92)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 14)
+                    .allowsHitTesting(false)
+
+                    quickActionButtons(streamId: stream.id, pillId: driving.id, size: buttonSize, iconSize: iconSize)
+                        .padding(.leading, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color(hex: "0A1526").opacity(0.92))
+                        )
                 }
             }
         }

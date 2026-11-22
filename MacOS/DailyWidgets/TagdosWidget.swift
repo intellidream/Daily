@@ -403,7 +403,7 @@ public struct TagdosWidgetView: View {
             // Stack of Streams (up to 5 styled stream rows)
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(entry.snapshot.streams.prefix(5), id: \.id) { stream in
-                    VStack(alignment: .leading, spacing: 2.5) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 4) {
                             Link(destination: pillEditURL(streamId: stream.id, pillId: "")) {
                                 Text(stream.title)
@@ -421,25 +421,14 @@ public struct TagdosWidgetView: View {
                                 }
                                 .foregroundColor(WidgetColors.accentCyan)
                             }
-                            Text("\(stream.activePillsCount) tags")
-                                .font(.system(size: 8, weight: .semibold, design: .rounded))
-                                .foregroundColor(Color.white.opacity(0.45))
-
-                            if let dpid = resolvedDrivingPillId(for: stream) {
-                                widgetQuickActionPair(streamId: stream.id, pillId: dpid, size: 17, iconSize: 7.5)
-                            }
                         }
 
-                        HStack(spacing: 4) {
-                            ForEach(Array(stream.pills.prefix(6).enumerated()), id: \.offset) { _, pill in
-                                widgetPillBadge(pill: pill, streamId: stream.id)
-                            }
-                            if stream.activePillsCount > 6 {
-                                Text("+\(stream.activePillsCount - 6)")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(Color.white.opacity(0.45))
-                            }
-                        }
+                        widgetPillsRowWithQuickActions(
+                            stream: stream,
+                            maxPills: 6,
+                            buttonSize: 16,
+                            iconSize: 7.5
+                        )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
@@ -507,23 +496,66 @@ public struct TagdosWidgetView: View {
                 Link(destination: pillEditURL(streamId: stream.id, pillId: "")) {
                     Text(stream.title)
                         .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.7))
+                        .foregroundColor(Color.white.opacity(0.75))
                         .lineLimit(1)
                 }
-                Spacer(minLength: 2)
-                if let dpid = resolvedDrivingPillId(for: stream) {
-                    widgetQuickActionPair(streamId: stream.id, pillId: dpid, size: 15, iconSize: 7)
+                Spacer(minLength: 4)
+                if let rem = stream.reminderTimeFormatted {
+                    HStack(spacing: 2) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 6.5))
+                        Text(rem)
+                            .font(.system(size: 7.5, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundColor(WidgetColors.accentCyan)
                 }
             }
 
+            widgetPillsRowWithQuickActions(
+                stream: stream,
+                maxPills: 5,
+                buttonSize: 15,
+                iconSize: 7
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func widgetPillsRowWithQuickActions(
+        stream: TagdosWidgetSnapshotStream,
+        maxPills: Int,
+        buttonSize: CGFloat,
+        iconSize: CGFloat
+    ) -> some View {
+        let dpid = resolvedDrivingPillId(for: stream)
+        ZStack(alignment: .trailing) {
             HStack(spacing: 3.5) {
-                ForEach(Array(stream.pills.prefix(4).enumerated()), id: \.offset) { _, pill in
+                ForEach(Array(stream.pills.prefix(maxPills).enumerated()), id: \.offset) { _, pill in
                     widgetPillBadge(pill: pill, streamId: stream.id)
                 }
-                if stream.activePillsCount > 4 {
-                    Text("+\(stream.activePillsCount - 4)")
+                if stream.activePillsCount > maxPills {
+                    Text("+\(stream.activePillsCount - maxPills)")
                         .font(.system(size: 7.5, weight: .bold))
-                        .foregroundColor(Color.white.opacity(0.4))
+                        .foregroundColor(Color.white.opacity(0.42))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, dpid != nil ? (buttonSize * 2 + 6) : 0)
+            .clipped()
+
+            if let dpid {
+                HStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [Color(hex: "081426").opacity(0.0), Color(hex: "081426").opacity(0.94)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 10)
+                    .allowsHitTesting(false)
+
+                    widgetQuickActionPair(streamId: stream.id, pillId: dpid, size: buttonSize, iconSize: iconSize)
+                        .padding(.leading, 1)
+                        .background(Capsule().fill(Color(hex: "081426").opacity(0.94)))
                 }
             }
         }

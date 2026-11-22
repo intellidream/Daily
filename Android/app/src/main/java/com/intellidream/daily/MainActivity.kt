@@ -658,10 +658,12 @@ fun DailyRootScreen(
         prismRepository.currentUserId = uid
         habitsRepository.currentUserId = uid
         healthRepository.currentUserId = uid
+        tagdosRepository.currentUserId = uid
         if (uid.isNotEmpty() && uid != "guest") {
             habitsRepository.syncLogs(uid)
             newsRepository.syncWithSupabase(uid)
             prismRepository.syncWithSupabase(uid)
+            tagdosRepository.syncWithSupabase(uid)
         }
     }
 

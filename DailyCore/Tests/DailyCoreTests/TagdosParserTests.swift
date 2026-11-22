@@ -118,4 +118,17 @@ final class TagdosParserTests: XCTestCase {
         XCTAssertEqual(snap.streams.first?.pills.first?.id, reparsed.activePills.first?.id.uuidString)
         XCTAssertEqual(snap.nextReminderFormatted, "08:45")
     }
+
+    func testMakeSupabaseDecoderSupportsFractionalAndWholeIsoTimestamps() throws {
+        struct StampWrapper: Decodable { let updated_at: Date }
+        let decoder = TagdosStore.makeSupabaseDecoder()
+
+        let fracData = #"{"updated_at":"2026-11-22T19:02:21.662265Z"}"#.data(using: .utf8)!
+        let fracDecoded = try decoder.decode(StampWrapper.self, from: fracData)
+        XCTAssertGreaterThan(fracDecoded.updated_at.timeIntervalSince1970, 1_700_000_000)
+
+        let stdData = #"{"updated_at":"2026-11-22T19:02:21Z"}"#.data(using: .utf8)!
+        let stdDecoded = try decoder.decode(StampWrapper.self, from: stdData)
+        XCTAssertGreaterThan(stdDecoded.updated_at.timeIntervalSince1970, 1_700_000_000)
+    }
 }

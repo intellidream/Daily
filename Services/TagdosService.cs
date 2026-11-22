@@ -41,6 +41,7 @@ namespace Daily.Services
         private bool _isLoaded = false;
         private readonly SemaphoreSlim _lock = new(1, 1);
         private readonly SemaphoreSlim _syncLock = new(1, 1);
+        private readonly SemaphoreSlim _realtimeLock = new(1, 1);
 
         private RealtimeChannel? _streamsRealtimeChannel;
         private RealtimeChannel? _notesRealtimeChannel;
@@ -1260,9 +1261,15 @@ namespace Daily.Services
 
                         // Remote wins if local is untouched seed, or local is already synced and remote is newer/different,
                         // or both are modified and remote is strictly newer.
+                        var localRemSpec = TagdosParser.EncodeReminderSpec(existing?.StreamReminderTicks, existing?.ClusterRemindersSpec);
                         bool adoptRemote = existing == null
                             || localIsSeed
-                            || (!localIsDirty && (remoteUpdatedUtc > localUpdatedUtc || existing.RawText != remote.RawSyntax || existing.DisplayNameCheck(remote.Title)))
+                            || (!localIsDirty && (
+                                remoteUpdatedUtc > localUpdatedUtc
+                                || existing.RawText != remote.RawSyntax
+                                || existing.DisplayNameCheck(remote.Title)
+                                || !string.Equals(localRemSpec ?? string.Empty, remote.ReminderTime ?? string.Empty, StringComparison.Ordinal)
+                                || !string.Equals(existing.ActiveMemos ?? string.Empty, remote.ActiveMemos ?? string.Empty, StringComparison.Ordinal)))
                             || (localIsDirty && remoteUpdatedUtc > localUpdatedUtc);
 
                         if (adoptRemote)
@@ -1444,6 +1451,8 @@ namespace Daily.Services
                     DataChanged?.Invoke(this, EventArgs.Empty);
                 }
 
+                SupabaseSessionGuardian.LogGuardian($"[TagdosService] SyncWithRemoteAsync completed (remoteStreams={remoteStreams.Count}, remoteNotes={remoteNotes.Count}, updatedLocal={anyLocalUpdatedFromRemote}).");
+
                 if (_realtimeUserId != userId)
                 {
                     _ = Task.Run(() => SetupRealtimeAsync(forceRecreate: false));
@@ -1466,11 +1475,12 @@ namespace Daily.Services
             var userId = _supabaseClient.Auth.CurrentUser?.Id;
             if (string.IsNullOrEmpty(userId)) return;
 
-            if (!forceRecreate && _realtimeUserId == userId && _streamsRealtimeChannel != null)
-                return;
-
+            await _realtimeLock.WaitAsync().ConfigureAwait(false);
             try
             {
+                if (!forceRecreate && _realtimeUserId == userId && _streamsRealtimeChannel != null)
+                    return;
+
                 if (_sessionGuardian != null)
                 {
                     var connected = await _sessionGuardian.EnsureRealtimeConnectedAsync().ConfigureAwait(false);
@@ -1518,6 +1528,10 @@ namespace Daily.Services
             catch (Exception ex)
             {
                 SupabaseSessionGuardian.LogGuardian($"[TagdosService] Realtime setup warning: {ex.Message}");
+            }
+            finally
+            {
+                _realtimeLock.Release();
             }
         }
 

@@ -44,6 +44,32 @@ public final class TagdosStore: ObservableObject {
     private var lastPushedNoteSignatures: [UUID: String] = [:]
     private var dirtyStreamIds: Set<UUID> = []
 
+    public nonisolated static func makeSupabaseDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+
+            let fracFormatter = ISO8601DateFormatter()
+            fracFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = fracFormatter.date(from: str) {
+                return d
+            }
+
+            let stdFormatter = ISO8601DateFormatter()
+            stdFormatter.formatOptions = [.withInternetDateTime]
+            if let d = stdFormatter.date(from: str) {
+                return d
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date string: \(str)"
+            )
+        }
+        return decoder
+    }
+
     private var groupDefaults: UserDefaults {
         UserDefaults(suiteName: GroupDefaults.suiteName) ?? UserDefaults.standard
     }
@@ -198,18 +224,41 @@ public final class TagdosStore: ObservableObject {
             return
         }
 
-        // Seed Default 5 Streams
+        // Seed Default 5 Streams (epoch updatedAt so cloud data always wins over untouched starter seeds)
         let parser = TagdosParser.shared
-        let defaultStreams: [TagDoStream] = [
+        let epochDate = Date(timeIntervalSince1970: 0)
+        var defaultStreams: [TagDoStream] = [
             parser.parseStream(rawText: Self.defaultStream1, title: "Stream 1: Daily Ops", orderIndex: 0),
             parser.parseStream(rawText: Self.defaultStream2, title: "Stream 2: Work & Code", orderIndex: 1),
             parser.parseStream(rawText: Self.defaultStream3, title: "Stream 3: Health & Fitness", orderIndex: 2),
             parser.parseStream(rawText: Self.defaultStream4, title: "Stream 4: Finances & Bills", orderIndex: 3),
             parser.parseStream(rawText: Self.defaultStream5, title: "Stream 5: Home & Life", orderIndex: 4)
         ]
+        for idx in defaultStreams.indices {
+            defaultStreams[idx].updatedAt = epochDate
+        }
 
         self.streams = defaultStreams
-        save()
+        save(triggerCloudSync: false)
+    }
+
+    private func isUntouchedSeedStream(_ stream: TagDoStream) -> Bool {
+        guard !dirtyStreamIds.contains(stream.id) else { return false }
+        if stream.updatedAt <= Date(timeIntervalSince1970: 1) { return true }
+        guard (stream.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+              stream.activeMemos.isEmpty,
+              stream.streamReminder == nil,
+              stream.clusters.allSatisfy({ $0.reminderDate == nil }) else {
+            return false
+        }
+        switch stream.orderIndex {
+        case 0: return stream.rawText == Self.defaultStream1
+        case 1: return stream.rawText == Self.defaultStream2
+        case 2: return stream.rawText == Self.defaultStream3
+        case 3: return stream.rawText == Self.defaultStream4
+        case 4: return stream.rawText == Self.defaultStream5
+        default: return false
+        }
     }
 
     private func persistDirtyStreamIds() {
@@ -911,8 +960,7 @@ public final class TagdosStore: ObservableObject {
                 let updated_at: Date
             }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = Self.makeSupabaseDecoder()
             let remoteStreams = try decoder.decode([RemoteStreamDTO].self, from: res.data)
 
             if !remoteStreams.isEmpty {
@@ -940,7 +988,7 @@ public final class TagdosStore: ObservableObject {
                         if self.dirtyStreamIds.contains(local.id) && local.updatedAt >= remote.updated_at {
                             continue
                         }
-                        if remote.updated_at >= local.updatedAt {
+                        if isUntouchedSeedStream(local) || remote.updated_at >= local.updatedAt {
                             var updated = parser.parseStream(
                                 rawText: remote.raw_syntax,
                                 title: remote.title,
@@ -1025,8 +1073,7 @@ public final class TagdosStore: ObservableObject {
                 .order("updated_at", ascending: false)
                 .execute()
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = Self.makeSupabaseDecoder()
             let remoteNotes = try decoder.decode([TagDoQuickNote].self, from: resNotes.data)
 
             if !remoteNotes.isEmpty {

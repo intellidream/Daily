@@ -3,6 +3,8 @@ package com.intellidream.daily.database
 import com.intellidream.daily.database.dao.TagdosDao
 import com.intellidream.daily.database.entity.TagdoQuickNoteEntity
 import com.intellidream.daily.database.entity.TagdoStreamEntity
+import com.intellidream.daily.model.RemoteTagdoQuickNoteRecord
+import com.intellidream.daily.model.RemoteTagdoStreamRecord
 import com.intellidream.daily.model.TagDoCluster
 import com.intellidream.daily.model.TagDoPill
 import com.intellidream.daily.model.TagDoQuickNote
@@ -12,14 +14,43 @@ import com.intellidream.daily.model.TagdosParser
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+interface TagdosSyncHandler {
+    suspend fun pullStreams(userId: String): List<RemoteTagdoStreamRecord>?
+    suspend fun upsertStream(
+        userId: String,
+        streamNumber: Int,
+        title: String,
+        rawSyntax: String,
+        reminderTime: String?,
+        activeMemos: String,
+        attachmentsJson: String,
+        updatedAtIso: String
+    ): Boolean
+    suspend fun deleteStreamsOverflow(userId: String, maxStreamNumber: Int): Boolean
+    suspend fun pullQuickNotes(userId: String): List<RemoteTagdoQuickNoteRecord>?
+    suspend fun upsertQuickNote(record: RemoteTagdoQuickNoteRecord): Boolean
+    suspend fun deleteQuickNote(userId: String, noteId: String): Boolean
+}
 
 /**
  * Centralized repository managing TagDoS streams, mental tags, per-stream active memos, and quick notes.
@@ -44,6 +75,18 @@ class TagdosRepository(
     val pendingNavigation: StateFlow<TagdosNavigationTarget?> = _pendingNavigation.asStateFlow()
 
     var onStreamsChanged: (() -> Unit)? = null
+    var syncHandler: TagdosSyncHandler? = null
+
+    @Volatile
+    var currentUserId: String = "guest"
+
+    private val syncMutex = Mutex()
+    private val attachmentsJsonByStreamId = ConcurrentHashMap<String, String>()
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private var pushDebounceJob: Job? = null
+
+    @Volatile
+    private var lastSyncMs: Long = 0L
 
     fun requestNavigation(
         streamId: String? = null,
@@ -131,6 +174,7 @@ class TagdosRepository(
                 } else {
                     val currentStreams = _streams.value
                     val parsed = entities.map { entity ->
+                        attachmentsJsonByStreamId[entity.id] = entity.attachmentsJson
                         val existing = currentStreams.firstOrNull { it.id == entity.id }
                         val savedClusterRems = decodeClusterReminders(entity.clusterRemindersJson)
                         val stream = TagdosParser.parseStream(
@@ -164,12 +208,17 @@ class TagdosRepository(
                     seedDefaultNotes()
                 } else {
                     val notes = entities.map { entity ->
+                        val decodedTags = runCatching {
+                            if (entity.tagsJson.isBlank()) emptyList()
+                            else json.decodeFromString(ListSerializer(String.serializer()), entity.tagsJson)
+                        }.getOrDefault(emptyList())
                         TagDoQuickNote(
                             id = entity.id,
                             userId = entity.userId,
                             title = entity.title,
                             content = entity.content,
                             isPinned = entity.isPinned,
+                            tags = decodedTags,
                             createdAt = entity.createdAt,
                             updatedAt = entity.updatedAt
                         )
@@ -198,7 +247,7 @@ class TagdosRepository(
                 rawText = s.rawText,
                 streamReminder = s.streamReminder,
                 activeMemos = s.activeMemos,
-                updatedAt = s.updatedAt,
+                updatedAt = 0L, // Untouched starter seed so Supabase cloud rows always win
                 syncedAt = null
             )
         }
@@ -228,8 +277,8 @@ class TagdosRepository(
                 title = n.title,
                 content = n.content,
                 isPinned = n.isPinned,
-                createdAt = n.createdAt,
-                updatedAt = n.updatedAt,
+                createdAt = 0L,
+                updatedAt = 0L, // Untouched starter seed so Supabase cloud notes always win
                 syncedAt = null
             )
         }
@@ -248,6 +297,7 @@ class TagdosRepository(
             streamReminder = streamReminder,
             clusterRemindersJson = encodeClusterReminders(clusters),
             activeMemos = activeMemos,
+            attachmentsJson = attachmentsJsonByStreamId[id] ?: "[]",
             updatedAt = updatedAt,
             syncedAt = syncedAt
         )
@@ -265,6 +315,7 @@ class TagdosRepository(
         onStreamsChanged?.invoke()
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStream(updated.toEntity(syncedAt = null))
+            scheduleCloudPush()
         }
     }
 
@@ -372,6 +423,7 @@ class TagdosRepository(
 
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStream(stream.toEntity(syncedAt = null))
+            scheduleCloudPush()
         }
         return stream.id
     }
@@ -433,6 +485,7 @@ class TagdosRepository(
         onStreamsChanged?.invoke()
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStreams(reindexed.map { it.toEntity(syncedAt = null) })
+            scheduleCloudPush()
         }
     }
 
@@ -456,6 +509,12 @@ class TagdosRepository(
         scope.launch(ioDispatcher) {
             tagdosDao.deleteStreamById(streamId)
             tagdosDao.upsertStreams(reindexedDomain.map { it.toEntity(syncedAt = null) })
+            val uid = currentUserId
+            val handler = syncHandler
+            if (handler != null && uid.isNotBlank() && uid != "guest") {
+                handler.deleteStreamsOverflow(uid, reindexedDomain.size)
+            }
+            scheduleCloudPush()
         }
     }
 
@@ -611,6 +670,7 @@ class TagdosRepository(
             val toSave = touchedEntities.values.toList()
             scope.launch(ioDispatcher) {
                 tagdosDao.upsertStreams(toSave)
+                scheduleCloudPush()
             }
         }
         return firstAffectedId
@@ -673,6 +733,7 @@ class TagdosRepository(
             val now = System.currentTimeMillis()
             val note = TagDoQuickNote(
                 id = noteId,
+                userId = currentUserId.takeIf { it.isNotBlank() && it != "guest" },
                 title = title,
                 content = content,
                 isPinned = false,
@@ -691,6 +752,7 @@ class TagdosRepository(
                     syncedAt = null
                 )
             )
+            scheduleCloudPush()
         }
         return noteId
     }
@@ -705,6 +767,7 @@ class TagdosRepository(
                 syncedAt = null
             )
             tagdosDao.upsertNote(updated)
+            scheduleCloudPush()
         }
     }
 
@@ -717,16 +780,308 @@ class TagdosRepository(
                 syncedAt = null
             )
             tagdosDao.upsertNote(updated)
+            scheduleCloudPush()
         }
     }
 
     fun deleteQuickNote(id: String) {
         scope.launch(ioDispatcher) {
             tagdosDao.deleteNoteById(id)
+            val uid = currentUserId
+            val handler = syncHandler
+            if (handler != null && uid.isNotBlank() && uid != "guest") {
+                handler.deleteQuickNote(uid, id)
+            }
         }
     }
 
-    fun syncWithSupabase() {
-        // Trigger manual sync pass (will integrate with Supabase / WorkManager)
+    // MARK: - Supabase Cloud Synchronization
+
+    private fun isUntouchedSeedStream(entity: TagdoStreamEntity): Boolean {
+        if (entity.updatedAt <= 0L) return true
+        if (entity.syncedAt == null &&
+            entity.customTitle.isNullOrBlank() &&
+            entity.activeMemos.isBlank() &&
+            entity.streamReminder == null &&
+            (entity.clusterRemindersJson.isBlank() || entity.clusterRemindersJson == "{}")
+        ) {
+            return when (entity.orderIndex) {
+                0 -> entity.rawText == DEFAULT_STREAM_1
+                1 -> entity.rawText == DEFAULT_STREAM_2
+                2 -> entity.rawText == DEFAULT_STREAM_3
+                3 -> entity.rawText == DEFAULT_STREAM_4
+                4 -> entity.rawText == DEFAULT_STREAM_5
+                else -> false
+            }
+        }
+        return false
+    }
+
+    private fun isUntouchedSeedNote(entity: TagdoQuickNoteEntity): Boolean {
+        if (entity.updatedAt <= 0L) return true
+        if (entity.syncedAt == null) {
+            if (entity.title == "Concert Tickets" && entity.content.startsWith("Concert Tickets:")) return true
+            if (entity.title == "Car Maintenance" && entity.content.startsWith("Car Maintenance:")) return true
+        }
+        return false
+    }
+
+    private fun parseIsoToEpochMs(iso: String?): Long {
+        val clean = iso?.trim().orEmpty()
+        if (clean.isEmpty()) return System.currentTimeMillis()
+        return runCatching { Instant.parse(clean).toEpochMilli() }
+            .recoverCatching { OffsetDateTime.parse(clean).toInstant().toEpochMilli() }
+            .getOrElse { System.currentTimeMillis() }
+    }
+
+    private fun encodeReminderSpecForEntity(entity: TagdoStreamEntity): String? {
+        val parsed = TagdosParser.parseStream(
+            rawText = entity.rawText,
+            title = entity.customTitle ?: entity.title,
+            id = entity.id,
+            streamReminder = entity.streamReminder,
+            orderIndex = entity.orderIndex
+        )
+        val savedMap = decodeClusterReminders(entity.clusterRemindersJson)
+        val hydrated = parsed.copy(
+            clusters = parsed.clusters.mapIndexed { idx, c -> c.copy(reminderTime = savedMap[idx]) }
+        )
+        return TagdosParser.encodeReminderSpec(hydrated)
+    }
+
+    private fun scheduleCloudPush() {
+        val uid = currentUserId
+        if (uid.isBlank() || uid == "guest" || syncHandler == null) return
+        pushDebounceJob?.cancel()
+        pushDebounceJob = scope.launch(ioDispatcher) {
+            delay(500L)
+            val activeUid = currentUserId
+            val handler = syncHandler ?: return@launch
+            if (activeUid.isBlank() || activeUid == "guest") return@launch
+            syncMutex.withLock {
+                pushPendingLocalChanges(handler, activeUid)
+            }
+        }
+    }
+
+    private suspend fun pushPendingLocalChanges(
+        handler: TagdosSyncHandler,
+        uid: String,
+        forceMissingNumbers: Set<Int> = emptySet(),
+        forceAllStreams: Boolean = false
+    ) {
+        val localStreams = tagdosDao.getAllStreamsOnce()
+        for (ls in localStreams) {
+            val streamNum = ls.orderIndex + 1
+            val isDirty = ls.syncedAt == null && !isUntouchedSeedStream(ls)
+            val isMissingRemote = forceMissingNumbers.contains(streamNum)
+            if (!forceAllStreams && !isDirty && !isMissingRemote) continue
+
+            val effectiveTitle = ls.customTitle?.takeIf { it.isNotBlank() } ?: ls.title
+            val reminderSpec = encodeReminderSpecForEntity(ls)
+            val updatedIso = if (ls.updatedAt > 0L) Instant.ofEpochMilli(ls.updatedAt).toString() else Instant.now().toString()
+            val ok = handler.upsertStream(
+                userId = uid,
+                streamNumber = streamNum,
+                title = effectiveTitle,
+                rawSyntax = ls.rawText,
+                reminderTime = reminderSpec,
+                activeMemos = ls.activeMemos,
+                attachmentsJson = ls.attachmentsJson,
+                updatedAtIso = updatedIso
+            )
+            if (ok) {
+                tagdosDao.upsertStream(ls.copy(syncedAt = System.currentTimeMillis()))
+            }
+        }
+
+        val localNotes = tagdosDao.getAllNotesOnce()
+        for (ln in localNotes) {
+            if (ln.syncedAt != null || isUntouchedSeedNote(ln)) continue
+            val tagsList = runCatching {
+                if (ln.tagsJson.isBlank()) emptyList()
+                else json.decodeFromString(ListSerializer(String.serializer()), ln.tagsJson)
+            }.getOrDefault(emptyList())
+            val createdIso = if (ln.createdAt > 0L) Instant.ofEpochMilli(ln.createdAt).toString() else Instant.now().toString()
+            val updatedIso = if (ln.updatedAt > 0L) Instant.ofEpochMilli(ln.updatedAt).toString() else Instant.now().toString()
+            val record = RemoteTagdoQuickNoteRecord(
+                id = ln.id,
+                userId = uid,
+                title = ln.title,
+                content = ln.content,
+                isPinned = ln.isPinned,
+                tags = tagsList,
+                createdAt = createdIso,
+                updatedAt = updatedIso
+            )
+            if (handler.upsertQuickNote(record)) {
+                tagdosDao.upsertNote(ln.copy(userId = uid, syncedAt = System.currentTimeMillis()))
+            }
+        }
+    }
+
+    suspend fun syncWithSupabase(
+        userId: String = currentUserId,
+        force: Boolean = false
+    ) = withContext(ioDispatcher) {
+        val uid = userId.trim()
+        if (uid.isEmpty() || uid == "guest") return@withContext
+        currentUserId = uid
+        val handler = syncHandler ?: return@withContext
+
+        syncMutex.withLock {
+            val nowStart = System.currentTimeMillis()
+            if (!force && nowStart - lastSyncMs < 15_000L) return@withLock
+
+            _isSyncing.value = true
+            try {
+                // 1. Pull & Merge Streams
+                val remoteStreams = handler.pullStreams(uid)
+                if (remoteStreams != null) {
+                    var localStreams = tagdosDao.getAllStreamsOnce().toMutableList()
+                    if (localStreams.isEmpty() && remoteStreams.isEmpty()) {
+                        seedDefaultStreams()
+                        localStreams = tagdosDao.getAllStreamsOnce().toMutableList()
+                    }
+
+                    val remoteNumbers = remoteStreams.map { it.streamNumber }.toSet()
+                    if (remoteStreams.isNotEmpty()) {
+                        val maxRemoteNum = remoteStreams.maxOf { it.streamNumber }
+                        val orphans = localStreams.filter {
+                            it.syncedAt != null && (it.orderIndex + 1) > maxRemoteNum && !isUntouchedSeedStream(it)
+                        }
+                        for (orphan in orphans) {
+                            tagdosDao.deleteStreamById(orphan.id)
+                            localStreams.removeAll { it.id == orphan.id }
+                        }
+
+                        val syncStamp = System.currentTimeMillis()
+                        for (remote in remoteStreams) {
+                            val orderIdx = (remote.streamNumber - 1).coerceAtLeast(0)
+                            val existing = localStreams.firstOrNull { it.orderIndex == orderIdx }
+                            val remoteUpdatedMs = parseIsoToEpochMs(remote.updatedAt)
+                            val localIsSeed = existing == null || isUntouchedSeedStream(existing)
+                            val localIsDirty = existing != null && existing.syncedAt == null && !localIsSeed
+
+                            val remoteMemos = remote.activeMemos.orEmpty()
+                            val localEffectiveTitle = existing?.customTitle?.takeIf { it.isNotBlank() } ?: existing?.title.orEmpty()
+                            val existingSpec = existing?.let { encodeReminderSpecForEntity(it) }
+                            val remoteDiffers = existing == null ||
+                                existing.rawText != remote.rawSyntax ||
+                                localEffectiveTitle != remote.title ||
+                                existing.activeMemos != remoteMemos ||
+                                existingSpec != remote.reminderTime
+
+                            val adoptRemote = localIsSeed ||
+                                (!localIsDirty && (remoteUpdatedMs > existing!!.updatedAt || remoteDiffers)) ||
+                                (localIsDirty && remoteUpdatedMs > existing!!.updatedAt)
+
+                            if (adoptRemote) {
+                                val remoteId = remote.id?.takeIf { it.isNotBlank() } ?: existing?.id ?: UUID.randomUUID().toString()
+                                if (existing != null && !existing.id.equals(remoteId, ignoreCase = true)) {
+                                    tagdosDao.deleteStreamById(existing.id)
+                                    localStreams.removeAll { it.id == existing.id }
+                                }
+
+                                val (streamRemTs, clusterMap) = TagdosParser.decodeReminderSpec(remote.reminderTime)
+                                val clusterJson = if (clusterMap.isEmpty()) "{}" else clusterMap.entries.joinToString(",") { "${it.key}=${it.value}" }
+                                val attachmentsJson = remote.attachments?.let {
+                                    json.encodeToString(JsonArray.serializer(), it)
+                                } ?: "[]"
+                                val previewParsed = TagdosParser.parseStream(
+                                    rawText = remote.rawSyntax,
+                                    title = remote.title,
+                                    id = remoteId,
+                                    streamReminder = streamRemTs,
+                                    orderIndex = orderIdx
+                                )
+                                val autoTitle = previewParsed.autoDetectedTitle
+                                val trimmedRemoteTitle = remote.title.trim()
+                                val customTitle = if (trimmedRemoteTitle.isNotEmpty() && trimmedRemoteTitle != autoTitle) trimmedRemoteTitle else null
+                                val resolvedTitle = customTitle ?: autoTitle
+
+                                val updatedEntity = TagdoStreamEntity(
+                                    id = remoteId,
+                                    orderIndex = orderIdx,
+                                    title = resolvedTitle,
+                                    customTitle = customTitle,
+                                    rawText = remote.rawSyntax,
+                                    streamReminder = streamRemTs,
+                                    clusterRemindersJson = clusterJson,
+                                    activeMemos = remoteMemos,
+                                    attachmentsJson = attachmentsJson,
+                                    updatedAt = remoteUpdatedMs,
+                                    syncedAt = syncStamp
+                                )
+                                attachmentsJsonByStreamId[remoteId] = attachmentsJson
+                                tagdosDao.upsertStream(updatedEntity)
+                                localStreams.removeAll { it.id == remoteId }
+                                localStreams.add(updatedEntity)
+                            }
+                        }
+
+                        val missingNumbers = localStreams.map { it.orderIndex + 1 }.toSet().minus(remoteNumbers)
+                        pushPendingLocalChanges(handler, uid, forceMissingNumbers = missingNumbers, forceAllStreams = false)
+                    } else {
+                        pushPendingLocalChanges(handler, uid, forceAllStreams = true)
+                    }
+                }
+
+                // 2. Pull & Merge Quick Notes
+                val remoteNotes = handler.pullQuickNotes(uid)
+                if (remoteNotes != null) {
+                    val localNotes = tagdosDao.getAllNotesOnce().toMutableList()
+                    if (remoteNotes.isNotEmpty()) {
+                        for (seedNote in localNotes.filter { isUntouchedSeedNote(it) }) {
+                            tagdosDao.deleteNoteById(seedNote.id)
+                            localNotes.removeAll { it.id == seedNote.id }
+                        }
+
+                        val remoteIds = remoteNotes.map { it.id.lowercase() }.toSet()
+                        for (orphan in localNotes.filter { it.syncedAt != null && !remoteIds.contains(it.id.lowercase()) }) {
+                            tagdosDao.deleteNoteById(orphan.id)
+                            localNotes.removeAll { it.id == orphan.id }
+                        }
+
+                        val syncStamp = System.currentTimeMillis()
+                        for (rNote in remoteNotes) {
+                            val existing = localNotes.firstOrNull { it.id.equals(rNote.id, ignoreCase = true) }
+                            val rUpdatedMs = parseIsoToEpochMs(rNote.updatedAt)
+                            val rCreatedMs = parseIsoToEpochMs(rNote.createdAt)
+                            val localDirty = existing != null && existing.syncedAt == null && !isUntouchedSeedNote(existing)
+
+                            val adoptNote = existing == null ||
+                                (!localDirty && (rUpdatedMs > existing.updatedAt ||
+                                    existing.title != rNote.title ||
+                                    existing.content != rNote.content ||
+                                    existing.isPinned != rNote.isPinned)) ||
+                                (localDirty && rUpdatedMs > existing.updatedAt)
+
+                            if (adoptNote) {
+                                val tagsJson = json.encodeToString(ListSerializer(String.serializer()), rNote.tags.orEmpty())
+                                tagdosDao.upsertNote(
+                                    TagdoQuickNoteEntity(
+                                        id = rNote.id,
+                                        userId = rNote.userId ?: uid,
+                                        title = rNote.title,
+                                        content = rNote.content,
+                                        isPinned = rNote.isPinned,
+                                        tagsJson = tagsJson,
+                                        createdAt = rCreatedMs,
+                                        updatedAt = rUpdatedMs,
+                                        syncedAt = syncStamp
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    pushPendingLocalChanges(handler, uid, forceMissingNumbers = emptySet(), forceAllStreams = false)
+                }
+
+                lastSyncMs = System.currentTimeMillis()
+            } finally {
+                _isSyncing.value = false
+            }
+        }
     }
 }

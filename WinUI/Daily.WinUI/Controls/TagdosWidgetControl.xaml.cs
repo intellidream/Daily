@@ -84,9 +84,17 @@ namespace Daily_WinUI.Controls
             {
                 var s1 = _streams[0];
                 Stream1TitleText.Text = s1.DisplayTitle;
-                Stream1ReminderText.Text = s1.StreamReminder.HasValue
-                    ? $"• {s1.StreamReminder.Value:HH:mm}"
-                    : string.Empty;
+                DateTime? rem1 = s1.StreamReminder ?? s1.Clusters.Where(c => c.ClusterReminder.HasValue).Select(c => c.ClusterReminder!.Value).OrderBy(d => d).FirstOrDefault();
+                if (rem1.HasValue && rem1.Value != default)
+                {
+                    Stream1ReminderText.Text = $"{rem1.Value:HH:mm}";
+                    Stream1ReminderBadge.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    Stream1ReminderBadge.Visibility = Visibility.Collapsed;
+                }
+                Stream1ActionsPanel.Visibility = s1.AllPills.Any(p => !p.IsCompleted) ? Visibility.Visible : Visibility.Collapsed;
 
                 PopulatePillsPanel(Stream1PillsPanel, s1);
             }
@@ -96,9 +104,17 @@ namespace Daily_WinUI.Controls
             {
                 var s2 = _streams[1];
                 Stream2TitleText.Text = s2.DisplayTitle;
-                Stream2ReminderText.Text = s2.StreamReminder.HasValue
-                    ? $"• {s2.StreamReminder.Value:HH:mm}"
-                    : string.Empty;
+                DateTime? rem2 = s2.StreamReminder ?? s2.Clusters.Where(c => c.ClusterReminder.HasValue).Select(c => c.ClusterReminder!.Value).OrderBy(d => d).FirstOrDefault();
+                if (rem2.HasValue && rem2.Value != default)
+                {
+                    Stream2ReminderText.Text = $"{rem2.Value:HH:mm}";
+                    Stream2ReminderBadge.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    Stream2ReminderBadge.Visibility = Visibility.Collapsed;
+                }
+                Stream2ActionsPanel.Visibility = s2.AllPills.Any(p => !p.IsCompleted) ? Visibility.Visible : Visibility.Collapsed;
 
                 PopulatePillsPanel(Stream2PillsPanel, s2);
             }
@@ -116,15 +132,33 @@ namespace Daily_WinUI.Controls
             }
         }
 
-        private void PopulatePillsPanel(VariableSizedWrapGrid panel, TagDoStream stream)
+        private void PopulatePillsPanel(Panel panel, TagDoStream stream)
         {
             panel.Children.Clear();
-            var pills = stream.AllPills.Take(8).ToList();
+            var pills = stream.AllPills.Where(p => !p.IsCompleted).ToList();
+            if (pills.Count == 0)
+            {
+                pills = stream.AllPills.ToList();
+            }
 
             foreach (var pill in pills)
             {
                 var pillBorder = CreatePillUI(pill, stream);
                 panel.Children.Add(pillBorder);
+            }
+        }
+
+        private void PillsScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is ScrollViewer sv && sv.ScrollableWidth > 0)
+            {
+                int delta = e.GetCurrentPoint(sv).Properties.MouseWheelDelta;
+                if (delta != 0)
+                {
+                    double targetOffset = Math.Clamp(sv.HorizontalOffset - delta * 0.6, 0, sv.ScrollableWidth);
+                    sv.ChangeView(targetOffset, null, null, false);
+                    e.Handled = true;
+                }
             }
         }
 
