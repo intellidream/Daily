@@ -908,7 +908,7 @@ namespace Daily_WinUI.Views
                     Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
                     TextTrimming = TextTrimming.CharacterEllipsis
                 });
-                var drivingRaw = stream.DrivingPill?.RawText;
+                var drivingRaw = stream.DrivingPill?.Text;
                 if (!string.IsNullOrWhiteSpace(stream.CustomTitle) && !string.IsNullOrWhiteSpace(drivingRaw))
                 {
                     labelStack.Children.Add(new TextBlock
