@@ -80,25 +80,33 @@
                                 <StackPanel x:Name="Stream1PillsPanel" Orientation="Horizontal" Spacing="5" Padding="0,0,54,0" VerticalAlignment="Center" />
                             </ScrollViewer>
 
-                            <StackPanel x:Name="Stream1ActionsPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Border Width="16" Height="24" IsHitTestVisible="False">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#000B1526" Offset="0" />
-                                            <GradientStop Color="#F00B1526" Offset="1" />
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
-                                <Border Background="#F00B1526" CornerRadius="11" Padding="3,2,0,2">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <Border x:Name="Stream1DoneBtn" Width="20" Height="20" CornerRadius="10" Background="#2800E676" BorderBrush="#6600E676" BorderThickness="1" Tapped="Stream1Done_Tapped" ToolTipService.ToolTip="Mark focus tag done">
-                                            <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border x:Name="Stream1RecycleBtn" Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" BorderBrush="#6600E5FF" BorderThickness="1" Tapped="Stream1Recycle_Tapped" ToolTipService.ToolTip="Recycle focus tag to back">
-                                            <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
+                            <StackPanel x:Name="Stream1ActionsPanel" Orientation="Horizontal" Spacing="0" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Grid Width="25" Height="25">
+                                    <Ellipse Width="25" Height="25" IsHitTestVisible="False">
+                                        <Ellipse.Fill>
+                                            <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                                                <GradientStop Color="#4500E676" Offset="0.55" />
+                                                <GradientStop Color="#0000E676" Offset="1.0" />
+                                            </RadialGradientBrush>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Border x:Name="Stream1DoneBtn" Width="20" Height="20" CornerRadius="10" Background="#FF0D3026" BorderBrush="#9400E676" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Tapped="Stream1Done_Tapped" ToolTipService.ToolTip="Mark focus tag done">
+                                        <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
+                                <Grid Width="25" Height="25">
+                                    <Ellipse Width="25" Height="25" IsHitTestVisible="False">
+                                        <Ellipse.Fill>
+                                            <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                                                <GradientStop Color="#4500E5FF" Offset="0.55" />
+                                                <GradientStop Color="#0000E5FF" Offset="1.0" />
+                                            </RadialGradientBrush>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Border x:Name="Stream1RecycleBtn" Width="20" Height="20" CornerRadius="10" Background="#FF0D2B3D" BorderBrush="#9400E5FF" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Tapped="Stream1Recycle_Tapped" ToolTipService.ToolTip="Recycle focus tag to back">
+                                        <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
                             </StackPanel>
                         </Grid>
                     </Grid>
@@ -136,25 +144,33 @@
                                 <StackPanel x:Name="Stream2PillsPanel" Orientation="Horizontal" Spacing="5" Padding="0,0,54,0" VerticalAlignment="Center" />
                             </ScrollViewer>
 
-                            <StackPanel x:Name="Stream2ActionsPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Border Width="16" Height="24" IsHitTestVisible="False">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#000B1526" Offset="0" />
-                                            <GradientStop Color="#F00B1526" Offset="1" />
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
-                                <Border Background="#F00B1526" CornerRadius="11" Padding="3,2,0,2">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <Border x:Name="Stream2DoneBtn" Width="20" Height="20" CornerRadius="10" Background="#2800E676" BorderBrush="#6600E676" BorderThickness="1" Tapped="Stream2Done_Tapped" ToolTipService.ToolTip="Mark focus tag done">
-                                            <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border x:Name="Stream2RecycleBtn" Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" BorderBrush="#6600E5FF" BorderThickness="1" Tapped="Stream2Recycle_Tapped" ToolTipService.ToolTip="Recycle focus tag to back">
-                                            <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
+                            <StackPanel x:Name="Stream2ActionsPanel" Orientation="Horizontal" Spacing="0" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Grid Width="25" Height="25">
+                                    <Ellipse Width="25" Height="25" IsHitTestVisible="False">
+                                        <Ellipse.Fill>
+                                            <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                                                <GradientStop Color="#4500E676" Offset="0.55" />
+                                                <GradientStop Color="#0000E676" Offset="1.0" />
+                                            </RadialGradientBrush>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Border x:Name="Stream2DoneBtn" Width="20" Height="20" CornerRadius="10" Background="#FF0D3026" BorderBrush="#9400E676" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Tapped="Stream2Done_Tapped" ToolTipService.ToolTip="Mark focus tag done">
+                                        <TextBlock Text="✓" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
+                                <Grid Width="25" Height="25">
+                                    <Ellipse Width="25" Height="25" IsHitTestVisible="False">
+                                        <Ellipse.Fill>
+                                            <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                                                <GradientStop Color="#4500E5FF" Offset="0.55" />
+                                                <GradientStop Color="#0000E5FF" Offset="1.0" />
+                                            </RadialGradientBrush>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Border x:Name="Stream2RecycleBtn" Width="20" Height="20" CornerRadius="10" Background="#FF0D2B3D" BorderBrush="#9400E5FF" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Tapped="Stream2Recycle_Tapped" ToolTipService.ToolTip="Recycle focus tag to back">
+                                        <TextBlock Text="↻" FontSize="9.5" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
                             </StackPanel>
                         </Grid>
                     </Grid>

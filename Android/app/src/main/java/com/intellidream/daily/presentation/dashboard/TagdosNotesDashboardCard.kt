@@ -40,8 +40,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -473,6 +477,22 @@ private fun StreamPillsRowWithQuickActions(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                .drawWithContent {
+                    drawContent()
+                    if (driving != null) {
+                        val fadeWidth = (buttonSizeDp * 2 + 10).dp.toPx()
+                        val fadeStart = (size.width - fadeWidth).coerceAtLeast(0f)
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color.Black, Color(0x0D000000)),
+                                startX = fadeStart,
+                                endX = size.width
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+                }
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 5.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -502,33 +522,12 @@ private fun StreamPillsRowWithQuickActions(
         }
 
         if (driving != null) {
-            Row(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(14.dp)
-                        .height(buttonSizeDp.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(Color.Transparent, Color(0xEC0A1526))
-                            )
-                        )
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color(0xEC0A1526))
-                        .padding(start = 2.dp)
-                ) {
-                    DashboardQuickActions(
-                        onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
-                        onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
-                        sizeDp = buttonSizeDp
-                    )
-                }
-            }
+            DashboardQuickActions(
+                onComplete = { repository.togglePillCompletion(stream.id, driving.id) },
+                onRecycle = { repository.recyclePillToBack(stream.id, driving.id) },
+                sizeDp = buttonSizeDp,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
         }
     }
 }
@@ -864,41 +863,65 @@ private fun LargeTagdosContent(
 private fun DashboardQuickActions(
     onComplete: () -> Unit,
     onRecycle: () -> Unit,
-    sizeDp: Int = 20
+    sizeDp: Int = 20,
+    modifier: Modifier = Modifier
 ) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(0.dp)
+    ) {
+        JewelActionCircle(
+            icon = Icons.Rounded.Check,
+            contentDescription = "Mark Done",
+            accentColor = ThemeColors.accentGreen,
+            coreFillColor = Color(0xFF0D3026),
+            sizeDp = sizeDp,
+            onClick = onComplete
+        )
+        JewelActionCircle(
+            icon = Icons.Rounded.Sync,
+            contentDescription = "Recycle Tag",
+            accentColor = ThemeColors.accentCyan,
+            coreFillColor = Color(0xFF0D2B3D),
+            sizeDp = sizeDp,
+            onClick = onRecycle
+        )
+    }
+}
+
+@Composable
+private fun JewelActionCircle(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    accentColor: Color,
+    coreFillColor: Color,
+    sizeDp: Int,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size((sizeDp + 5).dp)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(accentColor.copy(alpha = 0.28f), Color.Transparent)
+                )
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .size(sizeDp.dp)
                 .clip(CircleShape)
-                .background(ThemeColors.accentGreen.copy(alpha = 0.16f))
-                .border(0.8.dp, ThemeColors.accentGreen.copy(alpha = 0.4f), CircleShape)
-                .clickable(onClick = onComplete),
+                .background(coreFillColor)
+                .border(0.9.dp, accentColor.copy(alpha = 0.58f), CircleShape)
+                .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Rounded.Check,
-                contentDescription = "Mark Done",
-                tint = ThemeColors.accentGreen,
-                modifier = Modifier.size((sizeDp * 0.55f).dp)
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(sizeDp.dp)
-                .clip(CircleShape)
-                .background(ThemeColors.accentCyan.copy(alpha = 0.16f))
-                .border(0.8.dp, ThemeColors.accentCyan.copy(alpha = 0.4f), CircleShape)
-                .clickable(onClick = onRecycle),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Sync,
-                contentDescription = "Recycle Tag",
-                tint = ThemeColors.accentCyan,
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = accentColor,
                 modifier = Modifier.size((sizeDp * 0.55f).dp)
             )
         }

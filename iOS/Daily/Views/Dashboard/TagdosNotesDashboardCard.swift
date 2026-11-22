@@ -394,8 +394,10 @@ public struct TagdosNotesDashboardCard: View {
                     .frame(width: size, height: size)
                     .background(
                         Circle()
-                            .fill(ThemeColors.accentGreen.opacity(0.16))
-                            .overlay(Circle().strokeBorder(ThemeColors.accentGreen.opacity(0.4), lineWidth: 0.8))
+                            .fill(Color(hex: "0D3026"))
+                            .overlay(Circle().strokeBorder(ThemeColors.accentGreen.opacity(0.58), lineWidth: 0.9))
+                            .shadow(color: ThemeColors.accentGreen.opacity(0.28), radius: 2.5, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.28), radius: 2, x: 0, y: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -410,8 +412,10 @@ public struct TagdosNotesDashboardCard: View {
                     .frame(width: size, height: size)
                     .background(
                         Circle()
-                            .fill(ThemeColors.accentCyan.opacity(0.16))
-                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.4), lineWidth: 0.8))
+                            .fill(Color(hex: "0D2B3D"))
+                            .overlay(Circle().strokeBorder(ThemeColors.accentCyan.opacity(0.58), lineWidth: 0.9))
+                            .shadow(color: ThemeColors.accentCyan.opacity(0.28), radius: 2.5, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.28), radius: 2, x: 0, y: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -468,24 +472,24 @@ public struct TagdosNotesDashboardCard: View {
                 }
                 .padding(.trailing, hasQuick ? (buttonSize * 2 + 16) : 2)
             }
+            .mask(
+                HStack(spacing: 0) {
+                    Color.black
+                    if hasQuick {
+                        LinearGradient(
+                            colors: [.black, .black.opacity(0.05)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: buttonSize * 2 + 8)
+                    }
+                }
+            )
 
             if let driving = stream.drivingPill {
-                HStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [Color(hex: "0A1526").opacity(0.0), Color(hex: "0A1526").opacity(0.92)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: 14)
-                    .allowsHitTesting(false)
-
-                    quickActionButtons(streamId: stream.id, pillId: driving.id, size: buttonSize, iconSize: iconSize)
-                        .padding(.leading, 2)
-                        .background(
-                            Capsule()
-                                .fill(Color(hex: "0A1526").opacity(0.92))
-                        )
-                }
+                quickActionButtons(streamId: stream.id, pillId: driving.id, size: buttonSize, iconSize: iconSize)
+                    .padding(.vertical, 2)
+                    .padding(.trailing, 1)
             }
         }
     }

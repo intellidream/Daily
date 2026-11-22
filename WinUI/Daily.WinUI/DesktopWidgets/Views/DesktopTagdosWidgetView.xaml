@@ -40,10 +40,10 @@
                 <Border Grid.Column="0" Background="#15EC4899" CornerRadius="8" Padding="6,4,6,4" Tag="0" Tapped="TaskRow_Tapped">
                     <TextBlock x:Name="SmallTopTaskText" Text="Next: Complete Review" FontSize="9" Foreground="#F472B6" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                 </Border>
-                <Border Grid.Column="1" Width="20" Height="20" CornerRadius="10" Background="#2800E676" Tag="0" Tapped="DoneSlot_Tapped" ToolTipService.ToolTip="Mark done">
+                <Border Grid.Column="1" Width="20" Height="20" CornerRadius="10" Background="#FF0D3026" BorderBrush="#9400E676" BorderThickness="1" Tag="0" Tapped="DoneSlot_Tapped" ToolTipService.ToolTip="Mark done">
                     <TextBlock Text="✓" FontSize="9" FontWeight="Bold" Foreground="#FF00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
-                <Border Grid.Column="2" Width="20" Height="20" CornerRadius="10" Background="#2800E5FF" Tag="0" Tapped="RecycleSlot_Tapped" ToolTipService.ToolTip="Recycle to back">
+                <Border Grid.Column="2" Width="20" Height="20" CornerRadius="10" Background="#FF0D2B3D" BorderBrush="#9400E5FF" BorderThickness="1" Tag="0" Tapped="RecycleSlot_Tapped" ToolTipService.ToolTip="Recycle to back">
                     <TextBlock Text="↻" FontSize="9" FontWeight="Bold" Foreground="#FF00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
             </Grid>

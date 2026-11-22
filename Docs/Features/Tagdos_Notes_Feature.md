@@ -257,6 +257,7 @@ TagDoS supports one-way, on-demand task import from **Microsoft To Do** and **Go
 
 ### 11.4 Inline Widget `✓` & `↻` Quick Actions Over Scrolling Pills Row
 - **Clean Stream Header**: Across iOS, macOS, Android (`TagdosNotesDashboardCard.kt` & `DailyTagdosGlanceWidget.kt`), and Windows WinUI 3 (`TagdosWidgetControl.xaml` & `DesktopTagdosWidgetView.xaml`), each widget/dashboard stream header displays only the stream title on the left and the optional `🔔 HH:mm` schedule indicator on the right.
-- **Pills Row with Floating Right Actions**: The `✓` (complete focus pill) and `↻` (recycle to back) buttons now sit inline on the right edge of each stream's pills row above a subtle horizontal fade scrim, with trailing scroll padding so horizontal/flowing pills slide cleanly underneath the action buttons.
+- **Opaque Jewel Circular Actions & Delicate Per-Button Halo (Zero Dark Scrim)**: Replaced dark rectangular gradient scrim strips and wrapper capsules with **100% opaque deep-jewel circles** (`#0D3026` with `#00E676` border/icon for `✓`, `#0D2B3D` with `#00E5FF` border/icon for `↻`) accompanied solely by a subtle circular accent glow/halo around each individual button (`Circle` shadows on iOS/macOS, `RadialGradient` halo in Compose/WinUI, crisp bordered jewel boxes in Jetpack Glance).
+- **Pure Alpha Pill Dissolve**: On scrollable in-app dashboard strips (`TagdosNotesDashboardCard.swift` via `.mask` on iOS/macOS, and `TagdosNotesDashboardCard.kt` via offscreen `BlendMode.DstIn` on Android), only the scrolling pills fade in alpha underneath the trailing buttons — painting zero opaque dark patches onto translucent Liquid Glass cards, while WidgetKit preserves unmasked `Link` hit-testing with trailing clip padding.
 
 

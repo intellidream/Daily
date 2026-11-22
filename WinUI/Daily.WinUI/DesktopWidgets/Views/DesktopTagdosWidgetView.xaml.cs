@@ -301,91 +301,79 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 var overlay = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
+                    Spacing = 0,
                     HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                var scrimBrush = new LinearGradientBrush
-                {
-                    StartPoint = new Point(0, 0),
-                    EndPoint = new Point(1, 0)
-                };
-                scrimBrush.GradientStops.Add(new GradientStop { Color = Color.FromArgb(0x00, 0x0B, 0x15, 0x26), Offset = 0 });
-                scrimBrush.GradientStops.Add(new GradientStop { Color = Color.FromArgb(0xF0, 0x0B, 0x15, 0x26), Offset = 1 });
-                overlay.Children.Add(new Border
-                {
-                    Width = 14,
-                    Height = 22,
-                    Background = scrimBrush,
-                    IsHitTestVisible = false
-                });
-
-                var doneBtn = new Border
-                {
-                    Width = 19,
-                    Height = 19,
-                    CornerRadius = new CornerRadius(9.5),
-                    Background = new SolidColorBrush(Color.FromArgb(0x28, 0x00, 0xE6, 0x76)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE6, 0x76)),
-                    BorderThickness = new Thickness(1),
-                    Child = new TextBlock
-                    {
-                        Text = "✓",
-                        FontSize = 9,
-                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE6, 0x76)),
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    }
-                };
-                doneBtn.Tapped += async (_, e) =>
-                {
-                    e.Handled = true;
-                    await ExecuteStreamPillActionAsync(stream, focusPill, recycle: false);
-                };
-
-                var recycleBtn = new Border
-                {
-                    Width = 19,
-                    Height = 19,
-                    CornerRadius = new CornerRadius(9.5),
-                    Background = new SolidColorBrush(Color.FromArgb(0x28, 0x00, 0xE5, 0xFF)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0xE5, 0xFF)),
-                    BorderThickness = new Thickness(1),
-                    Child = new TextBlock
-                    {
-                        Text = "↻",
-                        FontSize = 9,
-                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF)),
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    }
-                };
-                recycleBtn.Tapped += async (_, e) =>
-                {
-                    e.Handled = true;
-                    await ExecuteStreamPillActionAsync(stream, focusPill, recycle: true);
-                };
-
-                var actionCapsule = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x0B, 0x15, 0x26)),
-                    CornerRadius = new CornerRadius(10),
-                    Padding = new Thickness(2, 1, 0, 1),
-                    Child = new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        Spacing = 4,
-                        Children = { doneBtn, recycleBtn }
-                    }
-                };
-                overlay.Children.Add(actionCapsule);
+                overlay.Children.Add(CreateJewelActionSlot(
+                    glyph: "✓",
+                    accentColor: Color.FromArgb(0xFF, 0x00, 0xE6, 0x76),
+                    coreColor: Color.FromArgb(0xFF, 0x0D, 0x30, 0x26),
+                    onTapped: () => ExecuteStreamPillActionAsync(stream, focusPill, recycle: false)
+                ));
+                overlay.Children.Add(CreateJewelActionSlot(
+                    glyph: "↻",
+                    accentColor: Color.FromArgb(0xFF, 0x00, 0xE5, 0xFF),
+                    coreColor: Color.FromArgb(0xFF, 0x0D, 0x2B, 0x3D),
+                    onTapped: () => ExecuteStreamPillActionAsync(stream, focusPill, recycle: true)
+                ));
                 pillsRowGrid.Children.Add(overlay);
             }
 
             stack.Children.Add(pillsRowGrid);
             card.Child = stack;
             return card;
+        }
+
+        private static Grid CreateJewelActionSlot(string glyph, Color accentColor, Color coreColor, Func<Task> onTapped)
+        {
+            var glow = new Microsoft.UI.Xaml.Shapes.Ellipse
+            {
+                Width = 24,
+                Height = 24,
+                IsHitTestVisible = false,
+                Fill = new RadialGradientBrush
+                {
+                    Center = new Point(0.5, 0.5),
+                    RadiusX = 0.5,
+                    RadiusY = 0.5,
+                    GradientStops =
+                    {
+                        new GradientStop { Color = Color.FromArgb(0x45, accentColor.R, accentColor.G, accentColor.B), Offset = 0.55 },
+                        new GradientStop { Color = Color.FromArgb(0x00, accentColor.R, accentColor.G, accentColor.B), Offset = 1.0 }
+                    }
+                }
+            };
+            var btn = new Border
+            {
+                Width = 19,
+                Height = 19,
+                CornerRadius = new CornerRadius(9.5),
+                Background = new SolidColorBrush(coreColor),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x94, accentColor.R, accentColor.G, accentColor.B)),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = glyph,
+                    FontSize = 9,
+                    FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                    Foreground = new SolidColorBrush(accentColor),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            btn.Tapped += async (_, e) =>
+            {
+                e.Handled = true;
+                await onTapped();
+            };
+
+            var slot = new Grid { Width = 24, Height = 24 };
+            slot.Children.Add(glow);
+            slot.Children.Add(btn);
+            return slot;
         }
 
         private async Task ExecuteStreamPillActionAsync(TagDoStream stream, TagDoPill pill, bool recycle)

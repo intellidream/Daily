@@ -468,8 +468,10 @@ public struct TagdosWidgetView: View {
                     .frame(width: size, height: size)
                     .background(
                         Circle()
-                            .fill(WidgetColors.accentGreen.opacity(0.18))
-                            .overlay(Circle().strokeBorder(WidgetColors.accentGreen.opacity(0.42), lineWidth: 0.8))
+                            .fill(Color(hex: "0D3026"))
+                            .overlay(Circle().strokeBorder(WidgetColors.accentGreen.opacity(0.58), lineWidth: 0.9))
+                            .shadow(color: WidgetColors.accentGreen.opacity(0.26), radius: 2.2, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.25), radius: 1.8, x: 0, y: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -481,8 +483,10 @@ public struct TagdosWidgetView: View {
                     .frame(width: size, height: size)
                     .background(
                         Circle()
-                            .fill(WidgetColors.accentCyan.opacity(0.18))
-                            .overlay(Circle().strokeBorder(WidgetColors.accentCyan.opacity(0.42), lineWidth: 0.8))
+                            .fill(Color(hex: "0D2B3D"))
+                            .overlay(Circle().strokeBorder(WidgetColors.accentCyan.opacity(0.58), lineWidth: 0.9))
+                            .shadow(color: WidgetColors.accentCyan.opacity(0.26), radius: 2.2, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.25), radius: 1.8, x: 0, y: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -540,23 +544,12 @@ public struct TagdosWidgetView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, dpid != nil ? (buttonSize * 2 + 6) : 0)
+            .padding(.trailing, dpid != nil ? (buttonSize * 2 + 7) : 0)
             .clipped()
 
             if let dpid {
-                HStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [Color(hex: "081426").opacity(0.0), Color(hex: "081426").opacity(0.94)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: 10)
-                    .allowsHitTesting(false)
-
-                    widgetQuickActionPair(streamId: stream.id, pillId: dpid, size: buttonSize, iconSize: iconSize)
-                        .padding(.leading, 1)
-                        .background(Capsule().fill(Color(hex: "081426").opacity(0.94)))
-                }
+                widgetQuickActionPair(streamId: stream.id, pillId: dpid, size: buttonSize, iconSize: iconSize)
+                    .padding(.vertical, 1.5)
             }
         }
     }

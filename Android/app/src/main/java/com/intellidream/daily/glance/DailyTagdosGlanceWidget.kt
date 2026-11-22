@@ -218,42 +218,62 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
     @androidx.compose.runtime.Composable
     private fun QuickActionButtons(streamId: String, pillId: String, compact: Boolean = false) {
         val boxSize = if (compact) 18.dp else 22.dp
+        val outerRadius = if (compact) 9.dp else 11.dp
+        val innerRadius = if (compact) 8.dp else 10.dp
         val fontSize = if (compact) 9.sp else 10.sp
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = GlanceModifier
                     .size(boxSize)
-                    .background(Color(0x3300E676))
-                    .cornerRadius(9.dp)
+                    .background(Color(0x8800E676))
+                    .cornerRadius(outerRadius)
+                    .padding(1.dp)
                     .clickable(buildQuickAction(streamId, pillId, "done")),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "✓",
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFF00E676)),
-                        fontSize = fontSize,
-                        fontWeight = FontWeight.Bold
+                Box(
+                    modifier = GlanceModifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0D3026))
+                        .cornerRadius(innerRadius),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "✓",
+                        style = TextStyle(
+                            color = ColorProvider(Color(0xFF00E676)),
+                            fontSize = fontSize,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
-                )
+                }
             }
             Spacer(modifier = GlanceModifier.width(3.dp))
             Box(
                 modifier = GlanceModifier
                     .size(boxSize)
-                    .background(Color(0x3300E5FF))
-                    .cornerRadius(9.dp)
+                    .background(Color(0x8800E5FF))
+                    .cornerRadius(outerRadius)
+                    .padding(1.dp)
                     .clickable(buildQuickAction(streamId, pillId, "recycle")),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "↻",
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xFF00E5FF)),
-                        fontSize = fontSize,
-                        fontWeight = FontWeight.Bold
+                Box(
+                    modifier = GlanceModifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0D2B3D))
+                        .cornerRadius(innerRadius),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "↻",
+                        style = TextStyle(
+                            color = ColorProvider(Color(0xFF00E5FF)),
+                            fontSize = fontSize,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
-                )
+                }
             }
         }
     }
