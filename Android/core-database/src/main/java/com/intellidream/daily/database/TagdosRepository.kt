@@ -75,6 +75,7 @@ class TagdosRepository(
     val pendingNavigation: StateFlow<TagdosNavigationTarget?> = _pendingNavigation.asStateFlow()
 
     var onStreamsChanged: (() -> Unit)? = null
+    var onTagdosWidgetsChanged: (() -> Unit)? = null
     var syncHandler: TagdosSyncHandler? = null
 
     @Volatile
@@ -197,6 +198,7 @@ class TagdosRepository(
                     }
                     _streams.value = parsed
                     onStreamsChanged?.invoke()
+                    onTagdosWidgetsChanged?.invoke()
                 }
             }
         }
@@ -302,7 +304,7 @@ class TagdosRepository(
             syncedAt = syncedAt
         )
 
-    private fun persistStreamUpdate(updated: TagDoStream) {
+    private fun persistStreamUpdate(updated: TagDoStream, notifyWidgets: Boolean = true) {
         val current = _streams.value.toMutableList()
         val idx = current.indexOfFirst { it.id == updated.id }
         if (idx >= 0) {
@@ -313,6 +315,9 @@ class TagdosRepository(
         }
         _streams.value = current
         onStreamsChanged?.invoke()
+        if (notifyWidgets) {
+            onTagdosWidgetsChanged?.invoke()
+        }
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStream(updated.toEntity(syncedAt = null))
             scheduleCloudPush()
@@ -379,14 +384,14 @@ class TagdosRepository(
         persistStreamUpdate(stream.copy(activeMemos = memos, updatedAt = System.currentTimeMillis()))
     }
 
-    fun recyclePillToBack(streamId: String, pillId: String) {
+    fun recyclePillToBack(streamId: String, pillId: String, notifyWidgets: Boolean = true) {
         val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
-        persistStreamUpdate(TagdosParser.recyclePillToBack(stream, pillId))
+        persistStreamUpdate(TagdosParser.recyclePillToBack(stream, pillId), notifyWidgets = notifyWidgets)
     }
 
-    fun togglePillCompletion(streamId: String, pillId: String) {
+    fun togglePillCompletion(streamId: String, pillId: String, notifyWidgets: Boolean = true) {
         val stream = _streams.value.firstOrNull { it.id == streamId } ?: return
-        persistStreamUpdate(TagdosParser.togglePillCompletion(stream, pillId))
+        persistStreamUpdate(TagdosParser.togglePillCompletion(stream, pillId), notifyWidgets = notifyWidgets)
     }
 
     fun removePill(streamId: String, pillId: String) {
@@ -420,6 +425,7 @@ class TagdosRepository(
         current.add(stream)
         _streams.value = current
         onStreamsChanged?.invoke()
+        onTagdosWidgetsChanged?.invoke()
 
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStream(stream.toEntity(syncedAt = null))
@@ -483,6 +489,7 @@ class TagdosRepository(
         }
         _streams.value = reindexed
         onStreamsChanged?.invoke()
+        onTagdosWidgetsChanged?.invoke()
         scope.launch(ioDispatcher) {
             tagdosDao.upsertStreams(reindexed.map { it.toEntity(syncedAt = null) })
             scheduleCloudPush()
@@ -505,6 +512,7 @@ class TagdosRepository(
         }
         _streams.value = reindexedDomain
         onStreamsChanged?.invoke()
+        onTagdosWidgetsChanged?.invoke()
 
         scope.launch(ioDispatcher) {
             tagdosDao.deleteStreamById(streamId)
@@ -667,6 +675,7 @@ class TagdosRepository(
         if (touchedEntities.isNotEmpty()) {
             _streams.value = current
             onStreamsChanged?.invoke()
+            onTagdosWidgetsChanged?.invoke()
             val toSave = touchedEntities.values.toList()
             scope.launch(ioDispatcher) {
                 tagdosDao.upsertStreams(toSave)

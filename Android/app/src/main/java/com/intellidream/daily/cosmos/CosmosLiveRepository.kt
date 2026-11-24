@@ -120,6 +120,8 @@ class CosmosLiveRepository(private val context: Context) {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    var onConditionsUpdated: (() -> Unit)? = null
+
     init {
         restoreCachedTelemetry()
     }
@@ -227,6 +229,7 @@ class CosmosLiveRepository(private val context: Context) {
                 .putString(KEY_CONDITIONS_JSON, json.encodeToString(cond))
                 .putLong(KEY_CONDITIONS_TS, System.currentTimeMillis())
                 .apply()
+            onConditionsUpdated?.invoke()
 
             evaluateOptInNotifications(
                 settings = settings,

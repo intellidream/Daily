@@ -792,6 +792,7 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
     public static let shared = WidgetDataCoordinator()
     public static let darwinMutationNotificationName = "com.intellidream.daily.widgetDidMutateData"
     private static let habitsBridgeFilename = "daily_habits_widget_bridge_v1.json"
+    private static let habitsPendingQueueFilename = "daily_habits_pending_queue_v1.json"
     private static let sleepBridgeFilename = "daily_sleep_widget_bridge_v1.json"
     private static let stressBridgeFilename = "daily_stress_widget_bridge_v1.json"
     private static let briefingBridgeFilename = "daily_briefing_widget_bridge_v1.json"
@@ -1137,16 +1138,87 @@ public final class WidgetDataCoordinator: @unchecked Sendable {
         return 0
     }
 
-    private func appendOfflineHabitQueue(_ record: HabitLogRecord, store: UserDefaults) {
-        var queue: [HabitLogRecord] = []
+    private func readPendingHabitLogsLocked(
+        store: UserDefaults,
+        bridgeDirectoryURL: URL?
+    ) -> [HabitLogRecord] {
+        var merged: [HabitLogRecord] = []
+        var seen = Set<UUID>()
+        let deletedIds = Set(store.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+
+        if let pendingURL = bridgeFileURL(filename: Self.habitsPendingQueueFilename, directory: bridgeDirectoryURL),
+           let data = try? Data(contentsOf: pendingURL),
+           let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: data) {
+            for record in decoded where !deletedIds.contains(record.id.uuidString) {
+                if seen.insert(record.id).inserted {
+                    merged.append(record)
+                }
+            }
+        }
         if let qData = store.data(forKey: "offline_habits_queue"),
            let decoded = try? JSONDecoder().decode([HabitLogRecord].self, from: qData) {
-            queue = decoded
+            for record in decoded where !deletedIds.contains(record.id.uuidString) {
+                if seen.insert(record.id).inserted {
+                    merged.append(record)
+                }
+            }
         }
-        queue.append(record)
-        if let encoded = try? JSONEncoder().encode(queue) {
-            store.set(encoded, forKey: "offline_habits_queue")
+        return merged
+    }
+
+    private func writePendingHabitLogsLocked(
+        _ queue: [HabitLogRecord],
+        store: UserDefaults,
+        bridgeDirectoryURL: URL?
+    ) {
+        guard let encoded = try? JSONEncoder().encode(queue) else { return }
+        if let pendingURL = bridgeFileURL(filename: Self.habitsPendingQueueFilename, directory: bridgeDirectoryURL) {
+            writeDataLocked(encoded, to: pendingURL)
         }
+        store.set(encoded, forKey: "offline_habits_queue")
+        store.synchronize()
+    }
+
+    private func appendOfflineHabitQueue(
+        _ record: HabitLogRecord,
+        store: UserDefaults,
+        bridgeDirectoryURL: URL? = nil
+    ) {
+        var queue = readPendingHabitLogsLocked(store: store, bridgeDirectoryURL: bridgeDirectoryURL)
+        if !queue.contains(where: { $0.id == record.id }) {
+            queue.append(record)
+        }
+        writePendingHabitLogsLocked(queue, store: store, bridgeDirectoryURL: bridgeDirectoryURL)
+    }
+
+    /// Reads pending un-synced habit logs atomically across the App Group file and synchronized UserDefaults.
+    public func readPendingHabitLogs(bridgeDirectoryURL: URL? = nil, defaults: UserDefaults? = nil) -> [HabitLogRecord] {
+        let store = defaults ?? groupDefaults
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        store.synchronize()
+        return readPendingHabitLogsLocked(store: store, bridgeDirectoryURL: bridgeDirectoryURL)
+    }
+
+    /// Appends a pending habit log into both the atomic App Group pending file and synchronized UserDefaults.
+    public func enqueuePendingHabitLog(_ record: HabitLogRecord, bridgeDirectoryURL: URL? = nil, defaults: UserDefaults? = nil) {
+        let store = defaults ?? groupDefaults
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        store.synchronize()
+        appendOfflineHabitQueue(record, store: store, bridgeDirectoryURL: bridgeDirectoryURL)
+    }
+
+    /// Removes only processed or deleted record IDs without clobbering concurrent widget/app additions.
+    public func removePendingHabitLogs(ids: Set<UUID>, bridgeDirectoryURL: URL? = nil, defaults: UserDefaults? = nil) {
+        guard !ids.isEmpty else { return }
+        let store = defaults ?? groupDefaults
+        bridgeLock.lock()
+        defer { bridgeLock.unlock() }
+        store.synchronize()
+        var queue = readPendingHabitLogsLocked(store: store, bridgeDirectoryURL: bridgeDirectoryURL)
+        queue.removeAll { ids.contains($0.id) }
+        writePendingHabitLogsLocked(queue, store: store, bridgeDirectoryURL: bridgeDirectoryURL)
     }
 
     // MARK: - Bubbles (Hydration)

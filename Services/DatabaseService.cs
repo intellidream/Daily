@@ -37,6 +37,18 @@ namespace Daily.Services
                 if (_initialized) return;
 
                 Console.WriteLine($"[DatabaseService] Initializing DB at: {_connection.DatabasePath}");
+
+#if WINUI_NATIVE
+                try
+                {
+                    await _connection.ExecuteScalarAsync<string>("PRAGMA journal_mode=WAL;").ConfigureAwait(false);
+                    await _connection.ExecuteAsync("PRAGMA busy_timeout=5000;").ConfigureAwait(false);
+                }
+                catch (Exception walEx)
+                {
+                    Console.WriteLine($"[DatabaseService] WAL/busy_timeout setup warning: {walEx.Message}");
+                }
+#endif
                 
                 // MIGRATION: Rename legacy tables if they exist
                 await RenameTableIfExists("local_habit_logs", "habits_logs").ConfigureAwait(false);

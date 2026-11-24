@@ -19,6 +19,7 @@ namespace Daily_WinUI.WidgetsHost.Services
     public class WidgetsHostHabitsService : IHabitsService
     {
         private readonly IDatabaseService _db;
+        private string? _cachedUserId;
         public event Action? OnHabitsUpdated;
         public event Action? OnViewTypeChanged;
 
@@ -96,9 +97,47 @@ namespace Daily_WinUI.WidgetsHost.Services
             };
         }
 
+        private async Task<string> ResolveActiveUserIdAsync()
+        {
+            var emptyGuid = Guid.Empty.ToString().ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(_cachedUserId) && _cachedUserId != emptyGuid)
+            {
+                return _cachedUserId;
+            }
+
+            try
+            {
+                string? uid = await _db.Connection.ExecuteScalarAsync<string?>(
+                    "SELECT UserId FROM habits_logs WHERE UserId IS NOT NULL AND UserId != '' AND UserId != 'guest' AND UserId != ? ORDER BY UpdatedAt DESC LIMIT 1",
+                    emptyGuid).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(uid))
+                {
+                    uid = await _db.Connection.ExecuteScalarAsync<string?>(
+                        "SELECT UserId FROM user_preferences WHERE UserId IS NOT NULL AND UserId != '' AND UserId != 'guest' AND UserId != ? LIMIT 1",
+                        emptyGuid).ConfigureAwait(false);
+                }
+                if (string.IsNullOrWhiteSpace(uid))
+                {
+                    uid = await _db.Connection.ExecuteScalarAsync<string?>(
+                        "SELECT UserId FROM smart_ledger WHERE UserId IS NOT NULL AND UserId != '' AND UserId != 'guest' AND UserId != ? ORDER BY UpdatedAt DESC LIMIT 1",
+                        emptyGuid).ConfigureAwait(false);
+                }
+
+                if (!string.IsNullOrWhiteSpace(uid) && Guid.TryParse(uid, out var parsedUid) && parsedUid != Guid.Empty)
+                {
+                    _cachedUserId = parsedUid.ToString().ToLowerInvariant();
+                    return _cachedUserId;
+                }
+            }
+            catch { }
+
+            return emptyGuid;
+        }
+
         public async Task UpdateGoalAsync(string habitType, double target, string unit)
         {
             await _db.InitializeAsync();
+            var resolvedUserId = await ResolveActiveUserIdAsync();
             var localGoal = await _db.Connection.Table<LocalHabitGoal>()
                 .Where(g => g.HabitType == habitType)
                 .FirstOrDefaultAsync();
@@ -108,6 +147,7 @@ namespace Daily_WinUI.WidgetsHost.Services
                 localGoal = new LocalHabitGoal
                 {
                     Id = Guid.NewGuid().ToString(),
+                    UserId = resolvedUserId,
                     HabitType = habitType,
                     TargetValue = target,
                     Unit = unit,
@@ -117,6 +157,10 @@ namespace Daily_WinUI.WidgetsHost.Services
             }
             else
             {
+                if (string.IsNullOrWhiteSpace(localGoal.UserId) || localGoal.UserId == "guest")
+                {
+                    localGoal.UserId = resolvedUserId;
+                }
                 localGoal.TargetValue = target;
                 localGoal.Unit = unit;
                 localGoal.UpdatedAt = DateTime.UtcNow;
@@ -162,10 +206,20 @@ namespace Daily_WinUI.WidgetsHost.Services
                         {
                             keyName = d.GetString() ?? keyName;
                         }
+                        else if (doc.RootElement.TryGetProperty("type", out var t))
+                        {
+                            keyName = t.GetString() ?? keyName;
+                        }
                     }
-                    catch { }
+                    catch
+                    {
+                        keyName = log.Metadata;
+                    }
                 }
-                else if (!string.IsNullOrEmpty(log.Unit))
+                else if (!string.IsNullOrEmpty(log.Unit)
+                    && !log.Unit.Equals("cigs", StringComparison.OrdinalIgnoreCase)
+                    && !log.Unit.Equals("unit", StringComparison.OrdinalIgnoreCase)
+                    && !log.Unit.Equals("ml", StringComparison.OrdinalIgnoreCase))
                 {
                     keyName = log.Unit;
                 }
@@ -181,10 +235,11 @@ namespace Daily_WinUI.WidgetsHost.Services
         public async Task AddLogAsync(string habitType, double value, string unit, DateTime loggedAt, string? metadata = null)
         {
             await _db.InitializeAsync();
+            var resolvedUserId = await ResolveActiveUserIdAsync();
             var log = new LocalHabitLog
             {
                 Id = Guid.NewGuid().ToString(),
-                UserId = string.Empty,
+                UserId = resolvedUserId,
                 HabitType = habitType,
                 Value = value,
                 Unit = unit,

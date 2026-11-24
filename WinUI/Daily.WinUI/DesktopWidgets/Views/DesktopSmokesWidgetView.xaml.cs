@@ -169,12 +169,12 @@ namespace Daily_WinUI.DesktopWidgets.Views
 
         private async void LogCigarette_Click(object sender, RoutedEventArgs e)
         {
-            await LogSmokeAsync("cigarette");
+            await LogSmokeAsync("{\"type\":\"Cigarette\"}");
         }
 
         private async void LogHeated_Click(object sender, RoutedEventArgs e)
         {
-            await LogSmokeAsync("heated");
+            await LogSmokeAsync("{\"type\":\"Heated Tobacco\"}");
         }
 
         private async void UndoLastSmoke_Click(object sender, RoutedEventArgs e)
@@ -196,17 +196,27 @@ namespace Daily_WinUI.DesktopWidgets.Views
             }
         }
 
-        private async Task LogSmokeAsync(string type)
+        private async Task LogSmokeAsync(string metadataJson)
         {
+            if (_habitsService == null)
+            {
+                try { _habitsService = App.Current.Services?.GetService<IHabitsService>(); } catch { }
+            }
             if (_habitsService == null) return;
             try
             {
-                await _habitsService.AddLogAsync("smokes", 1, type, DateTime.Now, type);
+                await _habitsService.AddLogAsync("smokes", 1, "cigs", DateTime.Now, metadataJson);
                 RefreshData();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[DesktopSmokesWidget] Error logging smoke: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[DesktopSmokesWidget] Error logging smoke: {ex}");
+                try
+                {
+                    var logPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "daily_widgetshost_debug.log");
+                    System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [DesktopSmokesWidget] LogSmokeAsync ERROR: {ex}\n");
+                }
+                catch { }
             }
         }
     }

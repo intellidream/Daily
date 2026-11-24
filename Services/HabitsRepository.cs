@@ -99,25 +99,26 @@ namespace Daily.Services
             // We can't do OR in one SQLite Where usually, so let's do two checks or a contains.
             // Simple approach: Check both.
             
-            var emptyGuid = Guid.Empty.ToString();
+            var emptyGuid = Guid.Empty.ToString().ToLowerInvariant();
+            var normalizedUserId = string.IsNullOrWhiteSpace(newUserId) ? emptyGuid : newUserId.ToLowerInvariant();
             var guestLogs = await _databaseService.Connection.Table<LocalHabitLog>()
-                                .Where(l => l.UserId == "guest" || l.UserId == emptyGuid)
+                                .Where(l => l.UserId == "guest" || l.UserId == emptyGuid || l.UserId == "" || l.UserId == null)
                                 .ToListAsync();
 
             if (guestLogs.Any())
             {
                 foreach (var log in guestLogs)
                 {
-                    log.UserId = newUserId;
+                    log.UserId = normalizedUserId;
                     log.SyncedAt = null; // Mark Dirty for Push
                 }
                 await _databaseService.Connection.UpdateAllAsync(guestLogs);
-                Console.WriteLine($"[HabitsRepository] Migrated {guestLogs.Count} logs from Guest to {newUserId}");
+                Console.WriteLine($"[HabitsRepository] Migrated {guestLogs.Count} logs from Guest/Empty to {normalizedUserId}");
             }
 
             // 2. Migrate Goals
             var guestGoals = await _databaseService.Connection.Table<LocalHabitGoal>()
-                                .Where(g => g.UserId == "guest" || g.UserId == emptyGuid)
+                                .Where(g => g.UserId == "guest" || g.UserId == emptyGuid || g.UserId == "" || g.UserId == null)
                                 .ToListAsync();
 
             if (guestGoals.Any())

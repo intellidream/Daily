@@ -95,12 +95,17 @@ class DailyApp : Application() {
         }
         smartLedgerRepository.onLedgerChanged = {
             appScope.launch {
-                com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
+                com.intellidream.daily.glance.WidgetUpdateHelper.updateFinanceWidgets(this@DailyApp)
             }
         }
         habitsRepository.onHabitsChanged = { habitType ->
             appScope.launch {
                 com.intellidream.daily.glance.WidgetUpdateHelper.updateHabitsWidgets(this@DailyApp, habitType)
+            }
+        }
+        healthRepository.onHealthSummaryUpdated = {
+            appScope.launch {
+                com.intellidream.daily.glance.WidgetUpdateHelper.updateHealthWidgets(this@DailyApp)
             }
         }
         tagdosRemoteService = com.intellidream.daily.network.TagdosRemoteService()
@@ -143,6 +148,8 @@ class DailyApp : Application() {
             }
             repo.onStreamsChanged = {
                 com.intellidream.daily.tagdos.TagdosNotificationScheduler.rescheduleAll(this@DailyApp, repo.streams.value)
+            }
+            repo.onTagdosWidgetsChanged = {
                 appScope.launch {
                     com.intellidream.daily.glance.WidgetUpdateHelper.updateTagdosWidgets(this@DailyApp)
                 }
@@ -190,6 +197,11 @@ class DailyApp : Application() {
         smartBriefingRepository = com.intellidream.daily.briefing.SmartBriefingRepository(this)
         cosmosCatalogRepository = com.intellidream.daily.cosmos.CosmosCatalogRepository.getInstance(this)
         cosmosLiveRepository = com.intellidream.daily.cosmos.CosmosLiveRepository.getInstance(this)
+        cosmosLiveRepository.onConditionsUpdated = {
+            appScope.launch {
+                com.intellidream.daily.glance.WidgetUpdateHelper.updateCosmosWidgets(this@DailyApp)
+            }
+        }
         prismRemoteService = com.intellidream.daily.network.PrismRemoteService()
         prismRepository = com.intellidream.daily.database.PrismRepository(this, dailyDatabase.prismDao())
         prismRepository.syncHandler = object : com.intellidream.daily.database.PrismSyncHandler {
@@ -280,6 +292,9 @@ class DailyApp : Application() {
                     }
                 }
             }
+            com.intellidream.daily.health.HealthSyncWorker.enqueuePeriodicSync(this@DailyApp)
+            // Render widgets immediately from local caches/Room without stalling on weather network I/O
+            com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
             weatherRepository.refreshWeather(
                 force = false,
                 unitSystem = currentSettings?.weatherUnitSystem ?: com.intellidream.daily.model.WeatherUnitSystem.Metric,
@@ -290,9 +305,6 @@ class DailyApp : Application() {
                     }
                 }
             )
-
-            com.intellidream.daily.health.HealthSyncWorker.enqueuePeriodicSync(this@DailyApp)
-            com.intellidream.daily.glance.WidgetUpdateHelper.updateAllWidgets(this@DailyApp)
         }
     }
 

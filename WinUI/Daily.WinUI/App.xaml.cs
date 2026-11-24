@@ -342,9 +342,20 @@ public partial class App : Application
                         {
                             System.Diagnostics.Debug.WriteLine("[Pipe] Received habits:external-changed command");
                             var app = App.Current;
-                            app?.DispatcherQueue?.TryEnqueue(() =>
+                            app?.DispatcherQueue?.TryEnqueue(async () =>
                             {
                                 app.SuppressWidgetRefreshTemporarily();
+                                try
+                                {
+                                    var signedInId = SupabaseClient?.Auth?.CurrentUser?.Id;
+                                    if (!string.IsNullOrWhiteSpace(signedInId) &&
+                                        app.Services?.GetService<Daily.Services.IHabitsRepository>() is { } habitsRepo)
+                                    {
+                                        await habitsRepo.MigrateGuestDataAsync(signedInId);
+                                    }
+                                }
+                                catch { }
+
                                 if (app.Services?.GetService<Daily.Services.IHabitsService>() is Daily.Services.HabitsService concreteHabits)
                                 {
                                     concreteHabits.NotifyExternalUpdate();

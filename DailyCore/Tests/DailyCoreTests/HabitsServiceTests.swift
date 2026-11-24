@@ -432,5 +432,51 @@ struct HabitsServiceTests {
         let rolledOverSnapshot = WidgetDataCoordinator.shared.fetchSmokesSnapshot(bridgeFileURL: bridgeURL, defaults: defaults)
         #expect(rolledOverSnapshot.todayTotal == 0)
     }
+
+    @Test("Atomic Pending Habit Queue Preserves Concurrent Widget Mutations")
+    func testAtomicPendingHabitQueuePreservation() throws {
+        let suiteName = "test.daily.pending.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        let smoke1 = HabitLogRecord(
+            id: UUID(),
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            loggedAt: Date(),
+            metadata: "{\"type\":\"Heated Tobacco\"}"
+        )
+        let smoke2 = HabitLogRecord(
+            id: UUID(),
+            habitType: "smokes",
+            value: 1,
+            unit: "cigs",
+            loggedAt: Date(),
+            metadata: "{\"type\":\"Cigarette\"}"
+        )
+
+        WidgetDataCoordinator.shared.enqueuePendingHabitLog(smoke1, bridgeDirectoryURL: tempDir, defaults: defaults)
+        WidgetDataCoordinator.shared.enqueuePendingHabitLog(smoke2, bridgeDirectoryURL: tempDir, defaults: defaults)
+
+        // Simulate UserDefaults lagging while atomic pending file still holds both records
+        defaults.removeObject(forKey: "offline_habits_queue")
+        defaults.synchronize()
+
+        let readAfterClear = WidgetDataCoordinator.shared.readPendingHabitLogs(bridgeDirectoryURL: tempDir, defaults: defaults)
+        #expect(readAfterClear.count == 2)
+        #expect(Set(readAfterClear.map(\.id)) == Set([smoke1.id, smoke2.id]))
+
+        // Removing only smoke1 must preserve smoke2 across both atomic file and UserDefaults
+        WidgetDataCoordinator.shared.removePendingHabitLogs(ids: [smoke1.id], bridgeDirectoryURL: tempDir, defaults: defaults)
+        let remaining = WidgetDataCoordinator.shared.readPendingHabitLogs(bridgeDirectoryURL: tempDir, defaults: defaults)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.id == smoke2.id)
+    }
 }
 

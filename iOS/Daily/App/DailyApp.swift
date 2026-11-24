@@ -44,6 +44,9 @@ struct DailyApp: App {
 
         // Wire native Apple HealthKit provider into HealthDataService
         HealthDataService.shared.localDataProvider = HealthKitManager.shared
+
+        // Listen for interactive WidgetKit mutations across processes on iOS
+        WidgetDarwinMutationListener.shared.startListening()
         
         // Eagerly initiate HealthKit authorization on launch
         Task {
@@ -66,9 +69,7 @@ struct DailyApp: App {
                     let healthRolledOver = HealthDataService.shared.checkMidnightRolloverIfNeeded()
                     let rolloverState = WidgetDataCoordinator.shared.consumePendingWidgetRolloverReload()
                     let effectiveDayRollover = habitsRolledOver || healthRolledOver || rolloverState.dayChanged
-                    HabitsService.shared.reloadFromLocalStorage()
-                    await HabitsService.shared.flushOfflineQueue()
-                    await HabitsService.shared.loadDataForSelectedDate(forceRefresh: effectiveDayRollover)
+                    await HabitsService.shared.syncForForegroundTransition(dayRolledOver: effectiveDayRollover)
                     await HealthDataService.shared.refreshIfStale()
                     await WeatherService.shared.refreshWeatherIfStale()
                     await SmartBriefingService.shared.syncForForegroundTransition(dayOrSlotChanged: effectiveDayRollover || rolloverState.slotChanged)

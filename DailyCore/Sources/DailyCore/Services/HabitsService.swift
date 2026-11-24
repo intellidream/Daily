@@ -140,6 +140,9 @@ public final class HabitsService: ObservableObject {
     private var recentlyPushedRecords: [UUID: (record: HabitLogRecord, pushedAt: Date)] = [:]
     private var pendingInFlightDeleteIds: Set<String> = []
     private var lastWrittenBridgeUpdatedAt: Date = .distantPast
+    private var activeFlushTask: Task<Void, Never>?
+    private var needsFlushRecheck = false
+    private var activeForegroundSyncTask: Task<Void, Never>?
     private var lastForegroundRefreshAt: Date = .distantPast
     private var lastConsistencyAndPrefsFetchAt: Date = .distantPast
     private var lastKnownTodayStart: Date = Calendar.current.startOfDay(for: Date())
@@ -171,11 +174,7 @@ public final class HabitsService: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 let rolledOver = self.checkMidnightRolloverIfNeeded()
-                self.reloadFromLocalStorage()
-                await self.flushOfflineQueue()
-                guard rolledOver || Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
-                self.lastForegroundRefreshAt = Date()
-                await self.loadDataForSelectedDate(forceRefresh: rolledOver)
+                await self.syncForForegroundTransition(dayRolledOver: rolledOver)
             }
         }
         #elseif canImport(AppKit)
@@ -187,18 +186,39 @@ public final class HabitsService: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 let rolledOver = self.checkMidnightRolloverIfNeeded()
-                self.reloadFromLocalStorage()
-                await self.flushOfflineQueue()
-                guard rolledOver || Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
-                self.lastForegroundRefreshAt = Date()
-                await self.loadDataForSelectedDate(forceRefresh: rolledOver)
+                await self.syncForForegroundTransition(dayRolledOver: rolledOver)
             }
         }
         #endif
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
             self.lastForegroundRefreshAt = Date()
-            await loadDataForSelectedDate()
+            await self.flushOfflineQueue()
+            await self.loadDataForSelectedDate()
         }
+    }
+
+    /// Single-flight foreground transition sync used by UIApplication/NSApplication observers
+    /// and SwiftUI scenePhase transitions without double-fetching Supabase.
+    public func syncForForegroundTransition(dayRolledOver: Bool) async {
+        if let existingTask = activeForegroundSyncTask {
+            await existingTask.value
+            if !dayRolledOver {
+                return
+            }
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            self.reloadFromLocalStorage()
+            await self.flushOfflineQueue()
+            guard dayRolledOver || Date().timeIntervalSince(self.lastForegroundRefreshAt) >= 120 else { return }
+            self.lastForegroundRefreshAt = Date()
+            await self.loadDataForSelectedDate(forceRefresh: dayRolledOver)
+        }
+        activeForegroundSyncTask = task
+        await task.value
+        activeForegroundSyncTask = nil
     }
     
     // MARK: - Midnight Rollover & Date Navigation
@@ -437,9 +457,7 @@ public final class HabitsService: ObservableObject {
 
         // 2. Immediately purge from offlineLogQueue in memory & storage
         offlineLogQueue.removeAll { $0.id == id || deletedIds.contains($0.id.uuidString) }
-        if let data = try? JSONEncoder().encode(offlineLogQueue) {
-            userDefaults.set(data, forKey: "offline_habits_queue")
-        }
+        WidgetDataCoordinator.shared.removePendingHabitLogs(ids: [id])
 
         // 3. Remove from in-memory arrays
         var deletedRecord: HabitLogRecord?
@@ -899,12 +917,59 @@ public final class HabitsService: ObservableObject {
     
     // MARK: - Offline Storage & Queue
     
+    private func refreshPendingQueueFromBridge() {
+        let pending = WidgetDataCoordinator.shared.readPendingHabitLogs()
+        var merged = pending
+        var seen = Set(pending.map(\.id))
+        let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+            .union(pendingInFlightDeleteIds)
+        for record in offlineLogQueue where !deletedIds.contains(record.id.uuidString) {
+            if seen.insert(record.id).inserted {
+                merged.append(record)
+            }
+        }
+        self.offlineLogQueue = merged
+    }
+
+    private func adoptHabitsBridgeIfNewer() {
+        // Adopt newer widget-side mutations from the atomic App Group bridge file
+        // so interactive widget taps sync cleanly back into the running app.
+        let today = Date()
+        let todayKey = isoDateFormatter.string(from: today)
+        guard let bridge = WidgetDataCoordinator.shared.readHabitsBridgeState(for: todayKey),
+              bridge.updatedAt > lastWrittenBridgeUpdatedAt else {
+            return
+        }
+        lastWrittenBridgeUpdatedAt = bridge.updatedAt
+        var deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
+        deletedIds.formUnion(bridge.deletedIds)
+        deletedIds.formUnion(pendingInFlightDeleteIds)
+        if !bridge.deletedIds.isEmpty {
+            userDefaults.set(Array(deletedIds), forKey: "deleted_habit_log_ids")
+        }
+
+        let pendingWater = pendingRecords(habitType: "water", on: today, excluding: Set(bridge.waterLogs.map(\.id)), deletedIds: deletedIds)
+        let pendingSmokes = pendingRecords(habitType: "smokes", on: today, excluding: Set(bridge.smokesLogs.map(\.id)), deletedIds: deletedIds)
+        let mergedWater = deduplicatedSortedLogs(pendingWater + bridge.waterLogs.filter { !deletedIds.contains($0.id.uuidString) })
+        let mergedSmokes = deduplicatedSortedLogs(pendingSmokes + bridge.smokesLogs.filter { !deletedIds.contains($0.id.uuidString) })
+
+        if let wData = try? JSONEncoder().encode(mergedWater) {
+            userDefaults.set(wData, forKey: "local_water_logs_\(todayKey)")
+        }
+        if let sData = try? JSONEncoder().encode(mergedSmokes) {
+            userDefaults.set(sData, forKey: "local_smokes_logs_\(todayKey)")
+        }
+        self.waterDailyTotals[todayKey] = mergedWater.isEmpty
+            ? bridge.waterTotalMl
+            : mergedWater.reduce(0.0) { $0 + $1.value }
+        self.smokesDailyTotals[todayKey] = mergedSmokes.isEmpty
+            ? bridge.smokesTotal
+            : mergedSmokes.reduce(0) { $0 + Int($1.value) }
+    }
+
     public func reloadFromLocalStorage() {
         userDefaults.synchronize()
-        if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
-           let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
-            self.offlineLogQueue = queue
-        }
+        refreshPendingQueueFromBridge()
         if let wData = userDefaults.data(forKey: "habits_water_daily_totals"),
            let wDict = try? JSONDecoder().decode([String: Double].self, from: wData) {
             self.waterDailyTotals = wDict
@@ -914,38 +979,7 @@ public final class HabitsService: ObservableObject {
             self.smokesDailyTotals = sDict
         }
 
-        // Adopt newer widget-side mutations from the atomic App Group bridge file
-        // so interactive widget taps sync cleanly back into the running app.
-        let today = Date()
-        let todayKey = isoDateFormatter.string(from: today)
-        if let bridge = WidgetDataCoordinator.shared.readHabitsBridgeState(for: todayKey),
-           bridge.updatedAt > lastWrittenBridgeUpdatedAt {
-            lastWrittenBridgeUpdatedAt = bridge.updatedAt
-            var deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
-            deletedIds.formUnion(bridge.deletedIds)
-            deletedIds.formUnion(pendingInFlightDeleteIds)
-            if !bridge.deletedIds.isEmpty {
-                userDefaults.set(Array(deletedIds), forKey: "deleted_habit_log_ids")
-            }
-
-            let pendingWater = pendingRecords(habitType: "water", on: today, excluding: Set(bridge.waterLogs.map(\.id)), deletedIds: deletedIds)
-            let pendingSmokes = pendingRecords(habitType: "smokes", on: today, excluding: Set(bridge.smokesLogs.map(\.id)), deletedIds: deletedIds)
-            let mergedWater = deduplicatedSortedLogs(pendingWater + bridge.waterLogs.filter { !deletedIds.contains($0.id.uuidString) })
-            let mergedSmokes = deduplicatedSortedLogs(pendingSmokes + bridge.smokesLogs.filter { !deletedIds.contains($0.id.uuidString) })
-
-            if let wData = try? JSONEncoder().encode(mergedWater) {
-                userDefaults.set(wData, forKey: "local_water_logs_\(todayKey)")
-            }
-            if let sData = try? JSONEncoder().encode(mergedSmokes) {
-                userDefaults.set(sData, forKey: "local_smokes_logs_\(todayKey)")
-            }
-            self.waterDailyTotals[todayKey] = mergedWater.isEmpty
-                ? bridge.waterTotalMl
-                : mergedWater.reduce(0.0) { $0 + $1.value }
-            self.smokesDailyTotals[todayKey] = mergedSmokes.isEmpty
-                ? bridge.smokesTotal
-                : mergedSmokes.reduce(0) { $0 + Int($1.value) }
-        }
+        adoptHabitsBridgeIfNewer()
 
         loadLocalLogsForSelectedDate()
         recalculateDailyAggregates()
@@ -953,6 +987,7 @@ public final class HabitsService: ObservableObject {
     }
     
     private func loadLocalSettingsAndQueue() {
+        userDefaults.synchronize()
         if let g = userDefaults.value(forKey: "water_goal") as? Double {
             self.waterGoal = g
         }
@@ -963,10 +998,7 @@ public final class HabitsService: ObservableObject {
             self.smokesSettings.baselineCigsPerDay = b
         }
         
-        if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
-           let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
-            self.offlineLogQueue = queue
-        }
+        refreshPendingQueueFromBridge()
         
         // Load cached daily totals dictionary
         if let wData = userDefaults.data(forKey: "habits_water_daily_totals"),
@@ -977,6 +1009,8 @@ public final class HabitsService: ObservableObject {
            let sDict = try? JSONDecoder().decode([String: Int].self, from: sData) {
             self.smokesDailyTotals = sDict
         }
+
+        adoptHabitsBridgeIfNewer()
         
         loadLocalLogsForSelectedDate()
         recalculateDailyAggregates()
@@ -992,25 +1026,20 @@ public final class HabitsService: ObservableObject {
     }
 
     public func saveDailyTotals(reloadingKinds: [String]) {
-        if let wData = try? JSONEncoder().encode(waterDailyTotals) {
-            userDefaults.set(wData, forKey: "habits_water_daily_totals")
-        }
-        if let sData = try? JSONEncoder().encode(smokesDailyTotals) {
-            userDefaults.set(sData, forKey: "habits_smokes_daily_totals")
-        }
         let today = Date()
         let todayKey = isoDateFormatter.string(from: today)
-        let todayWaterTotal = waterDailyTotals[todayKey] ?? 0
-        let todaySmokesTotal = smokesDailyTotals[todayKey] ?? 0
-        userDefaults.set(Int(todayWaterTotal), forKey: "cached_water_total")
-        userDefaults.set(todaySmokesTotal, forKey: "cached_smokes_total")
-        userDefaults.set(todayKey, forKey: "cached_habits_date")
-        userDefaults.synchronize()
-
         let activeDeletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
             .union(pendingInFlightDeleteIds)
-        let todayWaterLogs: [HabitLogRecord]
-        let todaySmokesLogs: [HabitLogRecord]
+
+        let pendingBridgeLogs = WidgetDataCoordinator.shared.readPendingHabitLogs()
+            .filter {
+                !$0.isDeleted
+                && !activeDeletedIds.contains($0.id.uuidString)
+                && isoDateFormatter.string(from: $0.loggedAt) == todayKey
+            }
+
+        var todayWaterLogs: [HabitLogRecord]
+        var todaySmokesLogs: [HabitLogRecord]
         if Calendar.current.isDateInToday(selectedDate) {
             todayWaterLogs = self.todaysWaterLogs.filter { !activeDeletedIds.contains($0.id.uuidString) }
             todaySmokesLogs = self.todaysSmokesLogs.filter { !activeDeletedIds.contains($0.id.uuidString) }
@@ -1018,6 +1047,34 @@ public final class HabitsService: ObservableObject {
             todayWaterLogs = cachedLocalLogs(forKey: todayKey, habitType: "water", on: today, deletedIds: activeDeletedIds)
             todaySmokesLogs = cachedLocalLogs(forKey: todayKey, habitType: "smokes", on: today, deletedIds: activeDeletedIds)
         }
+
+        let pendingWater = pendingBridgeLogs.filter { $0.habitType == "water" }
+        if !pendingWater.isEmpty {
+            todayWaterLogs = deduplicatedSortedLogs(pendingWater + todayWaterLogs)
+            if !todayWaterLogs.isEmpty {
+                waterDailyTotals[todayKey] = max(waterDailyTotals[todayKey] ?? 0, todayWaterLogs.reduce(0.0) { $0 + $1.value })
+            }
+        }
+        let pendingSmokes = pendingBridgeLogs.filter { $0.habitType == "smokes" }
+        if !pendingSmokes.isEmpty {
+            todaySmokesLogs = deduplicatedSortedLogs(pendingSmokes + todaySmokesLogs)
+            if !todaySmokesLogs.isEmpty {
+                smokesDailyTotals[todayKey] = max(smokesDailyTotals[todayKey] ?? 0, todaySmokesLogs.reduce(0) { $0 + Int($1.value) })
+            }
+        }
+
+        if let wData = try? JSONEncoder().encode(waterDailyTotals) {
+            userDefaults.set(wData, forKey: "habits_water_daily_totals")
+        }
+        if let sData = try? JSONEncoder().encode(smokesDailyTotals) {
+            userDefaults.set(sData, forKey: "habits_smokes_daily_totals")
+        }
+        let todayWaterTotal = waterDailyTotals[todayKey] ?? 0
+        let todaySmokesTotal = smokesDailyTotals[todayKey] ?? 0
+        userDefaults.set(Int(todayWaterTotal), forKey: "cached_water_total")
+        userDefaults.set(todaySmokesTotal, forKey: "cached_smokes_total")
+        userDefaults.set(todayKey, forKey: "cached_habits_date")
+        userDefaults.synchronize()
 
         let now = Date()
         let bridgeState = HabitsWidgetBridgeState(
@@ -1126,7 +1183,8 @@ public final class HabitsService: ObservableObject {
         let recentRecords = recentlyPushedRecords.values
             .filter { $0.pushedAt > cutoff }
             .map(\.record)
-        for record in Array(pendingInFlightRecords.values) + offlineLogQueue + recentRecords {
+        let bridgedPending = WidgetDataCoordinator.shared.readPendingHabitLogs()
+        for record in Array(pendingInFlightRecords.values) + offlineLogQueue + bridgedPending + recentRecords {
             guard record.habitType == habitType else { continue }
             guard !deletedIds.contains(record.id.uuidString) else { continue }
             guard isoDateFormatter.string(from: record.loggedAt) == targetKey else { continue }
@@ -1175,30 +1233,43 @@ public final class HabitsService: ObservableObject {
                 .union(pendingInFlightDeleteIds)
             guard !latestDeleted.contains(toInsert.id.uuidString) else { return }
             print("[HabitsService] Supabase insert failed (\(error.localizedDescription)). Queuing offline...")
-            if !offlineLogQueue.contains(where: { $0.id == toInsert.id }) {
-                offlineLogQueue.append(toInsert)
-                if let data = try? JSONEncoder().encode(offlineLogQueue) {
-                    userDefaults.set(data, forKey: "offline_habits_queue")
-                }
-            }
+            WidgetDataCoordinator.shared.enqueuePendingHabitLog(toInsert)
+            refreshPendingQueueFromBridge()
         }
     }
     
     public func flushOfflineQueue() async {
+        if let existingTask = activeFlushTask {
+            needsFlushRecheck = true
+            await existingTask.value
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            repeat {
+                self.needsFlushRecheck = false
+                await self.performFlushOfflineQueuePass()
+            } while self.needsFlushRecheck
+        }
+        activeFlushTask = task
+        await task.value
+        activeFlushTask = nil
+    }
+
+    private func performFlushOfflineQueuePass() async {
+        userDefaults.synchronize()
         let deletedIds = Set(userDefaults.stringArray(forKey: "deleted_habit_log_ids") ?? [])
-        
-        // 1. Reload latest queue from userDefaults in case widget added items
-        if let queueData = userDefaults.data(forKey: "offline_habits_queue"),
-           let queue = try? JSONDecoder().decode([HabitLogRecord].self, from: queueData) {
-            self.offlineLogQueue = queue
+            .union(pendingInFlightDeleteIds)
+
+        // 1. Reconcile in-memory queue with atomic App Group pending file & synchronized UserDefaults
+        refreshPendingQueueFromBridge()
+        let purgedDeletedUUIDs = Set(offlineLogQueue.filter { deletedIds.contains($0.id.uuidString) }.map(\.id))
+        if !purgedDeletedUUIDs.isEmpty {
+            WidgetDataCoordinator.shared.removePendingHabitLogs(ids: purgedDeletedUUIDs)
+            offlineLogQueue.removeAll { purgedDeletedUUIDs.contains($0.id) }
         }
-        
-        // Purge any deleted items from memory & persistent offline queue
-        self.offlineLogQueue.removeAll { deletedIds.contains($0.id.uuidString) }
-        if let data = try? JSONEncoder().encode(self.offlineLogQueue) {
-            userDefaults.set(data, forKey: "offline_habits_queue")
-        }
-        
+
         // 2. Flush pending deletions queue
         let pendingDeletes = userDefaults.stringArray(forKey: "offline_deleted_habits_queue") ?? []
         if !pendingDeletes.isEmpty {
@@ -1215,15 +1286,17 @@ public final class HabitsService: ObservableObject {
             }
             userDefaults.set(remainingDeletes, forKey: "offline_deleted_habits_queue")
         }
-        
-        guard !offlineLogQueue.isEmpty else { return }
-        
+
+        let snapshotQueue = offlineLogQueue
+        guard !snapshotQueue.isEmpty else { return }
+
         let session = try? await supabase.auth.session
-        let currentUserId = session?.user.id ?? userDefaults.string(forKey: "current_user_id").flatMap { UUID(uuidString: $0) }
-        
-        var remaining: [HabitLogRecord] = []
-        for var record in offlineLogQueue {
+        let currentUserId = session?.user.id ?? cachedSyncUserId()
+
+        var processedIds = Set<UUID>()
+        for var record in snapshotQueue {
             if deletedIds.contains(record.id.uuidString) {
+                processedIds.insert(record.id)
                 continue
             }
             if record.userId == nil, let uid = currentUserId {
@@ -1231,20 +1304,27 @@ public final class HabitsService: ObservableObject {
             }
             do {
                 try await supabase.from("habits_logs").insert(record, returning: .minimal).execute()
+                processedIds.insert(record.id)
+                if !pendingInFlightDeleteIds.contains(record.id.uuidString) {
+                    recentlyPushedRecords[record.id] = (record, Date())
+                }
             } catch {
                 let errStr = error.localizedDescription.lowercased()
                 if errStr.contains("duplicate") || errStr.contains("already exists") || errStr.contains("23505") || errStr.contains("unique") {
-                    // Already in database, do not retry
+                    processedIds.insert(record.id)
+                    if !pendingInFlightDeleteIds.contains(record.id.uuidString) {
+                        recentlyPushedRecords[record.id] = (record, Date())
+                    }
                     print("[HabitsService] flushOfflineQueue: record \(record.id) already exists in Supabase.")
                 } else {
                     print("[HabitsService] flushOfflineQueue error (\(error.localizedDescription)). Retaining in queue.")
-                    remaining.append(record)
                 }
             }
         }
-        self.offlineLogQueue = remaining
-        if let data = try? JSONEncoder().encode(remaining) {
-            userDefaults.set(data, forKey: "offline_habits_queue")
+
+        if !processedIds.isEmpty {
+            WidgetDataCoordinator.shared.removePendingHabitLogs(ids: processedIds)
+            refreshPendingQueueFromBridge()
         }
     }
     

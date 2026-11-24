@@ -9,6 +9,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
+import android.util.LruCache
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -38,6 +39,8 @@ enum class WidgetIconType {
  * for Jetpack Glance AppWidgets, achieving 100% 1:1 visual parity with iOS WidgetKit.
  */
 object WidgetVisualGraphics {
+
+    private val iconBitmapCache = object : LruCache<String, Bitmap>(96) {}
 
     // =========================================================================
     // MARK: - Color & Formatting Helpers
@@ -153,12 +156,17 @@ object WidgetVisualGraphics {
         colorInt: Int = Color.WHITE,
         opacity: Float = 1.0f
     ): Bitmap {
+        val alphaInt = (opacity.coerceIn(0f, 1f) * 255).toInt()
+        val cacheKey = "${icon.ordinal}_${sizePx}_${colorInt}_$alphaInt"
+        synchronized(iconBitmapCache) {
+            iconBitmapCache.get(cacheKey)?.let { if (!it.isRecycled) return it }
+        }
         val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
             color = colorInt
-            alpha = (opacity.coerceIn(0f, 1f) * 255).toInt()
+            alpha = alphaInt
         }
 
         val w = sizePx.toFloat()
@@ -437,6 +445,9 @@ object WidgetVisualGraphics {
             }
         }
 
+        synchronized(iconBitmapCache) {
+            iconBitmapCache.put(cacheKey, bitmap)
+        }
         return bitmap
     }
 

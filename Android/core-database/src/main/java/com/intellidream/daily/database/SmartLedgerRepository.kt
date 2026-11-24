@@ -105,12 +105,14 @@ class SmartLedgerRepository(
         } catch (_: Exception) {}
     }
 
-    fun saveLedgerText(newText: String, triggerCloudPush: Boolean = true) {
+    fun saveLedgerText(newText: String, triggerCloudPush: Boolean = true, notifyWidgets: Boolean = true) {
         val trimmed = newText.trim()
         val textToUse = if (trimmed.isEmpty()) DEFAULT_LEDGER_TEXT else SmartLedgerParser.normalizeLedgerText(newText)
         _rawText.value = textToUse
         _parsedLedger.value = SmartLedgerParser.parse(textToUse)
-        onLedgerChanged?.invoke()
+        if (notifyWidgets) {
+            onLedgerChanged?.invoke()
+        }
 
         val now = System.currentTimeMillis()
         scope.launch {
@@ -137,9 +139,9 @@ class SmartLedgerRepository(
         }
     }
 
-    fun adjustItem(lineIndex: Int, deltaRaw: Double) {
+    fun adjustItem(lineIndex: Int, deltaRaw: Double, notifyWidgets: Boolean = true) {
         val updatedText = SmartLedgerParser.adjustItemAmount(_rawText.value, lineIndex, deltaRaw)
-        saveLedgerText(updatedText)
+        saveLedgerText(updatedText, triggerCloudPush = true, notifyWidgets = notifyWidgets)
     }
 
     fun setItemAmount(lineIndex: Int, newRaw: Double) {

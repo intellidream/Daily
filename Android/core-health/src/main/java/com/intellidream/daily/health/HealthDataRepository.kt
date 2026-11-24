@@ -257,6 +257,8 @@ class HealthDataRepository(
     private val _stressAnalysis = MutableStateFlow<StressAnalysisResult?>(null)
     val stressAnalysis: StateFlow<StressAnalysisResult?> = _stressAnalysis.asStateFlow()
 
+    var onHealthSummaryUpdated: (() -> Unit)? = null
+
     private val _intradayStress = MutableStateFlow<List<IntradayStressPoint>>(emptyList())
     val intradayStress: StateFlow<List<IntradayStressPoint>> = _intradayStress.asStateFlow()
 
@@ -1846,6 +1848,9 @@ class HealthDataRepository(
             _availableSources.value = sourcesList
             _availableDevices.value = sourcesList.map { it.displayName }
             rebuildConfigurableSources()
+        }
+        if (dateKey == isoDateFormatter.format(Date())) {
+            onHealthSummaryUpdated?.invoke()
         }
     }
 

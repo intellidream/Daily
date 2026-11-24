@@ -21,10 +21,14 @@ namespace Daily_WinUI.DesktopWidgets
         public static string GetHostExecutablePath()
         {
             var baseDir = AppContext.BaseDirectory;
-            var path = Path.Combine(baseDir, "Daily.WidgetsHost.exe");
-            if (File.Exists(path)) return path;
+            var localPath = Path.Combine(baseDir, "Daily.WidgetsHost.exe");
+            var candidates = new System.Collections.Generic.List<string>();
+            if (File.Exists(localPath))
+            {
+                candidates.Add(localPath);
+            }
 
-            // Search parallel build directories in dev environment
+            // Search parallel build directories in dev environment and prefer newest build
             try
             {
                 var dir = new DirectoryInfo(baseDir);
@@ -38,17 +42,23 @@ namespace Daily_WinUI.DesktopWidgets
                     var hostBin = Path.Combine(dir.FullName, "Daily.WidgetsHost", "bin");
                     if (Directory.Exists(hostBin))
                     {
-                        var candidates = Directory.GetFiles(hostBin, "Daily.WidgetsHost.exe", SearchOption.AllDirectories);
-                        if (candidates.Length > 0)
-                        {
-                            return candidates.OrderByDescending(File.GetLastWriteTimeUtc).First();
-                        }
+                        var archTag = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+                            ? "win-arm64"
+                            : "win-x64";
+                        var found = Directory.GetFiles(hostBin, "Daily.WidgetsHost.exe", SearchOption.AllDirectories);
+                        var archMatched = found.Where(p => p.Contains(archTag, StringComparison.OrdinalIgnoreCase)).ToArray();
+                        candidates.AddRange(archMatched.Length > 0 ? archMatched : found);
                     }
                 }
             }
             catch { }
 
-            return path;
+            if (candidates.Count > 0)
+            {
+                return candidates.OrderByDescending(File.GetLastWriteTimeUtc).First();
+            }
+
+            return localPath;
         }
 
         public static bool IsHostAvailable()
@@ -91,10 +101,39 @@ namespace Daily_WinUI.DesktopWidgets
         public static void EnsureHostRunning()
         {
             if (IsRunningInHostProcess) return;
-            if (IsHostRunning()) return;
-
             string exePath = GetHostExecutablePath();
             if (!File.Exists(exePath)) return;
+
+            if (IsHostRunning())
+            {
+                try
+                {
+                    var latestWriteUtc = File.GetLastWriteTimeUtc(exePath);
+                    var runningHost = Process.GetProcessesByName("Daily.WidgetsHost").FirstOrDefault();
+                    var runningExe = runningHost?.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(runningExe) && File.GetLastWriteTimeUtc(runningExe) < latestWriteUtc.AddSeconds(-2))
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            await SendCommandAsync("shutdown", 800);
+                            await Task.Delay(350);
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo
+                                {
+                                    FileName = exePath,
+                                    UseShellExecute = true,
+                                    CreateNoWindow = true,
+                                    WindowStyle = ProcessWindowStyle.Hidden
+                                });
+                            }
+                            catch { }
+                        });
+                    }
+                }
+                catch { }
+                return;
+            }
 
             try
             {

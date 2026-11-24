@@ -8,6 +8,8 @@ import androidx.glance.appwidget.updateAll
 import com.intellidream.daily.DailyApp
 import com.intellidream.daily.model.SmokePreset
 import com.intellidream.daily.model.WaterPreset
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 class LogWaterActionCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
@@ -76,9 +78,8 @@ class AdjustLedgerActionCallback : ActionCallback {
         }
 
         if (item != null && item.lineIndex >= 0) {
-            app.smartLedgerRepository.adjustItem(item.lineIndex, delta)
-            runCatching { DailyMoneyGlanceWidget().updateAll(context) }
-            runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+            app.smartLedgerRepository.adjustItem(item.lineIndex, delta, notifyWidgets = false)
+            WidgetUpdateHelper.updateFinanceWidgets(context)
         }
     }
 
@@ -97,9 +98,9 @@ class TagdosPillActionCallback : ActionCallback {
 
         val app = runCatching { DailyApp.instance }.getOrNull() ?: return
         if (action == "recycle") {
-            app.tagdosRepository.recyclePillToBack(streamId, pillId)
+            app.tagdosRepository.recyclePillToBack(streamId, pillId, notifyWidgets = false)
         } else {
-            app.tagdosRepository.togglePillCompletion(streamId, pillId)
+            app.tagdosRepository.togglePillCompletion(streamId, pillId, notifyWidgets = false)
         }
         WidgetUpdateHelper.updateTagdosWidgets(context)
     }
@@ -112,36 +113,53 @@ class TagdosPillActionCallback : ActionCallback {
 }
 
 object WidgetUpdateHelper {
-    suspend fun updateTagdosWidgets(context: Context) {
-        runCatching { DailyTagdosGlanceWidget().updateAll(context) }
-        runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+    suspend fun updateTagdosWidgets(context: Context) = coroutineScope {
+        launch { runCatching { DailyTagdosGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
     }
-    suspend fun updateHabitsWidgets(context: Context, habitType: String? = null) {
+
+    suspend fun updateHabitsWidgets(context: Context, habitType: String? = null) = coroutineScope {
         when (habitType) {
             "water" -> {
-                runCatching { DailyBubblesGlanceWidget().updateAll(context) }
-                runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+                launch { runCatching { DailyBubblesGlanceWidget().updateAll(context) } }
+                launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
             }
             "smokes" -> {
-                runCatching { DailySmokesGlanceWidget().updateAll(context) }
-                runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+                launch { runCatching { DailySmokesGlanceWidget().updateAll(context) } }
+                launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
             }
             else -> {
-                runCatching { DailyBubblesGlanceWidget().updateAll(context) }
-                runCatching { DailySmokesGlanceWidget().updateAll(context) }
-                runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+                launch { runCatching { DailyBubblesGlanceWidget().updateAll(context) } }
+                launch { runCatching { DailySmokesGlanceWidget().updateAll(context) } }
+                launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
             }
         }
     }
 
-    suspend fun updateAllWidgets(context: Context) {
-        runCatching { DailyBubblesGlanceWidget().updateAll(context) }
-        runCatching { DailySmokesGlanceWidget().updateAll(context) }
-        runCatching { DailySleepGlanceWidget().updateAll(context) }
-        runCatching { DailyStressGlanceWidget().updateAll(context) }
-        runCatching { DailyMoneyGlanceWidget().updateAll(context) }
-        runCatching { DailyTagdosGlanceWidget().updateAll(context) }
-        runCatching { DailyCosmosGlanceWidget().updateAll(context) }
-        runCatching { DailyCombinedGlanceWidget().updateAll(context) }
+    suspend fun updateHealthWidgets(context: Context) = coroutineScope {
+        launch { runCatching { DailySleepGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyStressGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
+    }
+
+    suspend fun updateFinanceWidgets(context: Context) = coroutineScope {
+        launch { runCatching { DailyMoneyGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
+    }
+
+    suspend fun updateCosmosWidgets(context: Context) = coroutineScope {
+        launch { runCatching { DailyCosmosGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
+    }
+
+    suspend fun updateAllWidgets(context: Context) = coroutineScope {
+        launch { runCatching { DailyBubblesGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailySmokesGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailySleepGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyStressGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyMoneyGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyTagdosGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyCosmosGlanceWidget().updateAll(context) } }
+        launch { runCatching { DailyCombinedGlanceWidget().updateAll(context) } }
     }
 }
