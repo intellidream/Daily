@@ -66,7 +66,7 @@ Resolves three targeted regressions without altering macOS widget behavior, UI s
 - **macOS (`MacOS/Daily.xcodeproj`)**: `xcodebuild -project MacOS/Daily.xcodeproj -scheme Daily -configuration Debug -destination 'platform=macOS' build` succeeded (`** BUILD SUCCEEDED **`).
 - **iOS (`iOS/Daily.xcodeproj`)**:
   - `SimulaDuo` simulator: built (`** BUILD SUCCEEDED **`), installed, and launched `com.intellidream.daily`; confirmed `DailyWidgetsExtension.appex/Metadata.appintents/extract.actionsdata` (`12781` bytes) and App Group bridge hydration (`smokesTotal: 26`, `waterTotalMl: 1400`).
-  - `generic/platform=iOS`: built and signed with `Apple Development` (`** BUILD SUCCEEDED **`); physical installation to `Schmitz` could not connect (`CoreDeviceError 4000 / Connection reset by peer`, device `available (paired)`).
+  - Physical iPhone `Schmitz` (`00008140-000E2C863EFB001C`): built and signed with `Apple Development` (`** BUILD SUCCEEDED **`), installed via `xcrun devicectl device install app`, and launched live (`Daily` `PID 41445` and `DailyWidgetsExtension` `PID 41435` running).
 - **Android**:
   - `./gradlew assembleDebug` and `./gradlew testDebugUnitTest` succeeded cleanly.
   - `Medium_Phone_API_36.1` emulator: verified `DailyApp` startup, interactive Smokes widget taps (`Heat` -> `Cig`, updating count `0 -> 1 -> 2` alongside `Daily Executive` in `68ms–250ms` via logcat `AppWidgetServiceImpl`).
