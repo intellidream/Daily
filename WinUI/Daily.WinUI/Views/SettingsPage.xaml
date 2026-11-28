@@ -47,6 +47,12 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
+            <NavigationViewItem Tag="LoreenVeil" Content="Loreen Veil">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE72E;" FontFamily="Segoe Fluent Icons"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
             <!-- ── Application ─────────────────────────── -->
             <NavigationViewItemHeader Content="Application" />
 

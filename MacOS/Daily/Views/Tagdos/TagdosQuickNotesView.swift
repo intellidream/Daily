@@ -4,12 +4,20 @@ import DailyCore
 /// Dedicated Quick Notes stream featuring rich Markdown editing, live preview toggle,
 /// search, pinning, and Supabase cloud synchronization.
 public struct TagdosQuickNotesView: View {
+    public var isPeeking: Bool = false
     @ObservedObject private var store = TagdosStore.shared
+    @ObservedObject private var settingsService = SettingsService.shared
     @State private var searchText: String = ""
     @State private var activeEditingNote: TagDoQuickNote? = nil
     @State private var isCreatingNewNote: Bool = false
 
-    public init() {}
+    public init(isPeeking: Bool = false) {
+        self.isPeeking = isPeeking
+    }
+
+    private var isVeiled: Bool {
+        settingsService.settings.isLoreenVeilActiveForNotes && !isPeeking
+    }
 
     private var filteredNotes: [TagDoQuickNote] {
         let all = store.quickNotes
@@ -118,7 +126,8 @@ public struct TagdosQuickNotesView: View {
         .sheet(item: $activeEditingNote) { note in
             MarkdownNoteEditorSheet(
                 note: note,
-                isNew: isCreatingNewNote
+                isNew: isCreatingNewNote,
+                isVeiled: isVeiled
             ) { updatedNote in
                 if isCreatingNewNote {
                     store.createQuickNote(title: updatedNote.title, content: updatedNote.content)
@@ -138,8 +147,7 @@ public struct TagdosQuickNotesView: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top) {
-                    Text(note.displayTitle)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                    LoreenVeilText(note.displayTitle, isVeiled: isVeiled, size: 14, weight: .bold, design: .rounded)
                         .foregroundColor(.white)
                         .lineLimit(1)
 
@@ -157,8 +165,7 @@ public struct TagdosQuickNotesView: View {
                 }
 
                 if !note.previewSnippet.isEmpty {
-                    Text(note.previewSnippet)
-                        .font(.system(size: 12))
+                    LoreenVeilText(note.previewSnippet, isVeiled: isVeiled, size: 12)
                         .foregroundColor(Color.white.opacity(0.65))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -221,6 +228,7 @@ public struct TagdosQuickNotesView: View {
 struct MarkdownNoteEditorSheet: View {
     @State var note: TagDoQuickNote
     let isNew: Bool
+    var isVeiled: Bool = false
     let onSave: (TagDoQuickNote) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -286,13 +294,11 @@ struct MarkdownNoteEditorSheet: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
                             if !note.title.isEmpty {
-                                Text(note.title)
-                                    .font(.title2.bold())
+                                LoreenVeilText(note.title, isVeiled: isVeiled, size: 20, weight: .bold, design: .rounded)
                                     .foregroundColor(.white)
                             }
 
-                            Text(LocalizedStringKey(note.content))
-                                .font(.system(size: 14))
+                            LoreenVeilMarkdownText(note.content, isVeiled: isVeiled, size: 14)
                                 .foregroundColor(Color.white.opacity(0.9))
                                 .tint(ThemeColors.accentCyan)
                                 .lineSpacing(5)

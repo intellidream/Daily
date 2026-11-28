@@ -1,4 +1,5 @@
 import SwiftUI
+import LocalAuthentication
 import DailyCore
 #if canImport(UIKit)
 import UIKit
@@ -45,10 +46,30 @@ public struct TagdosNotesHubView: View {
     @State private var activeOverviewNote: TagDoQuickNote? = nil
     @State private var isCreatingOverviewNote: Bool = false
 
+    // Loreen Veil Peek / Biometric Reveal state
+    @State private var isPeekingLoreen: Bool = false
+    @State private var isBiometricRevealed: Bool = false
+
     public var onNavigateBack: (() -> Void)? = nil
 
     public init(onNavigateBack: (() -> Void)? = nil) {
         self.onNavigateBack = onNavigateBack
+    }
+
+    private var isLoreenMasterEnabled: Bool {
+        settingsService.settings.loreenVeilUnlocked && settingsService.settings.loreenVeilEnabled
+    }
+
+    private var isLoreenRevealedNow: Bool {
+        isPeekingLoreen || isBiometricRevealed
+    }
+
+    private var isTagdosVeiled: Bool {
+        settingsService.settings.isLoreenVeilActiveForTagdos && !isLoreenRevealedNow
+    }
+
+    private var isNotesVeiled: Bool {
+        settingsService.settings.isLoreenVeilActiveForNotes && !isLoreenRevealedNow
     }
 
     private func handleBack() {
@@ -98,7 +119,7 @@ public struct TagdosNotesHubView: View {
                         if isAllTab {
                             allOverviewContent
                         } else if isNotesTab {
-                            TagdosQuickNotesView()
+                            TagdosQuickNotesView(isPeeking: isLoreenRevealedNow)
                         } else {
                             if isRawEditMode {
                                 rawEditorCard
@@ -108,7 +129,7 @@ public struct TagdosNotesHubView: View {
 
                             // Per-Stream Active Memos & Attachments
                             if let stream = currentStream {
-                                TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1)
+                                TagdosActiveMemoView(streamId: stream.id, streamNumber: stream.orderIndex + 1, isPeeking: isLoreenRevealedNow)
                             }
                         }
                     }
@@ -169,6 +190,10 @@ public struct TagdosNotesHubView: View {
                     applyPendingNavigation(target, scrollProxy: scrollProxy)
                 }
             }
+            .onDisappear {
+                isPeekingLoreen = false
+                isBiometricRevealed = false
+            }
             .onChange(of: selectedStreamIndex) { _, newIndex in
                 if newIndex >= 0 && newIndex < store.streams.count {
                     rawTextBuffer = store.streams[newIndex].rawText
@@ -217,7 +242,8 @@ public struct TagdosNotesHubView: View {
         .sheet(item: $activeOverviewNote) { note in
             MarkdownNoteEditorSheet(
                 note: note,
-                isNew: isCreatingOverviewNote
+                isNew: isCreatingOverviewNote,
+                isVeiled: isNotesVeiled
             ) { updatedNote in
                 if isCreatingOverviewNote {
                     store.createQuickNote(title: updatedNote.title, content: updatedNote.content)
@@ -312,6 +338,10 @@ public struct TagdosNotesHubView: View {
 
             Spacer()
 
+            if isLoreenMasterEnabled {
+                loreenPeekButton
+            }
+
             Button {
                 triggerHaptic()
                 showingImportSheet = true
@@ -357,6 +387,85 @@ public struct TagdosNotesHubView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
+    }
+
+    @ViewBuilder
+    private var loreenPeekButton: some View {
+        let revealed = isLoreenRevealedNow
+        let requiresBio = settingsService.settings.loreenVeilRequireBiometricsForPeek
+        let btnColor = revealed ? ThemeColors.accentGreen : ThemeColors.accentPurple
+
+        if requiresBio {
+            Button {
+                triggerHaptic()
+                if isBiometricRevealed {
+                    withAnimation(.easeInOut(duration: 0.46)) {
+                        isBiometricRevealed = false
+                    }
+                } else {
+                    authenticateForLoreenReveal()
+                }
+            } label: {
+                Image(systemName: revealed ? "eye.fill" : "eye.slash.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(btnColor)
+                    .frame(width: 32, height: 32)
+                    .background(btnColor.opacity(0.18))
+                    .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(btnColor.opacity(revealed ? 0.85 : 0.4), lineWidth: revealed ? 1.5 : 1))
+                    .shadow(color: revealed ? btnColor.opacity(0.45) : .clear, radius: 6)
+            }
+            .accessibilityLabel(revealed ? "Re-veil Loreen" : "Unlock Loreen Reveal")
+        } else {
+            Image(systemName: revealed ? "eye.fill" : "eye.slash.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(btnColor)
+                .frame(width: 32, height: 32)
+                .background(btnColor.opacity(0.18))
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(btnColor.opacity(revealed ? 0.85 : 0.4), lineWidth: revealed ? 1.5 : 1))
+                .shadow(color: revealed ? btnColor.opacity(0.45) : .clear, radius: 6)
+                .scaleEffect(revealed ? 1.08 : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: revealed)
+                .contentShape(Circle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            if !isPeekingLoreen {
+                                triggerHaptic()
+                                withAnimation(.easeInOut(duration: 0.46)) {
+                                    isPeekingLoreen = true
+                                }
+                            }
+                        }
+                        .onEnded { _ in
+                            withAnimation(.easeInOut(duration: 0.46)) {
+                                isPeekingLoreen = false
+                            }
+                        }
+                )
+                .accessibilityLabel("Hold to Peek Loreen Veil")
+        }
+    }
+
+    private func authenticateForLoreenReveal() {
+        let context = LAContext()
+        var error: NSError?
+        if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Reveal veiled Tagdos & Notes") { success, _ in
+                Task { @MainActor in
+                    if success {
+                        withAnimation(.easeInOut(duration: 0.46)) {
+                            isBiometricRevealed = true
+                        }
+                    }
+                }
+            }
+        } else {
+            withAnimation(.easeInOut(duration: 0.46)) {
+                isBiometricRevealed = true
+            }
+        }
     }
 
     // MARK: - Stream Selector Tabs (All + S1..SN + Notes)
@@ -427,14 +536,12 @@ public struct TagdosNotesHubView: View {
 
                             let trimmedCustom = stream.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let trimmedCustom, !trimmedCustom.isEmpty {
-                                Text(trimmedCustom)
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                LoreenVeilText(trimmedCustom, isVeiled: isTagdosVeiled, size: 11, weight: .bold, design: .rounded)
                                     .foregroundColor(isSelected ? .white : Color.white.opacity(0.85))
                                     .lineLimit(1)
                                     .frame(maxWidth: 110, alignment: .leading)
                             } else if let driving = stream.drivingPill {
-                                Text(driving.rawText)
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                LoreenVeilText(driving.rawText, isVeiled: isTagdosVeiled, size: 11, weight: .bold, design: .rounded)
                                     .foregroundColor(isSelected ? .white : Color.white.opacity(0.85))
                                     .lineLimit(1)
                             }
@@ -624,8 +731,7 @@ public struct TagdosNotesHubView: View {
                                             .frame(width: 20, height: 20)
                                             .background(Circle().fill(ThemeColors.accentPurple.opacity(0.75)))
 
-                                        Text(stream.displayTitle)
-                                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        LoreenVeilText(stream.displayTitle, isVeiled: isTagdosVeiled, size: 13, weight: .bold, design: .rounded)
                                             .foregroundColor(.white)
                                             .lineLimit(1)
 
@@ -713,8 +819,7 @@ public struct TagdosNotesHubView: View {
                                     Image(systemName: "doc.text")
                                         .font(.system(size: 9.5))
                                         .foregroundColor(Color.white.opacity(0.45))
-                                    Text(memoTrimmed.replacingOccurrences(of: "\n", with: " · "))
-                                        .font(.system(size: 10.5, weight: .medium))
+                                    LoreenVeilText(memoTrimmed.replacingOccurrences(of: "\n", with: " · "), isVeiled: isNotesVeiled, size: 10.5, weight: .medium)
                                         .foregroundColor(Color.white.opacity(0.6))
                                         .lineLimit(1)
                                 }
@@ -797,8 +902,7 @@ public struct TagdosNotesHubView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text(note.displayTitle)
-                                            .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                                        LoreenVeilText(note.displayTitle, isVeiled: isNotesVeiled, size: 13.5, weight: .bold, design: .rounded)
                                             .foregroundColor(.white)
                                             .lineLimit(1)
                                         Spacer()
@@ -809,8 +913,7 @@ public struct TagdosNotesHubView: View {
                                         }
                                     }
                                     if !note.previewSnippet.isEmpty {
-                                        Text(note.previewSnippet)
-                                            .font(.system(size: 11.5))
+                                        LoreenVeilText(note.previewSnippet, isVeiled: isNotesVeiled, size: 11.5)
                                             .foregroundColor(Color.white.opacity(0.65))
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
@@ -878,8 +981,7 @@ public struct TagdosNotesHubView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(stream.displayTitle)
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                        LoreenVeilText(stream.displayTitle, isVeiled: isTagdosVeiled, size: 16, weight: .bold, design: .rounded)
                             .foregroundColor(.white)
                             .lineLimit(1)
                         Image(systemName: "pencil")
@@ -1002,9 +1104,15 @@ public struct TagdosNotesHubView: View {
                         .foregroundColor(ThemeColors.accentGreen)
                 }
 
-                Text(pill.rawText)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .strikethrough(pill.isCompleted, color: Color.white.opacity(0.4))
+                LoreenVeilText(
+                    pill.rawText,
+                    isVeiled: isTagdosVeiled,
+                    size: 12,
+                    weight: .bold,
+                    design: .rounded,
+                    strikethrough: pill.isCompleted,
+                    strikethroughColor: Color.white.opacity(0.4)
+                )
                     .foregroundColor(pill.isCompleted ? Color.white.opacity(0.4) : pillColor(for: pill.type))
 
                 if isLeading && !pill.isCompleted {

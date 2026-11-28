@@ -33,6 +33,8 @@ namespace Daily_WinUI.Controls
             {
                 _tagdosService.DataChanged += TagdosService_DataChanged;
             }
+            Daily_WinUI.Services.SettingsService.SettingsChanged -= OnLoreenSettingsChanged;
+            Daily_WinUI.Services.SettingsService.SettingsChanged += OnLoreenSettingsChanged;
             _ = LoadDataAsync();
         }
 
@@ -42,6 +44,12 @@ namespace Daily_WinUI.Controls
             {
                 _tagdosService.DataChanged -= TagdosService_DataChanged;
             }
+            Daily_WinUI.Services.SettingsService.SettingsChanged -= OnLoreenSettingsChanged;
+        }
+
+        private void OnLoreenSettingsChanged(Daily_WinUI.Services.AppSettings _)
+        {
+            DispatcherQueue.TryEnqueue(RenderWidget);
         }
 
         private void TagdosService_DataChanged(object? sender, EventArgs e)
@@ -76,6 +84,7 @@ namespace Daily_WinUI.Controls
 
         private void RenderWidget()
         {
+            bool isVeiled = Daily_WinUI.Services.SettingsService.Load().IsLoreenVeilActiveForTagdos;
             int totalActivePills = _streams.Sum(s => s.AllPills.Count(p => !p.IsCompleted));
             ActivePillsCountText.Text = $"{totalActivePills} active tags";
 
@@ -84,6 +93,7 @@ namespace Daily_WinUI.Controls
             {
                 var s1 = _streams[0];
                 Stream1TitleText.Text = s1.DisplayTitle;
+                LoreenVeilHelper.ApplyVeil(Stream1TitleText, isVeiled);
                 DateTime? rem1 = s1.StreamReminder ?? s1.Clusters.Where(c => c.ClusterReminder.HasValue).Select(c => c.ClusterReminder!.Value).OrderBy(d => d).FirstOrDefault();
                 if (rem1.HasValue && rem1.Value != default)
                 {
@@ -104,6 +114,7 @@ namespace Daily_WinUI.Controls
             {
                 var s2 = _streams[1];
                 Stream2TitleText.Text = s2.DisplayTitle;
+                LoreenVeilHelper.ApplyVeil(Stream2TitleText, isVeiled);
                 DateTime? rem2 = s2.StreamReminder ?? s2.Clusters.Where(c => c.ClusterReminder.HasValue).Select(c => c.ClusterReminder!.Value).OrderBy(d => d).FirstOrDefault();
                 if (rem2.HasValue && rem2.Value != default)
                 {
@@ -185,6 +196,7 @@ namespace Daily_WinUI.Controls
                 Foreground = new SolidColorBrush(fg),
                 VerticalAlignment = VerticalAlignment.Center
             };
+            LoreenVeilHelper.ApplyVeil(textBlock, Daily_WinUI.Services.SettingsService.Load().IsLoreenVeilActiveForTagdos);
 
             if (pill.IsCompleted)
             {

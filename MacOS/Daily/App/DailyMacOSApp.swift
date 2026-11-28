@@ -170,6 +170,7 @@ struct DailyMacOSApp: App {
     @Environment(\.openWindow) private var openWindow
     
     public init() {
+        LoreenFontRegistry.registerIfNeeded()
         // macOS operates in 100% remote consumer mode for health vitals
         // (no local HealthKit daemon on macOS; telemetry arrives via Supabase sync)
         HealthDataService.shared.localDataProvider = nil
@@ -280,6 +281,18 @@ struct DailyMacOSApp: App {
                     }
                 }
                 .keyboardShortcut("r", modifiers: .command)
+
+                if settingsService.settings.loreenVeilUnlocked {
+                    Divider()
+
+                    Button(settingsService.settings.loreenVeilEnabled ? "Disable Loreen Veil" : "Enable Loreen Veil") {
+                        settingsService.update { $0.loreenVeilEnabled.toggle() }
+                        #if canImport(WidgetKit)
+                        WidgetCenter.shared.reloadTimelines(ofKind: WidgetDataCoordinator.WidgetKind.tagdos)
+                        #endif
+                    }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                }
             }
         }
         

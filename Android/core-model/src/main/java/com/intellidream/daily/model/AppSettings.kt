@@ -118,9 +118,26 @@ data class AppSettings(
     val prismShieldAllowlist: List<String> = emptyList(),
     val prismClipboardDetectEnabled: Boolean = true,
 
+    // Loreen Veil (Visual Privacy Shield for Tagdos & Notes)
+    val loreenVeilUnlocked: Boolean = false,
+    val loreenVeilEnabled: Boolean = false,
+    val loreenVeilApplyToTagdos: Boolean = true,
+    val loreenVeilApplyToNotes: Boolean = true,
+    val loreenVeilApplyToWidgets: Boolean = false,
+    val loreenVeilRequireBiometricsForPeek: Boolean = false,
+
     // Dashboard Layout
     val dashboardWidgets: List<DashboardWidgetConfig> = DashboardWidgetConfig.defaultLayout
-)
+) {
+    val isLoreenVeilActiveForTagdos: Boolean
+        get() = loreenVeilUnlocked && loreenVeilEnabled && loreenVeilApplyToTagdos
+
+    val isLoreenVeilActiveForNotes: Boolean
+        get() = loreenVeilUnlocked && loreenVeilEnabled && loreenVeilApplyToNotes
+
+    val isLoreenVeilActiveForWidgets: Boolean
+        get() = loreenVeilUnlocked && loreenVeilEnabled && loreenVeilApplyToWidgets
+}
 
 fun AppSettings.ensureCanonicalWidgets(): AppSettings {
     val existingIds = dashboardWidgets.map { it.id }.toSet()

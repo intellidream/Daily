@@ -308,6 +308,7 @@
                 <KeyboardAccelerator Modifiers="Control" Key="S" Invoked="OnAcceleratorCtrlS" />
                 <KeyboardAccelerator Modifiers="Control" Key="R" Invoked="OnAcceleratorCtrlR" />
                 <KeyboardAccelerator Modifiers="Control" Key="N" Invoked="OnAcceleratorCtrlN" />
+                <KeyboardAccelerator Modifiers="Control,Shift" Key="L" Invoked="OnAcceleratorCtrlShiftL" />
             </Grid.KeyboardAccelerators>
 
             <Grid.ColumnDefinitions>

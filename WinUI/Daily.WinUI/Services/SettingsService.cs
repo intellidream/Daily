@@ -97,6 +97,23 @@ public sealed class AppSettings
     public List<string> PrismShieldAllowlist { get; set; } = new();
     public bool PrismClipboardDetectEnabled { get; set; } = true;
     public string? PrismGeminiApiKey { get; set; }
+
+    // ── Loreen Veil (Visual Privacy Shield for Tagdos & Notes) ──
+    public bool LoreenVeilUnlocked { get; set; } = false;
+    public bool LoreenVeilEnabled { get; set; } = false;
+    public bool LoreenVeilApplyToTagdos { get; set; } = true;
+    public bool LoreenVeilApplyToNotes { get; set; } = true;
+    public bool LoreenVeilApplyToWidgets { get; set; } = false;
+    public bool LoreenVeilRequireBiometricsForPeek { get; set; } = false;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsLoreenVeilActiveForTagdos => LoreenVeilUnlocked && LoreenVeilEnabled && LoreenVeilApplyToTagdos;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsLoreenVeilActiveForNotes => LoreenVeilUnlocked && LoreenVeilEnabled && LoreenVeilApplyToNotes;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsLoreenVeilActiveForWidgets => LoreenVeilUnlocked && LoreenVeilEnabled && LoreenVeilApplyToWidgets;
 }
 
 public sealed class SavedLocation
@@ -123,6 +140,8 @@ public static class SettingsService
 
     private static AppSettings? _cachedSettings;
     private static readonly object _lock = new();
+
+    public static event Action<AppSettings>? SettingsChanged;
 
     public static AppSettings Reload()
     {
@@ -170,6 +189,7 @@ public static class SettingsService
             }
             catch { }
         }
+        SettingsChanged?.Invoke(settings);
     }
 
     public static string GetModelDirectory(string modelId)

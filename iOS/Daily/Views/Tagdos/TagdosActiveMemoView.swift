@@ -8,7 +8,9 @@ import DailyCore
 public struct TagdosActiveMemoView: View {
     public let streamId: UUID
     public let streamNumber: Int
+    public var isPeeking: Bool = false
     @ObservedObject private var store = TagdosStore.shared
+    @ObservedObject private var settingsService = SettingsService.shared
 
     @State private var isCollapsed: Bool = true
     @State private var isEditingText: Bool = false
@@ -19,9 +21,14 @@ public struct TagdosActiveMemoView: View {
     @State private var previewAttachment: TagDoAttachment? = nil
     @State private var previewURL: URL? = nil
 
-    public init(streamId: UUID, streamNumber: Int) {
+    public init(streamId: UUID, streamNumber: Int, isPeeking: Bool = false) {
         self.streamId = streamId
         self.streamNumber = streamNumber
+        self.isPeeking = isPeeking
+    }
+
+    private var isVeiled: Bool {
+        settingsService.settings.isLoreenVeilActiveForNotes && !isPeeking
     }
 
     private var currentStream: TagDoStream? {
@@ -198,8 +205,7 @@ public struct TagdosActiveMemoView: View {
             .padding(.vertical, 6)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Text(LocalizedStringKey(text))
-                    .font(.system(size: 13, weight: .regular))
+                LoreenVeilMarkdownText(text, isVeiled: isVeiled, size: 13, weight: .regular)
                     .foregroundColor(Color.white.opacity(0.9))
                     .tint(ThemeColors.accentCyan)
                     .lineSpacing(4)

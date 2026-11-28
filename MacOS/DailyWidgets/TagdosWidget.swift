@@ -6,16 +6,19 @@ import DailyCore
 public struct TagdosEntry: TimelineEntry {
     public let date: Date
     public let snapshot: TagdosWidgetSnapshot
+    public let isLoreenVeiled: Bool
 
-    public init(date: Date, snapshot: TagdosWidgetSnapshot) {
+    public init(date: Date, snapshot: TagdosWidgetSnapshot, isLoreenVeiled: Bool = false) {
         self.date = date
         self.snapshot = snapshot
+        self.isLoreenVeiled = isLoreenVeiled
     }
 }
 
 public struct TagdosTimelineProvider: TimelineProvider {
     public func placeholder(in context: Context) -> TagdosEntry {
-        TagdosEntry(
+        LoreenFontRegistry.registerIfNeeded()
+        return TagdosEntry(
             date: Date(),
             snapshot: TagdosWidgetSnapshot(
                 streams: [
@@ -60,13 +63,17 @@ public struct TagdosTimelineProvider: TimelineProvider {
     }
 
     public func getSnapshot(in context: Context, completion: @escaping (TagdosEntry) -> Void) {
+        LoreenFontRegistry.registerIfNeeded()
         let snapshot = WidgetDataCoordinator.shared.fetchTagdosSnapshot()
-        completion(TagdosEntry(date: Date(), snapshot: snapshot))
+        let veiled = GroupDefaults.shared.loadSettings().isLoreenVeilActiveForWidgets
+        completion(TagdosEntry(date: Date(), snapshot: snapshot, isLoreenVeiled: veiled))
     }
 
     public func getTimeline(in context: Context, completion: @escaping (Timeline<TagdosEntry>) -> Void) {
+        LoreenFontRegistry.registerIfNeeded()
         let snapshot = WidgetDataCoordinator.shared.fetchTagdosSnapshot()
-        let entry = TagdosEntry(date: Date(), snapshot: snapshot)
+        let veiled = GroupDefaults.shared.loadSettings().isLoreenVeilActiveForWidgets
+        let entry = TagdosEntry(date: Date(), snapshot: snapshot, isLoreenVeiled: veiled)
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
@@ -78,6 +85,7 @@ public struct TagdosWidgetView: View {
     public let entry: TagdosEntry
 
     public init(entry: TagdosEntry) {
+        LoreenFontRegistry.registerIfNeeded()
         self.entry = entry
     }
 
@@ -192,7 +200,7 @@ public struct TagdosWidgetView: View {
                 HStack(spacing: 5) {
                     HStack(spacing: 4) {
                         Text(driving)
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .font(entry.isLoreenVeiled ? .loreen(size: 18) : .system(size: 18, weight: .bold, design: .rounded))
                             .foregroundColor(pillColor(for: drivingType))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -217,10 +225,14 @@ public struct TagdosWidgetView: View {
                 }
 
                 if !nextTags.isEmpty {
-                    Text("Next: \(nextTags)")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundColor(Color.white.opacity(0.65))
-                        .lineLimit(1)
+                    HStack(spacing: 3) {
+                        Text("Next:")
+                            .font(.system(size: 9.5, weight: .medium))
+                        Text(nextTags)
+                            .font(entry.isLoreenVeiled ? .loreen(size: 9.5) : .system(size: 9.5, weight: .medium))
+                    }
+                    .foregroundColor(Color.white.opacity(0.65))
+                    .lineLimit(1)
                 }
             }
 
@@ -280,12 +292,12 @@ public struct TagdosWidgetView: View {
                         Link(destination: pillEditURL(streamId: s1.id, pillId: resolvedDrivingPillId(for: s1) ?? "")) {
                             VStack(alignment: .leading, spacing: 1.5) {
                                 Text(driving)
-                                    .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                                    .font(entry.isLoreenVeiled ? .loreen(size: 14.5) : .system(size: 14.5, weight: .bold, design: .rounded))
                                     .foregroundColor(pillColor(for: s1.drivingPillType))
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
                                 Text(s1.title)
-                                    .font(.system(size: 8.5, weight: .medium))
+                                    .font(entry.isLoreenVeiled ? .loreen(size: 8.5) : .system(size: 8.5, weight: .medium))
                                     .foregroundColor(Color.white.opacity(0.55))
                                     .lineLimit(1)
                             }
@@ -407,7 +419,7 @@ public struct TagdosWidgetView: View {
                         HStack(spacing: 4) {
                             Link(destination: pillEditURL(streamId: stream.id, pillId: "")) {
                                 Text(stream.title)
-                                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                    .font(entry.isLoreenVeiled ? .loreen(size: 9.5) : .system(size: 9.5, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
                                     .lineLimit(1)
                             }
@@ -499,7 +511,7 @@ public struct TagdosWidgetView: View {
             HStack(spacing: 4) {
                 Link(destination: pillEditURL(streamId: stream.id, pillId: "")) {
                     Text(stream.title)
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .font(entry.isLoreenVeiled ? .loreen(size: 9) : .system(size: 9, weight: .bold, design: .rounded))
                         .foregroundColor(Color.white.opacity(0.75))
                         .lineLimit(1)
                 }
@@ -557,7 +569,7 @@ public struct TagdosWidgetView: View {
     @ViewBuilder
     private func widgetPillBadge(pill: TagdosWidgetSnapshotPill, streamId: String) -> some View {
         let badge = Text(pill.text)
-            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+            .font(entry.isLoreenVeiled ? .loreen(size: 8.5) : .system(size: 8.5, weight: .bold, design: .rounded))
             .foregroundColor(pillColor(for: pill.typeRaw))
             .padding(.horizontal, 4.5)
             .padding(.vertical, 2)
@@ -580,7 +592,9 @@ public struct TagdosWidgetView: View {
 public struct TagdosWidget: Widget {
     public let kind: String = "com.intellidream.daily.TagdosWidget"
 
-    public init() {}
+    public init() {
+        LoreenFontRegistry.registerIfNeeded()
+    }
 
     public var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TagdosTimelineProvider()) { entry in

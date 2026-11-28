@@ -55,9 +55,29 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var prismShieldEnabled: Bool = true
     public var prismShieldAllowlist: [String] = []
     public var prismClipboardDetectEnabled: Bool = true
+
+    // MARK: - Loreen Veil (Visual Privacy Shield for Tagdos & Notes)
+    public var loreenVeilUnlocked: Bool = false
+    public var loreenVeilEnabled: Bool = false
+    public var loreenVeilApplyToTagdos: Bool = true
+    public var loreenVeilApplyToNotes: Bool = true
+    public var loreenVeilApplyToWidgets: Bool = false
+    public var loreenVeilRequireBiometricsForPeek: Bool = false
     
     // MARK: - Dashboard Layout
     public var dashboardWidgets: [DashboardWidgetConfig] = DashboardWidgetConfig.defaultLayout
+    
+    public var isLoreenVeilActiveForTagdos: Bool {
+        loreenVeilUnlocked && loreenVeilEnabled && loreenVeilApplyToTagdos
+    }
+    
+    public var isLoreenVeilActiveForNotes: Bool {
+        loreenVeilUnlocked && loreenVeilEnabled && loreenVeilApplyToNotes
+    }
+    
+    public var isLoreenVeilActiveForWidgets: Bool {
+        loreenVeilUnlocked && loreenVeilEnabled && loreenVeilApplyToWidgets
+    }
     
     public init() {}
     
@@ -72,6 +92,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case nasaApiKey, cosmosWeatherEndpoint, cosmosWeatherApiKey
         case cosmosNotifyIssPasses, cosmosNotifyAurora, cosmosNotifyPristineSky, macMenuBarShowNightSky
         case prismSearchEngine, prismShieldEnabled, prismShieldAllowlist, prismClipboardDetectEnabled
+        case loreenVeilUnlocked, loreenVeilEnabled, loreenVeilApplyToTagdos, loreenVeilApplyToNotes, loreenVeilApplyToWidgets, loreenVeilRequireBiometricsForPeek
         case dashboardWidgets
     }
     
@@ -112,6 +133,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.prismShieldEnabled = try c.decodeIfPresent(Bool.self, forKey: .prismShieldEnabled) ?? true
         self.prismShieldAllowlist = try c.decodeIfPresent([String].self, forKey: .prismShieldAllowlist) ?? []
         self.prismClipboardDetectEnabled = try c.decodeIfPresent(Bool.self, forKey: .prismClipboardDetectEnabled) ?? true
+        self.loreenVeilUnlocked = try c.decodeIfPresent(Bool.self, forKey: .loreenVeilUnlocked) ?? false
+        self.loreenVeilEnabled = try c.decodeIfPresent(Bool.self, forKey: .loreenVeilEnabled) ?? false
+        self.loreenVeilApplyToTagdos = try c.decodeIfPresent(Bool.self, forKey: .loreenVeilApplyToTagdos) ?? true
+        self.loreenVeilApplyToNotes = try c.decodeIfPresent(Bool.self, forKey: .loreenVeilApplyToNotes) ?? true
+        self.loreenVeilApplyToWidgets = try c.decodeIfPresent(Bool.self, forKey: .loreenVeilApplyToWidgets) ?? false
+        self.loreenVeilRequireBiometricsForPeek = try c.decodeIfPresent(Bool.self, forKey: .loreenVeilRequireBiometricsForPeek) ?? false
         
         let loadedWidgets = try c.decodeIfPresent([DashboardWidgetConfig].self, forKey: .dashboardWidgets)
         if let loadedWidgets = loadedWidgets, !loadedWidgets.isEmpty {
@@ -164,6 +191,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encode(prismShieldEnabled, forKey: .prismShieldEnabled)
         try c.encode(prismShieldAllowlist, forKey: .prismShieldAllowlist)
         try c.encode(prismClipboardDetectEnabled, forKey: .prismClipboardDetectEnabled)
+        try c.encode(loreenVeilUnlocked, forKey: .loreenVeilUnlocked)
+        try c.encode(loreenVeilEnabled, forKey: .loreenVeilEnabled)
+        try c.encode(loreenVeilApplyToTagdos, forKey: .loreenVeilApplyToTagdos)
+        try c.encode(loreenVeilApplyToNotes, forKey: .loreenVeilApplyToNotes)
+        try c.encode(loreenVeilApplyToWidgets, forKey: .loreenVeilApplyToWidgets)
+        try c.encode(loreenVeilRequireBiometricsForPeek, forKey: .loreenVeilRequireBiometricsForPeek)
         try c.encode(dashboardWidgets, forKey: .dashboardWidgets)
     }
 }

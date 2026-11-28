@@ -633,6 +633,14 @@ public sealed partial class MainWindow : Window
     private void OnAcceleratorCtrlS(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; ToggleSidebar(); }
     private void OnAcceleratorCtrlR(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; TriggerGlobalSync(); }
     private void OnAcceleratorCtrlN(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; NavigateToTab(3); }
+    private void OnAcceleratorCtrlShiftL(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = true;
+        var s = Services.SettingsService.Load();
+        if (!s.LoreenVeilUnlocked) return;
+        s.LoreenVeilEnabled = !s.LoreenVeilEnabled;
+        Services.SettingsService.Save(s);
+    }
 
     // ── Window management ─────────────────────────────────────────────────────
 

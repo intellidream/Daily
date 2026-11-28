@@ -37,6 +37,13 @@
                 <TextBlock Grid.Column="1" Text="DayOne Glance" FontSize="14" FontWeight="Bold" FontFamily="Segoe UI Variable Display" Foreground="{ThemeResource AppFgColorBrush}" VerticalAlignment="Center"/>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                    <Button x:Name="LoreenVeilGlanceBtn" Click="LoreenVeilGlanceBtn_Click"
+                            Visibility="Collapsed"
+                            Background="#1FAF52DE" BorderBrush="#55AF52DE" BorderThickness="1"
+                            CornerRadius="12" Padding="7,4" ToolTipService.ToolTip="Toggle Loreen Veil (Ctrl+Shift+L)">
+                        <FontIcon x:Name="LoreenVeilGlanceIcon" Glyph="&#xE7B3;" FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#FFD2A8FF" VerticalAlignment="Center"/>
+                    </Button>
+
                     <Button x:Name="DesktopWidgetsButton"
                             Background="#1AFFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1"
                             CornerRadius="12" Padding="8,4" ToolTipService.ToolTip="Desktop Widgets">

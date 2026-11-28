@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellidream.daily.DailyApp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.GlassCard
 import com.intellidream.daily.designsystem.ThemeColors
@@ -59,6 +60,7 @@ import com.intellidream.daily.model.TagDoPill
 import com.intellidream.daily.model.TagDoPillType
 import com.intellidream.daily.model.TagDoQuickNote
 import com.intellidream.daily.model.TagDoStream
+import com.intellidream.daily.presentation.loreen.LoreenVeilText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,6 +80,9 @@ fun TagdosNotesDashboardCard(
 ) {
     val streams by repository.streams.collectAsState()
     val quickNotes by repository.quickNotes.collectAsState()
+    val appSettings by DailyApp.instance.settingsRepository.settings.collectAsState()
+    val isTagdosVeiled = appSettings.isLoreenVeilActiveForTagdos
+    val isNotesVeiled = appSettings.isLoreenVeilActiveForNotes
 
     GlassCard(
         cornerRadius = 20.dp,
@@ -94,23 +99,29 @@ fun TagdosNotesDashboardCard(
             DashboardWidgetSize.Small -> SmallTagdosContent(
                 streams = streams,
                 repository = repository,
+                isTagdosVeiled = isTagdosVeiled,
                 onOpenHub = onNavigateToHub
             )
             DashboardWidgetSize.Wide -> WideTagdosContent(
                 streams = streams,
                 repository = repository,
+                isTagdosVeiled = isTagdosVeiled,
                 onOpenHub = onNavigateToHub
             )
             DashboardWidgetSize.Tall -> TallTagdosContent(
                 streams = streams,
                 quickNotes = quickNotes,
                 repository = repository,
+                isTagdosVeiled = isTagdosVeiled,
+                isNotesVeiled = isNotesVeiled,
                 onOpenHub = onNavigateToHub
             )
             DashboardWidgetSize.Large -> LargeTagdosContent(
                 streams = streams,
                 quickNotes = quickNotes,
                 repository = repository,
+                isTagdosVeiled = isTagdosVeiled,
+                isNotesVeiled = isNotesVeiled,
                 onOpenHub = onNavigateToHub
             )
         }
@@ -144,6 +155,7 @@ private fun effectiveStreamReminder(stream: TagDoStream): Long? {
 private fun SmallTagdosContent(
     streams: List<TagDoStream>,
     repository: TagdosRepository,
+    isTagdosVeiled: Boolean,
     onOpenHub: () -> Unit
 ) {
     val stream1 = streams.firstOrNull()
@@ -247,8 +259,9 @@ private fun SmallTagdosContent(
                             }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text(
+                        LoreenVeilText(
                             text = driving.rawText,
+                            isVeiled = isTagdosVeiled,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = color,
@@ -281,8 +294,9 @@ private fun SmallTagdosContent(
             }
 
             if (nextPill != null) {
-                Text(
+                LoreenVeilText(
                     text = "Then: ${nextPill.rawText}",
+                    isVeiled = isTagdosVeiled,
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.6f),
@@ -319,6 +333,7 @@ private fun SmallTagdosContent(
 private fun WideTagdosContent(
     streams: List<TagDoStream>,
     repository: TagdosRepository,
+    isTagdosVeiled: Boolean,
     onOpenHub: () -> Unit
 ) {
     val stream1 = streams.firstOrNull()
@@ -393,12 +408,24 @@ private fun WideTagdosContent(
 
         // Stream 1 Pill Pipeline
         if (stream1 != null) {
-            StreamPipelineRow(stream = stream1, maxPills = 6, repository = repository, onOpenHub = onOpenHub)
+            StreamPipelineRow(
+                stream = stream1,
+                maxPills = 6,
+                repository = repository,
+                isTagdosVeiled = isTagdosVeiled,
+                onOpenHub = onOpenHub
+            )
         }
 
         // Stream 2 Pill Pipeline
         if (stream2 != null) {
-            StreamPipelineRow(stream = stream2, maxPills = 6, repository = repository, onOpenHub = onOpenHub)
+            StreamPipelineRow(
+                stream = stream2,
+                maxPills = 6,
+                repository = repository,
+                isTagdosVeiled = isTagdosVeiled,
+                onOpenHub = onOpenHub
+            )
         }
     }
 }
@@ -408,6 +435,7 @@ private fun StreamPipelineRow(
     stream: TagDoStream,
     maxPills: Int,
     repository: TagdosRepository,
+    isTagdosVeiled: Boolean,
     onOpenHub: () -> Unit
 ) {
     val reminderTs = effectiveStreamReminder(stream)
@@ -420,8 +448,9 @@ private fun StreamPipelineRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
+            LoreenVeilText(
                 text = stream.displayTitle,
+                isVeiled = isTagdosVeiled,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White.copy(alpha = 0.85f),
@@ -456,6 +485,7 @@ private fun StreamPipelineRow(
             compact = true,
             buttonSizeDp = 18,
             repository = repository,
+            isTagdosVeiled = isTagdosVeiled,
             onOpenHub = onOpenHub
         )
     }
@@ -467,6 +497,7 @@ private fun StreamPillsRowWithQuickActions(
     compact: Boolean,
     buttonSizeDp: Int,
     repository: TagdosRepository,
+    isTagdosVeiled: Boolean,
     onOpenHub: () -> Unit
 ) {
     val driving = stream.drivingPill
@@ -501,6 +532,7 @@ private fun StreamPillsRowWithQuickActions(
                 if (compact) {
                     MiniPillBadge(
                         pill = pill,
+                        isVeiled = isTagdosVeiled,
                         onClick = {
                             repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
                             onOpenHub()
@@ -509,6 +541,7 @@ private fun StreamPillsRowWithQuickActions(
                 } else {
                     InteractivePillBadge(
                         pill = pill,
+                        isVeiled = isTagdosVeiled,
                         onClick = {
                             repository.requestNavigation(streamId = stream.id, pillId = pill.id, openPillEditor = true)
                             onOpenHub()
@@ -538,6 +571,8 @@ private fun TallTagdosContent(
     streams: List<TagDoStream>,
     quickNotes: List<TagDoQuickNote>,
     repository: TagdosRepository,
+    isTagdosVeiled: Boolean,
+    isNotesVeiled: Boolean,
     onOpenHub: () -> Unit
 ) {
     val totalActive = streams.sumOf { it.activePills.size }
@@ -595,8 +630,9 @@ private fun TallTagdosContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        LoreenVeilText(
                             text = stream.displayTitle,
+                            isVeiled = isTagdosVeiled,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -630,6 +666,7 @@ private fun TallTagdosContent(
                         compact = true,
                         buttonSizeDp = 17,
                         repository = repository,
+                        isTagdosVeiled = isTagdosVeiled,
                         onOpenHub = onOpenHub
                     )
                 }
@@ -656,8 +693,9 @@ private fun TallTagdosContent(
                     tint = ThemeColors.accentOrange,
                     modifier = Modifier.size(11.dp)
                 )
-                Text(
+                LoreenVeilText(
                     text = firstNote.displayTitle,
+                    isVeiled = isNotesVeiled,
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.7f),
@@ -675,6 +713,8 @@ private fun LargeTagdosContent(
     streams: List<TagDoStream>,
     quickNotes: List<TagDoQuickNote>,
     repository: TagdosRepository,
+    isTagdosVeiled: Boolean,
+    isNotesVeiled: Boolean,
     onOpenHub: () -> Unit
 ) {
     val totalActive = streams.sumOf { it.activePills.size }
@@ -763,8 +803,9 @@ private fun LargeTagdosContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        LoreenVeilText(
                             text = stream.displayTitle,
+                            isVeiled = isTagdosVeiled,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -800,6 +841,7 @@ private fun LargeTagdosContent(
                         compact = false,
                         buttonSizeDp = 18,
                         repository = repository,
+                        isTagdosVeiled = isTagdosVeiled,
                         onOpenHub = onOpenHub
                     )
                 }
@@ -842,8 +884,9 @@ private fun LargeTagdosContent(
                                 .background(Color.White.copy(alpha = 0.06f))
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(
+                            LoreenVeilText(
                                 text = note.displayTitle,
+                                isVeiled = isNotesVeiled,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.White.copy(alpha = 0.8f),
@@ -929,7 +972,7 @@ private fun JewelActionCircle(
 }
 
 @Composable
-private fun MiniPillBadge(pill: TagDoPill, onClick: () -> Unit) {
+private fun MiniPillBadge(pill: TagDoPill, isVeiled: Boolean, onClick: () -> Unit) {
     val color = resolvePillColor(pill.type)
     Box(
         modifier = Modifier
@@ -939,8 +982,9 @@ private fun MiniPillBadge(pill: TagDoPill, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(
+        LoreenVeilText(
             text = pill.rawText,
+            isVeiled = isVeiled,
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
             color = color,
@@ -950,7 +994,7 @@ private fun MiniPillBadge(pill: TagDoPill, onClick: () -> Unit) {
 }
 
 @Composable
-private fun InteractivePillBadge(pill: TagDoPill, onClick: () -> Unit) {
+private fun InteractivePillBadge(pill: TagDoPill, isVeiled: Boolean, onClick: () -> Unit) {
     val color = resolvePillColor(pill.type)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -970,8 +1014,9 @@ private fun InteractivePillBadge(pill: TagDoPill, onClick: () -> Unit) {
                 modifier = Modifier.size(10.dp)
             )
         }
-        Text(
+        LoreenVeilText(
             text = pill.rawText,
+            isVeiled = isVeiled,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = color,

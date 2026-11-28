@@ -18,6 +18,14 @@ public struct TagdosNotesDashboardCard: View {
         self.onTap = onTap
     }
 
+    private var isTagdosVeiled: Bool {
+        settingsService.settings.isLoreenVeilActiveForTagdos
+    }
+
+    private var isNotesVeiled: Bool {
+        settingsService.settings.isLoreenVeilActiveForNotes
+    }
+
     private func triggerHaptic() {
         if settingsService.settings.hapticsEnabled {
             #if canImport(UIKit)
@@ -114,8 +122,7 @@ public struct TagdosNotesDashboardCard: View {
                             onTap()
                         } label: {
                             HStack(spacing: 4) {
-                                Text(driving.rawText)
-                                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                                LoreenVeilText(driving.rawText, isVeiled: isTagdosVeiled, size: 17, weight: .bold, design: .rounded)
                                     .foregroundColor(pillColor(for: driving.type))
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
@@ -145,10 +152,13 @@ public struct TagdosNotesDashboardCard: View {
                 }
 
                 if let next = nextPill {
-                    Text("Then: \(next.rawText)")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundColor(Color.white.opacity(0.6))
-                        .lineLimit(1)
+                    HStack(spacing: 3) {
+                        Text("Then:")
+                            .font(.system(size: 9.5, weight: .medium))
+                        LoreenVeilText(next.rawText, isVeiled: isTagdosVeiled, size: 9.5, weight: .medium)
+                    }
+                    .foregroundColor(Color.white.opacity(0.6))
+                    .lineLimit(1)
                 }
             }
 
@@ -243,8 +253,7 @@ public struct TagdosNotesDashboardCard: View {
             ForEach(store.streams.prefix(3)) { stream in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
-                        Text(stream.displayTitle)
-                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        LoreenVeilText(stream.displayTitle, isVeiled: isTagdosVeiled, size: 9.5, weight: .bold, design: .rounded)
                             .foregroundColor(.white)
                             .lineLimit(1)
                         Spacer(minLength: 4)
@@ -273,8 +282,7 @@ public struct TagdosNotesDashboardCard: View {
                     Image(systemName: "note.text")
                         .font(.system(size: 9))
                         .foregroundColor(ThemeColors.accentOrange)
-                    Text(firstNote.title.isEmpty ? firstNote.content : firstNote.title)
-                        .font(.system(size: 9.5, weight: .medium))
+                    LoreenVeilText(firstNote.title.isEmpty ? firstNote.content : firstNote.title, isVeiled: isNotesVeiled, size: 9.5, weight: .medium)
                         .foregroundColor(Color.white.opacity(0.65))
                         .lineLimit(1)
                 }
@@ -327,8 +335,7 @@ public struct TagdosNotesDashboardCard: View {
                 ForEach(store.streams.prefix(4)) { stream in
                     VStack(alignment: .leading, spacing: 3.5) {
                         HStack(spacing: 6) {
-                            Text(stream.displayTitle)
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                            LoreenVeilText(stream.displayTitle, isVeiled: isTagdosVeiled, size: 10, weight: .bold, design: .rounded)
                                 .foregroundColor(.white)
                                 .lineLimit(1)
                             Spacer(minLength: 4)
@@ -364,8 +371,7 @@ public struct TagdosNotesDashboardCard: View {
                     }
                     HStack(spacing: 6) {
                         ForEach(store.quickNotes.prefix(2)) { note in
-                            Text(note.title.isEmpty ? note.content : note.title)
-                                .font(.system(size: 9.5, weight: .medium))
+                            LoreenVeilText(note.title.isEmpty ? note.content : note.title, isVeiled: isNotesVeiled, size: 9.5, weight: .medium)
                                 .foregroundColor(Color.white.opacity(0.75))
                                 .lineLimit(1)
                                 .padding(.horizontal, 7)
@@ -431,8 +437,7 @@ public struct TagdosNotesDashboardCard: View {
     private func streamRow(stream: TagDoStream, maxPills: Int) -> some View {
         VStack(alignment: .leading, spacing: 2.5) {
             HStack(spacing: 5) {
-                Text(stream.displayTitle)
-                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                LoreenVeilText(stream.displayTitle, isVeiled: isTagdosVeiled, size: 9.5, weight: .bold, design: .rounded)
                     .foregroundColor(Color.white.opacity(0.8))
                     .lineLimit(1)
                 Spacer(minLength: 4)
@@ -501,8 +506,7 @@ public struct TagdosNotesDashboardCard: View {
             store.requestEditPill(streamId: streamId, pillId: pill.id)
             onTap()
         } label: {
-            Text(pill.rawText)
-                .font(.system(size: 9, weight: .bold, design: .rounded))
+            LoreenVeilText(pill.rawText, isVeiled: isTagdosVeiled, size: 9, weight: .bold, design: .rounded)
                 .foregroundColor(pillColor(for: pill.type))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2.5)
@@ -523,8 +527,7 @@ public struct TagdosNotesDashboardCard: View {
             onTap()
         } label: {
             HStack(spacing: 3) {
-                Text(pill.rawText)
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                LoreenVeilText(pill.rawText, isVeiled: isTagdosVeiled, size: 10, weight: .bold, design: .rounded)
                     .foregroundColor(pillColor(for: pill.type))
             }
             .padding(.horizontal, 6.5)

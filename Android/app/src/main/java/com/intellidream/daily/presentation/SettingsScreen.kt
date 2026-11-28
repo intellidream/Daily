@@ -79,6 +79,7 @@ import com.intellidream.daily.model.AppTheme
 import com.intellidream.daily.model.AuthProvider
 import com.intellidream.daily.model.UserProfile
 import com.intellidream.daily.model.WeatherUnitSystem
+import com.intellidream.daily.presentation.loreen.LoreenVeilSettingsCard
 
 @Composable
 fun SettingsScreen(
@@ -156,6 +157,15 @@ fun SettingsScreen(
                 item {
                     AppearanceSettingsCard(
                         settings = settings,
+                        onUpdateSettings = onUpdateSettings
+                    )
+                }
+
+                // 2b. Loreen Veil (Visual Privacy Shield)
+                item {
+                    LoreenVeilSettingsCard(
+                        settings = settings,
+                        userProfile = userProfile,
                         onUpdateSettings = onUpdateSettings
                     )
                 }

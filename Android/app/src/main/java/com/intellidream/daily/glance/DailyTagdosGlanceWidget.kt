@@ -2,10 +2,21 @@ package com.intellidream.daily.glance
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
+import android.text.TextPaint
+import android.text.TextUtils
+import android.util.TypedValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.res.ResourcesCompat
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
@@ -73,8 +84,21 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Exact
 
+    @Volatile
+    private var loreenTypefaceCache: Typeface? = null
+
+    private fun getLoreenTypeface(context: Context): Typeface? {
+        loreenTypefaceCache?.let { return it }
+        return runCatching { ResourcesCompat.getFont(context, R.font.loreen_regular) }
+            .getOrNull()
+            ?.also { loreenTypefaceCache = it }
+    }
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = runCatching { DailyApp.instance }.getOrNull()
+        val isLoreenVeiled = runCatching {
+            app?.settingsRepository?.getLatest()?.isLoreenVeilActiveForWidgets
+        }.getOrNull() ?: false
         val repoStreams = app?.tagdosRepository?.streams?.value ?: emptyList()
         val hhmmFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -171,15 +195,18 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                         size.width >= 200.dp && size.height >= 215.dp -> LargeTagdosLayout(
                             streams = streams,
                             totalActivePills = totalActivePills,
-                            nextReminderFormatted = nextReminderFormatted
+                            nextReminderFormatted = nextReminderFormatted,
+                            isVeiled = isLoreenVeiled
                         )
                         size.width >= 200.dp -> MediumTagdosLayout(
                             stream1 = stream1,
-                            stream2 = stream2
+                            stream2 = stream2,
+                            isVeiled = isLoreenVeiled
                         )
                         else -> SmallTagdosLayout(
                             stream1 = stream1,
-                            totalActivePills = totalActivePills
+                            totalActivePills = totalActivePills,
+                            isVeiled = isLoreenVeiled
                         )
                     }
                 }
@@ -278,13 +305,73 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
         }
     }
 
+    @androidx.compose.runtime.Composable
+    private fun GlanceLoreenText(
+        text: String,
+        isVeiled: Boolean,
+        color: Color,
+        fontSize: TextUnit,
+        fontWeight: FontWeight = FontWeight.Bold,
+        maxLines: Int = 1,
+        maxWidthDp: Dp? = null,
+        modifier: GlanceModifier = GlanceModifier
+    ) {
+        val context = LocalContext.current
+        val typeface = if (isVeiled) getLoreenTypeface(context) else null
+        if (!isVeiled || typeface == null) {
+            Text(
+                text = text,
+                modifier = modifier,
+                maxLines = maxLines,
+                style = TextStyle(
+                    color = ColorProvider(color),
+                    fontSize = fontSize,
+                    fontWeight = fontWeight
+                )
+            )
+            return
+        }
+
+        val dm = context.resources.displayMetrics
+        val textSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, fontSize.value, dm)
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+            this.color = color.toArgb()
+            this.textSize = textSizePx
+            this.typeface = typeface
+            if (fontWeight == FontWeight.Bold) {
+                isFakeBoldText = true
+            }
+        }
+        val maxPx = maxWidthDp?.let {
+            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, it.value, dm)
+        }
+        val displayStr = if (maxPx != null && paint.measureText(text) > maxPx) {
+            TextUtils.ellipsize(text, paint, maxPx, TextUtils.TruncateAt.END).toString()
+        } else {
+            text
+        }
+        val measuredW = paint.measureText(displayStr).toInt().coerceAtLeast(2)
+        val fm = paint.fontMetrics
+        val measuredH = kotlin.math.ceil((fm.descent - fm.ascent).toDouble()).toInt().coerceAtLeast(2)
+        val bitmap = Bitmap.createBitmap(measuredW, measuredH, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).drawText(displayStr, 0f, -fm.ascent, paint)
+        val widthDp = (measuredW / dm.density).dp
+        val heightDp = (measuredH / dm.density).dp
+        Image(
+            provider = ImageProvider(bitmap),
+            contentDescription = text,
+            modifier = modifier.width(widthDp).height(heightDp)
+        )
+    }
+
     // =========================================================================
     // MARK: - 1. SMALL LAYOUT (systemSmall: 2x2)
     // =========================================================================
     @androidx.compose.runtime.Composable
     private fun SmallTagdosLayout(
         stream1: WidgetStream,
-        totalActivePills: Int
+        totalActivePills: Int,
+        isVeiled: Boolean
     ) {
         val context = LocalContext.current
         val driving = stream1.drivingPillText
@@ -410,13 +497,13 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                                 .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
+                                GlanceLoreenText(
                                     text = driving,
-                                    style = TextStyle(
-                                        color = ColorProvider(pillColor),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    isVeiled = isVeiled,
+                                    color = pillColor,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxWidthDp = 64.dp
                                 )
                                 Spacer(modifier = GlanceModifier.width(3.dp))
                                 Image(
@@ -436,13 +523,13 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
 
                     if (nextTags.isNotEmpty()) {
                         Spacer(modifier = GlanceModifier.height(3.dp))
-                        Text(
-                            text = "Next: $nextTags",
-                            style = TextStyle(
-                                color = ColorProvider(Color(0xA6FFFFFF)),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                        GlanceLoreenText(
+                            text = if (isVeiled) nextTags else "Next: $nextTags",
+                            isVeiled = isVeiled,
+                            color = Color(0xA6FFFFFF),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxWidthDp = 112.dp
                         )
                     }
                 }
@@ -478,7 +565,8 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
     @androidx.compose.runtime.Composable
     private fun MediumTagdosLayout(
         stream1: WidgetStream,
-        stream2: WidgetStream
+        stream2: WidgetStream,
+        isVeiled: Boolean
     ) {
         val context = LocalContext.current
         val pillColor = resolvePillColor(stream1.drivingPillType)
@@ -527,21 +615,21 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Column {
-                        Text(
+                        GlanceLoreenText(
                             text = stream1.drivingPillText,
-                            style = TextStyle(
-                                color = ColorProvider(pillColor),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            isVeiled = isVeiled,
+                            color = pillColor,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxWidthDp = 84.dp
                         )
-                        Text(
+                        GlanceLoreenText(
                             text = stream1.title,
-                            style = TextStyle(
-                                color = ColorProvider(Color(0x8CFFFFFF)),
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            isVeiled = isVeiled,
+                            color = Color(0x8CFFFFFF),
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxWidthDp = 84.dp
                         )
                     }
                 }
@@ -590,9 +678,9 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             Column(
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight()
             ) {
-                StreamRow(stream1)
+                StreamRow(stream1, isVeiled = isVeiled)
                 Spacer(modifier = GlanceModifier.height(6.dp))
-                StreamRow(stream2)
+                StreamRow(stream2, isVeiled = isVeiled)
             }
         }
     }
@@ -604,7 +692,8 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
     private fun LargeTagdosLayout(
         streams: List<WidgetStream>,
         totalActivePills: Int,
-        nextReminderFormatted: String?
+        nextReminderFormatted: String?,
+        isVeiled: Boolean
     ) {
         val checklistIcon = WidgetVisualGraphics.createVectorIconBitmap(
             icon = WidgetIconType.CHECKLIST,
@@ -699,7 +788,7 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
             Column(modifier = GlanceModifier.fillMaxWidth()) {
                 for (stream in streams.take(5)) {
                     Box(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 5.dp)) {
-                        StreamRow(stream)
+                        StreamRow(stream, isVeiled = isVeiled)
                     }
                 }
             }
@@ -729,22 +818,22 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
     }
 
     @androidx.compose.runtime.Composable
-    private fun StreamRow(stream: WidgetStream) {
+    private fun StreamRow(stream: WidgetStream, isVeiled: Boolean) {
         val context = LocalContext.current
         Column(modifier = GlanceModifier.fillMaxWidth()) {
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
+                GlanceLoreenText(
                     text = stream.title,
-                    modifier = GlanceModifier.defaultWeight().clickable(buildOpenAction(context, stream.id, null)),
+                    isVeiled = isVeiled,
+                    color = Color(0xB3FFFFFF),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    style = TextStyle(
-                        color = ColorProvider(Color(0xB3FFFFFF)),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    maxWidthDp = 120.dp,
+                    modifier = GlanceModifier.defaultWeight().clickable(buildOpenAction(context, stream.id, null))
                 )
                 if (stream.reminderTime != null) {
                     Box(modifier = GlanceModifier.padding(start = 4.dp)) {
@@ -778,13 +867,13 @@ class DailyTagdosGlanceWidget : GlanceAppWidget() {
                                     .clickable(buildOpenAction(context, stream.id, pill.id))
                                     .padding(horizontal = 4.5.dp, vertical = 2.dp)
                             ) {
-                                Text(
+                                GlanceLoreenText(
                                     text = pill.text,
-                                    style = TextStyle(
-                                        color = ColorProvider(color),
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    isVeiled = isVeiled,
+                                    color = color,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxWidthDp = 42.dp
                                 )
                             }
                         }

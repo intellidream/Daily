@@ -42,8 +42,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellidream.daily.DailyApp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.ThemeColors
+import com.intellidream.daily.presentation.loreen.LoreenVeilText
 
 /**
  * Interactive per-stream memo and attachment viewer with Markdown formatting,
@@ -54,9 +56,12 @@ import com.intellidream.daily.designsystem.ThemeColors
 fun TagdosActiveMemoView(
     streamId: String,
     streamNumber: Int,
-    repository: TagdosRepository
+    repository: TagdosRepository,
+    isPeeking: Boolean = false
 ) {
     val streams by repository.streams.collectAsState()
+    val appSettings by DailyApp.instance.settingsRepository.settings.collectAsState()
+    val isVeiled = appSettings.isLoreenVeilActiveForTagdos && !isPeeking
     val currentStream = streams.firstOrNull { it.id == streamId }
 
     var isCollapsed by remember { mutableStateOf(true) }
@@ -236,8 +241,9 @@ fun TagdosActiveMemoView(
                     )
                 } else {
                     if (hasMemos) {
-                        Text(
+                        LoreenVeilText(
                             text = currentStream?.activeMemos.orEmpty(),
+                            isVeiled = isVeiled,
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Normal,
                             color = Color.White.copy(alpha = 0.85f),

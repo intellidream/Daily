@@ -22,6 +22,7 @@ using Daily.Configuration;
 using Daily.Models;
 using Daily.Services;
 using Daily.Services.Auth;
+using Daily_WinUI.Controls;
 using Daily_WinUI.Services;
 
 namespace Daily_WinUI.Views
@@ -34,7 +35,27 @@ namespace Daily_WinUI.Views
         private int _selectedStreamIndex = -1; // -1 = All Streams & Notes, 0..N-1 = Streams, N = Quick Notes
         private bool _isRawEditMode = false;
         private bool _isDialogOpen = false;
+        private bool _isPeekingLoreen = false;
+        private bool _isStreamMemosFocused = false;
         private readonly Dictionary<int, Border> _clusterBordersByIndex = new();
+
+        private bool IsTagdosVeiled
+        {
+            get
+            {
+                var s = SettingsService.Load();
+                return s.IsLoreenVeilActiveForTagdos && !_isPeekingLoreen;
+            }
+        }
+
+        private bool IsNotesVeiled
+        {
+            get
+            {
+                var s = SettingsService.Load();
+                return s.IsLoreenVeilActiveForNotes && !_isPeekingLoreen;
+            }
+        }
 
         public TagdosNotesDetailPage()
         {
@@ -49,6 +70,10 @@ namespace Daily_WinUI.Views
                 if (BackButton != null) BackButton.Visibility = Visibility.Collapsed;
                 if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
             }
+
+            SettingsService.SettingsChanged -= LoreenSettings_Changed;
+            SettingsService.SettingsChanged += LoreenSettings_Changed;
+            UpdateLoreenPeekButton();
 
             _tagdosService = App.Current.Services.GetService<ITagdosService>();
             if (_tagdosService != null)
@@ -67,11 +92,66 @@ namespace Daily_WinUI.Views
 
         private void Page_Unloaded(object sender, RoutedEventArgs e)
         {
+            _isPeekingLoreen = false;
+            SettingsService.SettingsChanged -= LoreenSettings_Changed;
             if (_tagdosService != null)
             {
                 _tagdosService.DataChanged -= TagdosService_DataChanged;
                 _tagdosService.PendingNavigationChanged -= TagdosService_PendingNavigationChanged;
             }
+        }
+
+        private void LoreenSettings_Changed(AppSettings _)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateLoreenPeekButton();
+                RefreshCurrentTabAfterChange();
+            });
+        }
+
+        private void UpdateLoreenPeekButton()
+        {
+            if (LoreenPeekButton == null || LoreenPeekIcon == null || LoreenPeekLabel == null) return;
+            var s = SettingsService.Load();
+            bool visible = s.LoreenVeilUnlocked && s.LoreenVeilEnabled;
+            LoreenPeekButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            LoreenPeekIcon.Glyph = _isPeekingLoreen ? "\xED1A" : "\xE7B3";
+            LoreenPeekLabel.Text = _isPeekingLoreen ? "Re-veil" : "Peek";
+        }
+
+        private async void LoreenPeek_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isPeekingLoreen)
+            {
+                _isPeekingLoreen = false;
+                UpdateLoreenPeekButton();
+                RefreshCurrentTabAfterChange();
+                return;
+            }
+
+            var s = SettingsService.Load();
+            if (s.LoreenVeilRequireBiometricsForPeek)
+            {
+                try
+                {
+                    var avail = await Windows.Security.Credentials.UI.UserConsentVerifier.CheckAvailabilityAsync();
+                    if (avail == Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available)
+                    {
+                        var res = await Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(
+                            "Authenticate with Windows Hello to reveal Loreen Veil");
+                        if (res != Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified)
+                        {
+                            return;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            _isPeekingLoreen = true;
+            UpdateLoreenPeekButton();
+            RefreshCurrentTabAfterChange();
         }
 
         private void TagdosService_DataChanged(object? sender, EventArgs e)
@@ -270,13 +350,15 @@ namespace Daily_WinUI.Views
                 var tabTitle = displayTitle.StartsWith(streamPrefix, StringComparison.OrdinalIgnoreCase)
                     ? displayTitle
                     : $"{streamPrefix}: {displayTitle}";
-                contentStack.Children.Add(new TextBlock
+                var tabTitleBlock = new TextBlock
                 {
                     Text = tabTitle,
                     FontSize = 12,
                     FontWeight = isSelected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
                     Foreground = isSelected ? new SolidColorBrush(Microsoft.UI.Colors.White) : new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))
-                });
+                };
+                LoreenVeilHelper.ApplyVeil(tabTitleBlock, IsTagdosVeiled);
+                contentStack.Children.Add(tabTitleBlock);
 
                 bool hasAnyReminder = stream.StreamReminder.HasValue || stream.Clusters.Any(c => c.ClusterReminder.HasValue);
                 if (hasAnyReminder)
@@ -618,14 +700,16 @@ namespace Daily_WinUI.Views
                         Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0xA8, 0xFF))
                     }
                 });
-                titleRow.Children.Add(new TextBlock
+                var overviewTitleBlock = new LoreenVeilTextBlock
                 {
                     Text = stream.DisplayTitle,
+                    IsVeiled = IsTagdosVeiled,
                     FontSize = 14,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
                     VerticalAlignment = VerticalAlignment.Center
-                });
+                };
+                titleRow.Children.Add(overviewTitleBlock);
 
                 DateTime? reminderDisplay = stream.StreamReminder ?? stream.Clusters.FirstOrDefault(c => c.ClusterReminder.HasValue)?.ClusterReminder;
                 if (reminderDisplay.HasValue)
@@ -746,14 +830,16 @@ namespace Daily_WinUI.Views
                         .FirstOrDefault()?.Trim();
                     if (!string.IsNullOrEmpty(firstLine))
                     {
-                        rowStack.Children.Add(new TextBlock
+                        var memoSnippet = new TextBlock
                         {
                             Text = firstLine,
                             FontSize = 11.5,
                             MaxLines = 1,
                             TextTrimming = TextTrimming.CharacterEllipsis,
                             Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF))
-                        });
+                        };
+                        LoreenVeilHelper.ApplyVeil(memoSnippet, IsTagdosVeiled);
+                        rowStack.Children.Add(memoSnippet);
                     }
                 }
 
@@ -870,6 +956,7 @@ namespace Daily_WinUI.Views
         private void RenderStreamView(TagDoStream stream)
         {
             StreamHeaderTitle.Text = stream.DisplayTitle;
+            LoreenVeilHelper.ApplyVeil(StreamHeaderTitle, IsTagdosVeiled);
             StreamReminderText.Text = stream.StreamReminder.HasValue
                 ? $"Reminder: {stream.StreamReminder.Value:HH:mm}"
                 : "No reminder set";
@@ -877,6 +964,7 @@ namespace Daily_WinUI.Views
             int totalActive = stream.AllPills.Count(p => !p.IsCompleted);
             StreamStatsText.Text = $"• {totalActive} active pills ({stream.Clusters.Count} clusters)";
             StreamMemosTextBox.Text = stream.ActiveMemos;
+            LoreenVeilHelper.ApplyVeil(StreamMemosTextBox, IsTagdosVeiled && !_isStreamMemosFocused);
 
             RenderAttachments(stream);
             RenderClusters(stream);
@@ -1192,6 +1280,7 @@ namespace Daily_WinUI.Views
                 Foreground = new SolidColorBrush(fg),
                 VerticalAlignment = VerticalAlignment.Center
             };
+            LoreenVeilHelper.ApplyVeil(textBlock, IsTagdosVeiled);
 
             if (pill.IsCompleted)
             {
@@ -1970,8 +2059,16 @@ namespace Daily_WinUI.Views
 
         // ── Active Memos & Drag and Drop Attachments ─────────────────────────
 
+        private void StreamMemosTextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            _isStreamMemosFocused = true;
+            LoreenVeilHelper.ApplyVeil(StreamMemosTextBox, false);
+        }
+
         private void StreamMemosTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
+            _isStreamMemosFocused = false;
+            LoreenVeilHelper.ApplyVeil(StreamMemosTextBox, IsTagdosVeiled);
             if (_selectedStreamIndex < 0 || _selectedStreamIndex >= _streams.Count) return;
             var stream = _streams[_selectedStreamIndex];
 
@@ -2126,6 +2223,7 @@ namespace Daily_WinUI.Views
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            LoreenVeilHelper.ApplyVeil(titleBlock, IsNotesVeiled);
             Grid.SetColumn(titleBlock, 0);
             headerGrid.Children.Add(titleBlock);
 
@@ -2189,6 +2287,7 @@ namespace Daily_WinUI.Views
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(0, 6, 0, 8)
             };
+            LoreenVeilHelper.ApplyVeil(contentBlock, IsNotesVeiled);
             Grid.SetRow(contentBlock, 1);
             grid.Children.Add(contentBlock);
 

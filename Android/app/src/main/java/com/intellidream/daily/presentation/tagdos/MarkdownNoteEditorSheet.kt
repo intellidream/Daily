@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.TagDoQuickNote
+import com.intellidream.daily.presentation.loreen.LoreenVeilText
 
 /**
  * Bottom sheet for viewing, creating, or editing a Quick Note with Markdown content.
@@ -56,7 +57,8 @@ fun MarkdownNoteEditorSheet(
     isNew: Boolean,
     onSave: (TagDoQuickNote) -> Unit,
     onDelete: (String) -> Unit = {},
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isVeiled: Boolean = false
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var title by remember { mutableStateOf(note.title) }
@@ -187,8 +189,9 @@ fun MarkdownNoteEditorSheet(
                         .background(Color.White.copy(alpha = 0.04f))
                         .padding(14.dp)
                 ) {
-                    Text(
+                    LoreenVeilText(
                         text = if (content.isBlank()) "(Empty note)" else content,
+                        isVeiled = isVeiled && content.isNotBlank(),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Normal,
                         color = Color.White.copy(alpha = 0.85f),

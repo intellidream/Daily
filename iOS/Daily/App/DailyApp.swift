@@ -40,6 +40,7 @@ struct DailyApp: App {
     @Environment(\.scenePhase) private var scenePhase
     
     public init() {
+        LoreenFontRegistry.registerIfNeeded()
         UNUserNotificationCenter.current().delegate = DailyNotificationDelegate.shared
 
         // Wire native Apple HealthKit provider into HealthDataService

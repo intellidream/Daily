@@ -23,6 +23,7 @@ public struct MenuBarCompanionView: View {
     @ObservedObject private var healthService = HealthDataService.shared
     @ObservedObject private var weatherService = WeatherService.shared
     @ObservedObject private var tagdosStore = TagdosStore.shared
+    @ObservedObject private var settingsService = SettingsService.shared
     
     @State private var tagdosMode: TagdosEntryMode = .note
     @State private var quickEntryText: String = ""
@@ -85,6 +86,26 @@ public struct MenuBarCompanionView: View {
                         .foregroundColor(.white)
                     
                     Spacer()
+
+                    if settingsService.settings.loreenVeilUnlocked {
+                        let isVeiled = settingsService.settings.loreenVeilEnabled
+                        Button {
+                            triggerHaptic()
+                            settingsService.update { $0.loreenVeilEnabled.toggle() }
+                        } label: {
+                            Image(systemName: isVeiled ? "eye.slash.fill" : "eye.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(isVeiled ? ThemeColors.accentCyan : Color.white.opacity(0.65))
+                                .frame(width: 24, height: 24)
+                                .background((isVeiled ? ThemeColors.accentCyan : Color.white).opacity(0.12), in: Circle())
+                                .overlay {
+                                    Circle().strokeBorder((isVeiled ? ThemeColors.accentCyan : Color.white).opacity(0.28), lineWidth: 1)
+                                }
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Toggle Loreen Veil (⌘⇧L)")
+                    }
                     
                     Button {
                         openFullApp(nil)

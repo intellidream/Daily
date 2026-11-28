@@ -13,6 +13,7 @@ public sealed partial class SettingsPage : Page
         { "Appearance",    typeof(AppearanceSettingsPage) },
         { "Notifications", typeof(AboutPage) },
         { "Cosmos",        typeof(CosmosSettingsPage) },
+        { "LoreenVeil",    typeof(LoreenVeilSettingsPage) },
         { "Account",       typeof(AboutPage) },
         { "Data",          typeof(DataSyncSettingsPage) },
         { "Debug",         typeof(DebugSettingsPage) },

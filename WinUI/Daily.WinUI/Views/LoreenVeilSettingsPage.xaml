@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Daily_WinUI.Views.LoreenVeilSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Daily_WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="40,32">
+        <StackPanel MaxWidth="760" HorizontalAlignment="Left" Spacing="20">
+
+            <!-- Header -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Loreen Veil" FontSize="26" FontWeight="SemiBold" CharacterSpacing="15" />
+                    <TextBlock Text="Zero-egress visual privacy shield that veils Tagdos &amp; Notes into Loreen Script while preserving plain Latin while editing."
+                               FontSize="12.5" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Border Grid.Column="1" x:Name="StatusBadgeBorder" CornerRadius="14" Padding="12,5" VerticalAlignment="Center" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="StatusBadgeIcon" Glyph="&#xE72E;" FontFamily="Segoe Fluent Icons" FontSize="12" />
+                        <TextBlock x:Name="StatusBadgeText" Text="Initiation Required" FontSize="12" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <!-- SECTION 1: Loreen Initiation Challenge (Shown inline when locked, toggleable when unlocked) -->
+            <Border x:Name="InitiationSectionCard"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="20">
+                <StackPanel Spacing="14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="3">
+                            <TextBlock x:Name="InitiationTitleText" Text="Loreen Initiation Challenge" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Trace each letter of the secret phrase in Loreen Script using mouse, pen, or touch to unlock the shield offline."
+                                       FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button x:Name="WordLoreenBtn" Content="LOREEN" Click="WordPreset_Click" Tag="LOREEN" CornerRadius="8" Padding="10,4" />
+                            <Button x:Name="WordNameBtn" Content="MY NAME" Click="WordPreset_Click" Tag="NAME" CornerRadius="8" Padding="10,4" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Word Progress Pills -->
+                    <StackPanel x:Name="ChallengeLettersPanel" Orientation="Horizontal" Spacing="8" />
+
+                    <!-- Interactive Drawing Canvas + Ghost Guide -->
+                    <Grid ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Width="240" Height="240"
+                                Background="#FF0B1424"
+                                BorderBrush="#44AF52DE"
+                                BorderThickness="1.5"
+                                CornerRadius="16">
+                            <Canvas x:Name="StrokeCanvas"
+                                    Width="240" Height="240"
+                                    Background="Transparent"
+                                    PointerPressed="StrokeCanvas_PointerPressed"
+                                    PointerMoved="StrokeCanvas_PointerMoved"
+                                    PointerReleased="StrokeCanvas_PointerReleased"
+                                    PointerCanceled="StrokeCanvas_PointerCanceled">
+                                <Canvas x:Name="GhostGuideLayer" Width="240" Height="240" IsHitTestVisible="False" Opacity="0.32" />
+                                <Canvas x:Name="UserStrokesLayer" Width="240" Height="240" IsHitTestVisible="False" />
+                            </Canvas>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock x:Name="CurrentTargetTitle" Text="Draw Loreen glyph for: L" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock x:Name="CurrentTargetHint" Text="Pedestal / top-hat — wide base block with rising stem" FontSize="12" Opacity="0.72" TextWrapping="Wrap" />
+
+                            <CheckBox x:Name="GhostGuideCheck" Content="Show faint glyph guide" IsChecked="True" Checked="GhostGuideCheck_Changed" Unchecked="GhostGuideCheck_Changed" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                <Button Content="Check Letter" Style="{StaticResource AccentButtonStyle}" Click="CheckLetter_Click" />
+                                <Button Content="Clear" Click="ClearStroke_Click" />
+                                <Button x:Name="ClosePracticeBtn" Content="Hide Practice Pad" Visibility="Collapsed" Click="HidePracticePad_Click" />
+                            </StackPanel>
+
+                            <TextBlock x:Name="RecognitionFeedbackText"
+                                       Text="Trace inside the dark box, then press Check Letter."
+                                       FontSize="12" Opacity="0.85" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- SECTION 2: Privacy Shield Controls (Shown when unlocked) -->
+            <StackPanel x:Name="UnlockedControlsPanel" Spacing="14" Visibility="Collapsed">
+
+                <!-- Master Veil Switch -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="18">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Enable Loreen Veil" FontSize="15" FontWeight="SemiBold" />
+                                <Border Background="#26AF52DE" BorderBrush="#66AF52DE" BorderThickness="1" CornerRadius="6" Padding="7,1">
+                                    <TextBlock Text="Ctrl+Shift+L" FontSize="10.5" FontWeight="SemiBold" Foreground="#FFD2A8FF" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Instantly swaps rendered text to Loreen Script across selected surfaces. Never touches stored UTF-8 text."
+                                       FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="MasterVeilSwitch" Toggled="SettingSwitch_Toggled" Margin="12,0,0,0" />
+                    </Grid>
+                </Border>
+
+                <!-- Surface Scope Toggles -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="18">
+                    <StackPanel Spacing="14">
+                        <TextBlock Text="Veil Surfaces &amp; Reveal Security" FontSize="14" FontWeight="SemiBold" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Tagdos Streams, Pills &amp; Active Memos" FontSize="13.5" FontWeight="Medium" />
+                                <TextBlock Text="Masks Tagdos tags, stream titles, dashboard widget &amp; memos." FontSize="11.5" Opacity="0.65" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" x:Name="ApplyTagdosSwitch" Toggled="SettingSwitch_Toggled" />
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Quick Notes Cards &amp; Previews" FontSize="13.5" FontWeight="Medium" />
+                                <TextBlock Text="Masks Quick Notes cards in Overview and the Notes tab." FontSize="11.5" Opacity="0.65" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" x:Name="ApplyNotesSwitch" Toggled="SettingSwitch_Toggled" />
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Floating Windows Desktop Widgets" FontSize="13.5" FontWeight="Medium" />
+                                <TextBlock Text="Keep desktop Tagdos overlays veiled even outside the main window." FontSize="11.5" Opacity="0.65" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" x:Name="ApplyWidgetsSwitch" Toggled="SettingSwitch_Toggled" />
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Require Windows Hello to Peek" FontSize="13.5" FontWeight="Medium" />
+                                <TextBlock Text="When enabled, clicking the reveal eye prompts Windows Hello verification." FontSize="11.5" Opacity="0.65" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" x:Name="RequireBiometricSwitch" Toggled="SettingSwitch_Toggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Live Interactive Sparkle Decrypt Preview -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="#44AF52DE"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="18">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Live Sparkle Decrypt Preview" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" x:Name="LivePreviewToggleBtn" Click="LivePreviewToggle_Click" Padding="10,5" CornerRadius="8">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE7B3;" FontFamily="Segoe Fluent Icons" FontSize="12" />
+                                    <TextBlock x:Name="LivePreviewBtnLabel" Text="Toggle Veil / Peek" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <Border Background="#12FFFFFF" CornerRadius="10" Padding="14">
+                            <StackPanel Spacing="6">
+                                <controls:LoreenVeilTextBlock x:Name="PreviewLine1" Text="MEETING AT 14:30 • CODE BLUE" FontSize="16" FontWeight="SemiBold" />
+                                <controls:LoreenVeilTextBlock x:Name="PreviewLine2" Text="Review Q4 secrets &amp; flight plan" FontSize="13.5" />
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Open Practice Pad" Click="ShowPracticePad_Click" />
+                            <Button Content="Re-lock Veil" Click="RelockVeil_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- SECTION 3: Documentation -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="18">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="How Loreen Veil Works" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="• Zero Supabase Egress: Privacy flags stay local in Daily.WinUI/settings.json and never trigger extra queries or sync payloads."
+                               FontSize="12" Opacity="0.78" TextWrapping="Wrap" />
+                    <TextBlock Text="• Plain UTF-8 Preserved: Underlying Tagdos &amp; Notes remain standard Latin UTF-8 so editing, search, and Raw DSL continue normally."
+                               FontSize="12" Opacity="0.78" TextWrapping="Wrap" />
+                    <TextBlock Text="• Instant Editing Safety: Dialog editors, Raw DSL, and focused Stream Memos always render readable Latin automatically."
+                               FontSize="12" Opacity="0.78" TextWrapping="Wrap" />
+                    <TextBlock Text="• Shortcuts &amp; Glance: Press Ctrl+Shift+L anywhere or click the Eye icon inside the Windows Taskbar Glance flyout."
+                               FontSize="12" Opacity="0.78" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- SECTION 4: Complete A-Z Codex -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="18">
+                <StackPanel Spacing="12">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Complete A–Z Loreen Codex" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="Click any glyph card below to load it onto the Practice Pad above." FontSize="12" Opacity="0.65" />
+                    </StackPanel>
+
+                    <VariableSizedWrapGrid x:Name="CodexGrid" Orientation="Horizontal" MaximumRowsOrColumns="4" ItemWidth="172" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

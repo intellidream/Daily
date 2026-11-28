@@ -41,9 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellidream.daily.DailyApp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.ThemeColors
 import com.intellidream.daily.model.TagDoQuickNote
+import com.intellidream.daily.presentation.loreen.LoreenVeilText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -58,9 +60,12 @@ import androidx.compose.foundation.clickable
 @Composable
 fun TagdosQuickNotesView(
     repository: TagdosRepository,
-    onOpenUrlInPrism: ((String) -> Unit)? = null
+    onOpenUrlInPrism: ((String) -> Unit)? = null,
+    isPeeking: Boolean = false
 ) {
     val quickNotes by repository.quickNotes.collectAsState()
+    val appSettings by DailyApp.instance.settingsRepository.settings.collectAsState()
+    val isNotesVeiled = appSettings.isLoreenVeilActiveForNotes && !isPeeking
     var searchText by remember { mutableStateOf("") }
     var activeEditingNote by remember { mutableStateOf<TagDoQuickNote?>(null) }
     var isCreatingNewNote by remember { mutableStateOf(false) }
@@ -213,6 +218,7 @@ fun TagdosQuickNotesView(
                     pinnedNotes.forEach { note ->
                         QuickNoteRowCard(
                             note = note,
+                            isVeiled = isNotesVeiled,
                             onClick = {
                                 activeEditingNote = note
                                 isCreatingNewNote = false
@@ -254,6 +260,7 @@ fun TagdosQuickNotesView(
                     unpinnedNotes.forEach { note ->
                         QuickNoteRowCard(
                             note = note,
+                            isVeiled = isNotesVeiled,
                             onClick = {
                                 activeEditingNote = note
                                 isCreatingNewNote = false
@@ -273,6 +280,7 @@ fun TagdosQuickNotesView(
         MarkdownNoteEditorSheet(
             note = note,
             isNew = isCreatingNewNote,
+            isVeiled = isNotesVeiled,
             onSave = { updated ->
                 if (isCreatingNewNote) {
                     repository.createQuickNote(updated.title, updated.content)
@@ -294,6 +302,7 @@ fun TagdosQuickNotesView(
 @Composable
 private fun QuickNoteRowCard(
     note: TagDoQuickNote,
+    isVeiled: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
     onDelete: () -> Unit,
@@ -324,8 +333,9 @@ private fun QuickNoteRowCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
+                LoreenVeilText(
                     text = note.displayTitle,
+                    isVeiled = isVeiled,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -356,8 +366,9 @@ private fun QuickNoteRowCard(
             }
 
             if (note.previewSnippet.isNotBlank()) {
-                Text(
+                LoreenVeilText(
                     text = note.previewSnippet,
+                    isVeiled = isVeiled,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
                     color = Color.White.copy(alpha = 0.65f),

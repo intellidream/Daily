@@ -62,6 +62,8 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     _tagdosService.DataChanged -= TagdosService_DataChanged;
                     _tagdosService.DataChanged += TagdosService_DataChanged;
                 }
+                Daily_WinUI.Services.SettingsService.SettingsChanged -= OnLoreenSettingsChanged;
+                Daily_WinUI.Services.SettingsService.SettingsChanged += OnLoreenSettingsChanged;
             }
             catch { }
 
@@ -79,6 +81,12 @@ namespace Daily_WinUI.DesktopWidgets.Views
             {
                 _tagdosService.DataChanged -= TagdosService_DataChanged;
             }
+            Daily_WinUI.Services.SettingsService.SettingsChanged -= OnLoreenSettingsChanged;
+        }
+
+        private void OnLoreenSettingsChanged(Daily_WinUI.Services.AppSettings _)
+        {
+            DispatcherQueue.TryEnqueue(RefreshData);
         }
 
         private void TagdosService_DataChanged(object? sender, EventArgs e)
@@ -110,53 +118,62 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 string activeStreamName = firstStream?.DisplayTitle ?? "Focus";
 
                 var quickNotes = await _tagdosService.GetQuickNotesAsync() ?? new List<TagDoQuickNote>();
+                bool isVeiled = Daily_WinUI.Services.SettingsService.Load().IsLoreenVeilActiveForWidgets;
 
                 // ── 1. Small layout ─────────────────────────────────────────────
                 SmallTaskCountText.Text = totalActive.ToString();
                 SmallActiveStreamText.Text = $"Focus: {activeStreamName} ⚡";
+                Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(SmallActiveStreamText, isVeiled);
                 SmallTopTaskText.Text = activePills.Count > 0
                     ? $"Next: {activePills[0].Text}"
                     : "Next: All tasks done! 🌟";
+                Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(SmallTopTaskText, isVeiled && activePills.Count > 0);
 
                 // ── 2. Medium layout ────────────────────────────────────────────
                 MediumStreamsSubtitle.Text = $"{streamCount} streams · {totalActive} open tags";
                 MediumFocusBadge.Text = $"Stream: {activeStreamName}";
+                Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(MediumFocusBadge, isVeiled);
 
                 MediumStreamsHost.Children.Clear();
                 foreach (var stream in streams.Take(2))
                 {
-                    MediumStreamsHost.Children.Add(CreateStreamCardElement(stream));
+                    MediumStreamsHost.Children.Add(CreateStreamCardElement(stream, isVeiled));
                 }
 
                 if (StreamNamesStatusText != null)
                 {
                     string streamSummary = string.Join(" · ", streams.Take(5).Select(s => s.DisplayTitle));
                     StreamNamesStatusText.Text = string.IsNullOrWhiteSpace(streamSummary) ? "Daily TagDoS Pipeline" : streamSummary;
+                    Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(StreamNamesStatusText, isVeiled && !string.IsNullOrWhiteSpace(streamSummary));
                 }
 
                 // ── 3. Large layout ─────────────────────────────────────────────
                 LargeStreamsSubtitle.Text = $"{streamCount} streams · {totalActive} open tags · {quickNotes.Count} notes";
                 LargeFocusBadge.Text = $"Stream: {activeStreamName}";
+                Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(LargeFocusBadge, isVeiled);
 
                 LargeStreamsHost.Children.Clear();
                 foreach (var stream in streams.Take(4))
                 {
-                    LargeStreamsHost.Children.Add(CreateStreamCardElement(stream));
+                    LargeStreamsHost.Children.Add(CreateStreamCardElement(stream, isVeiled));
                 }
 
                 var latestNote = quickNotes.OrderByDescending(n => n.UpdatedAt).FirstOrDefault();
                 if (latestNote != null && !string.IsNullOrWhiteSpace(latestNote.Content))
                 {
                     LargeQuickNotePreview.Text = $"Note: {latestNote.Content.Replace("\r", " ").Replace("\n", " ")}";
+                    Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(LargeQuickNotePreview, isVeiled);
                 }
                 else
                 {
                     LargeQuickNotePreview.Text = "No active quick notes · Click to create";
+                    Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(LargeQuickNotePreview, false);
                 }
                 LargeQuickNotesCount.Text = $"{quickNotes.Count} note(s)";
 
                 string allStreams = string.Join(" · ", streams.Select(s => s.DisplayTitle));
                 LargeStreamsSummary.Text = string.IsNullOrWhiteSpace(allStreams) ? "Streams: Work · Health · Finances · Personal" : $"Streams: {allStreams}";
+                Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(LargeStreamsSummary, isVeiled && !string.IsNullOrWhiteSpace(allStreams));
             }
             catch (Exception ex)
             {
@@ -164,7 +181,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
             }
         }
 
-        private UIElement CreateStreamCardElement(TagDoStream stream)
+        private UIElement CreateStreamCardElement(TagDoStream stream, bool isVeiled)
         {
             var card = new Border
             {
@@ -191,6 +208,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(titleBlock, isVeiled);
             titleBlock.Tapped += (_, e) =>
             {
                 e.Handled = true;
@@ -269,6 +287,15 @@ namespace Daily_WinUI.DesktopWidgets.Views
             foreach (var pill in displayPills)
             {
                 (Color bg, Color border, Color fg) = GetPillColors(pill.Type);
+                var pillText = new TextBlock
+                {
+                    Text = pill.Text,
+                    FontSize = 10,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(fg),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Daily_WinUI.Controls.LoreenVeilHelper.ApplyVeil(pillText, isVeiled);
                 var pillBorder = new Border
                 {
                     Background = new SolidColorBrush(bg),
@@ -276,14 +303,7 @@ namespace Daily_WinUI.DesktopWidgets.Views
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(8),
                     Padding = new Thickness(6, 2, 6, 2),
-                    Child = new TextBlock
-                    {
-                        Text = pill.Text,
-                        FontSize = 10,
-                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                        Foreground = new SolidColorBrush(fg),
-                        VerticalAlignment = VerticalAlignment.Center
-                    }
+                    Child = pillText
                 };
                 pillBorder.Tapped += (_, e) =>
                 {

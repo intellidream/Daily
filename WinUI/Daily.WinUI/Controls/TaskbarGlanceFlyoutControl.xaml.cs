@@ -46,12 +46,49 @@ namespace Daily_WinUI.Controls
         {
             this.InitializeComponent();
             this.Loaded += TaskbarGlanceFlyoutControl_Loaded;
+            this.Unloaded += TaskbarGlanceFlyoutControl_Unloaded;
         }
 
         private void TaskbarGlanceFlyoutControl_Loaded(object sender, RoutedEventArgs e)
         {
             ResolveServices();
+            SettingsService.SettingsChanged -= OnLoreenSettingsChanged;
+            SettingsService.SettingsChanged += OnLoreenSettingsChanged;
+            UpdateLoreenGlanceButton(SettingsService.Load());
             _ = LoadTelemetryAsync(forceRemoteHealth: true);
+        }
+
+        private void TaskbarGlanceFlyoutControl_Unloaded(object sender, RoutedEventArgs e)
+        {
+            SettingsService.SettingsChanged -= OnLoreenSettingsChanged;
+        }
+
+        private void OnLoreenSettingsChanged(AppSettings updated)
+        {
+            DispatcherQueue?.TryEnqueue(() => UpdateLoreenGlanceButton(updated));
+        }
+
+        private void UpdateLoreenGlanceButton(AppSettings s)
+        {
+            if (LoreenVeilGlanceBtn == null || LoreenVeilGlanceIcon == null) return;
+            LoreenVeilGlanceBtn.Visibility = s.LoreenVeilUnlocked ? Visibility.Visible : Visibility.Collapsed;
+            bool active = s.LoreenVeilUnlocked && s.LoreenVeilEnabled;
+            LoreenVeilGlanceIcon.Glyph = active ? "\xED1A" : "\xE7B3";
+            LoreenVeilGlanceBtn.Background = new SolidColorBrush(active
+                ? Color.FromArgb(0x36, 0xAF, 0x52, 0xDE)
+                : Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF));
+            LoreenVeilGlanceBtn.BorderBrush = new SolidColorBrush(active
+                ? Color.FromArgb(0x88, 0xAF, 0x52, 0xDE)
+                : Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+        }
+
+        private void LoreenVeilGlanceBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var s = SettingsService.Load();
+            if (!s.LoreenVeilUnlocked) return;
+            s.LoreenVeilEnabled = !s.LoreenVeilEnabled;
+            SettingsService.Save(s);
+            UpdateLoreenGlanceButton(s);
         }
 
         private void ResolveServices()

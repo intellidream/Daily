@@ -57,6 +57,10 @@ public struct SettingsView: View {
                     // Features Configuration Section
                     FeaturesSettingsSection()
                         .id("features")
+
+                    // Loreen Veil (Visual Privacy Shield)
+                    LoreenVeilSettingsSection()
+                        .id("loreen_veil")
                     
                     // DayOne Orbit Section (Smartwatch Cloud Link)
                     OrbitSettingsSection()
@@ -97,6 +101,12 @@ public struct SettingsView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation {
                         proxy.scrollTo("features", anchor: .top)
+                    }
+                }
+            } else if ProcessInfo.processInfo.arguments.contains("-scrollToLoreenVeil") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        proxy.scrollTo("loreen_veil", anchor: .center)
                     }
                 }
             } else if ProcessInfo.processInfo.arguments.contains("-scrollToOrbitBottom") {

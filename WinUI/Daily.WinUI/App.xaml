@@ -209,6 +209,7 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <FontFamily x:Key="TablerIconsFont">ms-appx:///Assets/Fonts/tabler-icons.ttf#tabler-icons</FontFamily>
+            <FontFamily x:Key="LoreenFont">ms-appx:///Assets/Fonts/Loreen-Regular.ttf#Loreen</FontFamily>
 
             <!-- Glass panel shadow style — apply to Border to get a soft drop shadow -->
             <Style x:Key="GlassPanelStyle" TargetType="Border">

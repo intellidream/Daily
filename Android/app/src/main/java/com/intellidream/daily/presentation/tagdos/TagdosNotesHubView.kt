@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +61,8 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -77,6 +80,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -104,6 +108,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.intellidream.daily.DailyApp
 import com.intellidream.daily.database.TagdosRepository
 import com.intellidream.daily.designsystem.DailyLiquidLoadingIndicator
 import com.intellidream.daily.designsystem.ThemeColors
@@ -113,6 +118,8 @@ import com.intellidream.daily.model.TagDoPillAction
 import com.intellidream.daily.model.TagDoPillType
 import com.intellidream.daily.model.TagDoQuickNote
 import com.intellidream.daily.model.TagDoStream
+import com.intellidream.daily.presentation.BiometricAuthHelper
+import com.intellidream.daily.presentation.loreen.LoreenVeilText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -139,6 +146,21 @@ fun TagdosNotesHubView(
     val quickNotes by repository.quickNotes.collectAsState()
     val isSyncing by repository.isSyncing.collectAsState()
     val pendingNav by repository.pendingNavigation.collectAsState()
+    val appSettings by DailyApp.instance.settingsRepository.settings.collectAsState()
+
+    var isPeekingLoreen by remember { mutableStateOf(false) }
+    var isBiometricRevealed by remember { mutableStateOf(false) }
+    val isLoreenMasterEnabled = appSettings.loreenVeilUnlocked && appSettings.loreenVeilEnabled
+    val isLoreenRevealedNow = isPeekingLoreen || isBiometricRevealed
+    val isTagdosVeiled = appSettings.isLoreenVeilActiveForTagdos && !isLoreenRevealedNow
+    val isNotesVeiled = appSettings.isLoreenVeilActiveForNotes && !isLoreenRevealedNow
+
+    DisposableEffect(Unit) {
+        onDispose {
+            isPeekingLoreen = false
+            isBiometricRevealed = false
+        }
+    }
 
     // -1 = "All" overview tab, 0..<streams.size = S1..SN, streams.size = "Notes"
     var selectedStreamIndex by remember { mutableIntStateOf(-1) }
@@ -308,6 +330,55 @@ fun TagdosNotesHubView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (isLoreenMasterEnabled) {
+                        val peekTint = if (isLoreenRevealedNow) ThemeColors.accentCyan else ThemeColors.accentPurple
+                        val peekModifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(peekTint.copy(alpha = if (isLoreenRevealedNow) 0.24f else 0.16f))
+                            .border(1.dp, peekTint.copy(alpha = 0.40f), CircleShape)
+                        Box(
+                            modifier = if (appSettings.loreenVeilRequireBiometricsForPeek) {
+                                peekModifier.clickable {
+                                    if (isBiometricRevealed) {
+                                        isBiometricRevealed = false
+                                    } else {
+                                        val activity = BiometricAuthHelper.getActivity(context)
+                                        if (activity != null && BiometricAuthHelper.isBiometricAvailable(context)) {
+                                            BiometricAuthHelper.prompt(
+                                                activity = activity,
+                                                title = "Reveal Loreen Veil",
+                                                subtitle = "Authenticate to temporarily view veiled Tagdos & Notes",
+                                                onSuccess = { isBiometricRevealed = true },
+                                                onError = { }
+                                            )
+                                        } else {
+                                            isBiometricRevealed = true
+                                        }
+                                    }
+                                }
+                            } else {
+                                peekModifier.pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            isPeekingLoreen = true
+                                            tryAwaitRelease()
+                                            isPeekingLoreen = false
+                                        }
+                                    )
+                                }
+                            },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isLoreenRevealedNow) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                contentDescription = if (isLoreenRevealedNow) "Hide Loreen Veil" else "Peek Loreen Veil",
+                                tint = peekTint,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -473,8 +544,9 @@ fun TagdosNotesHubView(
                         val customTabTitle = stream.customTitle?.trim()?.takeIf { it.isNotEmpty() }
                         val tabLabel = customTabTitle ?: driving?.rawText
                         if (tabLabel != null) {
-                            Text(
+                            LoreenVeilText(
                                 text = tabLabel,
+                                isVeiled = isTagdosVeiled,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f),
@@ -602,6 +674,8 @@ fun TagdosNotesHubView(
                     AllStreamsAndNotesOverview(
                         streams = streams,
                         quickNotes = quickNotes,
+                        isTagdosVeiled = isTagdosVeiled,
+                        isNotesVeiled = isNotesVeiled,
                         onSelectStream = { idx ->
                             selectedStreamIndex = idx
                             rawTextBuffer = streams[idx].rawText
@@ -632,7 +706,8 @@ fun TagdosNotesHubView(
                 } else if (isNotesTab) {
                     TagdosQuickNotesView(
                         repository = repository,
-                        onOpenUrlInPrism = onOpenUrlInPrism
+                        onOpenUrlInPrism = onOpenUrlInPrism,
+                        isPeeking = isLoreenRevealedNow
                     )
                 } else if (currentStream != null) {
                     if (isRawEditMode) {
@@ -648,6 +723,7 @@ fun TagdosNotesHubView(
                         InteractiveCanvasCard(
                             stream = currentStream,
                             highlightedClusterKey = highlightedClusterKey,
+                            isVeiled = isTagdosVeiled,
                             onRenameClick = { showingRenameSheet = true },
                             onStreamReminderClick = {
                                 editingReminderClusterIndex = null
@@ -670,7 +746,8 @@ fun TagdosNotesHubView(
                     TagdosActiveMemoView(
                         streamId = currentStream.id,
                         streamNumber = currentStream.orderIndex + 1,
-                        repository = repository
+                        repository = repository,
+                        isPeeking = isLoreenRevealedNow
                     )
                 }
 
@@ -811,6 +888,7 @@ fun TagdosNotesHubView(
         MarkdownNoteEditorSheet(
             note = note,
             isNew = isCreatingOverviewNote,
+            isVeiled = isNotesVeiled,
             onSave = { updated ->
                 if (isCreatingOverviewNote) {
                     repository.createQuickNote(updated.title, updated.content)
@@ -834,6 +912,8 @@ fun TagdosNotesHubView(
 private fun AllStreamsAndNotesOverview(
     streams: List<TagDoStream>,
     quickNotes: List<TagDoQuickNote>,
+    isTagdosVeiled: Boolean,
+    isNotesVeiled: Boolean,
     onSelectStream: (Int) -> Unit,
     onPillClick: (String, TagDoPill) -> Unit,
     onQuickComplete: (String, String) -> Unit,
@@ -948,8 +1028,9 @@ private fun AllStreamsAndNotesOverview(
                                     color = Color.White
                                 )
                             }
-                            Text(
+                            LoreenVeilText(
                                 text = stream.displayTitle,
+                                isVeiled = isTagdosVeiled,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -1046,6 +1127,7 @@ private fun AllStreamsAndNotesOverview(
                                 CanvasPill(
                                     pill = pill,
                                     isLeading = pill.id == driving?.id,
+                                    isVeiled = isTagdosVeiled,
                                     onClick = { onPillClick(stream.id, pill) }
                                 )
                             }
@@ -1054,8 +1136,9 @@ private fun AllStreamsAndNotesOverview(
 
                     val memoTrimmed = stream.activeMemos.trim()
                     if (memoTrimmed.isNotEmpty()) {
-                        Text(
+                        LoreenVeilText(
                             text = memoTrimmed.replace("\n", " · "),
+                            isVeiled = isTagdosVeiled,
                             fontSize = 10.5.sp,
                             color = Color.White.copy(alpha = 0.6f),
                             maxLines = 1,
@@ -1171,8 +1254,9 @@ private fun AllStreamsAndNotesOverview(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
+                                LoreenVeilText(
                                     text = note.displayTitle,
+                                    isVeiled = isNotesVeiled,
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -1190,8 +1274,9 @@ private fun AllStreamsAndNotesOverview(
                                 }
                             }
                             if (note.previewSnippet.isNotBlank()) {
-                                Text(
+                                LoreenVeilText(
                                     text = note.previewSnippet,
+                                    isVeiled = isNotesVeiled,
                                     fontSize = 11.5.sp,
                                     color = Color.White.copy(alpha = 0.65f),
                                     maxLines = 2,
@@ -1257,6 +1342,7 @@ private fun AllStreamsAndNotesOverview(
 private fun InteractiveCanvasCard(
     stream: TagDoStream,
     highlightedClusterKey: String?,
+    isVeiled: Boolean,
     onRenameClick: () -> Unit,
     onStreamReminderClick: () -> Unit,
     onClusterReminderClick: (Int) -> Unit,
@@ -1290,8 +1376,9 @@ private fun InteractiveCanvasCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
+                    LoreenVeilText(
                         text = stream.displayTitle,
+                        isVeiled = isVeiled,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -1379,6 +1466,7 @@ private fun InteractiveCanvasCard(
                         cluster = cluster,
                         isHighlighted = highlightedClusterKey == clusterKey,
                         reminderFormatted = cluster.reminderTime?.let { sdf.format(Date(it)) },
+                        isVeiled = isVeiled,
                         onAddPill = { onAddPillClick(clusterIndex) },
                         onSetReminder = { onClusterReminderClick(clusterIndex) },
                         onPillClick = onPillClick
@@ -1400,6 +1488,7 @@ private fun SwipeableClusterCard(
     cluster: TagDoCluster,
     isHighlighted: Boolean,
     reminderFormatted: String?,
+    isVeiled: Boolean,
     onAddPill: () -> Unit,
     onSetReminder: () -> Unit,
     onPillClick: (TagDoPill) -> Unit
@@ -1646,6 +1735,7 @@ private fun SwipeableClusterCard(
                         CanvasPill(
                             pill = pill,
                             isLeading = pillIndex == 0,
+                            isVeiled = isVeiled,
                             onClick = {
                                 if (abs(restingOffsetPx) > 1f) {
                                     rawOffsetPx = 0f
@@ -1666,6 +1756,7 @@ private fun SwipeableClusterCard(
 private fun CanvasPill(
     pill: TagDoPill,
     isLeading: Boolean,
+    isVeiled: Boolean = false,
     onClick: () -> Unit
 ) {
     val color = when (pill.type) {
@@ -1699,8 +1790,9 @@ private fun CanvasPill(
             )
         }
 
-        Text(
+        LoreenVeilText(
             text = pill.rawText,
+            isVeiled = isVeiled,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = if (pill.isCompleted) Color.White.copy(alpha = 0.4f) else color,
