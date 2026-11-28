@@ -43,7 +43,7 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                var s = SettingsService.Load();
+                var s = Daily_WinUI.Services.SettingsService.Load();
                 return s.IsLoreenVeilActiveForTagdos && !_isPeekingLoreen;
             }
         }
@@ -52,7 +52,7 @@ namespace Daily_WinUI.Views
         {
             get
             {
-                var s = SettingsService.Load();
+                var s = Daily_WinUI.Services.SettingsService.Load();
                 return s.IsLoreenVeilActiveForNotes && !_isPeekingLoreen;
             }
         }
@@ -71,8 +71,8 @@ namespace Daily_WinUI.Views
                 if (PopOutButton != null) PopOutButton.Visibility = Visibility.Collapsed;
             }
 
-            SettingsService.SettingsChanged -= LoreenSettings_Changed;
-            SettingsService.SettingsChanged += LoreenSettings_Changed;
+            Daily_WinUI.Services.SettingsService.SettingsChanged -= LoreenSettings_Changed;
+            Daily_WinUI.Services.SettingsService.SettingsChanged += LoreenSettings_Changed;
             UpdateLoreenPeekButton();
 
             _tagdosService = App.Current.Services.GetService<ITagdosService>();
@@ -93,7 +93,7 @@ namespace Daily_WinUI.Views
         private void Page_Unloaded(object sender, RoutedEventArgs e)
         {
             _isPeekingLoreen = false;
-            SettingsService.SettingsChanged -= LoreenSettings_Changed;
+            Daily_WinUI.Services.SettingsService.SettingsChanged -= LoreenSettings_Changed;
             if (_tagdosService != null)
             {
                 _tagdosService.DataChanged -= TagdosService_DataChanged;
@@ -101,7 +101,7 @@ namespace Daily_WinUI.Views
             }
         }
 
-        private void LoreenSettings_Changed(AppSettings _)
+        private void LoreenSettings_Changed(Daily_WinUI.Services.AppSettings _)
         {
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -113,7 +113,7 @@ namespace Daily_WinUI.Views
         private void UpdateLoreenPeekButton()
         {
             if (LoreenPeekButton == null || LoreenPeekIcon == null || LoreenPeekLabel == null) return;
-            var s = SettingsService.Load();
+            var s = Daily_WinUI.Services.SettingsService.Load();
             bool visible = s.LoreenVeilUnlocked && s.LoreenVeilEnabled;
             LoreenPeekButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
             LoreenPeekIcon.Glyph = _isPeekingLoreen ? "\xED1A" : "\xE7B3";
@@ -130,7 +130,7 @@ namespace Daily_WinUI.Views
                 return;
             }
 
-            var s = SettingsService.Load();
+            var s = Daily_WinUI.Services.SettingsService.Load();
             if (s.LoreenVeilRequireBiometricsForPeek)
             {
                 try
