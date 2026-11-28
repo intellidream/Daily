@@ -58,13 +58,16 @@ public static class LoreenGlyphCatalog
 
     private static LoreenPoint Pt(double sx, double sy) => new(sx / 100.0, sy / 120.0);
 
-    private static List<LoreenPoint> Circle(double cx, double cy, double r, int steps = 24)
+    private static List<LoreenPoint> Circle(double cx, double cy, double r, int steps = 24) =>
+        Ellipse(cx, cy, r, r, steps);
+
+    private static List<LoreenPoint> Ellipse(double cx, double cy, double rx, double ry, int steps = 24)
     {
         var pts = new List<LoreenPoint>(steps + 1);
         for (int k = 0; k <= steps; k++)
         {
             double a = (2.0 * Math.PI * k) / steps;
-            pts.Add(Pt(cx + r * Math.Cos(a), cy + r * Math.Sin(a)));
+            pts.Add(Pt(cx + rx * Math.Cos(a), cy + ry * Math.Sin(a)));
         }
         return pts;
     }
@@ -167,8 +170,8 @@ public static class LoreenGlyphCatalog
             "Circle enclosing a diagonal X cross",
             new[] { Circle(50, 60, 38), Line(23.1, 33.1, 76.9, 86.9), Line(76.9, 33.1, 23.1, 86.9) }),
         new('H', LoreenGlyphOrigin.Completed, "Radial",
-            "Two horizontally adjacent touching circles (infinity)",
-            new[] { Circle(30.5, 60, 19.5, 20), Circle(69.5, 60, 19.5, 20) }),
+            "Two full-height adjacent touching loops (infinity)",
+            new[] { Ellipse(26.5, 60, 23.5, 38, 20), Ellipse(73.5, 60, 23.5, 38, 20) }),
         new('I', LoreenGlyphOrigin.Original, "Radial / Cross",
             "Bare Latin cross",
             new[] { Line(50, 22, 50, 98), Line(28, 46, 72, 46) }),

@@ -65,7 +65,7 @@ All glyphs share cap height `y = 22..98`, center `(50, 60)`, uniform stroke `6.5
 | **E** | Original | Radial (Vowel) | Circle + 4-way cross | `<circle cx="50" cy="60" r="38" /><path d="M 12 60 H 88 M 50 22 V 98" />` |
 | **F** | Original | Recalled (PDF) | Inverted triangle + full cross | `<path d="M 18 22 H 82 L 50 96 Z M 50 22 V 98 M 24 58 H 76" />` |
 | **G** | Completed | Radial (Var. 1) | Circle + diagonal X cross | `<circle cx="50" cy="60" r="38" /><path d="M 23.1 33.1 L 76.9 86.9 M 76.9 33.1 L 23.1 86.9" />` |
-| **H** | Completed | Radial (Refined) | Two adjacent touching circles (`∞`) | `<circle cx="30.5" cy="60" r="19.5" /><circle cx="69.5" cy="60" r="19.5" />` |
+| **H** | Completed | Radial (Refined) | Two full-height adjacent touching loops (`∞`) | `<ellipse cx="26.5" cy="60" rx="23.5" ry="38" /><ellipse cx="73.5" cy="60" rx="23.5" ry="38" />` |
 | **I** | Original | Radial / Cross | Bare Latin cross | `<path d="M 50 22 V 98 M 28 46 H 72" />` |
 | **J** | Original | Architectural | Vertical spine + 2 opposite flags | `<path d="M 20 22 H 50 V 40 H 20 Z M 50 40 V 80 M 50 80 H 80 V 98 H 50 Z" />` |
 | **K** | Completed | Architectural | Inverted `L` (wide top block) | `<path d="M 16 22 H 84 V 48 H 16 Z M 40 48 V 98 H 60 V 48" />` |

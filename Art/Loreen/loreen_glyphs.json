@@ -63,8 +63,9 @@
       "char": "H",
       "origin": "completed",
       "family": "Radial",
-      "summary": "Two horizontally adjacent touching circles (infinity)",
-      "circles": [{ "cx": 30.5, "cy": 60, "r": 19.5 }, { "cx": 69.5, "cy": 60, "r": 19.5 }],
+      "summary": "Two full-height adjacent touching loops (infinity)",
+      "advance": 1020,
+      "circles": [{ "cx": 26.5, "cy": 60, "rx": 23.5, "ry": 38 }, { "cx": 73.5, "cy": 60, "rx": 23.5, "ry": 38 }],
       "paths": []
     },
     {

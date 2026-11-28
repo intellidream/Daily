@@ -76,9 +76,13 @@ public enum LoreenGlyphCatalog {
     }
 
     private static func circle(cx: Double, cy: Double, r: Double, steps: Int = 24) -> [LoreenPoint] {
+        ellipse(cx: cx, cy: cy, rx: r, ry: r, steps: steps)
+    }
+
+    private static func ellipse(cx: Double, cy: Double, rx: Double, ry: Double, steps: Int = 24) -> [LoreenPoint] {
         (0...steps).map { k in
             let a = (2.0 * Double.pi * Double(k)) / Double(steps)
-            return pt(cx + r * cos(a), cy + r * sin(a))
+            return pt(cx + rx * cos(a), cy + ry * sin(a))
         }
     }
 
@@ -171,8 +175,8 @@ public enum LoreenGlyphCatalog {
         ),
         LoreenGlyphDefinition(
             id: "H", origin: .completed, family: "Radial",
-            summary: "Two horizontally adjacent touching circles (infinity)",
-            strokes: [circle(cx: 30.5, cy: 60, r: 19.5, steps: 20), circle(cx: 69.5, cy: 60, r: 19.5, steps: 20)]
+            summary: "Two full-height adjacent touching loops (infinity)",
+            strokes: [ellipse(cx: 26.5, cy: 60, rx: 23.5, ry: 38, steps: 20), ellipse(cx: 73.5, cy: 60, rx: 23.5, ry: 38, steps: 20)]
         ),
         LoreenGlyphDefinition(
             id: "I", origin: .original, family: "Radial / Cross",

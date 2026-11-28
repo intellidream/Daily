@@ -10,7 +10,7 @@ import math
 import os
 import re
 import shutil
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -22,6 +22,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC_PATH = os.path.join(ROOT, "Art", "Loreen", "loreen_glyphs.json")
 ART_TTF_PATH = os.path.join(ROOT, "Art", "Loreen", "Loreen-Regular.ttf")
 CORE_TTF_PATH = os.path.join(ROOT, "DailyCore", "Sources", "DailyCore", "Resources", "Fonts", "Loreen-Regular.ttf")
+ANDROID_TTF_PATH = os.path.join(ROOT, "Android", "app", "src", "main", "res", "font", "loreen_regular.ttf")
+WINUI_TTF_PATH = os.path.join(ROOT, "WinUI", "Daily.WinUI", "Assets", "Fonts", "Loreen-Regular.ttf")
 
 UNITS_PER_EM = 1000
 ASCENT = 820
@@ -183,11 +185,12 @@ def parse_svg_path_to_polylines(d: str) -> List[List[Tuple[float, float]]]:
     return polylines
 
 
-def circle_to_polyline(cx: float, cy: float, r: float, steps: int = 48) -> List[Tuple[float, float]]:
+def circle_to_polyline(cx: float, cy: float, rx: float, ry: Optional[float] = None, steps: int = 48) -> List[Tuple[float, float]]:
+    eff_ry = rx if ry is None else ry
     pts = []
     for k in range(steps + 1):
         a = 2.0 * math.pi * k / steps
-        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+        pts.append((cx + rx * math.cos(a), cy + eff_ry * math.sin(a)))
     return pts
 
 
@@ -338,17 +341,18 @@ def build_font():
     # 26 Loreen letters
     for item in spec["letters"]:
         ch = item["char"]
+        adv = item.get("advance", DEFAULT_ADVANCE)
         polylines = []
         for c in item.get("circles", []):
-            polylines.append(circle_to_polyline(c["cx"], c["cy"], c["r"]))
+            polylines.append(circle_to_polyline(c["cx"], c["cy"], c.get("rx", c.get("r")), c.get("ry", c.get("r"))))
         for p in item.get("paths", []):
             polylines.extend(parse_svg_path_to_polylines(p))
 
-        g = strokes_to_tt_glyph(polylines, DEFAULT_ADVANCE)
+        g = strokes_to_tt_glyph(polylines, adv)
         glyph_order.append(ch)
         glyphs[ch] = g
         lsb = min((x for x, _ in g.coordinates), default=0) if g.numberOfContours > 0 else 0
-        metrics[ch] = (DEFAULT_ADVANCE, lsb)
+        metrics[ch] = (adv, lsb)
 
         code_up = ord(ch)
         code_lo = ord(ch.lower())
@@ -413,9 +417,13 @@ def build_font():
 
     os.makedirs(os.path.dirname(ART_TTF_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CORE_TTF_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(ANDROID_TTF_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(WINUI_TTF_PATH), exist_ok=True)
     fb.save(ART_TTF_PATH)
     shutil.copy2(ART_TTF_PATH, CORE_TTF_PATH)
-    print(f"Built {ART_TTF_PATH} ({os.path.getsize(ART_TTF_PATH)} bytes) and copied to DailyCore/Resources/Fonts")
+    shutil.copy2(ART_TTF_PATH, ANDROID_TTF_PATH)
+    shutil.copy2(ART_TTF_PATH, WINUI_TTF_PATH)
+    print(f"Built {ART_TTF_PATH} ({os.path.getsize(ART_TTF_PATH)} bytes) and copied to Core/Android/WinUI")
     print(f"Total glyphs: {len(glyph_order)}, cmap entries: {len(cmap)}")
 
 

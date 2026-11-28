@@ -51,9 +51,12 @@ object LoreenGlyphCatalog {
     private fun pt(sx: Double, sy: Double): LoreenPoint = LoreenPoint(sx / 100.0, sy / 120.0)
 
     private fun circle(cx: Double, cy: Double, r: Double, steps: Int = 24): List<LoreenPoint> =
+        ellipse(cx, cy, r, r, steps)
+
+    private fun ellipse(cx: Double, cy: Double, rx: Double, ry: Double, steps: Int = 24): List<LoreenPoint> =
         (0..steps).map { k ->
             val a = (2.0 * PI * k) / steps
-            pt(cx + r * cos(a), cy + r * sin(a))
+            pt(cx + rx * cos(a), cy + ry * sin(a))
         }
 
     private fun line(x1: Double, y1: Double, x2: Double, y2: Double, steps: Int = 8): List<LoreenPoint> =
@@ -146,8 +149,8 @@ object LoreenGlyphCatalog {
         ),
         LoreenGlyphDefinition(
             'H', LoreenGlyphOrigin.COMPLETED, "Radial",
-            "Two horizontally adjacent touching circles (infinity)",
-            listOf(circle(30.5, 60.0, 19.5, steps = 20), circle(69.5, 60.0, 19.5, steps = 20))
+            "Two full-height adjacent touching loops (infinity)",
+            listOf(ellipse(26.5, 60.0, 23.5, 38.0, steps = 20), ellipse(73.5, 60.0, 23.5, 38.0, steps = 20))
         ),
         LoreenGlyphDefinition(
             'I', LoreenGlyphOrigin.ORIGINAL, "Radial / Cross",
